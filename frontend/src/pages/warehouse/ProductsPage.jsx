@@ -6,15 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -33,9 +32,16 @@ import {
   Search,
   Filter,
   ImagePlus,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { productAPI } from "@/lib/api";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
+
+const emptyVariant = () => ({
+  storage: "",
+  options: [{ color: "", price: "", originalPrice: "" }],
+});
 
 const ProductsPage = () => {
   const [products, setProducts] = useState([]);
@@ -69,10 +75,12 @@ const ProductsPage = () => {
       camera: "",
       battery: "",
     },
+    variants: [], // storage-color-price combos
   });
 
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -122,6 +130,7 @@ const ProductsPage = () => {
           camera: "",
           battery: "",
         },
+        variants: product.variants || [],
       });
     } else {
       setEditingProduct(null);
@@ -144,10 +153,11 @@ const ProductsPage = () => {
           camera: "",
           battery: "",
         },
+        variants: [emptyVariant()],
       });
     }
     setError("");
-    setShowDialog(true);
+    setShowForm(true);
   };
 
   const handleChange = (e) => {
@@ -171,6 +181,62 @@ const ProductsPage = () => {
     }
   };
 
+  const handleVariantChange = (variantIndex, field, value) => {
+    const variants = [...formData.variants];
+    variants[variantIndex] = { ...variants[variantIndex], [field]: value };
+    setFormData({ ...formData, variants });
+  };
+
+  const handleVariantOptionChange = (
+    variantIndex,
+    optionIndex,
+    field,
+    value
+  ) => {
+    const variants = [...formData.variants];
+    const options = [...(variants[variantIndex]?.options || [])];
+    options[optionIndex] = { ...options[optionIndex], [field]: value };
+    variants[variantIndex] = { ...variants[variantIndex], options };
+    setFormData({ ...formData, variants });
+  };
+
+  const addVariant = () => {
+    setFormData({
+      ...formData,
+      variants: [...formData.variants, emptyVariant()],
+    });
+  };
+
+  const removeVariant = (variantIndex) => {
+    const variants = formData.variants.filter((_, i) => i !== variantIndex);
+    setFormData({
+      ...formData,
+      variants: variants.length ? variants : [emptyVariant()],
+    });
+  };
+
+  const addVariantOption = (variantIndex) => {
+    const variants = [...formData.variants];
+    const options = [...(variants[variantIndex]?.options || [])];
+    options.push({ color: "", price: "", originalPrice: "" });
+    variants[variantIndex] = { ...variants[variantIndex], options };
+    setFormData({ ...formData, variants });
+  };
+
+  const removeVariantOption = (variantIndex, optionIndex) => {
+    const variants = [...formData.variants];
+    const options = (variants[variantIndex]?.options || []).filter(
+      (_, i) => i !== optionIndex
+    );
+    variants[variantIndex] = {
+      ...variants[variantIndex],
+      options: options.length
+        ? options
+        : [{ color: "", price: "", originalPrice: "" }],
+    };
+    setFormData({ ...formData, variants });
+  };
+
   const handleImageChange = (e, index) => {
     const newImages = [...formData.images];
     newImages[index] = e.target.value;
@@ -189,19 +255,66 @@ const ProductsPage = () => {
     setFormData({ ...formData, images: newImages });
   };
 
+  const computeBasePricesFromVariants = (variants) => {
+    let minPrice = Infinity;
+    let minOriginal = Infinity;
+    variants.forEach((v) =>
+      (v.options || []).forEach((o) => {
+        const p = Number(o.price);
+        const op = Number(o.originalPrice);
+        if (!isNaN(p)) minPrice = Math.min(minPrice, p);
+        if (!isNaN(op)) minOriginal = Math.min(minOriginal, op);
+      })
+    );
+    return {
+      price: isFinite(minPrice) ? String(minPrice) : "",
+      originalPrice: isFinite(minOriginal) ? String(minOriginal) : "",
+      discount:
+        isFinite(minPrice) && isFinite(minOriginal) && minOriginal > 0
+          ? Math.max(
+              0,
+              Math.min(100, Math.round((1 - minPrice / minOriginal) * 100))
+            )
+          : formData.discount,
+    };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError("");
 
     try {
+      const hasVariants = (formData.variants || []).some(
+        (v) =>
+          v.storage &&
+          (v.options || []).some(
+            (o) => o.color && o.price !== "" && o.originalPrice !== ""
+          )
+      );
+
+      const basePrices = hasVariants
+        ? computeBasePricesFromVariants(formData.variants)
+        : {};
+
       const submitData = {
         ...formData,
-        price: Number(formData.price),
-        originalPrice: Number(formData.originalPrice),
-        discount: Number(formData.discount),
+        ...basePrices,
+        price: Number((basePrices.price ?? formData.price) || 0),
+        originalPrice: Number(
+          (basePrices.originalPrice ?? formData.originalPrice) || 0
+        ),
+        discount: Number(basePrices.discount ?? formData.discount),
         quantity: Number(formData.quantity),
         images: formData.images.filter((img) => img.trim() !== ""),
+        variants: (formData.variants || []).map((v) => ({
+          storage: v.storage,
+          options: (v.options || []).map((o) => ({
+            color: o.color,
+            price: Number(o.price || 0),
+            originalPrice: Number(o.originalPrice || 0),
+          })),
+        })),
       };
 
       if (editingProduct) {
@@ -211,7 +324,7 @@ const ProductsPage = () => {
       }
 
       await fetchProducts();
-      setShowDialog(false);
+      setShowForm(false);
     } catch (error) {
       setError(
         error.response?.data?.message ||
@@ -252,9 +365,18 @@ const ProductsPage = () => {
             Tổng số: {pagination.total} sản phẩm
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm sản phẩm
+        <Button onClick={() => setShowForm(!showForm)}>
+          {showForm ? (
+            <>
+              <X className="w-4 h-4 mr-2" />
+              Hủy
+            </>
+          ) : (
+            <>
+              <UserPlus className="w-4 h-4 mr-2" />
+              Thêm sản phẩm
+            </>
+          )}
         </Button>
       </div>
 
@@ -286,7 +408,348 @@ const ProductsPage = () => {
           </div>
         </CardContent>
       </Card>
+      {/* Add/Edit Dialog */}
+      {showForm && (
+        <Card>
+          {/* Cart content: Wider and taller cart */}
+          <CardContent className="max-w-full max-h-full overflow-y-auto">
+            <CardHeader>
+              <CardTitle>
+                {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
+              </CardTitle>
+              <CardDescription>
+                Điền thông tin chi tiết sản phẩm. Có thể thêm nhiều dung lượng
+                và màu sắc, mỗi tùy chọn có giá riêng.
+              </CardDescription>
+            </CardHeader>
 
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {error && <ErrorMessage message={error} />}
+
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Tên sản phẩm *</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="model">Model *</Label>
+                  <Input
+                    id="model"
+                    name="model"
+                    value={formData.model}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="originalPrice">Giá gốc (min) *</Label>
+                  <Input
+                    id="originalPrice"
+                    name="originalPrice"
+                    type="number"
+                    value={formData.originalPrice}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="discount">Giảm giá (%)</Label>
+                  <Input
+                    id="discount"
+                    name="discount"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={formData.discount}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="price">Giá bán (min) *</Label>
+                  <Input
+                    id="price"
+                    name="price"
+                    type="number"
+                    value={formData.price}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Số lượng *</Label>
+                  <Input
+                    id="quantity"
+                    name="quantity"
+                    type="number"
+                    value={formData.quantity}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Trạng thái *</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, status: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                      <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
+                      <SelectItem value="DISCONTINUED">
+                        Ngừng kinh doanh
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Specifications */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">
+                  Thông số kỹ thuật
+                </Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Input
+                    placeholder="Màu sắc"
+                    name="spec_color"
+                    value={formData.specifications.color}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="Bộ nhớ"
+                    name="spec_storage"
+                    value={formData.specifications.storage}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="RAM"
+                    name="spec_ram"
+                    value={formData.specifications.ram}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="Màn hình"
+                    name="spec_screen"
+                    value={formData.specifications.screen}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="Chip"
+                    name="spec_chip"
+                    value={formData.specifications.chip}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="Camera"
+                    name="spec_camera"
+                    value={formData.specifications.camera}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    placeholder="Pin"
+                    name="spec_battery"
+                    value={formData.specifications.battery}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+
+              {/* Variants Builder */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">
+                    Tùy chọn (Dung lượng & Màu sắc)
+                  </Label>
+                  <Button type="button" variant="outline" onClick={addVariant}>
+                    Thêm dung lượng
+                  </Button>
+                </div>
+
+                {formData.variants.map((variant, vIdx) => (
+                  <div key={vIdx} className="border rounded-md p-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <Input
+                        placeholder="Dung lượng (vd: 128GB, 256GB)"
+                        value={variant.storage}
+                        onChange={(e) =>
+                          handleVariantChange(vIdx, "storage", e.target.value)
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addVariantOption(vIdx)}
+                      >
+                        + Màu/giá
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => removeVariant(vIdx)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(variant.options || []).map((opt, oIdx) => (
+                        <div
+                          key={oIdx}
+                          className="grid grid-cols-1 md:grid-cols-4 gap-2"
+                        >
+                          <Input
+                            placeholder="Màu sắc (vd: Đen, Xanh...)"
+                            value={opt.color}
+                            onChange={(e) =>
+                              handleVariantOptionChange(
+                                vIdx,
+                                oIdx,
+                                "color",
+                                e.target.value
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="Giá gốc"
+                            type="number"
+                            value={opt.originalPrice}
+                            onChange={(e) =>
+                              handleVariantOptionChange(
+                                vIdx,
+                                oIdx,
+                                "originalPrice",
+                                e.target.value
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="Giá bán"
+                            type="number"
+                            value={opt.price}
+                            onChange={(e) =>
+                              handleVariantOptionChange(
+                                vIdx,
+                                oIdx,
+                                "price",
+                                e.target.value
+                              )
+                            }
+                          />
+                          <div className="flex items-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => removeVariantOption(vIdx, oIdx)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <p className="text-xs text-muted-foreground">
+                  Gợi ý: Khi nhập nhiều tùy chọn, giá hiển thị ở danh sách sẽ
+                  lấy theo giá thấp nhất.
+                </p>
+              </div>
+
+              {/* Images */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Hình ảnh</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addImageField}
+                  >
+                    <ImagePlus className="w-4 h-4 mr-2" />
+                    Thêm ảnh
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {formData.images.map((image, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        placeholder="URL hình ảnh"
+                        value={image}
+                        onChange={(e) => handleImageChange(e, index)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => removeImageField(index)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {formData.images.length === 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addImageField}
+                    >
+                      + Thêm đường dẫn ảnh
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description">Mô tả</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={4}
+                />
+              </div>
+
+              <CardFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowFrom(false)}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting
+                    ? "Đang xử lý..."
+                    : editingProduct
+                    ? "Cập nhật"
+                    : "Tạo sản phẩm"}
+                </Button>
+              </CardFooter>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((product) => (
@@ -406,234 +869,6 @@ const ProductsPage = () => {
           </Button>
         </div>
       )}
-
-      {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
-            </DialogTitle>
-            <DialogDescription>
-              Điền thông tin chi tiết sản phẩm
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <ErrorMessage message={error} />}
-
-            {/* Basic Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Tên sản phẩm *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="model">Model *</Label>
-                <Input
-                  id="model"
-                  name="model"
-                  value={formData.model}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="originalPrice">Giá gốc *</Label>
-                <Input
-                  id="originalPrice"
-                  name="originalPrice"
-                  type="number"
-                  value={formData.originalPrice}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="discount">Giảm giá (%)</Label>
-                <Input
-                  id="discount"
-                  name="discount"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={formData.discount}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="price">Giá bán *</Label>
-                <Input
-                  id="price"
-                  name="price"
-                  type="number"
-                  value={formData.price}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Số lượng *</Label>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Trạng thái *</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                    <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
-                    <SelectItem value="DISCONTINUED">
-                      Ngừng kinh doanh
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Specifications */}
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">
-                Thông số kỹ thuật
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  placeholder="Màu sắc"
-                  name="spec_color"
-                  value={formData.specifications.color}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Bộ nhớ"
-                  name="spec_storage"
-                  value={formData.specifications.storage}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="RAM"
-                  name="spec_ram"
-                  value={formData.specifications.ram}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Màn hình"
-                  name="spec_screen"
-                  value={formData.specifications.screen}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Chip"
-                  name="spec_chip"
-                  value={formData.specifications.chip}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Camera"
-                  name="spec_camera"
-                  value={formData.specifications.camera}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Pin"
-                  name="spec_battery"
-                  value={formData.specifications.battery}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
-
-            {/* Images */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Hình ảnh</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addImageField}
-                >
-                  <ImagePlus className="w-4 h-4 mr-2" />
-                  Thêm ảnh
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {formData.images.map((image, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      placeholder="URL hình ảnh"
-                      value={image}
-                      onChange={(e) => handleImageChange(e, index)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeImageField(index)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Mô tả</Label>
-              <Textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={4}
-              />
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowDialog(false)}
-              >
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
-                  ? "Đang xử lý..."
-                  : editingProduct
-                  ? "Cập nhật"
-                  : "Tạo sản phẩm"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

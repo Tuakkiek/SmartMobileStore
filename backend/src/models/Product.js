@@ -10,6 +10,19 @@ const specificationsSchema = new mongoose.Schema({
   camera: String,
   battery: String,
 }, { _id: false });
+ 
+// Variant option: a specific color with its own price points
+const variantOptionSchema = new mongoose.Schema({
+  color: { type: String, required: true, trim: true },
+  price: { type: Number, required: true, min: 0 },
+  originalPrice: { type: Number, required: true, min: 0 },
+}, { _id: false });
+
+// Variant: a storage with multiple color options
+const variantSchema = new mongoose.Schema({
+  storage: { type: String, required: true, trim: true },
+  options: { type: [variantOptionSchema], default: [] },
+}, { _id: false });
 
 const productSchema = new mongoose.Schema(
   {
@@ -24,6 +37,10 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
     specifications: specificationsSchema,
+
+    // Optional variants (storage -> color -> price)
+    variants: { type: [variantSchema], default: [] },
+
     price: {
       type: Number,
       required: true,
@@ -107,6 +124,34 @@ productSchema.pre('save', function (next) {
   } else if (this.status === 'OUT_OF_STOCK' && this.quantity > 0) {
     this.status = 'AVAILABLE';
   }
+
+  // If variants are provided, ensure base price/originalPrice reflect the minimum across variants.
+  if (Array.isArray(this.variants) && this.variants.length > 0) {
+    let minPrice = Infinity;
+    let minOriginal = Infinity;
+
+    this.variants.forEach(v => {
+      (v.options || []).forEach(opt => {
+        if (typeof opt.price === 'number') minPrice = Math.min(minPrice, opt.price);
+        if (typeof opt.originalPrice === 'number') minOriginal = Math.min(minOriginal, opt.originalPrice);
+      });
+    });
+
+    if (isFinite(minPrice)) {
+      this.price = minPrice;
+    }
+    if (isFinite(minOriginal)) {
+      this.originalPrice = minOriginal;
+    }
+
+    // Recompute discount if both are valid
+    if (this.originalPrice > 0 && this.price >= 0) {
+      const discount = Math.round((1 - this.price / this.originalPrice) * 100);
+      // keep within 0-100
+      this.discount = Math.max(0, Math.min(100, discount));
+    }
+  }
+
   next();
 });
 
