@@ -60,7 +60,8 @@ api.interceptors.response.use(
 
 export default api;
 
-// AUTH API
+
+// Auth API
 export const authAPI = {
   register: (data) => api.post("/auth/register", data),
   login: (data) => api.post("/auth/login", data),
@@ -69,7 +70,7 @@ export const authAPI = {
   changePassword: (data) => api.put("/auth/change-password", data),
 };
 
-// PRODUCT API
+// Product API
 export const productAPI = {
   getAll: (params) => api.get("/products", { params }),
   getById: (id) => api.get(`/products/${id}`),
@@ -77,28 +78,41 @@ export const productAPI = {
   update: (id, data) => api.put(`/products/${id}`, data),
   delete: (id) => api.delete(`/products/${id}`),
   updateQuantity: (id, quantity) => api.patch(`/products/${id}/quantity`, { quantity }),
+  
+  // Category endpoints
+  getCategories: () => api.get("/products/categories"),
+  getByCategory: (category, params) => api.get(`/products/category/${category}`, { params }),
+  getFeatured: (params) => api.get("/products/featured", { params }),
+  getNewArrivals: (params) => api.get("/products/new-arrivals", { params }),
+  getRelated: (id) => api.get(`/products/${id}/related`),
+  getStats: () => api.get("/products/stats/overview"),
+  
+  // Import/Export endpoints
+  bulkImportJSON: (data) => api.post("/products/bulk-import/json", data),
+  bulkImportCSV: (data) => api.post("/products/bulk-import/csv", data),
+  exportCSV: (params) => api.get("/products/export/csv", { params }),
+  bulkUpdate: (data) => api.post("/products/bulk-update", data),
 };
 
-// CART API
+// Cart API
 export const cartAPI = {
-  get: () => api.get("/cart"),
-  add: (data) => api.post("/cart/add", data),
-  update: (data) => api.put("/cart/update", data),
-  remove: (productId) => api.delete(`/cart/remove/${productId}`),
-  clear: () => api.delete("/cart/clear"),
+  getCart: () => api.get("/cart"),
+  addToCart: (data) => api.post("/cart/add", data),
+  updateItem: (data) => api.put("/cart/update", data),
+  removeItem: (productId) => api.delete(`/cart/remove/${productId}`),
+  clearCart: () => api.delete("/cart/clear"),
 };
 
-// ORDER API
+// Order API
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
   getMyOrders: (params) => api.get("/orders/my-orders", { params }),
-  getAll: (params) => api.get("/orders/all", { params }),
+  getAllOrders: (params) => api.get("/orders/all", { params }),
   getById: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, data) => api.put(`/orders/${id}/status`, data),
   cancel: (id) => api.post(`/orders/${id}/cancel`),
 };
-
-// REVIEW API
+// Review API
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
   create: (data) => api.post("/reviews", data),
@@ -106,7 +120,7 @@ export const reviewAPI = {
   delete: (id) => api.delete(`/reviews/${id}`),
 };
 
-// PROMOTION API
+// Promotion API
 export const promotionAPI = {
   getAll: () => api.get("/promotions"),
   getActive: () => api.get("/promotions/active"),
@@ -115,13 +129,15 @@ export const promotionAPI = {
   delete: (id) => api.delete(`/promotions/${id}`),
 };
 
-// USER API
+// User API
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
-  updateAddress: (id, data) => api.put(`/users/addresses/${id}`, data),
-  deleteAddress: (id) => api.delete(`/users/addresses/${id}`),
-  getEmployees: () => api.get("/users/employees"),
+  updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
+  deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
+  
+  // Employee management
+  getAllEmployees: () => api.get("/users/employees"),
   createEmployee: (data) => api.post("/users/employees", data),
   toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
