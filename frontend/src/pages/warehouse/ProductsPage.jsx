@@ -1,4 +1,4 @@
-// FILE: src/pages/warehouse/ProductsPage.jsx - Enhanced Version
+// FILE: src/pages/warehouse/ProductsPage.jsx - FIXED VERSION
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,34 +40,74 @@ import { productAPI } from "@/lib/api";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 import { toast } from "sonner";
 
-const CATEGORIES = ['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods', 'Accessories'];
+// ✅ Constants - Đặt ngoài component
+const CATEGORIES = [
+  "iPhone",
+  "iPad",
+  "Mac",
+  "Apple Watch",
+  "AirPods",
+  "Accessories",
+];
 
 const CATEGORY_SPECS = {
-  iPhone: ['color', 'storage', 'ram', 'screen', 'chip', 'camera', 'battery'],
-  iPad: ['color', 'storage', 'ram', 'screen', 'chip', 'camera', 'battery'],
-  Mac: ['color', 'storage', 'ram', 'screen', 'chip', 'gpu', 'ports', 'keyboard'],
-  'Apple Watch': ['caseSize', 'caseMaterial', 'bandType', 'waterResistance'],
-  AirPods: ['color', 'chargingCase', 'batteryLife', 'noiseCancellation'],
-  Accessories: ['color', 'material', 'compatibility', 'type']
+  iPhone: ["color", "storage", "ram", "screen", "chip", "camera", "battery"],
+  iPad: ["color", "storage", "ram", "screen", "chip", "camera", "battery"],
+  Mac: [
+    "color",
+    "storage",
+    "ram",
+    "screen",
+    "chip",
+    "gpu",
+    "ports",
+    "keyboard",
+  ],
+  "Apple Watch": ["caseSize", "caseMaterial", "bandType", "waterResistance"],
+  AirPods: ["color", "chargingCase", "batteryLife", "noiseCancellation"],
+  Accessories: ["color", "material", "compatibility", "type"],
 };
 
-const emptyVariant = () => ({
-  type: 'Storage',
-  name: '',
-  options: [{ name: '', color: '', price: '', originalPrice: '' }],
+// ✅ Helper functions - Đặt ngoài component
+const getEmptyFormData = () => ({
+  name: "",
+  category: "iPhone",
+  subcategory: "",
+  model: "",
+  price: "",
+  originalPrice: "",
+  discount: 0,
+  quantity: "",
+  status: "AVAILABLE",
+  images: [""],
+  description: "",
+  features: [""],
+  tags: [""],
+  specifications: {},
+  variants: [],
 });
 
+const emptyVariant = () => ({
+  type: "Storage",
+  name: "",
+  options: [{ name: "", color: "", price: "", originalPrice: "" }],
+});
+
+// ✅ Component
 const ProductsPage = () => {
+  // Product states
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    total: 0,
-  });
+
+  // ✅ Pagination - CHỈ KẾ BÁO 1 LẦN
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
 
   // Form states
   const [showForm, setShowForm] = useState(false);
@@ -75,44 +115,26 @@ const ProductsPage = () => {
   const [formData, setFormData] = useState(getEmptyFormData());
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState("basic"); // Thêm state để quản lý tab
 
   // Import states
   const [showImport, setShowImport] = useState(false);
-  const [importType, setImportType] = useState('json');
+  const [importType, setImportType] = useState("json");
   const [importFile, setImportFile] = useState(null);
   const [importData, setImportData] = useState(null);
   const [importResults, setImportResults] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  function getEmptyFormData() {
-    return {
-      name: "",
-      category: "iPhone",
-      subcategory: "",
-      model: "",
-      price: "",
-      originalPrice: "",
-      discount: 0,
-      quantity: "",
-      status: "AVAILABLE",
-      images: [],
-      description: "",
-      features: [],
-      tags: [],
-      specifications: {},
-      variants: [],
-    };
-  }
-
+  // ✅ Fetch products khi dependencies thay đổi
   useEffect(() => {
     fetchProducts();
-  }, [searchTerm, categoryFilter, statusFilter, pagination.currentPage]);
+  }, [searchTerm, categoryFilter, statusFilter, currentPage]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
       const params = {
-        page: pagination.currentPage,
+        page: currentPage, // ✅ Dùng currentPage
         limit: 12,
         search: searchTerm || undefined,
         category: categoryFilter !== "all" ? categoryFilter : undefined,
@@ -120,10 +142,20 @@ const ProductsPage = () => {
       };
 
       const response = await productAPI.getAll(params);
-      const { products, totalPages, currentPage, total } = response.data.data;
+      const {
+        products,
+        totalPages,
+        currentPage: responsePage,
+        total,
+      } = response.data.data;
 
       setProducts(products);
-      setPagination({ currentPage, totalPages, total });
+      setTotalPages(totalPages);
+      setTotalProducts(total);
+      // Cập nhật currentPage từ response (đề phòng)
+      if (responsePage !== currentPage) {
+        setCurrentPage(responsePage);
+      }
     } catch (error) {
       console.error("Error fetching products:", error);
       toast.error("Lỗi khi tải danh sách sản phẩm");
@@ -145,10 +177,10 @@ const ProductsPage = () => {
         discount: product.discount || 0,
         quantity: product.quantity,
         status: product.status,
-        images: product.images || [],
+        images: product.images?.length > 0 ? product.images : [""], // ✅ Fix
         description: product.description || "",
-        features: product.features || [],
-        tags: product.tags || [],
+        features: product.features?.length > 0 ? product.features : [""], // ✅ Fix
+        tags: product.tags?.length > 0 ? product.tags : [""], // ✅ Fix
         specifications: product.specifications || {},
         variants: product.variants || [],
       });
@@ -181,7 +213,12 @@ const ProductsPage = () => {
     setFormData({ ...formData, variants });
   };
 
-  const handleVariantOptionChange = (variantIndex, optionIndex, field, value) => {
+  const handleVariantOptionChange = (
+    variantIndex,
+    optionIndex,
+    field,
+    value
+  ) => {
     const variants = [...formData.variants];
     const options = [...(variants[variantIndex]?.options || [])];
     options[optionIndex] = { ...options[optionIndex], [field]: value };
@@ -204,7 +241,7 @@ const ProductsPage = () => {
   const addVariantOption = (variantIndex) => {
     const variants = [...formData.variants];
     const options = [...(variants[variantIndex]?.options || [])];
-    options.push({ name: '', color: '', price: '', originalPrice: '' });
+    options.push({ name: "", color: "", price: "", originalPrice: "" });
     variants[variantIndex] = { ...variants[variantIndex], options };
     setFormData({ ...formData, variants });
   };
@@ -229,6 +266,11 @@ const ProductsPage = () => {
   };
 
   const removeArrayItem = (field, index) => {
+    // ✅ Không cho xóa hết, giữ ít nhất 1 phần tử
+    if (formData[field].length <= 1) {
+      toast.error("Phải có ít nhất 1 mục");
+      return;
+    }
     const newArray = formData[field].filter((_, i) => i !== index);
     setFormData({ ...formData, [field]: newArray });
   };
@@ -304,50 +346,49 @@ const ProductsPage = () => {
     reader.onload = (event) => {
       try {
         const content = event.target.result;
-        
-        if (importType === 'json') {
+
+        if (importType === "json") {
           const data = JSON.parse(content);
           setImportData(Array.isArray(data) ? data : data.products || []);
         } else {
           // CSV parsing (simple)
-          const lines = content.split('\n');
-          const headers = lines[0].split(',').map(h => h.trim());
-          const data = lines.slice(1).filter(line => line.trim()).map(line => {
-            const values = line.split(',');
-            const obj = {};
-            headers.forEach((header, index) => {
-              obj[header] = values[index]?.trim() || '';
+          const lines = content.split("\n");
+          const headers = lines[0].split(",").map((h) => h.trim());
+          const data = lines
+            .slice(1)
+            .filter((line) => line.trim())
+            .map((line) => {
+              const values = line.split(",");
+              const obj = {};
+              headers.forEach((header, index) => {
+                obj[header] = values[index]?.trim() || "";
+              });
+              return obj;
             });
-            return obj;
-          });
           setImportData(data);
         }
-        setError('');
+        setError("");
       } catch (err) {
-        setError('Lỗi đọc file: ' + err.message);
+        setError("Lỗi đọc file: " + err.message);
         setImportData(null);
       }
     };
 
-    if (importType === 'json') {
-      reader.readAsText(file);
-    } else {
-      reader.readAsText(file);
-    }
+    reader.readAsText(file);
   };
 
   const handleImport = async () => {
     if (!importData || importData.length === 0) {
-      setError('Không có dữ liệu để import');
+      setError("Không có dữ liệu để import");
       return;
     }
 
     setIsImporting(true);
-    setError('');
+    setError("");
 
     try {
       let response;
-      if (importType === 'json') {
+      if (importType === "json") {
         response = await productAPI.bulkImportJSON({ products: importData });
       } else {
         response = await productAPI.bulkImportCSV({ csvData: importData });
@@ -357,8 +398,8 @@ const ProductsPage = () => {
       toast.success(response.data.message);
       await fetchProducts();
     } catch (error) {
-      setError(error.response?.data?.message || 'Import thất bại');
-      toast.error('Import thất bại');
+      setError(error.response?.data?.message || "Import thất bại");
+      toast.error("Import thất bại");
     } finally {
       setIsImporting(false);
     }
@@ -367,74 +408,84 @@ const ProductsPage = () => {
   const handleExport = async () => {
     try {
       const response = await productAPI.exportCSV({
-        category: categoryFilter !== 'all' ? categoryFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
       });
 
       const csvData = response.data.data;
       const headers = Object.keys(csvData[0]);
       const csvContent = [
-        headers.join(','),
-        ...csvData.map(row => headers.map(h => row[h]).join(','))
-      ].join('\n');
+        headers.join(","),
+        ...csvData.map((row) => headers.map((h) => row[h]).join(",")),
+      ].join("\n");
 
-      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const blob = new Blob([csvContent], { type: "text/csv" });
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `products_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `products_${new Date().toISOString().split("T")[0]}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Export thành công');
+      toast.success("Export thành công");
     } catch (error) {
-      toast.error('Export thất bại');
+      toast.error("Export thất bại");
     }
   };
 
   const downloadTemplate = () => {
-    const template = importType === 'json' ? {
-      products: [
-        {
-          name: "iPhone 17 Pro Max",
-          category: "iPhone",
-          subcategory: "Pro",
-          model: "iPhone 17 Pro Max",
-          price: 29990000,
-          originalPrice: 32990000,
-          discount: 9,
-          quantity: 50,
-          status: "AVAILABLE",
-          images: ["/images/iphone17pm.png"],
-          description: "iPhone 17 Pro Max với màn hình lớn nhất",
-          features: ["Màn hình Super Retina XDR", "Chip A19 Pro"],
-          tags: ["premium", "pro"],
-          specifications: {
-            color: "Natural Titanium",
-            storage: "256GB",
-            screen: "6.9\"",
-            chip: "A19 Pro",
-            camera: "48MP",
-            battery: "4,422 mAh"
-          },
-          variants: [
-            {
-              type: "Storage",
-              name: "256GB",
-              options: [
-                { name: "Natural Titanium", color: "Natural Titanium", price: 29990000, originalPrice: 32990000 }
-              ]
-            }
-          ]
-        }
-      ]
-    } : `name,category,subcategory,model,price,originalPrice,discount,quantity,status,images,description,features,tags,spec_color,spec_storage,spec_screen,spec_chip,spec_camera,spec_battery,variants
+    const template =
+      importType === "json"
+        ? {
+            products: [
+              {
+                name: "iPhone 17 Pro Max",
+                category: "iPhone",
+                subcategory: "Pro",
+                model: "iPhone 17 Pro Max",
+                price: 29990000,
+                originalPrice: 32990000,
+                discount: 9,
+                quantity: 50,
+                status: "AVAILABLE",
+                images: ["/images/iphone17pm.png"],
+                description: "iPhone 17 Pro Max với màn hình lớn nhất",
+                features: ["Màn hình Super Retina XDR", "Chip A19 Pro"],
+                tags: ["premium", "pro"],
+                specifications: {
+                  color: "Natural Titanium",
+                  storage: "256GB",
+                  screen: '6.9"',
+                  chip: "A19 Pro",
+                  camera: "48MP",
+                  battery: "4,422 mAh",
+                },
+                variants: [
+                  {
+                    type: "Storage",
+                    name: "256GB",
+                    options: [
+                      {
+                        name: "Natural Titanium",
+                        color: "Natural Titanium",
+                        price: 29990000,
+                        originalPrice: 32990000,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }
+        : `name,category,subcategory,model,price,originalPrice,discount,quantity,status,images,description,features,tags,spec_color,spec_storage,spec_screen,spec_chip,spec_camera,spec_battery,variants
 iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,/images/iphone17pm.png,"iPhone 17 Pro Max","Màn hình Super Retina XDR,Chip A19 Pro","premium,pro",Natural Titanium,256GB,6.9",A19 Pro,48MP,4422 mAh,"[{""type"":""Storage"",""name"":""256GB"",""options"":[{""name"":""Natural Titanium"",""color"":""Natural Titanium"",""price"":29990000,""originalPrice"":32990000}]}]"`;
 
-    const blob = new Blob([importType === 'json' ? JSON.stringify(template, null, 2) : template], 
-      { type: importType === 'json' ? 'application/json' : 'text/csv' });
+    const blob = new Blob(
+      [importType === "json" ? JSON.stringify(template, null, 2) : template],
+      { type: importType === "json" ? "application/json" : "text/csv" }
+    );
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `template.${importType}`;
     a.click();
@@ -454,7 +505,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
         <div>
           <h1 className="text-3xl font-bold mb-2">Quản lý sản phẩm</h1>
           <p className="text-muted-foreground">
-            Tổng số: {pagination.total} sản phẩm
+            Tổng số: {totalProducts} sản phẩm
           </p>
         </div>
         <div className="flex gap-2">
@@ -506,7 +557,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
               <Label>Chọn file</Label>
               <Input
                 type="file"
-                accept={importType === 'json' ? '.json' : '.csv'}
+                accept={importType === "json" ? ".json" : ".csv"}
                 onChange={handleFileChange}
               />
             </div>
@@ -520,13 +571,13 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                     Đã tải {importData.length} sản phẩm
                   </span>
                   <Button onClick={handleImport} disabled={isImporting}>
-                    {isImporting ? 'Đang import...' : 'Import ngay'}
+                    {isImporting ? "Đang import..." : "Import ngay"}
                   </Button>
                 </div>
                 <div className="max-h-40 overflow-y-auto text-sm">
                   {importData.slice(0, 5).map((item, i) => (
                     <div key={i} className="py-1 border-b last:border-0">
-                      {item.name || 'Unknown'} - {item.category}
+                      {item.name || "Unknown"} - {item.category}
                     </div>
                   ))}
                   {importData.length > 5 && (
@@ -585,8 +636,10 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả danh mục</SelectItem>
-                {CATEGORIES.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                {CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -611,26 +664,19 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
       {showForm && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>
-                  {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
-                </CardTitle>
-                <CardDescription>
-                  Điền thông tin chi tiết sản phẩm
-                </CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setShowForm(false)}>
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
+            <CardTitle>
+              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
+            </CardTitle>
           </CardHeader>
-
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && <ErrorMessage message={error} />}
 
-              <Tabs defaultValue="basic" className="w-full">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="basic">Cơ bản</TabsTrigger>
                   <TabsTrigger value="specs">Thông số</TabsTrigger>
@@ -638,73 +684,77 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   <TabsTrigger value="media">Media</TabsTrigger>
                 </TabsList>
 
-                {/* Basic Tab */}
-                <TabsContent value="basic" className="space-y-4">
+                <TabsContent
+                  value="basic"
+                  className="space-y-4 mt-6 border border-red-500"
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Tên sản phẩm *</Label>
                       <Input
                         value={formData.name}
-                        onChange={(e) => handleChange('name', e.target.value)}
+                        onChange={(e) => handleChange("name", e.target.value)}
                         required
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Danh mục *</Label>
-                      <Select 
+                      <Select
                         value={formData.category}
-                        onValueChange={(value) => handleChange('category', value)}
+                        onValueChange={(value) =>
+                          handleChange("category", value)
+                        }
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {CATEGORIES.map(cat => (
-                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          {CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>
+                              {cat}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-2">
                       <Label>Phân loại con</Label>
                       <Input
                         value={formData.subcategory}
-                        onChange={(e) => handleChange('subcategory', e.target.value)}
+                        onChange={(e) =>
+                          handleChange("subcategory", e.target.value)
+                        }
                         placeholder="vd: Pro, Air, Mini..."
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Model *</Label>
                       <Input
                         value={formData.model}
-                        onChange={(e) => handleChange('model', e.target.value)}
+                        onChange={(e) => handleChange("model", e.target.value)}
                         required
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Giá gốc *</Label>
                       <Input
                         type="number"
                         value={formData.originalPrice}
-                        onChange={(e) => handleChange('originalPrice', e.target.value)}
+                        onChange={(e) =>
+                          handleChange("originalPrice", e.target.value)
+                        }
                         required
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Giá bán *</Label>
                       <Input
                         type="number"
                         value={formData.price}
-                        onChange={(e) => handleChange('price', e.target.value)}
+                        onChange={(e) => handleChange("price", e.target.value)}
                         required
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Giảm giá (%)</Label>
                       <Input
@@ -712,25 +762,27 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                         min="0"
                         max="100"
                         value={formData.discount}
-                        onChange={(e) => handleChange('discount', e.target.value)}
+                        onChange={(e) =>
+                          handleChange("discount", e.target.value)
+                        }
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Số lượng *</Label>
                       <Input
                         type="number"
                         value={formData.quantity}
-                        onChange={(e) => handleChange('quantity', e.target.value)}
+                        onChange={(e) =>
+                          handleChange("quantity", e.target.value)
+                        }
                         required
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Trạng thái *</Label>
                       <Select
                         value={formData.status}
-                        onValueChange={(value) => handleChange('status', value)}
+                        onValueChange={(value) => handleChange("status", value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -744,26 +796,32 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                       </Select>
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Mô tả</Label>
                     <Textarea
                       value={formData.description}
-                      onChange={(e) => handleChange('description', e.target.value)}
+                      onChange={(e) =>
+                        handleChange("description", e.target.value)
+                      }
                       rows={4}
                     />
                   </div>
                 </TabsContent>
 
-                {/* Specs Tab */}
-                <TabsContent value="specs" className="space-y-4">
+                <TabsContent
+                  value="specs"
+                  className="space-y-4 mt-6 border border-red-500"
+                >
+                  <p className="text-blue-500">Nội dung tab Thông số (Debug)</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {currentSpecs.map(spec => (
+                    {currentSpecs.map((spec) => (
                       <div key={spec} className="space-y-2">
                         <Label>{spec}</Label>
                         <Input
-                          value={formData.specifications[spec] || ''}
-                          onChange={(e) => handleSpecChange(spec, e.target.value)}
+                          value={formData.specifications[spec] || ""}
+                          onChange={(e) =>
+                            handleSpecChange(spec, e.target.value)
+                          }
                           placeholder={`Nhập ${spec}`}
                         />
                       </div>
@@ -771,15 +829,20 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   </div>
                 </TabsContent>
 
-                {/* Variants Tab */}
-                <TabsContent value="variants" className="space-y-4">
+                <TabsContent
+                  value="variants"
+                  className="space-y-4 mt-6 border border-red-500"
+                >
                   <div className="flex items-center justify-between">
                     <Label className="text-base">Biến thể sản phẩm</Label>
-                    <Button type="button" variant="outline" onClick={addVariant}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addVariant}
+                    >
                       Thêm biến thể
                     </Button>
                   </div>
-
                   {formData.variants.map((variant, vIdx) => (
                     <div key={vIdx} className="border rounded-md p-4 space-y-3">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -787,7 +850,9 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                           <Label>Loại</Label>
                           <Input
                             value={variant.type}
-                            onChange={(e) => handleVariantChange(vIdx, 'type', e.target.value)}
+                            onChange={(e) =>
+                              handleVariantChange(vIdx, "type", e.target.value)
+                            }
                             placeholder="vd: Storage, Size..."
                           />
                         </div>
@@ -795,7 +860,9 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                           <Label>Giá trị</Label>
                           <Input
                             value={variant.name}
-                            onChange={(e) => handleVariantChange(vIdx, 'name', e.target.value)}
+                            onChange={(e) =>
+                              handleVariantChange(vIdx, "name", e.target.value)
+                            }
                             placeholder="vd: 256GB, 42mm..."
                           />
                         </div>
@@ -816,31 +883,61 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                           </Button>
                         </div>
                       </div>
-
                       <div className="space-y-2">
                         {(variant.options || []).map((opt, oIdx) => (
-                          <div key={oIdx} className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                          <div
+                            key={oIdx}
+                            className="grid grid-cols-1 md:grid-cols-5 gap-2"
+                          >
                             <Input
                               placeholder="Tên"
                               value={opt.name}
-                              onChange={(e) => handleVariantOptionChange(vIdx, oIdx, 'name', e.target.value)}
+                              onChange={(e) =>
+                                handleVariantOptionChange(
+                                  vIdx,
+                                  oIdx,
+                                  "name",
+                                  e.target.value
+                                )
+                              }
                             />
                             <Input
                               placeholder="Màu"
                               value={opt.color}
-                              onChange={(e) => handleVariantOptionChange(vIdx, oIdx, 'color', e.target.value)}
+                              onChange={(e) =>
+                                handleVariantOptionChange(
+                                  vIdx,
+                                  oIdx,
+                                  "color",
+                                  e.target.value
+                                )
+                              }
                             />
                             <Input
                               placeholder="Giá gốc"
                               type="number"
                               value={opt.originalPrice}
-                              onChange={(e) => handleVariantOptionChange(vIdx, oIdx, 'originalPrice', e.target.value)}
+                              onChange={(e) =>
+                                handleVariantOptionChange(
+                                  vIdx,
+                                  oIdx,
+                                  "originalPrice",
+                                  e.target.value
+                                )
+                              }
                             />
                             <Input
                               placeholder="Giá bán"
                               type="number"
                               value={opt.price}
-                              onChange={(e) => handleVariantOptionChange(vIdx, oIdx, 'price', e.target.value)}
+                              onChange={(e) =>
+                                handleVariantOptionChange(
+                                  vIdx,
+                                  oIdx,
+                                  "price",
+                                  e.target.value
+                                )
+                              }
                             />
                             <Button
                               type="button"
@@ -856,12 +953,19 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   ))}
                 </TabsContent>
 
-                {/* Media Tab */}
-                <TabsContent value="media" className="space-y-4">
+                <TabsContent
+                  value="media"
+                  className="space-y-4 mt-6 border border-red-500"
+                >
+                  <p className="text-blue-500">Nội dung tab Media (Debug)</p>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Hình ảnh</Label>
-                      <Button type="button" variant="outline" onClick={() => addArrayItem('images')}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addArrayItem("images")}
+                      >
                         Thêm ảnh
                       </Button>
                     </div>
@@ -869,24 +973,29 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                       <div key={idx} className="flex gap-2">
                         <Input
                           value={img}
-                          onChange={(e) => handleArrayChange('images', idx, e.target.value)}
+                          onChange={(e) =>
+                            handleArrayChange("images", idx, e.target.value)
+                          }
                           placeholder="URL hình ảnh"
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => removeArrayItem('images', idx)}
+                          onClick={() => removeArrayItem("images", idx)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     ))}
                   </div>
-
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Tính năng nổi bật</Label>
-                      <Button type="button" variant="outline" onClick={() => addArrayItem('features')}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addArrayItem("features")}
+                      >
                         Thêm tính năng
                       </Button>
                     </div>
@@ -894,24 +1003,29 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                       <div key={idx} className="flex gap-2">
                         <Input
                           value={feature}
-                          onChange={(e) => handleArrayChange('features', idx, e.target.value)}
+                          onChange={(e) =>
+                            handleArrayChange("features", idx, e.target.value)
+                          }
                           placeholder="Tính năng"
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => removeArrayItem('features', idx)}
+                          onClick={() => removeArrayItem("features", idx)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     ))}
                   </div>
-
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Tags</Label>
-                      <Button type="button" variant="outline" onClick={() => addArrayItem('tags')}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addArrayItem("tags")}
+                      >
                         Thêm tag
                       </Button>
                     </div>
@@ -919,13 +1033,15 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                       <div key={idx} className="flex gap-2">
                         <Input
                           value={tag}
-                          onChange={(e) => handleArrayChange('tags', idx, e.target.value)}
+                          onChange={(e) =>
+                            handleArrayChange("tags", idx, e.target.value)
+                          }
                           placeholder="Tag"
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => removeArrayItem('tags', idx)}
+                          onClick={() => removeArrayItem("tags", idx)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -935,18 +1051,61 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                 </TabsContent>
               </Tabs>
 
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                  Hủy
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Đang xử lý...' : editingProduct ? 'Cập nhật' : 'Tạo sản phẩm'}
-                </Button>
-              </div>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? "Đang xử lý..."
+                  : editingProduct
+                  ? "Cập nhật"
+                  : "Tạo sản phẩm"}
+              </Button>
             </form>
           </CardContent>
         </Card>
       )}
+
+      {/* Filters
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Tìm kiếm sản phẩm..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Danh mục" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả danh mục</SelectItem>
+                {CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Trạng thái" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
+                <SelectItem value="DISCONTINUED">Ngừng KD</SelectItem>
+                <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card> */}
 
       {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -964,7 +1123,11 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   <Package className="w-12 h-12 text-gray-400" />
                 </div>
               )}
-              <Badge className={`absolute top-2 right-2 ${getStatusColor(product.status)}`}>
+              <Badge
+                className={`absolute top-2 right-2 ${getStatusColor(
+                  product.status
+                )}`}
+              >
                 {getStatusText(product.status)}
               </Badge>
               <Badge className="absolute top-2 left-2 bg-blue-500">
@@ -993,10 +1156,15 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
 
               <div className="flex items-center justify-between text-sm mb-4">
                 <span className="text-muted-foreground">Tồn kho:</span>
-                <span className={`font-semibold ${
-                  product.quantity > 10 ? 'text-green-600' :
-                  product.quantity > 0 ? 'text-orange-600' : 'text-red-600'
-                }`}>
+                <span
+                  className={`font-semibold ${
+                    product.quantity > 10
+                      ? "text-green-600"
+                      : product.quantity > 0
+                      ? "text-orange-600"
+                      : "text-red-600"
+                  }`}
+                >
                   {product.quantity}
                 </span>
               </div>
@@ -1024,23 +1192,23 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
         ))}
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
+      {/* Pagination - ✅ FIX */}
+      {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <Button
             variant="outline"
-            disabled={pagination.currentPage === 1}
-            onClick={() => setPagination({ ...pagination, currentPage: pagination.currentPage - 1 })}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage((prev) => prev - 1)}
           >
             Trước
           </Button>
           <span className="px-4 py-2 flex items-center">
-            Trang {pagination.currentPage} / {pagination.totalPages}
+            Trang {currentPage} / {totalPages}
           </span>
           <Button
             variant="outline"
-            disabled={pagination.currentPage === pagination.totalPages}
-            onClick={() => setPagination({ ...pagination, currentPage: pagination.currentPage + 1 })}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((prev) => prev + 1)}
           >
             Sau
           </Button>

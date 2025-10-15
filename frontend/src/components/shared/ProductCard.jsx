@@ -1,5 +1,5 @@
-// FILE: src/components/shared/ProductCard.jsx - Enhanced
-import React from "react";
+// FILE: src/components/shared/ProductCard.jsx
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ const CATEGORY_COLORS = {
   iPhone: "bg-blue-500",
   iPad: "bg-purple-500",
   Mac: "bg-gray-700",
-  'Apple Watch': "bg-red-500",
+  "Apple Watch": "bg-red-500",
   AirPods: "bg-green-500",
   Accessories: "bg-orange-500",
 };
@@ -23,27 +23,59 @@ export const ProductCard = ({ product }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
+  const [isAdding, setIsAdding] = useState(false);
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
 
+    // Log trạng thái xác thực
+    console.log("Auth state:", { isAuthenticated, user, token: localStorage.getItem("token") });
+
     if (!isAuthenticated) {
+      console.log("Redirecting to login due to unauthenticated user");
       navigate("/login");
       return;
     }
 
-    if (user?.role !== "CUSTOMER") {
+    if (!user || user.role !== "CUSTOMER") {
+      console.log("Invalid user role:", user?.role);
       toast.error("Chỉ khách hàng mới có thể thêm vào giỏ hàng");
       return;
     }
 
-    const result = await addToCart(product._id, 1);
-    if (result.success) {
-      toast.success("Đã thêm vào giỏ hàng", {
-        description: product.name,
-      });
-    } else {
-      toast.error(result.message || "Thêm vào giỏ hàng thất bại");
+    // Kiểm tra dữ liệu sản phẩm
+    console.log("Product data:", { id: product._id, status: product.status, quantity: product.quantity });
+    if (!product?._id) {
+      console.error("Invalid product ID:", product);
+      toast.error("Sản phẩm không hợp lệ");
+      return;
+    }
+
+    if (product.quantity < 1) {
+      console.error("Product out of stock:", product._id);
+      toast.error("Sản phẩm đã hết hàng");
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      console.log("Calling addToCart:", { productId: product._id, quantity: 1 });
+      const result = await addToCart(product._id, 1);
+      console.log("Add to cart result:", result);
+
+      if (result.success) {
+        toast.success("Đã thêm vào giỏ hàng", {
+          description: product.name,
+        });
+      } else {
+        console.error("Add to cart failed:", result.message);
+        toast.error(result.message || "Thêm vào giỏ hàng thất bại");
+      }
+    } catch (error) {
+      console.error("Unexpected error in handleAddToCart:", error);
+      toast.error(error.message || "Lỗi hệ thống khi thêm vào giỏ hàng");
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -67,58 +99,48 @@ export const ProductCard = ({ product }) => {
           </div>
         )}
 
-        {/* Category Badge */}
         <Badge className={`absolute top-2 left-2 ${categoryColor} text-white`}>
           {product.category}
         </Badge>
 
-        {/* Status Badge */}
         <Badge
           className={`absolute top-2 right-2 ${getStatusColor(product.status)}`}
         >
           {getStatusText(product.status)}
         </Badge>
 
-        {/* Discount Badge */}
         {product.discount > 0 && (
           <Badge className="absolute bottom-2 right-2 bg-red-500 text-white">
             -{product.discount}%
           </Badge>
         )}
 
-        {/* Quick Add Button */}
         {isAuthenticated && user?.role === "CUSTOMER" && product.status === "AVAILABLE" && (
           <Button
             size="sm"
             className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={handleAddToCart}
+            disabled={isAdding}
           >
             <ShoppingCart className="w-4 h-4 mr-1" />
-            Thêm
+            {isAdding ? "Đang thêm..." : "Thêm"}
           </Button>
         )}
       </div>
 
       <CardContent className="p-4">
         <div className="space-y-2">
-          {/* Product Name */}
           <h3 className="font-semibold text-lg line-clamp-2 min-h-[3.5rem]">
             {product.name}
           </h3>
-
-          {/* Model */}
           <p className="text-sm text-muted-foreground line-clamp-1">
             {product.model}
           </p>
-
-          {/* Subcategory */}
           {product.subcategory && (
             <Badge variant="outline" className="text-xs">
               {product.subcategory}
             </Badge>
           )}
-
-          {/* Rating */}
           {product.totalReviews > 0 && (
             <div className="flex items-center gap-1">
               <div className="flex">
@@ -138,8 +160,6 @@ export const ProductCard = ({ product }) => {
               </span>
             </div>
           )}
-
-          {/* Price */}
           <div className="space-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-primary">
@@ -152,8 +172,6 @@ export const ProductCard = ({ product }) => {
               </p>
             )}
           </div>
-
-          {/* Stock Info */}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Còn lại:</span>
             <span
@@ -168,8 +186,6 @@ export const ProductCard = ({ product }) => {
               {product.quantity} sản phẩm
             </span>
           </div>
-
-          {/* Specifications Preview */}
           {product.specifications && (
             <div className="flex flex-wrap gap-1 pt-2 border-t">
               {product.specifications.storage && (
@@ -189,8 +205,6 @@ export const ProductCard = ({ product }) => {
               )}
             </div>
           )}
-
-          {/* Tags */}
           {product.tags && product.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {product.tags.slice(0, 3).map((tag, idx) => (

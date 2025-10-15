@@ -13,13 +13,13 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // Đọc từ localStorage (zustand persist lưu ở đây)
-    const authStorage = localStorage.getItem('auth-storage');
-    
+    const authStorage = localStorage.getItem("auth-storage");
+
     if (authStorage) {
       try {
         const { state } = JSON.parse(authStorage);
         const token = state?.token;
-        
+
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
           console.log("✅ Token attached:", token.substring(0, 20) + "...");
@@ -32,7 +32,7 @@ api.interceptors.request.use(
     } else {
       console.warn("⚠️ auth-storage not found in localStorage");
     }
-    
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -44,13 +44,13 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       console.warn("🔒 401 Unauthorized - Token invalid or expired");
-      
+
       // Chỉ clear storage nếu không phải endpoint login
       if (!error.config.url.includes("/auth/login")) {
         localStorage.removeItem("auth-storage");
         // Redirect to login nếu cần
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
         }
       }
     }
@@ -59,7 +59,6 @@ api.interceptors.response.use(
 );
 
 export default api;
-
 
 // Auth API
 export const authAPI = {
@@ -77,16 +76,18 @@ export const productAPI = {
   create: (data) => api.post("/products", data),
   update: (id, data) => api.put(`/products/${id}`, data),
   delete: (id) => api.delete(`/products/${id}`),
-  updateQuantity: (id, quantity) => api.patch(`/products/${id}/quantity`, { quantity }),
-  
+  updateQuantity: (id, quantity) =>
+    api.patch(`/products/${id}/quantity`, { quantity }),
+
   // Category endpoints
   getCategories: () => api.get("/products/categories"),
-  getByCategory: (category, params) => api.get(`/products/category/${category}`, { params }),
+  getByCategory: (category, params) =>
+    api.get(`/products/category/${category}`, { params }),
   getFeatured: (params) => api.get("/products/featured", { params }),
   getNewArrivals: (params) => api.get("/products/new-arrivals", { params }),
   getRelated: (id) => api.get(`/products/${id}/related`),
   getStats: () => api.get("/products/stats/overview"),
-  
+
   // Import/Export endpoints
   bulkImportJSON: (data) => api.post("/products/bulk-import/json", data),
   bulkImportCSV: (data) => api.post("/products/bulk-import/csv", data),
@@ -133,12 +134,15 @@ export const promotionAPI = {
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
-  updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
+  updateAddress: (addressId, data) =>
+    api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
-  
+
   // Employee management
   getAllEmployees: () => api.get("/users/employees"),
+  getEmployees: () => api.get("/users/employees"),
   createEmployee: (data) => api.post("/users/employees", data),
-  toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
+  toggleEmployeeStatus: (id) =>
+    api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
