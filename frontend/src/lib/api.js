@@ -104,15 +104,16 @@ export const cartAPI = {
   clearCart: () => api.delete("/cart/clear"),
 };
 
-// Order API
+// ORDER API
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
   getMyOrders: (params) => api.get("/orders/my-orders", { params }),
-  getAllOrders: (params) => api.get("/orders/all", { params }),
+  getAll: (params) => api.get("/orders/all", { params }),
   getById: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, data) => api.put(`/orders/${id}/status`, data),
   cancel: (id) => api.post(`/orders/${id}/cancel`),
 };
+
 // Review API
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),

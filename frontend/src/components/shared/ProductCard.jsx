@@ -87,7 +87,7 @@ export const ProductCard = ({ product }) => {
       onClick={() => navigate(`/products/${product._id}`)}
     >
       <div className="aspect-square relative bg-gray-100">
-        {product.images && product.images[0] ? (
+{product.images && product.images[0] ? (
           <img
             src={product.images[0]}
             alt={product.name}
@@ -172,7 +172,7 @@ export const ProductCard = ({ product }) => {
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between text-sm">
+<div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Còn lại:</span>
             <span
               className={`font-medium ${
