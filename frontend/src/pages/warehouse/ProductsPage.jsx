@@ -565,7 +565,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
             {error && <ErrorMessage message={error} />}
 
             {importData && (
-              <div className="border rounded p-4 space-y-2">
+              <div className="  rounded p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">
                     Đã tải {importData.length} sản phẩm
@@ -576,7 +576,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                 </div>
                 <div className="max-h-40 overflow-y-auto text-sm">
                   {importData.slice(0, 5).map((item, i) => (
-                    <div key={i} className="py-1 border-b last:border-0">
+                    <div key={i} className="py-1  -b last: -0">
                       {item.name || "Unknown"} - {item.category}
                     </div>
                   ))}
@@ -684,10 +684,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   <TabsTrigger value="media">Media</TabsTrigger>
                 </TabsList>
 
-                <TabsContent
-                  value="basic"
-                  className="space-y-4 mt-6 border border-red-500"
-                >
+                <TabsContent value="basic" className="space-y-4 mt-6  ">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Tên sản phẩm *</Label>
@@ -808,11 +805,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   </div>
                 </TabsContent>
 
-                <TabsContent
-                  value="specs"
-                  className="space-y-4 mt-6 border border-red-500"
-                >
-                  <p className="text-blue-500">Nội dung tab Thông số (Debug)</p>
+                <TabsContent value="specs" className="space-y-4 mt-6  ">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {currentSpecs.map((spec) => (
                       <div key={spec} className="space-y-2">
@@ -831,7 +824,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
 
                 <TabsContent
                   value="variants"
-                  className="space-y-4 mt-6 border border-red-500"
+                  className="space-y-4 mt-6 border   border-spacing-0"
                 >
                   <div className="flex items-center justify-between">
                     <Label className="text-base">Biến thể sản phẩm</Label>
@@ -844,7 +837,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                     </Button>
                   </div>
                   {formData.variants.map((variant, vIdx) => (
-                    <div key={vIdx} className="border rounded-md p-4 space-y-3">
+                    <div key={vIdx} className="  rounded-md p-4 space-y-3">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-2">
                           <Label>Loại</Label>
@@ -953,11 +946,7 @@ iPhone 17 Pro Max,iPhone,Pro,iPhone 17 Pro Max,29990000,32990000,9,50,AVAILABLE,
                   ))}
                 </TabsContent>
 
-                <TabsContent
-                  value="media"
-                  className="space-y-4 mt-6 border border-red-500"
-                >
-                  <p className="text-blue-500">Nội dung tab Media (Debug)</p>
+                <TabsContent value="media" className="space-y-4 mt-6    ">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Hình ảnh</Label>
