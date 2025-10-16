@@ -191,18 +191,19 @@ orderSchema.pre("save", function (next) {
 
 // Method to update order status
 orderSchema.methods.updateStatus = async function (status, userId, note) {
+  console.log("Updating status to:", status, "current status:", this.status);
   this.status = status;
   
   this.addStatusHistory(status, userId, note);
   
-  // Update payment status if delivered
   if (status === "DELIVERED" && this.paymentMethod === "COD") {
     this.paymentStatus = "PAID";
   }
   
-  return this.save();
+  const saved = await this.save();
+  console.log("Saved status:", saved.status);
+  return saved;
 };
-
 // Method to cancel order
 orderSchema.methods.cancel = async function (userId, note) {
   if (this.status === "DELIVERED") {
