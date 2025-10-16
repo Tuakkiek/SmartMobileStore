@@ -1,13 +1,11 @@
-// ============================================
-// FILE: src/pages/ProductDetailPage.jsx
-// ============================================
+// FILE: src/pages/ProductDetailPage.jsx - Enhanced Design
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Loading } from "@/components/shared/Loading";
-import { ShoppingCart, Star, Minus, Plus } from "lucide-react";
+import { ShoppingCart, Star, Shield, Clock, Truck, Check } from "lucide-react";
 import { productAPI, reviewAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { useCartStore } from "@/store/cartStore";
@@ -22,22 +20,18 @@ const ProductDetailPage = () => {
 
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
-  const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(null);
   const [selectedStorage, setSelectedStorage] = useState(null);
+  const [selectedColor, setSelectedColor] = useState(null);
   const [selectedWarranty, setSelectedWarranty] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [productRes, reviewsRes] = await Promise.all([
-          productAPI.getById(id),
-          reviewAPI.getByProduct(id),
-        ]);
-
+        const productRes = await productAPI.getById(id);
         const p = productRes.data.data.product;
+
         if (p && p.specifications) {
           const s = p.specifications || {};
           p.specifications = {
@@ -63,11 +57,20 @@ const ProductDetailPage = () => {
         }
 
         setProduct(p);
-        setReviews(reviewsRes.data.data.reviews);
+
+        try {
+          const reviewsRes = await reviewAPI.getByProduct(id);
+          setReviews(reviewsRes.data.data.reviews || []);
+        } catch (reviewError) {
+          console.warn(
+            "Could not fetch reviews:",
+            reviewError.response?.status
+          );
+          setReviews([]);
+        }
       } catch (error) {
-        const status = error.response?.status;
-        const msg = error.response?.data?.message || error.message;
-        console.error("Error fetching data:", status, msg);
+        console.error("Error fetching product:", error);
+        toast.error("Không thể tải thông tin sản phẩm");
       } finally {
         setIsLoading(false);
       }
@@ -76,27 +79,23 @@ const ProductDetailPage = () => {
     fetchData();
   }, [id]);
 
-  // Init selection based on actual variants
   useEffect(() => {
     if (!product) return;
-    const variants = Array.isArray(product.variants) ? product.variants : [];
-    const storages = Array.from(new Set(variants.map((v) => v.storage))).filter(
+    const variants = product.variants || [];
+    const storages = Array.from(
+      new Set(variants.flatMap((v) => v.options?.map((o) => o.name) || []))
+    ).filter(Boolean);
+    const colors = Array.from(new Set(variants.map((v) => v.name))).filter(
       Boolean
     );
-    const colorsFromVariants = Array.from(
-      new Set(variants.map((v) => v.color))
-    ).filter(Boolean);
-    const fallbackColors = product.specifications?.colors || [];
-    const colors =
-      colorsFromVariants.length > 0 ? colorsFromVariants : fallbackColors;
 
     const defaultStorage = storages[0] || null;
     let defaultColor = colors[0] || null;
     if (defaultStorage) {
-      const cs = variants
-        .filter((v) => v.storage === defaultStorage)
-        .map((v) => v.color);
-      if (cs.length > 0) defaultColor = cs[0];
+      const compatibleColors = variants
+        .filter((v) => v.options?.some((o) => o.name === defaultStorage))
+        .map((v) => v.name);
+      if (compatibleColors.length) defaultColor = compatibleColors[0];
     }
 
     setSelectedStorage(defaultStorage);
@@ -108,6 +107,17 @@ const ProductDetailPage = () => {
     });
   }, [product]);
 
+  useEffect(() => {
+    if (!product || !selectedColor) return;
+    const variants = product.variants || [];
+    const colorVariant = variants.find((v) => v.name === selectedColor);
+    const imageUrl =
+      colorVariant?.options?.[0]?.imageUrl || product.images?.[0];
+    const imageIndex =
+      product.images?.findIndex((img) => img === imageUrl) ?? 0;
+    setSelectedImage(imageIndex);
+  }, [selectedColor, product]);
+
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
       navigate("/login");
@@ -115,17 +125,15 @@ const ProductDetailPage = () => {
     }
 
     if (user?.role !== "CUSTOMER") {
+      toast.error("Chỉ khách hàng mới có thể thêm vào giỏ hàng");
       return;
     }
 
-    const result = await addToCart(product._id, quantity);
+    const result = await addToCart(product._id, 1);
     if (result.success) {
-      setQuantity(1);
       toast.success("Đã thêm vào giỏ hàng", {
-        description: `${product.name} • ${
-          selectedStorage?.label ||
-          product.specifications?.storage ||
-          "Mặc định"
+        description: `${product.name}${
+          selectedStorage ? " • " + selectedStorage : ""
         }${selectedColor ? " • " + selectedColor : ""}`,
       });
     } else {
@@ -133,65 +141,44 @@ const ProductDetailPage = () => {
     }
   };
 
-  const handleBuyNow = async () => {
-    if (!isAuthenticated) {
-      navigate("/login");
-      return;
-    }
-    if (user?.role !== "CUSTOMER") {
-      return;
-    }
-    const result = await addToCart(product._id, quantity);
-    if (result.success) {
-      toast.success("Đã thêm vào giỏ hàng", {
-        description: `${product.name} • ${
-          selectedStorage?.label ||
-          product.specifications?.storage ||
-          "Mặc định"
-        }${selectedColor ? " • " + selectedColor : ""}`,
-      });
-      navigate("/checkout");
-    } else {
-      toast.error(result.message || "Không thể mua ngay lúc này");
-    }
-  };
-
-  if (isLoading) {
-    return <Loading />;
-  }
-
-  if (!product) {
+  if (isLoading) return <Loading />;
+  if (!product)
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <p>Không tìm thấy sản phẩm</p>
+        Không tìm thấy sản phẩm
       </div>
     );
-  }
 
-  // Derived options and price
-  const variants = Array.isArray(product.variants) ? product.variants : [];
-  const storages = Array.from(new Set(variants.map((v) => v.storage))).filter(
+  const variants = product.variants || [];
+  const storages = Array.from(
+    new Set(variants.flatMap((v) => v.options?.map((o) => o.name) || []))
+  ).filter(Boolean);
+  const allColors = Array.from(new Set(variants.map((v) => v.name))).filter(
     Boolean
   );
-  const allColorsFromVariants = Array.from(
-    new Set(variants.map((v) => v.color))
-  ).filter(Boolean);
-  const colorOptions =
-    allColorsFromVariants.length > 0
-      ? allColorsFromVariants
-      : product.specifications?.colors || [];
+
   const colorsForStorage = (st) =>
-    variants.filter((v) => v.storage === st).map((v) => v.color);
-  const selectedVariant = variants.find(
-    (v) => v.storage === selectedStorage && v.color === selectedColor
-  );
+    variants
+      .filter((v) => v.options?.some((o) => o.name === st))
+      .map((v) => v.name);
 
   const priceForStorage = (st) => {
     const prices = variants
-      .filter((v) => v.storage === st)
-      .map((v) => v.price)
-      .filter((p) => Number.isFinite(p));
-    return prices.length ? Math.min(...prices) : product.price;
+      .filter((v) => v.options?.some((o) => o.name === st))
+      .map((v) => v.options.find((o) => o.name === st)?.price || Infinity);
+    return Math.min(...prices);
+  };
+
+  const priceForColorAndStorage = (color, st) => {
+    const v = variants.find((v) => v.name === color);
+    return v?.options?.find((o) => o.name === st)?.price || 0;
+  };
+
+  const imageForColor = (color) => {
+    const v = variants.find((v) => v.name === color);
+    return (
+      v?.options?.[0]?.imageUrl || product.images?.[0] || "/placeholder.png"
+    );
   };
 
   const warrantyOptions = [
@@ -199,367 +186,405 @@ const ProductDetailPage = () => {
     { label: "1 đổi 1 24 tháng", months: 24, extraPrice: 1100000 },
   ];
 
-  const basePrice =
-    selectedVariant?.price ??
-    (selectedStorage ? priceForStorage(selectedStorage) : product.price);
+  const basePrice = priceForColorAndStorage(selectedColor, selectedStorage);
   const finalPrice = basePrice + (selectedWarranty?.extraPrice || 0);
-
-  const colorToCss = (name) => {
-    if (!name) return "#ccc";
-    const map = {
-      black: "#000000",
-      trắng: "#ffffff",
-      white: "#ffffff",
-      silver: "#c0c0c0",
-      bạc: "#c0c0c0",
-      gold: "#d4af37",
-      vàng: "#d4af37",
-      blue: "#1e40af",
-      xanh: "#1e40af",
-      "xanh dương": "#1e3a8a",
-      green: "#10b981",
-      pink: "#ec4899",
-      hồng: "#ec4899",
-      purple: "#8b5cf6",
-      tím: "#8b5cf6",
-      red: "#ef4444",
-      đỏ: "#ef4444",
-      orange: "#f97316",
-      cam: "#f97316",
-      gray: "#6b7280",
-      xám: "#6b7280",
-      graphite: "#4b5563",
-      "deep blue": "#1e3a8a",
-      "cosmic orange": "#ea580c",
-    };
-    const key = String(name).toLowerCase();
-    return map[key] || name;
-  };
+  const originalPrice =
+    variants
+      .find((v) => v.name === selectedColor)
+      ?.options?.find((o) => o.name === selectedStorage)?.originalPrice ||
+    product.originalPrice;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        {/* Images */}
-        <div className="space-y-4">
-          <div className="aspect-square rounded-lg overflow-hidden border">
-            <img
-              src={product.images?.[selectedImage] || "/placeholder.png"}
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
+    <div className="bg-gray-50 min-h-screen">
+      <div className="container mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Card className="overflow-hidden">
+              <CardContent className="p-6 bg-white">
+                <img
+                  src={product.images?.[selectedImage] || "/placeholder.png"}
+                  alt={product.name}
+                  className="w-full h-auto max-h-[400px] object-contain"
+                />
+              </CardContent>
+            </Card>
+
+            {product.images?.length > 1 && (
+              <div className="grid grid-cols-7 gap-2">
+                {product.images.map((image, index) => (
+                  <button
+                    key={index}
+                    className={`aspect-square rounded-lg overflow-hidden border-2 ${
+                      selectedImage === index
+                        ? "border-red-500"
+                        : "border-gray-200"
+                    } hover:border-red-500 transition`}
+                    onClick={() => setSelectedImage(index)}
+                  >
+                    <img
+                      src={image}
+                      alt={`${product.name} ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {product.images?.length > 1 && (
-            <div className="grid grid-cols-4 gap-2">
-              {product.images.map((image, index) => (
-                <button
-                  key={index}
-                  className={`aspect-square rounded-lg overflow-hidden border-2 ${
-                    selectedImage === index
-                      ? "border-primary"
-                      : "border-transparent"
-                  }`}
-                  onClick={() => setSelectedImage(index)}
-                >
-                  <img
-                    src={image}
-                    alt={`${product.name} ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+          <div className="lg:col-span-3 space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <h1 className="text-2xl font-bold flex-1">{product.name}</h1>
+                  <Badge className={getStatusColor(product.status)}>
+                    {getStatusText(product.status)}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                  <div className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${
+                          i < Math.floor(product.averageRating || 0)
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-gray-300"
+                        }`}
+                      />
+                    ))}
+                    <span>({reviews.length} đánh giá)</span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="bg-blue-50 text-blue-600 border-blue-200"
+                  >
+                    Mới 100%
+                  </Badge>
+                </div>
+                {product.model && (
+                  <p className="text-gray-600 mb-2">
+                    <strong>Mã sản phẩm:</strong> {product.model}
+                  </p>
+                )}
+                {product.specifications?.manufacturer && (
+                  <p className="text-gray-600 mb-2">
+                    <strong>Hãng sản xuất:</strong>{" "}
+                    {product.specifications.manufacturer}
+                  </p>
+                )}
+                {product.specifications?.condition && (
+                  <p className="text-gray-600 mb-2">
+                    <strong>Tình trạng:</strong>{" "}
+                    {product.specifications.condition}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-red-500">
+              <CardContent className="p-6">
+                <div className="space-y-3">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-bold text-red-600">
+                      {formatPrice(finalPrice)} đ
+                    </span>
+                    {originalPrice > finalPrice && (
+                      <>
+                        <span className="text-lg text-gray-400 line-through">
+                          {formatPrice(originalPrice)} đ
+                        </span>
+                        <Badge className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400">
+                          Trả góp 0%
+                        </Badge>
+                      </>
+                    )}
+                  </div>
+                  {selectedWarranty?.extraPrice > 0 && (
+                    <p className="text-sm text-gray-600">
+                      Giá trả góp chỉ từ{" "}
+                      <span className="font-semibold">0đ</span>
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    <strong>Ưu đãi:</strong> Miễn phí vận chuyển toàn quốc
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {storages.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="font-semibold mb-3">Phiên bản khác</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    {storages.map((st, idx) => {
+                      const variantPrice = priceForStorage(st);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setSelectedStorage(st);
+                            const compatColors = colorsForStorage(st);
+                            if (
+                              compatColors.length &&
+                              !compatColors.includes(selectedColor)
+                            ) {
+                              setSelectedColor(compatColors[0]);
+                            }
+                          }}
+                          className={`p-3 rounded-lg border-2 text-sm transition relative ${
+                            selectedStorage === st
+                              ? "border-red-500 bg-red-50"
+                              : "border-gray-200 hover:border-red-300"
+                          }`}
+                        >
+                          <div className="font-semibold text-center">{st}</div>
+                          <div className="text-xs text-gray-600 text-center mt-1">
+                            {formatPrice(variantPrice)} đ
+                          </div>
+                          {selectedStorage === st && (
+                            <Badge className="absolute top-1 right-1 bg-green-500">
+                              <Check className="w-3 h-3" />
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {allColors.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="font-semibold mb-3">
+                    Chọn màu sắc hoặc tình trạng máy:
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    {colorsForStorage(selectedStorage).map((color, idx) => {
+                      const colorPrice = priceForColorAndStorage(
+                        color,
+                        selectedStorage
+                      );
+                      const colorImageUrl = imageForColor(color);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedColor(color)}
+                          className={`p-3 rounded-lg border-2 transition flex flex-col items-center gap-2 relative ${
+                            selectedColor === color
+                              ? "border-red-500 bg-red-50"
+                              : "border-gray-200 hover:border-red-300"
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{color}</span>
+                          <span className="text-xs text-gray-600">
+                            {formatPrice(colorPrice)} đ
+                          </span>
+                          {selectedColor === color && (
+                            <Badge className="absolute top-1 right-1 bg-green-500">
+                              <Check className="w-3 h-3" />
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {warrantyOptions.length > 0 && (
+              <Card className="border-2 border-red-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="w-5 h-5 text-red-500" />
+                    <h3 className="font-semibold">Bảo hành</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {warrantyOptions.map((opt, idx) => (
+                      <label
+                        key={idx}
+                        className={`flex items-center justify-between gap-3 border-2 rounded-lg p-4 cursor-pointer transition ${
+                          selectedWarranty?.label === opt.label
+                            ? "border-red-500 bg-red-50"
+                            : "border-gray-200 hover:border-red-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <input
+                            type="radio"
+                            name="warranty"
+                            checked={selectedWarranty?.label === opt.label}
+                            onChange={() => setSelectedWarranty(opt)}
+                            className="w-4 h-4 text-red-500"
+                          />
+                          <div className="flex items-center gap-2">
+                            {opt.extraPrice === 0 && (
+                              <Badge className="bg-red-500 hover:bg-red-600">
+                                <Clock className="w-3 h-3 mr-1" />
+                                Hot
+                              </Badge>
+                            )}
+                            <span className="font-medium">{opt.label}</span>
+                          </div>
+                        </div>
+                        <div
+                          className={`text-sm font-semibold ${
+                            opt.extraPrice > 0
+                              ? "text-red-600"
+                              : "text-green-600"
+                          }`}
+                        >
+                          {opt.extraPrice > 0
+                            ? `+ ${formatPrice(opt.extraPrice)}`
+                            : "Miễn phí"}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Truck className="w-5 h-5 text-blue-500" />
+                  <h3 className="font-semibold">Giao hàng</h3>
+                </div>
+                <p className="text-gray-600">
+                  Giao hàng toàn quốc, miễn phí vận chuyển cho đơn hàng từ
+                  500.000đ
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="sticky bottom-0 bg-white border-t pt-4">
+              <Button
+                className="w-full h-14 text-lg font-semibold bg-red-500 hover:bg-red-600"
+                onClick={handleAddToCart}
+                disabled={
+                  product.status !== "AVAILABLE" || product.quantity === 0
+                }
+              >
+                <ShoppingCart className="w-5 h-5 mr-2" />
+                Thêm vào giỏ hàng
+              </Button>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Product Info */}
-        <div className="space-y-6">
-          <div>
-            <Badge className={getStatusColor(product.status)}>
-              {getStatusText(product.status)}
-            </Badge>
-            <h1 className="text-3xl font-bold mt-2">{product.name}</h1>
-            <p className="text-muted-foreground mt-1">Mã: {product.model}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex items-center">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-5 h-5 ${
-                    i < Math.floor(product.averageRating)
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "text-gray-300"
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="text-sm text-muted-foreground">
-              ({product.totalReviews} đánh giá)
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-bold text-primary">
-                {formatPrice(finalPrice)}
-              </span>
-              {product.discount > 0 && (
-                <>
-                  <span className="text-xl text-muted-foreground line-through">
-                    {formatPrice(product.originalPrice)}
-                  </span>
-                  <Badge className="bg-red-500">-{product.discount}%</Badge>
-                </>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Còn lại: {product.quantity} sản phẩm
-            </p>
-          </div>
-
-          {/* Storage Options */}
-          {storages.length > 0 && (
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {product.description && (
             <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-3">Dung lượng</h3>
-                <div className="flex flex-wrap gap-2">
-                  {storages.map((st, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setSelectedStorage(st);
-                        const compatColors = colorsForStorage(st);
-                        if (
-                          compatColors.length &&
-                          !compatColors.includes(selectedColor)
-                        ) {
-                          setSelectedColor(compatColors[0]);
-                        }
-                      }}
-                      className={`px-4 py-2 rounded-md border text-sm hover:border-primary transition ${
-                        selectedStorage === st
-                          ? "border-primary"
-                          : "border-gray-200"
-                      }`}
-                    >
-                      <div className="font-medium">{st}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatPrice(priceForStorage(st))}
-                      </div>
-                    </button>
-                  ))}
-                </div>
+              <CardHeader>
+                <h3 className="text-xl font-bold">Mô tả sản phẩm</h3>
+              </CardHeader>
+              <CardContent className="p-6">
+                <p className="text-gray-600 whitespace-pre-line">
+                  {product.description}
+                </p>
               </CardContent>
             </Card>
           )}
 
-          {/* Color Options */}
-          {colorOptions.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-3">Màu sắc</h3>
-                <div className="flex flex-wrap gap-3">
-                  {(colorsForStorage(selectedStorage) || colorOptions).map(
-                    (color, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedColor(color)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md border transition ${
-                          selectedColor === color
-                            ? "border-primary"
-                            : "border-gray-200"
-                        }`}
-                        title={color}
-                      >
-                        <span
-                          className="inline-block w-5 h-5 rounded-full border"
-                          style={{ backgroundColor: colorToCss(color) }}
-                        />
-                        <span className="text-sm">{color}</span>
-                      </button>
-                    )
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Warranty Options (radio style) */}
-          {warrantyOptions.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-3">Bảo hành</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {warrantyOptions.map((opt, idx) => (
-                    <label
-                      key={idx}
-                      className={`flex items-center justify-between gap-3 border rounded-md p-3 cursor-pointer ${
-                        selectedWarranty?.label === opt.label
-                          ? "border-primary"
-                          : "border-gray-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="warranty"
-                          checked={selectedWarranty?.label === opt.label}
-                          onChange={() => setSelectedWarranty(opt)}
-                        />
-                        <span className="font-medium">{opt.label}</span>
-                      </div>
-                      <div
-                        className={`text-sm ${
-                          opt.extraPrice > 0 ? "text-red-600" : "text-green-600"
-                        }`}
-                      >
-                        {opt.extraPrice > 0
-                          ? `+${formatPrice(opt.extraPrice)}`
-                          : "Miễn phí"}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Specifications */}
           {product.specifications && (
             <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-4">Thông số kỹ thuật</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+              <CardHeader>
+                <h3 className="text-xl font-bold">Thông số kỹ thuật</h3>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-2 text-sm">
                   {product.specifications.screenSize && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Kích thước màn hình:
-                      </span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Màn hình:</span>
+                      <span className="font-medium">
                         {product.specifications.screenSize}
                       </span>
                     </div>
                   )}
+                  {product.specifications.resolution && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Độ phân giải:</span>
+                      <span className="font-medium">
+                        {product.specifications.resolution}
+                      </span>
+                    </div>
+                  )}
                   {product.specifications.cpu && (
-                    <div>
-                      <span className="text-muted-foreground">CPU:</span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">CPU:</span>
+                      <span className="font-medium">
                         {product.specifications.cpu}
                       </span>
                     </div>
                   )}
-                  {product.specifications.operatingSystem && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Hệ điều hành:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {product.specifications.operatingSystem}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.storage && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Bộ nhớ trong:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {product.specifications.storage}
-                      </span>
-                    </div>
-                  )}
                   {product.specifications.ram && (
-                    <div>
-                      <span className="text-muted-foreground">RAM:</span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">RAM:</span>
+                      <span className="font-medium">
                         {product.specifications.ram}
                       </span>
                     </div>
                   )}
-                  {product.specifications.mainCamera && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Camera chính:
+                  {product.specifications.storage && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Dung lượng:</span>
+                      <span className="font-medium">
+                        {product.specifications.storage}
                       </span>
-                      <span className="ml-2 font-medium">
+                    </div>
+                  )}
+                  {product.specifications.mainCamera && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Camera chính:</span>
+                      <span className="font-medium">
                         {product.specifications.mainCamera}
                       </span>
                     </div>
                   )}
                   {product.specifications.frontCamera && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Camera trước:
-                      </span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Camera selfie:</span>
+                      <span className="font-medium">
                         {product.specifications.frontCamera}
                       </span>
                     </div>
                   )}
-                  {product.specifications.colors &&
-                    product.specifications.colors.length > 0 && (
-                      <div>
-                        <span className="text-muted-foreground">Màu sắc:</span>
-                        <span className="ml-2 font-medium">
-                          {product.specifications.colors.join(", ")}
-                        </span>
-                      </div>
-                    )}
-                  {product.specifications.resolution && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Độ phân giải màn hình:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {product.specifications.resolution}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.manufacturer && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Hãng sản xuất:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {product.specifications.manufacturer}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.condition && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Tình trạng SP:
-                      </span>
-                      <span className="ml-2 font-medium">
-                        {product.specifications.condition}
-                      </span>
-                    </div>
-                  )}
                   {product.specifications.battery && (
-                    <div>
-                      <span className="text-muted-foreground">Pin:</span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Pin:</span>
+                      <span className="font-medium">
                         {product.specifications.battery}
                       </span>
                     </div>
                   )}
                   {product.specifications.weight && (
-                    <div>
-                      <span className="text-muted-foreground">
-                        Trọng lượng:
-                      </span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Trọng lượng:</span>
+                      <span className="font-medium">
                         {product.specifications.weight}
                       </span>
                     </div>
                   )}
                   {product.specifications.dimensions && (
-                    <div>
-                      <span className="text-muted-foreground">Kích thước:</span>
-                      <span className="ml-2 font-medium">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Kích thước:</span>
+                      <span className="font-medium">
                         {product.specifications.dimensions}
+                      </span>
+                    </div>
+                  )}
+                  {product.specifications.operatingSystem && (
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Hệ điều hành:</span>
+                      <span className="font-medium">
+                        {product.specifications.operatingSystem}
                       </span>
                     </div>
                   )}
@@ -567,88 +592,21 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
           )}
-
-          {/* Add to Cart */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center border rounded-md">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                disabled={quantity <= 1}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="px-4 font-medium">{quantity}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() =>
-                  setQuantity(Math.min(product.quantity, quantity + 1))
-                }
-                disabled={quantity >= product.quantity}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Button
-              className="flex-1"
-              size="lg"
-              onClick={handleAddToCart}
-              disabled={
-                product.status !== "AVAILABLE" || product.quantity === 0
-              }
-            >
-              <ShoppingCart className="w-5 h-5 mr-2" />
-              Thêm vào giỏ hàng
-            </Button>
-            <Button
-              className="flex-1"
-              size="lg"
-              variant="default"
-              onClick={handleBuyNow}
-              disabled={
-                product.status !== "AVAILABLE" || product.quantity === 0
-              }
-            >
-              Mua ngay
-            </Button>
-          </div>
         </div>
-      </div>
 
-      {/* Description */}
-      {product.description && (
-        <Card className="mb-8">
-          <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold mb-4">Mô tả sản phẩm</h3>
-            <p className="text-muted-foreground whitespace-pre-line">
-              {product.description}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Reviews */}
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="text-xl font-semibold mb-4">
-            Đánh giá ({reviews.length})
-          </h3>
-          {reviews.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              Chưa có đánh giá nào
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {reviews.map((review) => (
-                <div key={review._id} className="border-b pb-4 last:border-0">
+        {reviews.length > 0 && (
+          <Card className="mt-8">
+            <CardHeader>
+              <h3 className="text-xl font-bold">Đánh giá ({reviews.length})</h3>
+            </CardHeader>
+            <CardContent className="p-6">
+              {reviews.map((review, idx) => (
+                <div key={idx} className="border-b py-4 last:border-b-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium">
-                      {review.customerId?.fullName}
+                    <span className="font-semibold">
+                      {review.user?.name || "Ẩn danh"}
                     </span>
-                    <div className="flex items-center">
+                    <div className="flex gap-0.5">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
@@ -661,15 +619,16 @@ const ProductDetailPage = () => {
                       ))}
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {review.comment}
+                  <p className="text-gray-600">{review.comment}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(review.createdAt).toLocaleDateString()}
                   </p>
                 </div>
               ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

@@ -254,13 +254,13 @@ const OrdersSection = () => {
                             <h4 className="font-medium line-clamp-1">{item.productName}</h4>
                             <div className="flex items-center gap-4 mt-1">
                               <p className="text-sm text-muted-foreground">
-                                Số sim: <span className="font-medium">{item.specifications?.storage || "N/A"}</span>
+                                Dung lượng: <span className="font-medium">{item.specifications?.storage || "N/A"}</span>
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                Gói cước: <span className="font-medium">{item.specifications?.ram || "N/A"}</span>
+                                Ram: <span className="font-medium">{item.specifications?.ram || "N/A"}</span>
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                Loại sim: <span className="font-medium">{item.specifications?.color || "N/A"}</span>
+                                Màu sắc: <span className="font-medium">{item.specifications?.color || "N/A"}</span>
                               </p>
                             </div>
                           </div>

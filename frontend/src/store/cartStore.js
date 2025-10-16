@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { cartAPI } from "@/lib/api";
 
 export const useCartStore = create((set, get) => ({
-  cart: null,
+  cart: { items: [] },
   isLoading: false,
   error: null,
 
@@ -12,7 +12,7 @@ export const useCartStore = create((set, get) => ({
   getCart: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.get();
+      const response = await cartAPI.getCart();
       set({ cart: response.data.data, isLoading: false });
     } catch (error) {
       set({ error: error.response?.data?.message, isLoading: false });
@@ -23,7 +23,7 @@ export const useCartStore = create((set, get) => ({
   addToCart: async (productId, quantity = 1) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.add({ productId, quantity });
+      const response = await cartAPI.addToCart({ productId, quantity });
       set({ cart: response.data.data, isLoading: false });
       return { success: true, message: response.data.message };
     } catch (error) {
@@ -37,7 +37,7 @@ export const useCartStore = create((set, get) => ({
   updateCartItem: async (productId, quantity) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.update({ productId, quantity });
+      const response = await cartAPI.updateItem({ productId, quantity });
       set({ cart: response.data.data, isLoading: false });
       return { success: true };
     } catch (error) {
@@ -51,7 +51,7 @@ export const useCartStore = create((set, get) => ({
   removeFromCart: async (productId) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.remove(productId);
+      const response = await cartAPI.removeItem(productId);
       set({ cart: response.data.data, isLoading: false });
       return { success: true };
     } catch (error) {
@@ -65,7 +65,7 @@ export const useCartStore = create((set, get) => ({
   clearCart: async () => {
     set({ isLoading: true, error: null });
     try {
-      await cartAPI.clear();
+      await cartAPI.clearCart();
       set({ cart: { items: [] }, isLoading: false });
       return { success: true };
     } catch (error) {
