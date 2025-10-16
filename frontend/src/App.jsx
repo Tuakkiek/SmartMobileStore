@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
+import {Toaster} from "sonner";
 
 // Layouts
 import MainLayout from "@/layouts/MainLayout";
@@ -150,6 +151,7 @@ function App() {
         {/* 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+        <Toaster position = "bottom-right" richColors /> 
     </BrowserRouter>
   );
 }

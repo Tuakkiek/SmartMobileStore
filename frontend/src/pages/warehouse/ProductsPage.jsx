@@ -1,4 +1,4 @@
-// FILE: src/pages/warehouse/ProductsPage.jsx - FIXED WITH MODEL FIELD
+// FILE: src/pages/warehouse/ProductsPage.jsx - UPDATED WITH PRODUCTCARD
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
+import { ProductCard } from "@/components/shared/ProductCard";
 import { Trash2, Plus, Pencil, Package } from "lucide-react";
 import { productAPI } from "@/lib/api";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
@@ -77,7 +78,7 @@ const CATEGORY_SPECS = {
 
 const getEmptyFormData = () => ({
   name: "",
-  model: "", // Thêm trường model
+  model: "",
   category: "iPhone",
   price: "",
   originalPrice: "",
@@ -98,6 +99,7 @@ const getEmptyFormData = () => ({
   },
   variants: [],
   images: [""],
+  badges: [],
 });
 
 const emptyVariant = () => ({
@@ -163,7 +165,7 @@ const ProductsPage = () => {
       setEditingProduct(product);
       setFormData({
         name: product.name,
-        model: product.model || "", // Load model từ product
+        model: product.model || "",
         category: product.category,
         price: product.price,
         originalPrice: product.originalPrice,
@@ -193,6 +195,7 @@ const ProductsPage = () => {
           })),
         })) || [],
         images: product.images?.length > 0 ? product.images : [""],
+        badges: product.badges || [],
       });
       setPreviewImage(product.images?.[0] || null);
     } else {
@@ -360,7 +363,6 @@ const ProductsPage = () => {
     setIsSubmitting(true);
     setError("");
 
-    // Validate required fields
     if (!formData.model.trim()) {
       setError("Model là trường bắt buộc");
       toast.error("Vui lòng nhập model sản phẩm");
@@ -371,7 +373,7 @@ const ProductsPage = () => {
     try {
       const submitData = {
         name: formData.name,
-        model: formData.model, // Thêm model vào submit data
+        model: formData.model,
         category: formData.category,
         price: Number(formData.price || 0),
         originalPrice: Number(formData.originalPrice || 0),
@@ -396,6 +398,7 @@ const ProductsPage = () => {
           })),
         })),
         images: formData.images.filter((img) => img.trim() !== ""),
+        badges: formData.badges,
       };
 
       if (editingProduct) {
@@ -427,6 +430,18 @@ const ProductsPage = () => {
       await fetchProducts();
     } catch (error) {
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
+    }
+  };
+
+  const handleProductUpdate = async (productId, data) => {
+    try {
+      await productAPI.update(productId, data);
+      await fetchProducts();
+      toast.success("Cập nhật sản phẩm thành công");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Cập nhật sản phẩm thất bại"
+      );
     }
   };
 
@@ -581,7 +596,6 @@ const ProductsPage = () => {
                   </div>
                 </TabsContent>
 
-                {/* Các TabsContent khác giữ nguyên như code trước */}
                 <TabsContent value="specs" className="space-y-4 mt-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {currentSpecs.map((spec) => (
@@ -898,7 +912,7 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* Phần danh sách sản phẩm giữ nguyên */}
+      {/* Search & Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -938,87 +952,18 @@ const ProductsPage = () => {
         </CardContent>
       </Card>
 
+      {/* Products Grid - Using ProductCard Component */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((product) => (
-          <Card key={product._id} className="overflow-hidden">
-            <div className="aspect-square relative bg-gray-100">
-              {product.images &&
-              product.images[0] &&
-              product.images[0].trim() ? (
-                <img
-                  src={product.images[0]}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-12 h-12 text-gray-400" />
-                </div>
-              )}
-              <Badge
-                className={`absolute top-2 right-2 ${getStatusColor(
-                  product.status
-                )}`}
-              >
-                {getStatusText(product.status)}
-              </Badge>
-              <Badge className="absolute top-2 left-2 bg-blue-500">
-                {product.category}
-              </Badge>
-            </div>
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-lg mb-1 line-clamp-1">
-                {product.name}
-              </h3>
-              <p className="text-sm text-muted-foreground mb-2">
-                {product.model || "N/A"}
-              </p>
-              <div className="space-y-1 mb-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-primary">
-                    {formatPrice(product.price)}
-                  </span>
-                  {product.discount > 0 && (
-                    <Badge variant="destructive">-{product.discount}%</Badge>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm mb-4">
-                <span className="text-muted-foreground">Tồn kho:</span>
-                <span
-                  className={`font-semibold ${
-                    product.quantity > 10
-                      ? "text-green-600"
-                      : product.quantity > 0
-                      ? "text-orange-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {product.quantity}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleOpenForm(product)}
-                >
-                  <Pencil className="w-4 h-4 mr-2" /> Sửa
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDelete(product._id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ProductCard
+            key={product._id}
+            product={product}
+            onUpdate={handleProductUpdate}
+          />
         ))}
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <Button

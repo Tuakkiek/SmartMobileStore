@@ -1,4 +1,3 @@
-// FILE: src/pages/ProductDetailPage.jsx - Enhanced Design
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,11 @@ const ProductDetailPage = () => {
   const [selectedStorage, setSelectedStorage] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedWarranty, setSelectedWarranty] = useState(null);
+
+  // Reset scroll to top when page loads
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,7 +82,6 @@ const ProductDetailPage = () => {
 
     fetchData();
   }, [id]);
-
   useEffect(() => {
     if (!product) return;
     const variants = product.variants || [];
@@ -141,13 +144,7 @@ const ProductDetailPage = () => {
     }
   };
 
-  if (isLoading) return <Loading />;
-  if (!product)
-    return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        Không tìm thấy sản phẩm
-      </div>
-    );
+  if (isLoading || !product) return <Loading />;
 
   const variants = product.variants || [];
   const storages = Array.from(
@@ -180,7 +177,6 @@ const ProductDetailPage = () => {
       v?.options?.[0]?.imageUrl || product.images?.[0] || "/placeholder.png"
     );
   };
-
   const warrantyOptions = [
     { label: "1 đổi 1 12 tháng", months: 12, extraPrice: 0 },
     { label: "1 đổi 1 24 tháng", months: 24, extraPrice: 1100000 },
@@ -370,7 +366,6 @@ const ProductDetailPage = () => {
                         color,
                         selectedStorage
                       );
-                      const colorImageUrl = imageForColor(color);
                       return (
                         <button
                           key={idx}
@@ -464,7 +459,7 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
 
-            <div className="sticky bottom-0 bg-white border-t pt-4">
+            <div className="relative bg-white border-t pt-4">
               <Button
                 className="w-full h-14 text-lg font-semibold bg-red-500 hover:bg-red-600"
                 onClick={handleAddToCart}
