@@ -23,6 +23,7 @@ const MainLayout = () => {
     setMobileMenuOpen(false);
   };
 
+
   const handleProfileNavigation = () => {
     if (user?.role === "CUSTOMER") {
       navigate("/profile");
