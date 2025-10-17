@@ -1,192 +1,253 @@
-// ============================================
-// FILE: src/pages/warehouse/ProductsPage.jsx
-// ============================================
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
-import {
-  Package,
-  Plus,
-  Pencil,
-  Trash2,
-  Search,
-  Filter,
-  ImagePlus,
-} from "lucide-react";
+import { ProductCard } from "@/components/shared/ProductCard";
+import { Plus, X } from "lucide-react";
 import { productAPI } from "@/lib/api";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
+import { toast } from "sonner";
+import { CATEGORIES, getEmptyFormData, emptyVariant } from "@/lib/productConstants";
+import ProductFormBasic from "@/components/shared/ProductFormBasic";
+import ProductFormSpecs from "@/components/shared/ProductFormSpecs";
+import ProductFormVariants from "@/components/shared/ProductFormVariants";
+import ProductFormMedia from "@/components/shared/ProductFormMedia";
+import ProductCategoryModal from "@/components/shared/ProductCategoryModal";
 
 const ProductsPage = () => {
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showDialog, setShowDialog] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    total: 0,
-  });
-
-  const [formData, setFormData] = useState({
-    name: "",
-    model: "",
-    price: "",
-    originalPrice: "",
-    discount: 0,
-    quantity: "",
-    status: "AVAILABLE",
-    images: [],
-    description: "",
-    specifications: {
-      color: "",
-      storage: "",
-      ram: "",
-      screen: "",
-      chip: "",
-      camera: "",
-      battery: "",
-    },
-  });
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("iPhone");
+  const [selectedCondition, setSelectedCondition] = useState("NEW");
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [formData, setFormData] = useState(getEmptyFormData());
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState("basic");
+  const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
     fetchProducts();
-  }, [searchTerm, statusFilter, pagination.currentPage]);
+  }, [searchTerm, categoryFilter, statusFilter, currentPage]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
       const params = {
-        page: pagination.currentPage,
+        page: currentPage,
         limit: 12,
         search: searchTerm || undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
       };
-
       const response = await productAPI.getAll(params);
-      const { products, totalPages, currentPage, total } = response.data.data;
-
+      const { products, totalPages, currentPage: responsePage, total } = response.data.data;
       setProducts(products);
-      setPagination({ currentPage, totalPages, total });
+      setTotalPages(totalPages);
+      setTotalProducts(total);
+      if (responsePage !== currentPage) setCurrentPage(responsePage);
     } catch (error) {
       console.error("Error fetching products:", error);
+      toast.error("Lỗi khi tải danh sách sản phẩm");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleOpenDialog = (product = null) => {
+  const handleOpenForm = (product = null) => {
     if (product) {
       setEditingProduct(product);
       setFormData({
         name: product.name,
-        model: product.model,
+        model: product.model || "",
+        category: product.category,
+        condition: product.condition || "NEW",
         price: product.price,
         originalPrice: product.originalPrice,
         discount: product.discount || 0,
         quantity: product.quantity,
         status: product.status,
-        images: product.images || [],
         description: product.description || "",
-        specifications: product.specifications || {
-          color: "",
-          storage: "",
-          ram: "",
-          screen: "",
-          chip: "",
-          camera: "",
-          battery: "",
+        specifications: {
+          screenSize: product.specifications?.screenSize || "",
+          cpu: product.specifications?.cpu || "",
+          operatingSystem: product.specifications?.operatingSystem || "",
+          storage: product.specifications?.storage || "",
+          ram: product.specifications?.ram || "",
+          mainCamera: product.specifications?.mainCamera || "",
+          frontCamera: product.specifications?.frontCamera || "",
+          battery: product.specifications?.battery || "",
+          colors: Array.isArray(product.specifications?.colors) ? product.specifications.colors : [""],
+          chip: product.specifications?.chip || "",
+          gpuType: product.specifications?.gpuType || "",
+          screenTechnology: product.specifications?.screenTechnology || "",
+          screenResolution: product.specifications?.screenResolution || "",
+          cpuType: product.specifications?.cpuType || "",
+          ports: product.specifications?.ports || "",
         },
+        variants: product.variants?.map((v) => ({
+          color: v.name || v.options[0]?.color || "",
+          imageUrl: v.options[0]?.imageUrl || "",
+          options: v.options.map((o) => ({
+            cpuGpu: o.cpuGpu || o.name || "",
+            ram: o.ram || "",
+            storage: o.storage || o.capacity || "",
+            price: o.price || "",
+            originalPrice: o.originalPrice || "",
+            quantity: o.quantity || "",
+          })),
+        })) || [],
+        images: product.images?.length > 0 ? product.images : [""],
+        badges: product.badges || [],
       });
+      setPreviewImage(product.images?.[0] || null);
+      setShowForm(true);
+      setShowCategoryModal(false);
     } else {
       setEditingProduct(null);
-      setFormData({
-        name: "",
-        model: "",
-        price: "",
-        originalPrice: "",
-        discount: 0,
-        quantity: "",
-        status: "AVAILABLE",
-        images: [],
-        description: "",
-        specifications: {
-          color: "",
-          storage: "",
-          ram: "",
-          screen: "",
-          chip: "",
-          camera: "",
-          battery: "",
-        },
-      });
+      setSelectedCategory("iPhone");
+      setSelectedCondition("NEW");
+      setShowCategoryModal(true);
     }
     setError("");
-    setShowDialog(true);
+    setActiveTab("basic");
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  const handleCategorySubmit = () => {
+    const newFormData = getEmptyFormData(selectedCategory);
+    newFormData.condition = selectedCondition;
+    setFormData(newFormData);
+    setShowForm(true);
+    setShowCategoryModal(false);
+  };
+
+  const handleChange = (name, value) => {
     setError("");
-
-    if (name.includes("spec_")) {
-      const specKey = name.replace("spec_", "");
-      setFormData({
-        ...formData,
-        specifications: {
-          ...formData.specifications,
-          [specKey]: value,
-        },
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
+    const updatedFormData = { ...formData, [name]: value };
+    if (name === "originalPrice" || name === "price") {
+      const origPrice = Number(updatedFormData.originalPrice) || 0;
+      const sellPrice = Number(updatedFormData.price) || 0;
+      updatedFormData.discount = origPrice > 0 ? Math.round(((origPrice - sellPrice) / origPrice) * 100) : 0;
     }
+    if (name === "category") {
+      // Reset specifications when category changes
+      updatedFormData.specifications = {
+        ...getEmptyFormData(value).specifications,
+        colors: Array.isArray(updatedFormData.specifications.colors) ? updatedFormData.specifications.colors : [""],
+      };
+    }
+    setFormData(updatedFormData);
   };
 
-  const handleImageChange = (e, index) => {
-    const newImages = [...formData.images];
-    newImages[index] = e.target.value;
-    setFormData({ ...formData, images: newImages });
-  };
-
-  const addImageField = () => {
+  const handleSpecChange = (key, value) => {
     setFormData({
       ...formData,
-      images: [...formData.images, ""],
+      specifications: { 
+        ...formData.specifications, 
+        [key]: key === "colors" ? (Array.isArray(value) ? value : [value]) : value 
+      },
     });
   };
 
-  const removeImageField = (index) => {
-    const newImages = formData.images.filter((_, i) => i !== index);
-    setFormData({ ...formData, images: newImages });
+  const handleColorChange = (index, value) => {
+    const colors = [...formData.specifications.colors];
+    colors[index] = value;
+    setFormData({
+      ...formData,
+      specifications: { ...formData.specifications, colors },
+    });
+  };
+
+  const addColor = () => {
+    setFormData({
+      ...formData,
+      specifications: {
+        ...formData.specifications,
+        colors: [...formData.specifications.colors, ""],
+      },
+    });
+  };
+
+  const removeColor = (index) => {
+    if (formData.specifications.colors.length <= 1) {
+      toast.error("Phải có ít nhất 1 màu sắc");
+      return;
+    }
+    const colors = formData.specifications.colors.filter((_, i) => i !== index);
+    setFormData({
+      ...formData,
+      specifications: { ...formData.specifications, colors },
+    });
+  };
+
+  const handleVariantChange = (variantIndex, field, value) => {
+    const variants = [...formData.variants];
+    variants[variantIndex][field] = value;
+    let newFormData = { ...formData, variants };
+    if (field === "imageUrl" && value.trim()) {
+      setPreviewImage(value);
+      if (!formData.images.some((img) => img === value)) {
+        let images = [...formData.images];
+        if (images[0] === "") images[0] = value;
+        else images.push(value);
+        newFormData = { ...newFormData, images };
+      }
+    }
+    setFormData(newFormData);
+  };
+
+  const handleVariantOptionChange = (variantIndex, optionIndex, field, value) => {
+    const variants = [...formData.variants];
+    const options = [...variants[variantIndex].options];
+    options[optionIndex][field] = value;
+    variants[variantIndex].options = options;
+    setFormData({ ...formData, variants });
+  };
+
+  const addVariant = () => setFormData({ ...formData, variants: [...formData.variants, emptyVariant()] });
+  const removeVariant = (variantIndex) => setFormData({ ...formData, variants: formData.variants.filter((_, i) => i !== variantIndex) });
+  const addVariantOption = (variantIndex) => {
+    const variants = [...formData.variants];
+    const options = [...variants[variantIndex].options];
+    options.push({ cpuGpu: "", ram: "", storage: "", price: "", originalPrice: "", quantity: "" });
+    variants[variantIndex].options = options;
+    setFormData({ ...formData, variants });
+  };
+  const removeVariantOption = (variantIndex, optionIndex) => {
+    const variants = [...formData.variants];
+    const options = variants[variantIndex].options.filter((_, i) => i !== optionIndex);
+    variants[variantIndex].options = options;
+    setFormData({ ...formData, variants });
+  };
+
+  const handleArrayChange = (field, index, value) => {
+    const newArray = [...formData[field]];
+    newArray[index] = value;
+    if (field === "images" && index === 0 && value) setPreviewImage(value);
+    setFormData({ ...formData, [field]: newArray });
+  };
+
+  const addArrayItem = (field) => setFormData({ ...formData, [field]: [...formData[field], ""] });
+  const removeArrayItem = (field, index) => {
+    if (formData[field].length <= 1) {
+      toast.error("Phải có ít nhất 1 mục");
+      return;
+    }
+    const newArray = formData[field].filter((_, i) => i !== index);
+    setFormData({ ...formData, [field]: newArray });
+    if (field === "images" && index === 0) setPreviewImage(newArray[0] || null);
   };
 
   const handleSubmit = async (e) => {
@@ -194,29 +255,61 @@ const ProductsPage = () => {
     setIsSubmitting(true);
     setError("");
 
+    if (!formData.model.trim()) {
+      setError("Model là trường bắt buộc");
+      toast.error("Vui lòng nhập model sản phẩm");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const submitData = {
-        ...formData,
-        price: Number(formData.price),
-        originalPrice: Number(formData.originalPrice),
-        discount: Number(formData.discount),
-        quantity: Number(formData.quantity),
+        name: formData.name,
+        model: formData.model,
+        category: formData.category,
+        condition: formData.condition,
+        price: Number(formData.price || 0),
+        originalPrice: Number(formData.originalPrice || 0),
+        discount: Number(formData.discount || 0),
+        quantity: Number(formData.quantity || 0),
+        status: formData.status,
+        description: formData.description,
+        specifications: {
+          ...formData.specifications,
+          colors: formData.specifications.colors.filter((c) => c.trim() !== ""),
+        },
+        variants: formData.variants.map((v) => ({
+          type: "Color",
+          name: v.color,
+          options: v.options.map((o) => ({
+            name: `${o.cpuGpu} - ${o.ram} - ${o.storage}`,
+            color: v.color,
+            cpuGpu: o.cpuGpu,
+            ram: o.ram,
+            storage: o.storage,
+            price: Number(o.price || 0),
+            originalPrice: Number(o.originalPrice || 0),
+            imageUrl: v.imageUrl || null,
+            quantity: Number(o.quantity || 0),
+          })),
+        })),
         images: formData.images.filter((img) => img.trim() !== ""),
+        badges: formData.badges,
       };
 
       if (editingProduct) {
         await productAPI.update(editingProduct._id, submitData);
+        toast.success("Cập nhật sản phẩm thành công");
       } else {
         await productAPI.create(submitData);
+        toast.success("Tạo sản phẩm thành công");
       }
-
       await fetchProducts();
-      setShowDialog(false);
+      setShowForm(false);
     } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          `${editingProduct ? "Cập nhật" : "Tạo"} sản phẩm thất bại`
-      );
+      console.error("Submit error:", error);
+      setError(error.response?.data?.message || `${editingProduct ? "Cập nhật" : "Tạo"} sản phẩm thất bại`);
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra");
     } finally {
       setIsSubmitting(false);
     }
@@ -224,419 +317,162 @@ const ProductsPage = () => {
 
   const handleDelete = async (productId) => {
     if (!confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
-
     try {
       await productAPI.delete(productId);
+      toast.success("Xóa sản phẩm thành công");
       await fetchProducts();
     } catch (error) {
-      alert(error.response?.data?.message || "Xóa sản phẩm thất bại");
+      toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
     }
   };
 
-  const handleStatusChange = (value) => {
-    setStatusFilter(value);
-    setPagination({ ...pagination, currentPage: 1 });
+  const handleProductUpdate = async (productId, data) => {
+    try {
+      await productAPI.update(productId, data);
+      await fetchProducts();
+      toast.success("Cập nhật sản phẩm thành công");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Cập nhật sản phẩm thất bại");
+    }
   };
 
-  if (isLoading && products.length === 0) {
-    return <Loading />;
-  }
+  if (isLoading && products.length === 0) return <Loading />;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Quản lý sản phẩm</h1>
-          <p className="text-muted-foreground">
-            Tổng số: {pagination.total} sản phẩm
-          </p>
+          <p className="text-muted-foreground">Tổng số: {totalProducts} sản phẩm</p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm sản phẩm
+        <Button onClick={() => handleOpenForm()}>
+          <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
         </Button>
       </div>
 
-      {/* Filters */}
+      <ProductCategoryModal
+        showCategoryModal={showCategoryModal}
+        setShowCategoryModal={setShowCategoryModal}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        selectedCondition={selectedCondition}
+        setSelectedCondition={setSelectedCondition}
+        handleCategorySubmit={handleCategorySubmit}
+      />
+
+      {showForm && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>
+              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
+            </CardTitle>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && <ErrorMessage message={error} />}
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="basic">Cơ bản</TabsTrigger>
+                  <TabsTrigger value="specs">Thông số</TabsTrigger>
+                  <TabsTrigger value="variants">Biến thể</TabsTrigger>
+                  <TabsTrigger value="media">Media</TabsTrigger>
+                </TabsList>
+                <TabsContent value="basic" className="mt-6">
+                  <ProductFormBasic
+                    formData={formData}
+                    handleChange={handleChange}
+                    editingProduct={editingProduct}
+                  />
+                </TabsContent>
+                <TabsContent value="specs" className="mt-6">
+                  <ProductFormSpecs
+                    formData={formData}
+                    handleSpecChange={handleSpecChange}
+                    handleColorChange={handleColorChange}
+                    addColor={addColor}
+                    removeColor={removeColor}
+                  />
+                </TabsContent>
+                <TabsContent value="variants" className="mt-6">
+                  <ProductFormVariants
+                    formData={formData}
+                    handleVariantChange={handleVariantChange}
+                    handleVariantOptionChange={handleVariantOptionChange}
+                    addVariant={addVariant}
+                    removeVariant={removeVariant}
+                    addVariantOption={addVariantOption}
+                    removeVariantOption={removeVariantOption}
+                  />
+                </TabsContent>
+                <TabsContent value="media" className="mt-6">
+                  <ProductFormMedia
+                    formData={formData}
+                    handleArrayChange={handleArrayChange}
+                    addArrayItem={addArrayItem}
+                    removeArrayItem={removeArrayItem}
+                    previewImage={previewImage}
+                  />
+                </TabsContent>
+              </Tabs>
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? "Đang xử lý..." : editingProduct ? "Cập nhật" : "Tạo sản phẩm"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm kiếm sản phẩm..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={statusFilter} onValueChange={handleStatusChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Trạng thái" />
-              </SelectTrigger>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Input placeholder="Tìm kiếm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger title="Lọc theo danh mục"><SelectValue placeholder="Danh mục" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="all">Tất cả</SelectItem>
+                {CATEGORIES.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger title="Lọc theo trạng thái"><SelectValue placeholder="Trạng thái" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả</SelectItem>
                 <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
                 <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
-                <SelectItem value="DISCONTINUED">Ngừng kinh doanh</SelectItem>
+                <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((product) => (
-          <Card key={product._id} className="overflow-hidden">
-            <div className="aspect-square relative bg-gray-100">
-              {product.images && product.images[0] ? (
-                <img
-                  src={product.images[0]}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-12 h-12 text-gray-400" />
-                </div>
-              )}
-              <Badge
-                className={`absolute top-2 right-2 ${getStatusColor(
-                  product.status
-                )}`}
-              >
-                {getStatusText(product.status)}
-              </Badge>
-            </div>
-
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-lg mb-1 line-clamp-1">
-                {product.name}
-              </h3>
-              <p className="text-sm text-muted-foreground mb-2">
-                {product.model}
-              </p>
-
-              <div className="space-y-1 mb-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-primary">
-                    {formatPrice(product.price)}
-                  </span>
-                  {product.discount > 0 && (
-                    <Badge variant="destructive">-{product.discount}%</Badge>
-                  )}
-                </div>
-                {product.originalPrice > product.price && (
-                  <p className="text-sm text-muted-foreground line-through">
-                    {formatPrice(product.originalPrice)}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-sm mb-4">
-                <span className="text-muted-foreground">Tồn kho:</span>
-                <span
-                  className={`font-semibold ${
-                    product.quantity > 10
-                      ? "text-green-600"
-                      : product.quantity > 0
-                      ? "text-orange-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {product.quantity} sản phẩm
-                </span>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleOpenDialog(product)}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Sửa
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDelete(product._id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ProductCard
+            key={product._id}
+            product={product}
+            onUpdate={handleProductUpdate}
+            onEdit={handleOpenForm}
+          />
         ))}
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
+      {totalPages > 1 && (
         <div className="flex justify-center gap-2">
-          <Button
-            variant="outline"
-            disabled={pagination.currentPage === 1}
-            onClick={() =>
-              setPagination({
-                ...pagination,
-                currentPage: pagination.currentPage - 1,
-              })
-            }
-          >
+          <Button variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((prev) => prev - 1)}>
             Trước
           </Button>
-          <span className="px-4 py-2">
-            Trang {pagination.currentPage} / {pagination.totalPages}
-          </span>
-          <Button
-            variant="outline"
-            disabled={pagination.currentPage === pagination.totalPages}
-            onClick={() =>
-              setPagination({
-                ...pagination,
-                currentPage: pagination.currentPage + 1,
-              })
-            }
-          >
+          <span className="px-4 py-2">Trang {currentPage} / {totalPages}</span>
+          <Button variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((prev) => prev + 1)}>
             Sau
           </Button>
         </div>
       )}
-
-      {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
-            </DialogTitle>
-            <DialogDescription>
-              Điền thông tin chi tiết sản phẩm
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <ErrorMessage message={error} />}
-
-            {/* Basic Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Tên sản phẩm *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="model">Model *</Label>
-                <Input
-                  id="model"
-                  name="model"
-                  value={formData.model}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="originalPrice">Giá gốc *</Label>
-                <Input
-                  id="originalPrice"
-                  name="originalPrice"
-                  type="number"
-                  value={formData.originalPrice}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="discount">Giảm giá (%)</Label>
-                <Input
-                  id="discount"
-                  name="discount"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={formData.discount}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="price">Giá bán *</Label>
-                <Input
-                  id="price"
-                  name="price"
-                  type="number"
-                  value={formData.price}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Số lượng *</Label>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Trạng thái *</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                    <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
-                    <SelectItem value="DISCONTINUED">
-                      Ngừng kinh doanh
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Specifications */}
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">
-                Thông số kỹ thuật
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  placeholder="Màu sắc"
-                  name="spec_color"
-                  value={formData.specifications.color}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Bộ nhớ"
-                  name="spec_storage"
-                  value={formData.specifications.storage}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="RAM"
-                  name="spec_ram"
-                  value={formData.specifications.ram}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Màn hình"
-                  name="spec_screen"
-                  value={formData.specifications.screen}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Chip"
-                  name="spec_chip"
-                  value={formData.specifications.chip}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Camera"
-                  name="spec_camera"
-                  value={formData.specifications.camera}
-                  onChange={handleChange}
-                />
-                <Input
-                  placeholder="Pin"
-                  name="spec_battery"
-                  value={formData.specifications.battery}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
-
-            {/* Images */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Hình ảnh</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addImageField}
-                >
-                  <ImagePlus className="w-4 h-4 mr-2" />
-                  Thêm ảnh
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {formData.images.map((image, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      placeholder="URL hình ảnh"
-                      value={image}
-                      onChange={(e) => handleImageChange(e, index)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeImageField(index)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Mô tả</Label>
-              <Textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={4}
-              />
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowDialog(false)}
-              >
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
-                  ? "Đang xử lý..."
-                  : editingProduct
-                  ? "Cập nhật"
-                  : "Tạo sản phẩm"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
-
 
 export default ProductsPage;

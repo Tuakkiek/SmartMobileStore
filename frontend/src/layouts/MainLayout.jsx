@@ -95,7 +95,7 @@ const MainLayout = () => {
     { name: "Apple Vision Pro", path: "/products?category=vision" },
     { name: "AirPods", path: "/products?category=airpods" },
     { name: "Apple Intelligence", path: "/products?category=intelligence" },
-    { name: "Apple Trade In", path: "/trade-in" },
+{ name: "Apple Trade In", path: "/trade-in" },
   ];
 
   return (
@@ -105,7 +105,6 @@ const MainLayout = () => {
         className={`fixed inset-0 z-50 transition-opacity duration-300 ${
           searchOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
-  
       >
         {/* Backdrop với blur */}
         <div
@@ -163,7 +162,7 @@ const MainLayout = () => {
                           →
                         </span>
                         <span className="text-sm">{link.name}</span>
-                      </Link>
+</Link>
                     ))}
                   </div>
                 </div>
@@ -224,12 +223,12 @@ const MainLayout = () => {
       </div>
 
       {/* Header */}
-      <header className="bg-black text-white py-4 px-6">
+      <header className="fixed top-0 left-0 right-0 bg-black text-white py-4 px-6 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-6">
           {/* Logo */}
           <Link
             to="/"
-            className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
+className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
           >
             <span className="text-black font-bold text-lg transition-colors duration-300 hover:text-gray-700">
               LOGO
@@ -286,7 +285,7 @@ const MainLayout = () => {
                 onClick={() => navigate("/login")}
                 className="bg-white text-black rounded-full px-6 py-3 flex items-center gap-2 transition-all duration-300 hover:bg-gray-200 hover:scale-105"
               >
-                <User className="w-5 h-5 transition-colors duration-300 hover:text-gray-700" />
+<User className="w-5 h-5 transition-colors duration-300 hover:text-gray-700" />
                 <span className="font-medium transition-colors duration-300 hover:text-gray-700">
                   Đăng nhập
                 </span>
@@ -361,7 +360,7 @@ const MainLayout = () => {
                 </Link>
                 <Link
                   to="/register"
-                  className="block px-4 py-2 text-sm text-white hover:bg-gray-800 rounded-md"
+className="block px-4 py-2 text-sm text-white hover:bg-gray-800 rounded-md"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Đăng ký
@@ -373,7 +372,7 @@ const MainLayout = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">
+      <main className="flex-1 pt-20">
         <Outlet />
       </main>
 

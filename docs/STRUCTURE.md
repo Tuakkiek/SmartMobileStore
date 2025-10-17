@@ -1,122 +1,136 @@
-iphone-store/
-│
-├── backend/                          # Backend Node.js + Express
-│   ├── config/
-│   │   └── config.js                # Cấu hình môi trường (đã có)
-│   │
-│   ├── models/                      # MongoDB Models
-│   │   ├── User.model.js           # Model người dùng
-│   │   ├── Product.model.js        # Model sản phẩm
-│   │   ├── Cart.model.js           # Model giỏ hàng
-│   │   ├── Order.model.js          # Model đơn hàng
-│   │   └── Review.model.js         # Model đánh giá & khuyến mãi
-│   │
-│   ├── controllers/                 # Business Logic
-│   │   ├── auth.controller.js      # Xử lý đăng nhập, đăng ký
-│   │   ├── user.controller.js      # Quản lý user & nhân viên
-│   │   ├── product.controller.js   # Quản lý sản phẩm
-│   │   ├── cart.controller.js      # Quản lý giỏ hàng
-│   │   ├── order.controller.js     # Quản lý đơn hàng
-│   │   ├── review.controller.js    # Quản lý đánh giá
-│   │   └── promotion.controller.js # Quản lý khuyến mãi
-│   │
-│   ├── routes/                      # API Routes
-│   │   ├── auth.routes.js          # Routes xác thực
-│   │   ├── user.routes.js          # Routes user
-│   │   ├── product.routes.js       # Routes sản phẩm
-│   │   ├── cart.routes.js          # Routes giỏ hàng
-│   │   ├── order.routes.js         # Routes đơn hàng
-│   │   ├── review.routes.js        # Routes đánh giá
-│   │   └── promotion.routes.js     # Routes khuyến mãi
-│   │
-│   ├── middleware/
-│   │   └── auth.middleware.js      # JWT authentication & authorization
-│   │
-│   ├── .env                         # Biến môi trường
-│   ├── server.js                    # Entry point
-│   ├── package.json
-│   └── .gitignore
-│   
+# File Tree: v10
 
-|── docs/
-|   |──STRUCTURE.md                  # Mô tả cấu trúc dự án
-|
+Generated on: 10/16/2025, 8:26:57 AM
+Root path: `c:\Project_1\v10`
 
+```
+├── 📁 .qodo/
+└── 📁 SmartMobileStore/
+    ├── 📁 .git/ 🚫 (auto-hidden)
+    ├── 📁 backend/
+    │   ├── 📁 node_modules/ 🚫 (auto-hidden)
+    │   ├── 📁 src/
+    │   │   ├── 📁 config/
+    │   │   │   ├── 📄 config.js
+    │   │   │   └── 📄 db.js
+    │   │   ├── 📁 controllers/
+    │   │   │   ├── 📄 authController.js
+    │   │   │   ├── 📄 cartController.js
+    │   │   │   ├── 📄 orderController.js
+    │   │   │   ├── 📄 productController.js
+    │   │   │   ├── 📄 promotionController.js
+    │   │   │   ├── 📄 reviewController.js
+    │   │   │   └── 📄 userController.js
+    │   │   ├── 📁 middleware/
+    │   │   │   └── 📄 authMiddleware.js
+    │   │   ├── 📁 models/
+    │   │   │   ├── 📄 Cart.js
+    │   │   │   ├── 📄 Order.js
+    │   │   │   ├── 📄 Product.js
+    │   │   │   ├── 📄 Promotion.js
+    │   │   │   ├── 📄 Review.js
+    │   │   │   └── 📄 User.js
+    │   │   ├── 📁 routes/
+    │   │   │   ├── 📄 authRoutes.js
+    │   │   │   ├── 📄 cartRoutes.js
+    │   │   │   ├── 📄 orderRoutes.js
+    │   │   │   ├── 📄 productRoutes.js
+    │   │   │   ├── 📄 promotionRoutes.js
+    │   │   │   ├── 📄 reviewRoutes.js
+    │   │   │   └── 📄 userRoutes.js
+    │   │   └── 📄 server.js
+    │   ├── 🔒 .env 🚫 (auto-hidden)
+    │   ├── 📄 package-lock.json
+    │   └── 📄 package.json
+    ├── 📁 docs/
+    │   └── 📝 STRUCTURE.md
+    └── 📁 frontend/
+        ├── 📁 node_modules/ 🚫 (auto-hidden)
+        ├── 📁 public/
+        │   ├── 🖼️ iPhone17pm.png
+        │   ├── 🖼️ img1.png
+        │   ├── 🖼️ img2.png
+        │   ├── 🖼️ img3.png
+        │   ├── 🖼️ img4.png
+        │   ├── 🖼️ img5.png
+        │   ├── 🖼️ ip17.png
+        │   ├── 🖼️ ip17pm.png
+        │   ├── 🖼️ ip17pm1.png
+        │   ├── 🖼️ ipAir.png
+        │   └── 🖼️ ipAir2.png
+        ├── 📁 src/
+        │   ├── 📁 assets/
+        │   │   └── 🖼️ react.svg
+        │   ├── 📁 components/
+        │   │   ├── 📁 shared/
+        │   │   │   ├── 📄 ErrorMessage.jsx
+        │   │   │   ├── 📄 HeroBanner.jsx
+        │   │   │   ├── 📄 Loading.jsx
+        │   │   │   ├── 📄 ProductCard.jsx
+        │   │   │   └── 📄 iPhoneShowcase.jsx
+        │   │   └── 📁 ui/
+        │   │       ├── 📄 alert-dialog.jsx
+        │   │       ├── 📄 badge.jsx
+        │   │       ├── 📄 button.jsx
+        │   │       ├── 📄 card.jsx
+        │   │       ├── 📄 dialog.jsx
+        │   │       ├── 📄 dropdown-menu.jsx
+        │   │       ├── 📄 input.jsx
+        │   │       ├── 📄 label.jsx
+        │   │       ├── 📄 select.jsx
+        │   │       ├── 📄 sonner.jsx
+        │   │       ├── 📄 tabs.jsx
+        │   │       └── 📄 textarea.jsx
+        │   ├── 📁 layouts/
+        │   │   ├── 📄 DashboardLayout.jsx
+        │   │   └── 📄 MainLayout.jsx
+        │   ├── 📁 lib/
+        │   │   ├── 📄 api.js
+        │   │   └── 📄 utils.js
+        │   ├── 📁 pages/
+        │   │   ├── 📁 admin/
+        │   │   │   ├── 📄 AdminDashboard.jsx
+        │   │   │   ├── 📄 EmployeesPage.jsx
+        │   │   │   └── 📄 PromotionsPage.jsx
+        │   │   ├── 📁 customer/
+        │   │   │   ├── 📄 CartPage.jsx
+        │   │   │   ├── 📄 CheckoutPage.jsx
+        │   │   │   ├── 📄 OrderDetailPage.jsx
+        │   │   │   ├── 📄 OrdersPage.jsx
+        │   │   │   └── 📄 ProfilePage.jsx
+        │   │   ├── 📁 order-manager/
+        │   │   │   └── 📄 OrderManagementPage.jsx
+        │   │   ├── 📁 warehouse/
+        │   │   │   └── 📄 ProductsPage.jsx
+        │   │   ├── 📄 HomePage.jsx
+        │   │   ├── 📄 LoginPage.jsx
+        │   │   ├── 📄 ProductDetailPage.jsx
+        │   │   ├── 📄 ProductsPage.jsx
+        │   │   └── 📄 RegisterPage.jsx
+        │   ├── 📁 store/
+        │   │   ├── 📄 authStore.js
+        │   │   └── 📄 cartStore.js
+        │   ├── 🎨 App.css
+        │   ├── 📄 App.jsx
+        │   ├── 🎨 index.css
+        │   ├── 📄 main.jsx
+        │   └── 📄 province.js
+        ├── 🔒 .env 🚫 (auto-hidden)
+        ├── 🚫 .gitignore
+        ├── 📖 README.md
+        ├── 📄 components.json
+        ├── 📄 eslint.config.js
+        ├── 🌐 index.html
+        ├── 📄 jsconfig.json
+        ├── 📄 package-lock.json
+        ├── 📄 package.json
+        ├── 📄 postcss.config.js
+        ├── 📄 tailwind.config.js
+        └── 📄 vite.config.js
+```
 
-├── frontend/                         # Frontend React + Vite
-│   ├── public/
-│   │   └── placeholder.png          # Ảnh mặc định
-│   │
-│   ├── src/
-│   │   ├── components/              # React Components
-│   │   │   ├── ui/                 # ShadCN UI Components
-│   │   │   │   ├── button.jsx
-│   │   │   │   ├── input.jsx
-│   │   │   │   ├── label.jsx
-│   │   │   │   ├── card.jsx
-│   │   │   │   ├── dialog.jsx
-│   │   │   │   ├── dropdown-menu.jsx
-│   │   │   │   ├── select.jsx
-│   │   │   │   ├── toast.jsx
-│   │   │   │   └── tabs.jsx
-│   │   │   │
-│   │   │   └── shared/             # Shared Components
-│   │   │       ├── ProductCard.jsx
-│   │   │       ├── Loading.jsx
-│   │   │       └── ErrorMessage.jsx
-│   │   │
-│   │   ├── layouts/                 # Layout Components
-│   │   │   ├── MainLayout.jsx      # Layout cho trang public/customer
-│   │   │   └── DashboardLayout.jsx # Layout cho dashboard admin
-│   │   │
-│   │   ├── pages/                   # Page Components
-│   │   │   ├── HomePage.jsx        # Trang chủ
-│   │   │   ├── ProductsPage.jsx    # Danh sách sản phẩm
-│   │   │   ├── ProductDetailPage.jsx # Chi tiết sản phẩm
-│   │   │   ├── LoginPage.jsx       # Đăng nhập
-│   │   │   ├── RegisterPage.jsx    # Đăng ký
-│   │   │   │
-│   │   │   ├── customer/           # Trang dành cho khách hàng
-│   │   │   │   ├── CartPage.jsx
-│   │   │   │   ├── CheckoutPage.jsx
-│   │   │   │   ├── OrdersPage.jsx
-│   │   │   │   ├── OrderDetailPage.jsx
-│   │   │   │   └── ProfilePage.jsx
-│   │   │   │
-│   │   │   ├── admin/              # Trang dành cho Admin
-│   │   │   │   ├── AdminDashboard.jsx
-│   │   │   │   ├── EmployeesPage.jsx
-│   │   │   │   └── PromotionsPage.jsx
-│   │   │   │
-│   │   │   ├── warehouse/          # Trang dành cho Warehouse Staff
-│   │   │   │   └── ProductsPage.jsx
-│   │   │   │
-│   │   │   └── order-manager/      # Trang dành cho Order Manager
-│   │   │       └── OrderManagementPage.jsx
-│   │   │
-│   │   ├── store/                   # State Management (Zustand)
-│   │   │   ├── authStore.js        # Authentication store
-│   │   │   └── cartStore.js        # Shopping cart store
-│   │   │
-│   │   ├── lib/                     # Utilities & Helpers
-│   │   │   ├── utils.js            # Helper functions (cn, formatPrice, formatDate)
-│   │   │   └── api.js              # Axios instance & interceptors
-│   │   │
-│   │   ├── App.jsx                  # Main App với Routes
-│   │   ├── main.jsx                 # Entry point
-│   │   └── index.css                # Global styles + Tailwind
-│   │
-│   ├── .env                          # Frontend environment variables
-│   ├── index.html
-│   ├── vite.config.js               # Vite configuration
-│   ├── tailwind.config.js           # TailwindCSS configuration
-│   ├── postcss.config.js            # PostCSS configuration
-│   ├── package.json
-│   ├── jsconfig.json                # Path aliases (@/)
-│   └── .gitignore
-│
-├── .gitignore                        # Root gitignore
-└── README.md                         # Tài liệu dự án
+---
+*Generated by FileTree Pro Extension*
 
 
 
