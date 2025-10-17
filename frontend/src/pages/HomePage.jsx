@@ -1,10 +1,17 @@
-// FILE: src/pages/HomePage.jsx - Enhanced with Categories
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/shared/ProductCard";
 import { Loading } from "@/components/shared/Loading";
-import { ArrowRight, Smartphone, Tablet, Laptop, Watch, Headphones, Box } from "lucide-react";
+import {
+  ArrowRight,
+  Smartphone,
+  Tablet,
+  Laptop,
+  Watch,
+  Headphones,
+  Box,
+} from "lucide-react";
 import { productAPI } from "@/lib/api";
 import IPhoneShowcase from "@/components/shared/iPhoneShowcase";
 import { HeroBannerCarousel } from "@/components/shared/HeroBanner";
@@ -13,9 +20,9 @@ const CATEGORY_ICONS = {
   iPhone: Smartphone,
   iPad: Tablet,
   Mac: Laptop,
-  'Apple Watch': Watch,
+  "Apple Watch": Watch,
   AirPods: Headphones,
-  Accessories: Box,
+  "Phụ kiện": Box,
 };
 
 const CategorySection = ({ category, products, onViewAll }) => {
@@ -50,25 +57,23 @@ const CategorySection = ({ category, products, onViewAll }) => {
 const HomePage = () => {
   const navigate = useNavigate();
   const [categoryProducts, setCategoryProducts] = useState({});
-  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Sử dụng danh sách danh mục từ CATEGORY_ICONS
+  const categories = Object.keys(CATEGORY_ICONS);
+
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch categories
-        const categoriesRes = await productAPI.getCategories();
-        const cats = categoriesRes.data.data.categories.map(c => c._id);
-        setCategories(cats);
-
         // Fetch featured products for each category
         const productsData = {};
         await Promise.all(
-          cats.map(async (category) => {
+          categories.map(async (category) => {
             try {
-              const response = await productAPI.getFeatured({ 
-                category, 
-                limit: 4 
+              const response = await productAPI.getFeatured({
+                category,
+                limit: 4,
               });
               productsData[category] = response.data.data.products;
             } catch (error) {
@@ -123,11 +128,6 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* iPhone Showcase */}
-      {categoryProducts.iPhone && categoryProducts.iPhone.length > 0 && (
-        <IPhoneShowcase />
-      )}
-
       {/* Category Sections */}
       {categories.map((category) => (
         <CategorySection
@@ -143,7 +143,10 @@ const HomePage = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold">Sản phẩm mới</h2>
-            <Button variant="ghost" onClick={() => navigate("/products?sort=createdAt")}>
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/products?sort=createdAt")}
+            >
               Xem tất cả
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -152,6 +155,11 @@ const HomePage = () => {
           <NewArrivalsSection />
         </div>
       </section>
+
+      {/* iPhone Showcase */}
+      {categoryProducts.iPhone && categoryProducts.iPhone.length > 0 && (
+        <IPhoneShowcase />
+      )}
     </div>
   );
 };
