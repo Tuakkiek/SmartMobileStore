@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Star } from "lucide-react";
+import { ShoppingCart, Star, Pencil } from "lucide-react";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
@@ -18,7 +18,7 @@ const CATEGORY_COLORS = {
   Accessories: "bg-orange-500",
 };
 
-export const ProductCard = ({ product, onUpdate }) => {
+export const ProductCard = ({ product, onUpdate, onEdit }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
@@ -64,6 +64,13 @@ export const ProductCard = ({ product, onUpdate }) => {
       toast.error(error.message || "Lỗi hệ thống khi thêm vào giỏ hàng");
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleEditProduct = (e) => {
+    e.stopPropagation();
+    if (onEdit) {
+      onEdit(product);
     }
   };
 
@@ -180,19 +187,29 @@ export const ProductCard = ({ product, onUpdate }) => {
         </div>
 
         {/* Add to Cart Button - Hover Overlay */}
-        {isAuthenticated &&
-          user?.role === "CUSTOMER" &&
-          product.status === "AVAILABLE" && (
-            <Button
-              size="sm"
-              className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
-              onClick={handleAddToCart}
-              disabled={isAdding}
-            >
-              <ShoppingCart className="w-4 h-4 mr-1" />
-              {isAdding ? "..." : "Thêm"}
-            </Button>
-          )}
+        {isAuthenticated && user?.role === "CUSTOMER" && product.status === "AVAILABLE" && (
+          <Button
+            size="sm"
+            className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
+            onClick={handleAddToCart}
+            disabled={isAdding}
+          >
+            <ShoppingCart className="w-4 h-4 mr-1" />
+            {isAdding ? "..." : "Thêm"}
+          </Button>
+        )}
+
+        {/* Edit Button - Hover Overlay for Admins */}
+        {isAuthenticated && user?.role === "ADMIN" && (
+          <Button
+            size="sm"
+            className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
+            onClick={handleEditProduct}
+          >
+            <Pencil className="w-4 h-4 mr-1" />
+            Sửa
+          </Button>
+        )}
       </div>
 
       {/* Content Container */}
@@ -294,11 +311,14 @@ export const ProductCard = ({ product, onUpdate }) => {
               Chỉ còn {product.quantity} sản phẩm
             </p>
           )}
+
           {product.quantity === 0 && (
             <p className="text-xs text-red-600 font-medium pt-1">
               Hết hàng
             </p>
           )}
+
+          
         </div>
       </CardContent>
     </Card>

@@ -1,114 +1,22 @@
-// FILE: src/pages/warehouse/ProductsPage.jsx - UPDATED WITH PRODUCTCARD
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { ProductCard } from "@/components/shared/ProductCard";
-import { Trash2, Plus, Pencil, Package } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { productAPI } from "@/lib/api";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 import { toast } from "sonner";
-
-const CATEGORIES = [
-  "iPhone",
-  "iPad",
-  "Mac",
-  "AirPods",
-  "Apple Watch",
-  "Phụ kiện",
-];
-
-const CATEGORY_SPECS = {
-  iPhone: [
-    "screenSize",
-    "cpu",
-    "operatingSystem",
-    "storage",
-    "ram",
-    "mainCamera",
-    "frontCamera",
-    "battery",
-    "colors",
-  ],
-  iPad: [
-    "screenSize",
-    "cpu",
-    "operatingSystem",
-    "storage",
-    "ram",
-    "mainCamera",
-    "frontCamera",
-    "battery",
-    "colors",
-  ],
-  Mac: [
-    "screenSize",
-    "cpu",
-    "operatingSystem",
-    "storage",
-    "ram",
-    "gpu",
-    "ports",
-    "keyboard",
-    "colors",
-  ],
-  "Apple Watch": [
-    "caseSize",
-    "caseMaterial",
-    "bandType",
-    "waterResistance",
-    "colors",
-  ],
-  AirPods: ["chargingCase", "batteryLife", "noiseCancellation", "colors"],
-  "Phụ kiện": ["material", "compatibility", "type", "colors"],
-};
-
-const getEmptyFormData = () => ({
-  name: "",
-  model: "",
-  category: "iPhone",
-  price: "",
-  originalPrice: "",
-  discount: 0,
-  quantity: "",
-  status: "AVAILABLE",
-  description: "",
-  specifications: {
-    screenSize: "",
-    cpu: "",
-    operatingSystem: "",
-    storage: "",
-    ram: "",
-    mainCamera: "",
-    frontCamera: "",
-    battery: "",
-    colors: [""],
-  },
-  variants: [],
-  images: [""],
-  badges: [],
-});
-
-const emptyVariant = () => ({
-  color: "",
-  imageUrl: "",
-  options: [
-    { capacity: "", price: "", originalPrice: "", quantity: "" },
-  ],
-});
+import { CATEGORIES, getEmptyFormData, emptyVariant } from "@/lib/productConstants";
+import ProductFormBasic from "@/components/shared/ProductFormBasic";
+import ProductFormSpecs from "@/components/shared/ProductFormSpecs";
+import ProductFormVariants from "@/components/shared/ProductFormVariants";
+import ProductFormMedia from "@/components/shared/ProductFormMedia";
+import ProductCategoryModal from "@/components/shared/ProductCategoryModal";
 
 const ProductsPage = () => {
   const [products, setProducts] = useState([]);
@@ -120,6 +28,9 @@ const ProductsPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
   const [showForm, setShowForm] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("iPhone");
+  const [selectedCondition, setSelectedCondition] = useState("NEW");
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState(getEmptyFormData());
   const [error, setError] = useState("");
@@ -142,12 +53,7 @@ const ProductsPage = () => {
         status: statusFilter !== "all" ? statusFilter : undefined,
       };
       const response = await productAPI.getAll(params);
-      const {
-        products,
-        totalPages,
-        currentPage: responsePage,
-        total,
-      } = response.data.data;
+      const { products, totalPages, currentPage: responsePage, total } = response.data.data;
       setProducts(products);
       setTotalPages(totalPages);
       setTotalProducts(total);
@@ -167,6 +73,7 @@ const ProductsPage = () => {
         name: product.name,
         model: product.model || "",
         category: product.category,
+        condition: product.condition || "NEW",
         price: product.price,
         originalPrice: product.originalPrice,
         discount: product.discount || 0,
@@ -182,13 +89,21 @@ const ProductsPage = () => {
           mainCamera: product.specifications?.mainCamera || "",
           frontCamera: product.specifications?.frontCamera || "",
           battery: product.specifications?.battery || "",
-          colors: product.specifications?.colors || [""],
+          colors: Array.isArray(product.specifications?.colors) ? product.specifications.colors : [""],
+          chip: product.specifications?.chip || "",
+          gpuType: product.specifications?.gpuType || "",
+          screenTechnology: product.specifications?.screenTechnology || "",
+          screenResolution: product.specifications?.screenResolution || "",
+          cpuType: product.specifications?.cpuType || "",
+          ports: product.specifications?.ports || "",
         },
         variants: product.variants?.map((v) => ({
           color: v.name || v.options[0]?.color || "",
           imageUrl: v.options[0]?.imageUrl || "",
           options: v.options.map((o) => ({
-            capacity: o.name || "",
+            cpuGpu: o.cpuGpu || o.name || "",
+            ram: o.ram || "",
+            storage: o.storage || o.capacity || "",
             price: o.price || "",
             originalPrice: o.originalPrice || "",
             quantity: o.quantity || "",
@@ -198,13 +113,24 @@ const ProductsPage = () => {
         badges: product.badges || [],
       });
       setPreviewImage(product.images?.[0] || null);
+      setShowForm(true);
+      setShowCategoryModal(false);
     } else {
       setEditingProduct(null);
-      setFormData(getEmptyFormData());
-      setPreviewImage(null);
+      setSelectedCategory("iPhone");
+      setSelectedCondition("NEW");
+      setShowCategoryModal(true);
     }
     setError("");
+    setActiveTab("basic");
+  };
+
+  const handleCategorySubmit = () => {
+    const newFormData = getEmptyFormData(selectedCategory);
+    newFormData.condition = selectedCondition;
+    setFormData(newFormData);
     setShowForm(true);
+    setShowCategoryModal(false);
   };
 
   const handleChange = (name, value) => {
@@ -213,10 +139,14 @@ const ProductsPage = () => {
     if (name === "originalPrice" || name === "price") {
       const origPrice = Number(updatedFormData.originalPrice) || 0;
       const sellPrice = Number(updatedFormData.price) || 0;
-      updatedFormData.discount =
-        origPrice > 0
-          ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
-          : 0;
+      updatedFormData.discount = origPrice > 0 ? Math.round(((origPrice - sellPrice) / origPrice) * 100) : 0;
+    }
+    if (name === "category") {
+      // Reset specifications when category changes
+      updatedFormData.specifications = {
+        ...getEmptyFormData(value).specifications,
+        colors: Array.isArray(updatedFormData.specifications.colors) ? updatedFormData.specifications.colors : [""],
+      };
     }
     setFormData(updatedFormData);
   };
@@ -224,7 +154,10 @@ const ProductsPage = () => {
   const handleSpecChange = (key, value) => {
     setFormData({
       ...formData,
-      specifications: { ...formData.specifications, [key]: value },
+      specifications: { 
+        ...formData.specifications, 
+        [key]: key === "colors" ? (Array.isArray(value) ? value : [value]) : value 
+      },
     });
   };
 
@@ -267,23 +200,15 @@ const ProductsPage = () => {
       setPreviewImage(value);
       if (!formData.images.some((img) => img === value)) {
         let images = [...formData.images];
-        if (images[0] === "") {
-          images[0] = value;
-        } else {
-          images.push(value);
-        }
+        if (images[0] === "") images[0] = value;
+        else images.push(value);
         newFormData = { ...newFormData, images };
       }
     }
     setFormData(newFormData);
   };
 
-  const handleVariantOptionChange = (
-    variantIndex,
-    optionIndex,
-    field,
-    value
-  ) => {
+  const handleVariantOptionChange = (variantIndex, optionIndex, field, value) => {
     const variants = [...formData.variants];
     const options = [...variants[variantIndex].options];
     options[optionIndex][field] = value;
@@ -291,48 +216,18 @@ const ProductsPage = () => {
     setFormData({ ...formData, variants });
   };
 
-  const addVariant = () => {
-    setFormData({
-      ...formData,
-      variants: [...formData.variants, emptyVariant()],
-    });
-  };
-
-  const removeVariant = (variantIndex) => {
-    const variants = formData.variants.filter((_, i) => i !== variantIndex);
-    setFormData({ ...formData, variants });
-  };
-
+  const addVariant = () => setFormData({ ...formData, variants: [...formData.variants, emptyVariant()] });
+  const removeVariant = (variantIndex) => setFormData({ ...formData, variants: formData.variants.filter((_, i) => i !== variantIndex) });
   const addVariantOption = (variantIndex) => {
     const variants = [...formData.variants];
     const options = [...variants[variantIndex].options];
-    let defaultCapacity = "128GB";
-    if (options.length > 0) {
-      const last = options[options.length - 1].capacity;
-      const match = last.match(/^(\d+)(GB|TB)$/);
-      if (match) {
-        let num = parseInt(match[1]);
-        const unit = match[2];
-        if (unit === "TB") num *= 1024;
-        const nextNum = num * 2;
-        defaultCapacity = nextNum >= 1024 ? `${nextNum / 1024}TB` : `${nextNum}GB`;
-      }
-    }
-    options.push({
-      capacity: defaultCapacity,
-      price: "",
-      originalPrice: "",
-      quantity: "",
-    });
+    options.push({ cpuGpu: "", ram: "", storage: "", price: "", originalPrice: "", quantity: "" });
     variants[variantIndex].options = options;
     setFormData({ ...formData, variants });
   };
-
   const removeVariantOption = (variantIndex, optionIndex) => {
     const variants = [...formData.variants];
-    const options = variants[variantIndex].options.filter(
-      (_, i) => i !== optionIndex
-    );
+    const options = variants[variantIndex].options.filter((_, i) => i !== optionIndex);
     variants[variantIndex].options = options;
     setFormData({ ...formData, variants });
   };
@@ -344,10 +239,7 @@ const ProductsPage = () => {
     setFormData({ ...formData, [field]: newArray });
   };
 
-  const addArrayItem = (field) => {
-    setFormData({ ...formData, [field]: [...formData[field], ""] });
-  };
-
+  const addArrayItem = (field) => setFormData({ ...formData, [field]: [...formData[field], ""] });
   const removeArrayItem = (field, index) => {
     if (formData[field].length <= 1) {
       toast.error("Phải có ít nhất 1 mục");
@@ -375,6 +267,7 @@ const ProductsPage = () => {
         name: formData.name,
         model: formData.model,
         category: formData.category,
+        condition: formData.condition,
         price: Number(formData.price || 0),
         originalPrice: Number(formData.originalPrice || 0),
         discount: Number(formData.discount || 0),
@@ -389,8 +282,11 @@ const ProductsPage = () => {
           type: "Color",
           name: v.color,
           options: v.options.map((o) => ({
-            name: o.capacity,
+            name: `${o.cpuGpu} - ${o.ram} - ${o.storage}`,
             color: v.color,
+            cpuGpu: o.cpuGpu,
+            ram: o.ram,
+            storage: o.storage,
             price: Number(o.price || 0),
             originalPrice: Number(o.originalPrice || 0),
             imageUrl: v.imageUrl || null,
@@ -412,10 +308,7 @@ const ProductsPage = () => {
       setShowForm(false);
     } catch (error) {
       console.error("Submit error:", error);
-      setError(
-        error.response?.data?.message ||
-          `${editingProduct ? "Cập nhật" : "Tạo"} sản phẩm thất bại`
-      );
+      setError(error.response?.data?.message || `${editingProduct ? "Cập nhật" : "Tạo"} sản phẩm thất bại`);
       toast.error(error.response?.data?.message || "Có lỗi xảy ra");
     } finally {
       setIsSubmitting(false);
@@ -439,510 +332,114 @@ const ProductsPage = () => {
       await fetchProducts();
       toast.success("Cập nhật sản phẩm thành công");
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Cập nhật sản phẩm thất bại"
-      );
+      toast.error(error.response?.data?.message || "Cập nhật sản phẩm thất bại");
     }
   };
 
   if (isLoading && products.length === 0) return <Loading />;
-
-  const currentSpecs = CATEGORY_SPECS[formData.category] || [];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Quản lý sản phẩm</h1>
-          <p className="text-muted-foreground">
-            Tổng số: {totalProducts} sản phẩm
-          </p>
+          <p className="text-muted-foreground">Tổng số: {totalProducts} sản phẩm</p>
         </div>
         <Button onClick={() => handleOpenForm()}>
           <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
         </Button>
       </div>
 
+      <ProductCategoryModal
+        showCategoryModal={showCategoryModal}
+        setShowCategoryModal={setShowCategoryModal}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        selectedCondition={selectedCondition}
+        setSelectedCondition={setSelectedCondition}
+        handleCategorySubmit={handleCategorySubmit}
+      />
+
       {showForm && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>
               {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
             </CardTitle>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>
+              <X className="w-4 h-4" />
+            </Button>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && <ErrorMessage message={error} />}
-
-              <Tabs
-                value={activeTab}
-                onValueChange={setActiveTab}
-                className="w-full"
-              >
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="basic">Cơ bản</TabsTrigger>
                   <TabsTrigger value="specs">Thông số</TabsTrigger>
                   <TabsTrigger value="variants">Biến thể</TabsTrigger>
                   <TabsTrigger value="media">Media</TabsTrigger>
                 </TabsList>
-
-                <TabsContent value="basic" className="space-y-4 mt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tên sản phẩm</Label>
-                      <Input
-                        value={formData.name}
-                        onChange={(e) => handleChange("name", e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Model <span className="text-red-500">*</span></Label>
-                      <Input
-                        value={formData.model}
-                        onChange={(e) => handleChange("model", e.target.value)}
-                        placeholder="VD: iPhone 14 Pro Max"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Danh mục</Label>
-                      <Select
-                        value={formData.category}
-                        onValueChange={(value) =>
-                          handleChange("category", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CATEGORIES.map((cat) => (
-                            <SelectItem key={cat} value={cat}>
-                              {cat}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Giá gốc</Label>
-                      <Input
-                        type="number"
-                        value={formData.originalPrice}
-                        onChange={(e) =>
-                          handleChange("originalPrice", e.target.value)
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Giá bán</Label>
-                      <Input
-                        type="number"
-                        value={formData.price}
-                        onChange={(e) => handleChange("price", e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Giảm giá (%)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={formData.discount}
-                        disabled
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Số lượng</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.quantity}
-                        onChange={(e) =>
-                          handleChange("quantity", e.target.value)
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Trạng thái</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(value) => handleChange("status", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                          <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
-                          <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Mô tả</Label>
-                    <Textarea
-                      value={formData.description}
-                      onChange={(e) =>
-                        handleChange("description", e.target.value)
-                      }
-                      rows={4}
-                    />
-                  </div>
+                <TabsContent value="basic" className="mt-6">
+                  <ProductFormBasic
+                    formData={formData}
+                    handleChange={handleChange}
+                    editingProduct={editingProduct}
+                  />
                 </TabsContent>
-
-                <TabsContent value="specs" className="space-y-4 mt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {currentSpecs.map((spec) => (
-                      <div key={spec} className="space-y-2">
-                        <Label>
-                          {spec === "screenSize"
-                            ? "Kích thước màn hình"
-                            : spec === "cpu"
-                            ? "CPU"
-                            : spec === "operatingSystem"
-                            ? "Hệ điều hành"
-                            : spec === "storage"
-                            ? "Dung lượng lưu trữ"
-                            : spec === "ram"
-                            ? "RAM"
-                            : spec === "mainCamera"
-                            ? "Camera chính"
-                            : spec === "frontCamera"
-                            ? "Camera phụ"
-                            : spec === "battery"
-                            ? "Dung lượng pin"
-                            : "Màu sắc"}
-                        </Label>
-                        {spec === "colors" ? (
-                          <div>
-                            {formData.specifications.colors.map(
-                              (color, index) => (
-                                <div key={index} className="flex gap-2 mb-2">
-                                  <Input
-                                    value={color}
-                                    onChange={(e) =>
-                                      handleColorChange(index, e.target.value)
-                                    }
-                                    placeholder="Nhập màu sắc"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => removeColor(index)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              )
-                            )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={addColor}
-                              className="mt-2"
-                            >
-                              <Plus className="w-4 h-4 mr-2" /> Thêm màu
-                            </Button>
-                          </div>
-                        ) : (
-                          <Input
-                            value={formData.specifications[spec] || ""}
-                            onChange={(e) =>
-                              handleSpecChange(spec, e.target.value)
-                            }
-                            placeholder={`Nhập ${spec}`}
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                <TabsContent value="specs" className="mt-6">
+                  <ProductFormSpecs
+                    formData={formData}
+                    handleSpecChange={handleSpecChange}
+                    handleColorChange={handleColorChange}
+                    addColor={addColor}
+                    removeColor={removeColor}
+                  />
                 </TabsContent>
-
-                <TabsContent value="variants" className="space-y-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base">Biến thể sản phẩm</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={addVariant}
-                    >
-                      <Plus className="w-4 h-4 mr-2" /> Thêm màu
-                    </Button>
-                  </div>
-                  {formData.variants.map((variant, vIdx) => (
-                    <div key={vIdx} className="rounded-md p-4 space-y-3 border">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Màu</Label>
-                          <Input
-                            placeholder="Nhập màu"
-                            value={variant.color}
-                            onChange={(e) =>
-                              handleVariantChange(vIdx, "color", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>URL ảnh</Label>
-                          <Input
-                            placeholder="Nhập URL ảnh"
-                            value={variant.imageUrl}
-                            onChange={(e) =>
-                              handleVariantChange(vIdx, "imageUrl", e.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        {variant.options.map((opt, oIdx) => (
-                          <div
-                            key={oIdx}
-                            className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end"
-                          >
-                            <div className="space-y-2">
-                              <Label>Dung lượng bộ nhớ</Label>
-                              <Select
-                                value={opt.capacity || ""}
-                                onValueChange={(value) =>
-                                  handleVariantOptionChange(
-                                    vIdx,
-                                    oIdx,
-                                    "capacity",
-                                    value
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Chọn dung lượng" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {[
-                                    "128GB",
-                                    "256GB",
-                                    "512GB",
-                                    "1TB",
-                                    "2TB",
-                                  ].map((capacity) => (
-                                    <SelectItem key={capacity} value={capacity}>
-                                      {capacity}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Giá gốc</Label>
-                              <Input
-                                type="number"
-                                placeholder="Nhập giá gốc"
-                                value={opt.originalPrice}
-                                onChange={(e) =>
-                                  handleVariantOptionChange(
-                                    vIdx,
-                                    oIdx,
-                                    "originalPrice",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Giá bán</Label>
-                              <Input
-                                type="number"
-                                placeholder="Nhập giá bán"
-                                value={opt.price}
-                                onChange={(e) =>
-                                  handleVariantOptionChange(
-                                    vIdx,
-                                    oIdx,
-                                    "price",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Số lượng</Label>
-                              <Input
-                                type="number"
-                                placeholder="Nhập số lượng"
-                                value={opt.quantity}
-                                onChange={(e) =>
-                                  handleVariantOptionChange(
-                                    vIdx,
-                                    oIdx,
-                                    "quantity",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => removeVariantOption(vIdx, oIdx)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => addVariantOption(vIdx)}
-                        >
-                          <Plus className="w-4 h-4 mr-2" /> Thêm dung lượng
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => removeVariant(vIdx)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" /> Xóa biến thể
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <TabsContent value="variants" className="mt-6">
+                  <ProductFormVariants
+                    formData={formData}
+                    handleVariantChange={handleVariantChange}
+                    handleVariantOptionChange={handleVariantOptionChange}
+                    addVariant={addVariant}
+                    removeVariant={removeVariant}
+                    addVariantOption={addVariantOption}
+                    removeVariantOption={removeVariantOption}
+                  />
                 </TabsContent>
-
-                <TabsContent value="media" className="space-y-4 mt-6">
-                  <div className="space-y-2">
-                    <Label>Hình ảnh</Label>
-                    <div className="flex flex-col gap-2">
-                      {formData.images.map((img, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Input
-                            value={img}
-                            onChange={(e) =>
-                              handleArrayChange("images", idx, e.target.value)
-                            }
-                            placeholder="URL hình ảnh"
-                            className={idx === 0 ? "font-bold" : ""}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => removeArrayItem("images", idx)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => addArrayItem("images")}
-                      >
-                        <Plus className="w-4 h-4 mr-2" /> Thêm ảnh
-                      </Button>
-                    </div>
-                    {formData.images.some((img) => img.trim()) && (
-                      <div className="mt-4">
-                        <Label>Ảnh xem trước</Label>
-                        <div className="aspect-square bg-gray-200 mt-2">
-                          {previewImage && (
-                            <img
-                              src={previewImage}
-                              alt="Preview"
-                              className="w-full h-full object-contain"
-                            />
-                          )}
-                          {!previewImage && (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package className="w-12 h-12 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-5 gap-2 mt-2">
-                          {formData.images
-                            .filter((img) => img.trim())
-                            .map((img, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => setPreviewImage(img)}
-                                className="aspect-square bg-gray-100 border-2 rounded overflow-hidden"
-                              >
-                                <img
-                                  src={img}
-                                  alt={`Thumbnail ${idx + 1}`}
-                                  className="w-full h-full object-cover"
-                                />
-                              </button>
-                            ))}
-                          {formData.variants
-                            .filter((v) => v.imageUrl && v.imageUrl.trim())
-                            .map((v, idx) => (
-                              <button
-                                key={`variant-${idx}`}
-                                onClick={() => setPreviewImage(v.imageUrl)}
-                                className="aspect-square bg-gray-100 border-2 rounded overflow-hidden"
-                              >
-                                <img
-                                  src={v.imageUrl}
-                                  alt={`Variant Thumbnail ${idx + 1}`}
-                                  className="w-full h-full object-cover"
-                                />
-                              </button>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <TabsContent value="media" className="mt-6">
+                  <ProductFormMedia
+                    formData={formData}
+                    handleArrayChange={handleArrayChange}
+                    addArrayItem={addArrayItem}
+                    removeArrayItem={removeArrayItem}
+                    previewImage={previewImage}
+                  />
                 </TabsContent>
               </Tabs>
-
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
-                  ? "Đang xử lý..."
-                  : editingProduct
-                  ? "Cập nhật"
-                  : "Tạo sản phẩm"}
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? "Đang xử lý..." : editingProduct ? "Cập nhật" : "Tạo sản phẩm"}
               </Button>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* Search & Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Input
-                placeholder="Tìm kiếm sản phẩm..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+            <Input placeholder="Tìm kiếm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Danh mục" />
-              </SelectTrigger>
+              <SelectTrigger title="Lọc theo danh mục"><SelectValue placeholder="Danh mục" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả danh mục</SelectItem>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">Tất cả</SelectItem>
+                {CATEGORIES.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Trạng thái" />
-              </SelectTrigger>
+              <SelectTrigger title="Lọc theo trạng thái"><SelectValue placeholder="Trạng thái" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="all">Tất cả</SelectItem>
                 <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
                 <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
                 <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
@@ -952,35 +449,24 @@ const ProductsPage = () => {
         </CardContent>
       </Card>
 
-      {/* Products Grid - Using ProductCard Component */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((product) => (
           <ProductCard
             key={product._id}
             product={product}
             onUpdate={handleProductUpdate}
+            onEdit={handleOpenForm}
           />
         ))}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
-          <Button
-            variant="outline"
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((prev) => prev - 1)}
-          >
+          <Button variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((prev) => prev - 1)}>
             Trước
           </Button>
-          <span className="px-4 py-2 flex items-center">
-            Trang {currentPage} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((prev) => prev + 1)}
-          >
+          <span className="px-4 py-2">Trang {currentPage} / {totalPages}</span>
+          <Button variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((prev) => prev + 1)}>
             Sau
           </Button>
         </div>

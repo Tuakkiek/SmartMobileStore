@@ -105,7 +105,7 @@ const HomePage = () => {
   return (
     <div>
       {/* Hero Banner */}
-      <HeroBannerCarousel />
+<HeroBannerCarousel />
 
       {/* Category Navigation */}
       <section className="py-8 bg-gray-50">
