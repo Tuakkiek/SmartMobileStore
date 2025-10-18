@@ -2,10 +2,24 @@ import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 
-const ProductFormVariants = ({ formData, handleVariantChange, handleVariantOptionChange, addVariant, removeVariant, addVariantOption, removeVariantOption }) => {
+const ProductFormVariants = ({
+  formData,
+  handleVariantChange,
+  handleVariantOptionChange,
+  addVariant,
+  removeVariant,
+  addVariantOption,
+  removeVariantOption,
+}) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -18,11 +32,15 @@ const ProductFormVariants = ({ formData, handleVariantChange, handleVariantOptio
         <div key={vIdx} className="rounded-md p-4 space-y-3 border">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Màu <span className="text-red-500">*</span></Label>
+              <Label>
+                Màu <span className="text-red-500">*</span>
+              </Label>
               <Input
                 placeholder="VD: Space Gray"
                 value={variant.color}
-                onChange={(e) => handleVariantChange(vIdx, "color", e.target.value)}
+                onChange={(e) =>
+                  handleVariantChange(vIdx, "color", e.target.value)
+                }
                 required
               />
             </div>
@@ -31,67 +49,154 @@ const ProductFormVariants = ({ formData, handleVariantChange, handleVariantOptio
               <Input
                 placeholder="Nhập URL ảnh"
                 value={variant.imageUrl}
-                onChange={(e) => handleVariantChange(vIdx, "imageUrl", e.target.value)}
+                onChange={(e) =>
+                  handleVariantChange(vIdx, "imageUrl", e.target.value)
+                }
               />
             </div>
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium">Phiên bản cấu hình:</Label>
             {variant.options.map((opt, oIdx) => (
-              <div key={oIdx} className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md">
+              <div
+                key={oIdx}
+                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md"
+              >
                 <div className="space-y-2">
                   <Label>CPU – GPU</Label>
                   <Input
                     placeholder="VD: M3 Pro 11-core CPU, 14-core GPU"
                     value={opt.cpuGpu}
-                    onChange={(e) => handleVariantOptionChange(vIdx, oIdx, "cpuGpu", e.target.value)}
+                    onChange={(e) =>
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "cpuGpu",
+                        e.target.value
+                      )
+                    }
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Ram</Label>
-                  <Select value={opt.ram || ""} onValueChange={(value) => handleVariantOptionChange(vIdx, oIdx, "ram", value)}>
-                    <SelectTrigger><SelectValue placeholder="Chọn RAM" /></SelectTrigger>
+                  <Select
+                    value={opt.ram || ""}
+                    onValueChange={(value) =>
+                      handleVariantOptionChange(vIdx, oIdx, "ram", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn RAM" />
+                    </SelectTrigger>
                     <SelectContent>
-                      {["8GB", "16GB", "24GB", "32GB", "64GB"].map((ram) => (
-                        <SelectItem key={ram} value={ram}>{ram}</SelectItem>
+                      {[
+                        "3GB",
+                        "4GB",
+                        "6GB",
+                        "8GB",
+                        "12GB",
+                        "16GB",
+                        "24GB",
+                        "32GB",
+                        "64GB",
+                      ].map((ram) => (
+                        <SelectItem key={ram} value={ram}>
+                          {ram}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Bộ nhớ trong</Label>
-                  <Select value={opt.storage || ""} onValueChange={(value) => handleVariantOptionChange(vIdx, oIdx, "storage", value)}>
-                    <SelectTrigger><SelectValue placeholder="Chọn bộ nhớ" /></SelectTrigger>
+                  <Select
+                    value={opt.storage || ""}
+                    onValueChange={(value) =>
+                      handleVariantOptionChange(vIdx, oIdx, "storage", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn bộ nhớ" />
+                    </SelectTrigger>
                     <SelectContent>
-                      {["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"].map((storage) => (
-                        <SelectItem key={storage} value={storage}>{storage}</SelectItem>
-                      ))}
+                      {["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"].map(
+                        (storage) => (
+                          <SelectItem key={storage} value={storage}>
+                            {storage}
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Giá gốc</Label>
-                  <Input type="number" value={opt.originalPrice} onChange={(e) => handleVariantOptionChange(vIdx, oIdx, "originalPrice", e.target.value)} />
+                  <Input
+                    type="number"
+                    value={opt.originalPrice}
+                    onChange={(e) =>
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "originalPrice",
+                        e.target.value
+                      )
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Giá bán</Label>
-                  <Input type="number" value={opt.price} onChange={(e) => handleVariantOptionChange(vIdx, oIdx, "price", e.target.value)} />
+                  <Input
+                    type="number"
+                    value={opt.price}
+                    onChange={(e) =>
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "price",
+                        e.target.value
+                      )
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
-                  <Input type="number" value={opt.quantity} onChange={(e) => handleVariantOptionChange(vIdx, oIdx, "quantity", e.target.value)} />
+                  <Input
+                    type="number"
+                    value={opt.quantity}
+                    onChange={(e) =>
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "quantity",
+                        e.target.value
+                      )
+                    }
+                  />
                 </div>
-                <Button type="button" variant="outline" onClick={() => removeVariantOption(vIdx, oIdx)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => removeVariantOption(vIdx, oIdx)}
+                >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             ))}
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => addVariantOption(vIdx)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => addVariantOption(vIdx)}
+            >
               <Plus className="w-4 h-4 mr-2" /> Thêm phiên bản
             </Button>
-            <Button type="button" variant="outline" onClick={() => removeVariant(vIdx)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => removeVariant(vIdx)}
+            >
               <Trash2 className="w-4 h-4 mr-2" /> Xóa màu
             </Button>
           </div>

@@ -3,28 +3,59 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus } from "lucide-react";
-import { toast } from "sonner";
 
-const ProductFormSpecs = ({ formData, handleSpecChange, handleColorChange, addColor, removeColor }) => {
-  console.log("formData.specifications.colors:", formData.specifications.colors); // Debug log
+const ProductFormSpecs = ({
+  formData,
+  handleSpecChange,
+  handleColorChange,
+  addColor,
+  removeColor,
+}) => {
+  console.log(
+    "formData.specifications.colors:",
+    formData.specifications.colors
+  ); // Debug log
 
   const macSpecLabels = {
-    chip: "Chip",
-    gpuType: "Loại card đồ họa",
-    ram: "Dung lượng RAM",
-    storage: "Ổ cứng",
-    screenSize: "Kích thước màn hình",
-    screenTechnology: "Công nghệ màn hình",
-    battery: "Pin",
-    operatingSystem: "Hệ điều hành",
-    screenResolution: "Độ phân giải màn hình",
-    cpuType: "Loại CPU",
-    ports: "Cổng giao tiếp",
+    Chip: "chip",
+    "GPU Type": "gpuType",
+    RAM: "ram",
+    Storage: "storage",
+    "Screen Size": "screenSize",
+    "Screen Technology": "screenTechnology",
+    Battery: "battery",
+    "Operating System": "operatingSystem",
+    "Screen Resolution": "screenResolution",
+    "CPU Type": "cpuType",
+    Ports: "ports",
   };
 
-  const currentSpecs = formData.category === "Mac"
-    ? ["chip", "gpuType", "ram", "storage", "screenSize", "screenTechnology", "battery", "operatingSystem", "screenResolution", "cpuType", "ports"]
-    : ["screenSize", "cpu", "operatingSystem", "storage", "ram", "mainCamera", "frontCamera", "battery", "colors"];
+  const currentSpecs =
+    formData.category === "Mac"
+      ? [
+          "Chip",
+          "GPU Type",
+          "RAM",
+          "Storage",
+          "Screen Size",
+          "Screen Technology",
+          "Battery",
+          "Operating System",
+          "Screen Resolution",
+          "CPU Type",
+          "Ports",
+        ]
+      : [
+          "Screen Size",
+          "CPU",
+          "Operating System",
+          "Storage",
+          "RAM",
+          "Main Camera",
+          "Front Camera",
+          "Battery",
+          "Colors",
+        ];
 
   return (
     <div className="space-y-4">
@@ -43,17 +74,18 @@ const ProductFormSpecs = ({ formData, handleSpecChange, handleColorChange, addCo
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {currentSpecs.map((spec) => (
-            spec !== "colors" && (
-              <div key={spec} className="space-y-2">
-                <Label>{spec}</Label>
-                <Input
-                  value={formData.specifications[spec] || ""}
-                  onChange={(e) => handleSpecChange(spec, e.target.value)}
-                />
-              </div>
-            )
-          ))}
+          {currentSpecs.map(
+            (spec) =>
+              spec !== "colors" && (
+                <div key={spec} className="space-y-2">
+                  <Label>{spec}</Label>
+                  <Input
+                    value={formData.specifications[spec] || ""}
+                    onChange={(e) => handleSpecChange(spec, e.target.value)}
+                  />
+                </div>
+              )
+          )}
           {formData.category !== "Mac" && (
             <div className="space-y-2 col-span-full">
               <Label>Màu sắc</Label>
@@ -66,7 +98,12 @@ const ProductFormSpecs = ({ formData, handleSpecChange, handleColorChange, addCo
                         onChange={(e) => handleColorChange(idx, e.target.value)}
                         className="w-32"
                       />
-                      <Button type="button" variant="outline" size="sm" onClick={() => removeColor(idx)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeColor(idx)}
+                      >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
@@ -74,7 +111,12 @@ const ProductFormSpecs = ({ formData, handleSpecChange, handleColorChange, addCo
                 ) : (
                   <p className="text-red-500">Error: Colors data is invalid</p>
                 )}
-                <Button type="button" variant="outline" size="sm" onClick={addColor}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addColor}
+                >
                   <Plus className="w-3 h-3 mr-1" /> Thêm
                 </Button>
               </div>

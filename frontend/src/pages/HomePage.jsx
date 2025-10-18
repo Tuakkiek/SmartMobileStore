@@ -62,7 +62,6 @@ const HomePage = () => {
   // Sử dụng danh sách danh mục từ CATEGORY_ICONS
   const categories = Object.keys(CATEGORY_ICONS);
 
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -105,7 +104,7 @@ const HomePage = () => {
   return (
     <div>
       {/* Hero Banner */}
-<HeroBannerCarousel />
+      <HeroBannerCarousel />
 
       {/* Category Navigation */}
       <section className="py-8 bg-gray-50">
@@ -128,16 +127,6 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Category Sections */}
-      {categories.map((category) => (
-        <CategorySection
-          key={category}
-          category={category}
-          products={categoryProducts[category]}
-          onViewAll={handleViewAll}
-        />
-      ))}
-
       {/* New Arrivals */}
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
@@ -155,6 +144,16 @@ const HomePage = () => {
           <NewArrivalsSection />
         </div>
       </section>
+
+      {/* Category Sections */}
+      {categories.map((category) => (
+        <CategorySection
+          key={category}
+          category={category}
+          products={categoryProducts[category]}
+          onViewAll={handleViewAll}
+        />
+      ))}
 
       {/* iPhone Showcase */}
       {categoryProducts.iPhone && categoryProducts.iPhone.length > 0 && (
