@@ -1,3 +1,5 @@
+// src/lib/productConstants.js
+
 const CATEGORIES = [
   "iPhone",
   "iPad",

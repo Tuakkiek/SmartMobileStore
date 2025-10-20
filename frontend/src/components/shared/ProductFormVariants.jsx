@@ -52,7 +52,7 @@ const ProductFormVariants = ({ formData, handleVariantChange, handleVariantOptio
                   <Select value={opt.ram || ""} onValueChange={(value) => handleVariantOptionChange(vIdx, oIdx, "ram", value)}>
                     <SelectTrigger><SelectValue placeholder="Chọn RAM" /></SelectTrigger>
                     <SelectContent>
-                      {["8GB", "16GB", "24GB", "32GB", "64GB"].map((ram) => (
+                      {["3GB","4GB","6GB","8GB","12GB", "16GB", "24GB", "32GB", "64GB"].map((ram) => (
                         <SelectItem key={ram} value={ram}>{ram}</SelectItem>
                       ))}
                     </SelectContent>

@@ -25,6 +25,8 @@ const ProductDetailPage = () => {
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedWarranty, setSelectedWarranty] = useState(null);
 
+  
+
   // Reset scroll to top when page loads
   useEffect(() => {
     window.scrollTo(0, 0);

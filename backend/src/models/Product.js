@@ -1,61 +1,77 @@
 // models/Product.js - Extended version
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 // Base specifications - common fields
-const specificationsSchema = new mongoose.Schema({
-  // Common fields for all products
-  color: String,
-  weight: String,
-  dimensions: String,
-  
-  // iPhone/iPad/Mac specific
-  storage: String,
-  ram: String,
-  screen: String,
-  chip: String,
-  camera: String,
-  battery: String,
-  
-  // Mac specific
-  gpu: String,
-  ports: String,
-  keyboard: String,
-  
-  // Apple Watch specific
-  caseSize: String,
-  caseMaterial: String,
-  bandType: String,
-  waterResistance: String,
-  
-  // AirPods specific
-  chargingCase: String,
-  batteryLife: String,
-  noiseCancellation: String,
-  
-  // Accessories specific
-  compatibility: String,
-  material: String,
-  type: String,
-  
-  // Additional flexible field for any other specs
-  additional: mongoose.Schema.Types.Mixed
-}, { _id: false, strict: false }); // strict: false allows flexible fields
+const specificationsSchema = new mongoose.Schema(
+  {
+    // Common fields for all products
+    color: String,
+    weight: String,
+    dimensions: String,
+
+    // iPhone/iPad/Mac specific
+    storage: String,
+    ram: String,
+    screen: String,
+    chip: String,
+    camera: String,
+    battery: String,
+
+    // Mac specific
+    gpu: String,
+    ports: String,
+    keyboard: String,
+
+    // Apple Watch specific
+    caseSize: String,
+    caseMaterial: String,
+    bandType: String,
+    waterResistance: String,
+
+    // AirPods
+    chipset: String,
+    brand: String,
+    audioTechnology: String,
+    batteryLife: String,
+    controlMethod: String,
+    microphone: String,
+    connectionPort: String,
+    otherFeatures: String,
+
+    // Accessories - Dynamic
+    customSpecs: [
+      {
+        key: String,
+        value: String,
+      },
+    ],
+    // Additional flexible field for any other specs
+    additional: mongoose.Schema.Types.Mixed,
+  },
+  { _id: false, strict: false }
+); // strict: false allows flexible fields
 
 // Variant option: a specific color/config with its own price points
-const variantOptionSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true }, // e.g., "Natural Titanium", "Starlight"
-  color: { type: String, trim: true },
-  price: { type: Number, required: true, min: 0 },
-  originalPrice: { type: Number, required: true, min: 0 },
-  sku: { type: String, trim: true }, // Stock Keeping Unit
-}, { _id: false });
+const variantOptionSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true }, // e.g., "Natural Titanium", "Starlight"
+    color: { type: String, trim: true },
+    price: { type: Number, required: true, min: 0 },
+    originalPrice: { type: Number, required: true, min: 0 },
+    sku: { type: String, trim: true }, // Stock Keeping Unit
+  },
+  { _id: false }
+);
 
 // Variant: a configuration level (storage, size, etc.) with multiple options
-const variantSchema = new mongoose.Schema({
-  type: { type: String, required: true, trim: true }, // e.g., "Storage", "Case Size", "Model"
-  name: { type: String, required: true, trim: true }, // e.g., "256GB", "41mm", "M3"
-  options: { type: [variantOptionSchema], default: [] },
-}, { _id: false });
+const variantSchema = new mongoose.Schema(
+  {
+    type: { type: String, required: true, trim: true }, // e.g., "Storage", "Case Size", "Model"
+    name: { type: String, required: true, trim: true }, // e.g., "256GB", "41mm", "M3"
+    options: { type: [variantOptionSchema], default: [] },
+  },
+  { _id: false }
+);
 
 const productSchema = new mongoose.Schema(
   {
@@ -66,7 +82,7 @@ const productSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods', 'Accessories'],
+      enum: ["iPhone", "iPad", "Mac", "Apple Watch", "AirPods", "Accessories"],
       required: true,
       index: true,
     },
@@ -85,6 +101,13 @@ const productSchema = new mongoose.Schema(
 
     // Variants for different configurations
     variants: { type: [variantSchema], default: [] },
+
+    condition: {
+      type: String,
+      enum: ["NEW", "LIKE_NEW"],
+      default: "NEW",
+      required: true,
+    },
 
     // Base price (minimum price if variants exist)
     price: {
@@ -121,15 +144,15 @@ const productSchema = new mongoose.Schema(
     },
     features: [String], // Key features list
     inTheBox: [String], // What's included in the box
-    
+
     // SEO and organization
     tags: [String], // e.g., ["gaming", "student", "professional"]
     brand: {
       type: String,
-      default: 'Apple',
+      default: "Apple",
       trim: true,
     },
-    
+
     // Reviews
     averageRating: {
       type: Number,
@@ -142,17 +165,18 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-    
+
     // Metadata
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
-    
+
     // Release date for pre-orders
     releaseDate: Date,
   },
+
   {
     timestamps: true,
   }
@@ -160,14 +184,14 @@ const productSchema = new mongoose.Schema(
 
 // Calculate final price
 productSchema.methods.calculatePrice = function () {
-  return this.originalPrice - (this.originalPrice * this.discount / 100);
+  return this.originalPrice - (this.originalPrice * this.discount) / 100;
 };
 
 // Update product rating
 productSchema.methods.updateRating = async function () {
-  const Review = mongoose.model('Review');
+  const Review = mongoose.model("Review");
   const reviews = await Review.find({ productId: this._id });
-  
+
   if (reviews.length > 0) {
     const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
     this.averageRating = sum / reviews.length;
@@ -176,16 +200,16 @@ productSchema.methods.updateRating = async function () {
     this.averageRating = 0;
     this.totalReviews = 0;
   }
-  
+
   await this.save();
 };
 
 // Auto-update status based on quantity
-productSchema.pre('save', function (next) {
-  if (this.quantity === 0 && this.status !== 'PRE_ORDER') {
-    this.status = 'OUT_OF_STOCK';
-  } else if (this.status === 'OUT_OF_STOCK' && this.quantity > 0) {
-    this.status = 'AVAILABLE';
+productSchema.pre("save", function (next) {
+  if (this.quantity === 0 && this.status !== "PRE_ORDER") {
+    this.status = "OUT_OF_STOCK";
+  } else if (this.status === "OUT_OF_STOCK" && this.quantity > 0) {
+    this.status = "AVAILABLE";
   }
 
   // If variants are provided, ensure base price/originalPrice reflect the minimum
@@ -193,10 +217,12 @@ productSchema.pre('save', function (next) {
     let minPrice = Infinity;
     let minOriginal = Infinity;
 
-    this.variants.forEach(v => {
-      (v.options || []).forEach(opt => {
-        if (typeof opt.price === 'number') minPrice = Math.min(minPrice, opt.price);
-        if (typeof opt.originalPrice === 'number') minOriginal = Math.min(minOriginal, opt.originalPrice);
+    this.variants.forEach((v) => {
+      (v.options || []).forEach((opt) => {
+        if (typeof opt.price === "number")
+          minPrice = Math.min(minPrice, opt.price);
+        if (typeof opt.originalPrice === "number")
+          minOriginal = Math.min(minOriginal, opt.originalPrice);
       });
     });
 
@@ -222,6 +248,6 @@ productSchema.index({ category: 1, status: 1 });
 productSchema.index({ price: 1 });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ averageRating: -1 });
-productSchema.index({ name: 'text', model: 'text', description: 'text' });
+productSchema.index({ name: "text", model: "text", description: "text" });
 
 export default mongoose.model("Product", productSchema);

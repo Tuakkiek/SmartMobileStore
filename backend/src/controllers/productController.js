@@ -1,4 +1,4 @@
-// controllers/productController.js - Extended version
+// controllers/productController.js - UPDATED v11 WITH CONDITION FIELD
 import Product from '../models/Product.js';
 
 // Get all categories with product counts
@@ -29,7 +29,7 @@ export const getCategories = async (req, res) => {
   }
 };
 
-// Get all products with enhanced filtering
+// Get all products with enhanced filtering - UPDATED WITH CONDITION
 export const getAllProducts = async (req, res) => {
   try {
     const { 
@@ -39,6 +39,7 @@ export const getAllProducts = async (req, res) => {
       category,
       subcategory,
       status, 
+      condition, // NEW FILTER
       minPrice, 
       maxPrice, 
       sort,
@@ -56,6 +57,11 @@ export const getAllProducts = async (req, res) => {
     // Filter by subcategory
     if (subcategory) {
       query.subcategory = subcategory;
+    }
+
+    // NEW: Filter by condition
+    if (condition) {
+      query.condition = condition;
     }
 
     // Search by name, model, or description
@@ -124,16 +130,21 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-// Get products by category
+// Get products by category - UPDATED WITH CONDITION
 export const getProductsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
-    const { page = 1, limit = 12, subcategory, sort = 'createdAt' } = req.query;
+    const { page = 1, limit = 12, subcategory, condition, sort = 'createdAt' } = req.query;
 
     const query = { category };
     
     if (subcategory) {
       query.subcategory = subcategory;
+    }
+
+    // NEW: Filter by condition
+    if (condition) {
+      query.condition = condition;
     }
 
     let sortOption = { createdAt: -1 };
@@ -166,10 +177,10 @@ export const getProductsByCategory = async (req, res) => {
   }
 };
 
-// Get featured/popular products
+// Get featured/popular products - UPDATED WITH CONDITION
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const { category, limit = 8 } = req.query;
+    const { category, condition, limit = 8 } = req.query; // NEW CONDITION PARAM
     
     const query = {
       status: 'AVAILABLE',
@@ -178,6 +189,11 @@ export const getFeaturedProducts = async (req, res) => {
 
     if (category) {
       query.category = category;
+    }
+
+    // NEW: Filter by condition
+    if (condition) {
+      query.condition = condition;
     }
 
     const products = await Product.find(query)
@@ -196,10 +212,10 @@ export const getFeaturedProducts = async (req, res) => {
   }
 };
 
-// Get new arrivals
+// Get new arrivals - UPDATED WITH CONDITION
 export const getNewArrivals = async (req, res) => {
   try {
-    const { category, limit = 8 } = req.query;
+    const { category, condition, limit = 8 } = req.query; // NEW CONDITION PARAM
     
     const query = {
       status: { $in: ['AVAILABLE', 'PRE_ORDER'] }
@@ -207,6 +223,11 @@ export const getNewArrivals = async (req, res) => {
 
     if (category) {
       query.category = category;
+    }
+
+    // NEW: Filter by condition
+    if (condition) {
+      query.condition = condition;
     }
 
     const products = await Product.find(query)
@@ -250,7 +271,7 @@ export const getProductById = async (req, res) => {
   }
 };
 
-// Get related products
+// Get related products - UPDATED WITH CONDITION
 export const getRelatedProducts = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -265,6 +286,7 @@ export const getRelatedProducts = async (req, res) => {
     const relatedProducts = await Product.find({
       _id: { $ne: product._id },
       category: product.category,
+      condition: product.condition, // NEW: SAME CONDITION
       status: 'AVAILABLE'
     })
     .limit(4)
@@ -282,13 +304,18 @@ export const getRelatedProducts = async (req, res) => {
   }
 };
 
-// Create product (Warehouse Staff)
 export const createProduct = async (req, res) => {
   try {
-    const product = await Product.create({
+    const productData = {
       ...req.body,
-      createdBy: req.user._id
-    });
+      condition: req.body.condition || "NEW",
+      createdBy: req.user._id,
+      specifications: req.body.category === "Phụ kiện"
+        ? { customSpecs: req.body.specifications?.customSpecs || [{ key: "", value: "" }] }
+        : req.body.specifications || {},
+    };
+
+    const product = await Product.create(productData);
 
     res.status(201).json({
       success: true,
@@ -303,12 +330,19 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// Update product (Warehouse Staff, Admin)
 export const updateProduct = async (req, res) => {
   try {
+    const updateData = {
+      ...req.body,
+      condition: req.body.condition || "NEW",
+      specifications: req.body.category === "Phụ kiện"
+        ? { customSpecs: req.body.specifications?.customSpecs || [{ key: "", value: "" }] }
+        : req.body.specifications || {},
+    };
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -394,7 +428,7 @@ export const bulkUpdateProducts = async (req, res) => {
 
     const result = await Product.updateMany(
       { _id: { $in: productIds } },
-      { $set: updateData }
+      { $set: { ...updateData, condition: updateData.condition || "NEW" } } // ✅ CONDITION
     );
 
     res.json({
@@ -410,13 +444,16 @@ export const bulkUpdateProducts = async (req, res) => {
   }
 };
 
-// Get product statistics by category
+// Get product statistics by category - UPDATED WITH CONDITION
 export const getProductStats = async (req, res) => {
   try {
     const stats = await Product.aggregate([
       {
         $group: {
-          _id: '$category',
+          _id: { 
+            category: '$category', 
+            condition: '$condition' // NEW: GROUP BY CONDITION
+          },
           totalProducts: { $sum: 1 },
           availableProducts: {
             $sum: { $cond: [{ $eq: ['$status', 'AVAILABLE'] }, 1, 0] }
@@ -427,7 +464,7 @@ export const getProductStats = async (req, res) => {
         }
       },
       {
-        $sort: { _id: 1 }
+        $sort: { '_id.category': 1, '_id.condition': 1 }
       }
     ]);
 
@@ -443,9 +480,7 @@ export const getProductStats = async (req, res) => {
   }
 };
 
-// Add these functions to controllers/productController.js
-
-// Bulk import products from JSON
+// Bulk import products from JSON - UPDATED WITH CONDITION
 export const bulkImportJSON = async (req, res) => {
   try {
     const { products } = req.body;
@@ -464,14 +499,15 @@ export const bulkImportJSON = async (req, res) => {
 
     for (const productData of products) {
       try {
-        // Add createdBy to each product
         const product = await Product.create({
           ...productData,
+          condition: productData.condition || "NEW", // ✅ DEFAULT
           createdBy: req.user._id
         });
         results.success.push({
           name: product.name,
-          id: product._id
+          id: product._id,
+          condition: product.condition // NEW
         });
       } catch (error) {
         results.failed.push({
@@ -494,7 +530,7 @@ export const bulkImportJSON = async (req, res) => {
   }
 };
 
-// Bulk import products from CSV
+// Bulk import products from CSV - UPDATED WITH CONDITION
 export const bulkImportCSV = async (req, res) => {
   try {
     const { csvData } = req.body;
@@ -558,6 +594,7 @@ export const bulkImportCSV = async (req, res) => {
           category: row.category,
           subcategory: row.subcategory || '',
           model: row.model,
+          condition: row.condition || "NEW", // ✅ NEW FIELD
           specifications,
           variants,
           price: Number(row.price),
@@ -575,7 +612,8 @@ export const bulkImportCSV = async (req, res) => {
         const product = await Product.create(productData);
         results.success.push({
           name: product.name,
-          id: product._id
+          id: product._id,
+          condition: product.condition // NEW
         });
       } catch (error) {
         results.failed.push({
@@ -598,14 +636,15 @@ export const bulkImportCSV = async (req, res) => {
   }
 };
 
-// Export products to CSV format
+// Export products to CSV format - UPDATED WITH CONDITION
 export const exportToCSV = async (req, res) => {
   try {
-    const { category, status } = req.query;
+    const { category, status, condition } = req.query; // NEW CONDITION PARAM
     const query = {};
     
     if (category) query.category = category;
     if (status) query.status = status;
+    if (condition) query.condition = condition; // NEW
 
     const products = await Product.find(query).lean();
 
@@ -615,6 +654,7 @@ export const exportToCSV = async (req, res) => {
       category: product.category,
       subcategory: product.subcategory || '',
       model: product.model,
+      condition: product.condition, // NEW
       price: product.price,
       originalPrice: product.originalPrice,
       discount: product.discount || 0,
