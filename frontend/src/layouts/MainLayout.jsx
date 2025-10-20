@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Outlet, Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, User, Menu, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,21 @@ const MainLayout = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Thêm useRef để tham chiếu đến ô input tìm kiếm
+  const searchInputRef = useRef(null);
+
+  // Focus vào ô input khi searchOpen thay đổi thành true
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [searchOpen]);
+
   const handleLogout = async () => {
     await logout();
     navigate("/");
     setMobileMenuOpen(false);
   };
-
 
   const handleProfileNavigation = () => {
     if (user?.role === "CUSTOMER") {
@@ -95,7 +104,7 @@ const MainLayout = () => {
     { name: "Apple Vision Pro", path: "/products?category=vision" },
     { name: "AirPods", path: "/products?category=airpods" },
     { name: "Apple Intelligence", path: "/products?category=intelligence" },
-{ name: "Apple Trade In", path: "/trade-in" },
+    { name: "Apple Trade In", path: "/trade-in" },
   ];
 
   return (
@@ -103,7 +112,9 @@ const MainLayout = () => {
       {/* Search Overlay */}
       <div
         className={`fixed inset-0 z-50 transition-opacity duration-300 ${
-          searchOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          searchOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
       >
         {/* Backdrop với blur */}
@@ -115,7 +126,9 @@ const MainLayout = () => {
         {/* Search Container - Animation slide down */}
         <div
           className={`absolute top-0 left-0 right-0 bg-black shadow-2xl transform transition-all duration-500 ease-out ${
-            searchOpen ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
+            searchOpen
+              ? "translate-y-0 opacity-100"
+              : "-translate-y-full opacity-0"
           }`}
           style={{ transformOrigin: "top" }}
         >
@@ -127,12 +140,13 @@ const MainLayout = () => {
                   <div className="flex-1 relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
                     <input
+                      ref={searchInputRef} // Gắn ref vào input
                       type="text"
                       placeholder="Search apple.com"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-gray-900/50 text-gray-300 rounded-lg py-4 pl-12 pr-6 focus:outline-none focus:bg-gray-900 placeholder-gray-500 transition-colors"
-                      autoFocus
+                      // autoFocus được thay bằng useEffect
                     />
                   </div>
                   <button
@@ -162,7 +176,7 @@ const MainLayout = () => {
                           →
                         </span>
                         <span className="text-sm">{link.name}</span>
-</Link>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -228,7 +242,7 @@ const MainLayout = () => {
           {/* Logo */}
           <Link
             to="/"
-className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
+            className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
           >
             <span className="text-black font-bold text-lg transition-colors duration-300 hover:text-gray-700">
               LOGO
@@ -285,7 +299,7 @@ className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-
                 onClick={() => navigate("/login")}
                 className="bg-white text-black rounded-full px-6 py-3 flex items-center gap-2 transition-all duration-300 hover:bg-gray-200 hover:scale-105"
               >
-<User className="w-5 h-5 transition-colors duration-300 hover:text-gray-700" />
+                <User className="w-5 h-5 transition-colors duration-300 hover:text-gray-700" />
                 <span className="font-medium transition-colors duration-300 hover:text-gray-700">
                   Đăng nhập
                 </span>
@@ -360,7 +374,7 @@ className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-
                 </Link>
                 <Link
                   to="/register"
-className="block px-4 py-2 text-sm text-white hover:bg-gray-800 rounded-md"
+                  className="block px-4 py-2 text-sm text-white hover:bg-gray-800 rounded-md"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Đăng ký
