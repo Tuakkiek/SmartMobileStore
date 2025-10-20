@@ -1,11 +1,12 @@
 // ============================================
-// FILE: src/pages/order-manager/OrdersPage.jsx
+// FILE: src/pages/order-manager/OrderManagementPage.jsx
 // ============================================
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -39,7 +40,12 @@ import {
   Phone,
 } from "lucide-react";
 import { orderAPI } from "@/lib/api";
-import { formatPrice, formatDate, getStatusColor, getStatusText } from "@/lib/utils";
+import {
+  formatPrice,
+  formatDate,
+  getStatusColor,
+  getStatusText,
+} from "@/lib/utils";
 
 const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
@@ -95,7 +101,9 @@ const OrdersPage = () => {
       setSelectedOrder(response.data.data.order);
       setShowDetailDialog(true);
     } catch (error) {
-      alert(error.response?.data?.message || "Không thể tải thông tin đơn hàng");
+      alert(
+        error.response?.data?.message || "Không thể tải thông tin đơn hàng"
+      );
     }
   };
 
@@ -108,7 +116,7 @@ const OrdersPage = () => {
     setError("");
     setShowStatusDialog(true);
   };
-          
+
   const getNextStatus = (currentStatus) => {
     const statusFlow = {
       PENDING: "CONFIRMED",
@@ -132,8 +140,10 @@ const OrdersPage = () => {
       await orderAPI.updateStatus(selectedOrder._id, statusUpdate);
       await fetchOrders();
       setShowStatusDialog(false);
+      toast.success("Cập nhật trạng thái thành công");
     } catch (error) {
       setError(error.response?.data?.message || "Cập nhật trạng thái thất bại");
+      toast.error("Cập nhật trạng thái thất bại");
     } finally {
       setIsSubmitting(false);
     }
