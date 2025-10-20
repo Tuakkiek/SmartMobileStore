@@ -35,8 +35,7 @@ export const createOrder = async (req, res) => {
         discount: product.discount || 0,
       });
 
-      totalAmount +=
-        item.quantity * product.price * (1 - (product.discount || 0) / 100);
+      totalAmount += item.quantity * product.price;
       product.quantity -= item.quantity;
       await product.save();
     }
@@ -138,7 +137,9 @@ export const getOrderById = async (req, res) => {
       .populate("statusHistory.updatedBy", "fullName");
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
 
     if (
@@ -161,7 +162,19 @@ export const getOrderById = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status, note } = req.body;
+    console.log("Received status:", status, "note:", note); // Check input from frontend
+
+    const VALID_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "CANCELLED"];
+    if (!status || !VALID_STATUSES.includes(status)) {
+      console.log("Invalid status:", status);
+      return res.status(400).json({
+        success: false,
+        message: `Trạng thái không hợp lệ. Phải là một trong: ${VALID_STATUSES.join(", ")}`,
+      });
+    }
+
     const order = await Order.findById(req.params.id);
+    console.log("Current order status before update:", order.status); // Check old status
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
@@ -173,16 +186,17 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    order.addStatusHistory(status, req.user._id, note);
-    if (status === "DELIVERED") order.paymentStatus = "PAID";
-    await order.save();
+    // Gọi update
+    const updatedOrder = await order.updateStatus(status, req.user._id, note);
+    console.log("Updated order status after save:", updatedOrder.status); // Check new status
 
     res.json({
       success: true,
       message: "Cập nhật trạng thái đơn hàng thành công",
-      data: { order },
+      data: { order: updatedOrder },
     });
   } catch (error) {
+    console.error("Error in updateOrderStatus:", error.message); // Log error
     res.status(400).json({ success: false, message: error.message });
   }
 };
@@ -193,7 +207,9 @@ export const cancelOrder = async (req, res) => {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
     if (order.customerId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
