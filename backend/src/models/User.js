@@ -36,6 +36,7 @@ const addressSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
+    role: { type: String, enum: ['USER', 'WAREHOUSE_STAFF', 'ADMIN'], default: 'USER' },
     fullName: {
       type: String,
       required: true,
@@ -62,11 +63,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
-    role: {
-      type: String,
-      enum: ["CUSTOMER", "WAREHOUSE_STAFF", "ORDER_MANAGER", "ADMIN"],
-      default: "CUSTOMER",
-    },
+
     status: {
       type: String,
       enum: ["ACTIVE", "LOCKED"],

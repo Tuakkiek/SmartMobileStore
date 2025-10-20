@@ -1,3 +1,8 @@
+// ============================================
+// FILE: src/components/shared/ProductFormBasic.jsx
+// ✅ GIỮ NGUYÊN - BASIC FORM CHO TẤT CẢ
+// ============================================
+
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +27,7 @@ const ProductFormBasic = ({ formData, handleChange, editingProduct }) => {
           <Input
             value={formData.model}
             onChange={(e) => handleChange("model", e.target.value)}
-            placeholder={formData.category === "Mac" ? "VD: MacBook Pro 14-inch M3" : "VD: iPhone 17 Pro Max"}
+            placeholder="VD: iPhone 16 Pro Max"
             required
           />
         </div>

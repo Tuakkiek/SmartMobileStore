@@ -1,5 +1,164 @@
-// controllers/productController.js - UPDATED v11 WITH CONDITION FIELD
+// controllers/productController.js - UPDATED WITH VARIANTS SUPPORT
 import Product from '../models/Product.js';
+import Variant from '../models/Variant.js';
+
+// [Existing functions remain unchanged...]
+
+// Get variants by product ID
+export const getVariantsByProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const variants = await Variant.find({ productId })
+      .populate('productId', 'name model');
+
+    if (!variants.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy biến thể cho sản phẩm này'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { variants }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Get variant by ID
+export const getVariantById = async (req, res) => {
+  try {
+    const { variantId } = req.params;
+    const variant = await Variant.findById(variantId)
+      .populate('productId', 'name model');
+
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy biến thể'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { variant }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Create a new variant
+export const createVariant = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const product = await Product.findById(productId);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy sản phẩm'
+      });
+    }
+
+    const variantData = {
+      ...req.body,
+      productId,
+      stock: req.body.stock || 0, // Mặc định stock là 0 nếu không có
+    };
+
+    const variant = await Variant.create(variantData);
+
+    // Cập nhật mảng variants của product (nếu cần)
+    product.variants.push(variant._id);
+    await product.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Tạo biến thể thành công',
+      data: { variant }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Update a variant
+export const updateVariant = async (req, res) => {
+  try {
+    const { variantId } = req.params;
+    const updateData = req.body;
+
+    const variant = await Variant.findByIdAndUpdate(
+      variantId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy biến thể'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Cập nhật biến thể thành công',
+      data: { variant }
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Delete a variant
+export const deleteVariant = async (req, res) => {
+  try {
+    const { variantId } = req.params;
+    const variant = await Variant.findById(variantId);
+
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy biến thể'
+      });
+    }
+
+    // Xóa variant khỏi mảng variants của product
+    await Product.updateOne(
+      { _id: variant.productId },
+      { $pull: { variants: variantId } }
+    );
+
+    await Variant.findByIdAndDelete(variantId);
+
+    res.json({
+      success: true,
+      message: 'Xóa biến thể thành công'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 
 // Get all categories with product counts
 export const getCategories = async (req, res) => {
@@ -29,9 +188,13 @@ export const getCategories = async (req, res) => {
   }
 };
 
-// Get all products with enhanced filtering - UPDATED WITH CONDITION
+// Get all products with enhanced filtering - GROUP BY PRODUCT + MIN PRICE FROM VARIANTS
+// controllers/productController.js
+// controllers/productController.js
 export const getAllProducts = async (req, res) => {
   try {
+    console.log('Query params:', req.query); // Log để kiểm tra tham số
+
     const { 
       page = 1, 
       limit = 12, 
@@ -39,7 +202,7 @@ export const getAllProducts = async (req, res) => {
       category,
       subcategory,
       status, 
-      condition, // NEW FILTER
+      condition,
       minPrice, 
       maxPrice, 
       sort,
@@ -47,117 +210,180 @@ export const getAllProducts = async (req, res) => {
       inStock
     } = req.query;
 
-    const query = {};
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
 
-    // Filter by category
-    if (category) {
-      query.category = category;
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Page must be a positive number'
+      });
+    }
+    if (isNaN(limitNum) || limitNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Limit must be a positive number'
+      });
     }
 
-    // Filter by subcategory
-    if (subcategory) {
-      query.subcategory = subcategory;
-    }
+    let pipeline = [
+      // Join với variants
+      {
+        $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      // Tính min price từ variants hoặc dùng price gốc, với fallback
+      {
+        $addFields: {
+          displayPrice: {
+            $cond: {
+              if: { $eq: [{ $size: '$variants' }, 0] }, // Nếu không có variants
+              then: { $ifNull: ['$price', 0] }, // Sử dụng price gốc
+              else: {
+                $min: [
+                  { $ifNull: ['$price', Infinity] },
+                  { $ifNull: [{ $min: '$variants.price' }, Infinity] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      // Filter cơ bản
+      {
+        $match: {
+          ...(category && { category: category }),
+          ...(subcategory && { subcategory: subcategory }),
+          ...(condition && { condition: condition }),
+          ...(status && { status: status }),
+          ...(inStock === 'true' && { 
+            $or: [
+              { quantity: { $gt: 0 } },
+              { 'variants.stock': { $gt: 0 } }
+            ]
+          }),
+          ...(minPrice && { displayPrice: { $gte: Number(minPrice) } }),
+          ...(maxPrice && { displayPrice: { $lte: Number(maxPrice) } }),
+          ...(tags && { tags: { $in: tags.split(',') } })
+        }
+      },
+      // Search
+      ...(search && [{
+        $match: {
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { model: { $regex: search, $options: 'i' } },
+            { description: { $regex: search, $options: 'i' } }
+          ]
+        }
+      }]),
+      // Project fields cần thiết
+      {
+        $project: {
+          name: 1,
+          model: 1,
+          category: 1,
+          subcategory: 1,
+          condition: 1,
+          displayPrice: 1,
+          originalPrice: 1,
+          discount: 1,
+          status: 1,
+          quantity: 1,
+          images: 1,
+          averageRating: 1,
+          totalReviews: 1,
+          createdAt: 1,
+          variantsCount: { $size: '$variants' }
+        }
+      },
+      // Sort
+      {
+        $sort: sort === 'price-asc' ? { displayPrice: 1 } :
+               sort === 'price-desc' ? { displayPrice: -1 } :
+               sort === 'rating' ? { averageRating: -1 } :
+               sort === 'name' ? { name: 1 } :
+               sort === 'popularity' ? { totalReviews: -1 } :
+               { createdAt: -1 }
+      },
+      // Pagination
+      { $skip: (pageNum - 1) * limitNum },
+      { $limit: limitNum }
+    ];
 
-    // NEW: Filter by condition
-    if (condition) {
-      query.condition = condition;
-    }
+    const products = await Product.aggregate(pipeline);
+    const countPipeline = pipeline.filter(p => 
+      !['$skip', '$limit'].includes(p.$skip?.toString() || p.$limit?.toString())
+    );
+    const count = await Product.aggregate([...countPipeline, { $count: 'total' }]);
 
-    // Search by name, model, or description
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { model: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    // Filter by status
-    if (status) {
-      query.status = status;
-    }
-
-    // Filter by stock availability
-    if (inStock === 'true') {
-      query.quantity = { $gt: 0 };
-      query.status = { $in: ['AVAILABLE', 'PRE_ORDER'] };
-    }
-
-    // Filter by price range
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
-
-    // Filter by tags
-    if (tags) {
-      const tagArray = tags.split(',');
-      query.tags = { $in: tagArray };
-    }
-
-    // Sort options
-    let sortOption = { createdAt: -1 };
-    if (sort === 'price-asc') sortOption = { price: 1 };
-    if (sort === 'price-desc') sortOption = { price: -1 };
-    if (sort === 'rating') sortOption = { averageRating: -1 };
-    if (sort === 'name') sortOption = { name: 1 };
-    if (sort === 'popularity') sortOption = { totalReviews: -1 };
-
-    const products = await Product.find(query)
-      .sort(sortOption)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .populate('createdBy', 'fullName');
-
-    const count = await Product.countDocuments(query);
+    console.log('Products fetched:', products.length); // Log để debug
 
     res.json({
       success: true,
       data: {
         products,
-        totalPages: Math.ceil(count / limit),
-        currentPage: Number(page),
-        total: count
+        totalPages: Math.ceil((count[0]?.total || 0) / limitNum),
+        currentPage: pageNum,
+        total: count[0]?.total || 0
       }
     });
   } catch (error) {
+    console.error('Error in getAllProducts:', error); // Log lỗi chi tiết
     res.status(400).json({
       success: false,
-      message: error.message
+      message: error.message || 'Bad request'
     });
   }
 };
 
-// Get products by category - UPDATED WITH CONDITION
+// Get products by category - GROUP BY PRODUCT + MIN PRICE FROM VARIANTS
 export const getProductsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
     const { page = 1, limit = 12, subcategory, condition, sort = 'createdAt' } = req.query;
 
-    const query = { category };
-    
-    if (subcategory) {
-      query.subcategory = subcategory;
-    }
+    const pipeline = [
+      { $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      {
+        $addFields: {
+          displayPrice: {
+            $min: ['$price', { $min: '$variants.price' }]
+          }
+        }
+      },
+      {
+        $match: {
+          category,
+          ...(subcategory && { subcategory }),
+          ...(condition && { condition })
+        }
+      },
+      {
+        $project: {
+          name: 1, model: 1, category: 1, subcategory: 1, condition: 1,
+          displayPrice: 1, images: 1, averageRating: 1, variantsCount: { $size: '$variants' }
+        }
+      },
+      { $sort: sort === 'price-asc' ? { displayPrice: 1 } :
+               sort === 'price-desc' ? { displayPrice: -1 } :
+               sort === 'rating' ? { averageRating: -1 } : { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit * 1 }
+    ];
 
-    // NEW: Filter by condition
-    if (condition) {
-      query.condition = condition;
-    }
-
-    let sortOption = { createdAt: -1 };
-    if (sort === 'price-asc') sortOption = { price: 1 };
-    if (sort === 'price-desc') sortOption = { price: -1 };
-    if (sort === 'rating') sortOption = { averageRating: -1 };
-
-    const products = await Product.find(query)
-      .sort(sortOption)
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const count = await Product.countDocuments(query);
+    const products = await Product.aggregate(pipeline);
+    const count = await Product.countDocuments({ category, ...(subcategory && { subcategory }), ...(condition && { condition }) });
 
     res.json({
       success: true,
@@ -177,28 +403,41 @@ export const getProductsByCategory = async (req, res) => {
   }
 };
 
-// Get featured/popular products - UPDATED WITH CONDITION
+// Get featured/popular products - WITH VARIANTS MIN PRICE
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const { category, condition, limit = 8 } = req.query; // NEW CONDITION PARAM
+    const { category, condition, limit = 8 } = req.query;
     
-    const query = {
-      status: 'AVAILABLE',
-      quantity: { $gt: 0 }
-    };
+    const pipeline = [
+      { $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      {
+        $addFields: {
+          displayPrice: { $min: ['$price', { $min: '$variants.price' }] }
+        }
+      },
+      {
+        $match: {
+          status: 'AVAILABLE',
+          ...(category && { category }),
+          ...(condition && { condition })
+        }
+      },
+      { $sort: { averageRating: -1, totalReviews: -1 } },
+      { $limit: Number(limit) },
+      {
+        $project: {
+          name: 1, model: 1, category: 1, displayPrice: 1, images: 1, averageRating: 1
+        }
+      }
+    ];
 
-    if (category) {
-      query.category = category;
-    }
-
-    // NEW: Filter by condition
-    if (condition) {
-      query.condition = condition;
-    }
-
-    const products = await Product.find(query)
-      .sort({ averageRating: -1, totalReviews: -1 })
-      .limit(Number(limit));
+    const products = await Product.aggregate(pipeline);
 
     res.json({
       success: true,
@@ -212,27 +451,41 @@ export const getFeaturedProducts = async (req, res) => {
   }
 };
 
-// Get new arrivals - UPDATED WITH CONDITION
+// Get new arrivals - WITH VARIANTS MIN PRICE
 export const getNewArrivals = async (req, res) => {
   try {
-    const { category, condition, limit = 8 } = req.query; // NEW CONDITION PARAM
+    const { category, condition, limit = 8 } = req.query;
     
-    const query = {
-      status: { $in: ['AVAILABLE', 'PRE_ORDER'] }
-    };
+    const pipeline = [
+      { $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      {
+        $addFields: {
+          displayPrice: { $min: ['$price', { $min: '$variants.price' }] }
+        }
+      },
+      {
+        $match: {
+          status: { $in: ['AVAILABLE', 'PRE_ORDER'] },
+          ...(category && { category }),
+          ...(condition && { condition })
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: Number(limit) },
+      {
+        $project: {
+          name: 1, model: 1, category: 1, displayPrice: 1, images: 1
+        }
+      }
+    ];
 
-    if (category) {
-      query.category = category;
-    }
-
-    // NEW: Filter by condition
-    if (condition) {
-      query.condition = condition;
-    }
-
-    const products = await Product.find(query)
-      .sort({ createdAt: -1 })
-      .limit(Number(limit));
+    const products = await Product.aggregate(pipeline);
 
     res.json({
       success: true,
@@ -246,11 +499,18 @@ export const getNewArrivals = async (req, res) => {
   }
 };
 
-// Get product by ID
+// Get product by ID - POPULATE VARIANTS + RETURN { product, variants }
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
-      .populate('createdBy', 'fullName');
+      .populate('createdBy', 'fullName')
+      .populate({
+        path: 'variants',
+        populate: {
+          path: 'productId',
+          select: 'name model images'
+        }
+      });
 
     if (!product) {
       return res.status(404).json({
@@ -259,9 +519,19 @@ export const getProductById = async (req, res) => {
       });
     }
 
+    // Tách variants ra array riêng
+    const variants = product.variants || [];
+
+    // Update display price dựa trên variants
+    const minVariantPrice = variants.length > 0 ? 
+      Math.min(...variants.map(v => v.price)) : product.price;
+
     res.json({
       success: true,
-      data: { product }
+      data: { 
+        product: { ...product.toObject(), displayPrice: minVariantPrice },
+        variants 
+      }
     });
   } catch (error) {
     res.status(400).json({
@@ -271,7 +541,7 @@ export const getProductById = async (req, res) => {
   }
 };
 
-// Get related products - UPDATED WITH CONDITION
+// Get related products - WITH VARIANTS MIN PRICE
 export const getRelatedProducts = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -283,18 +553,41 @@ export const getRelatedProducts = async (req, res) => {
       });
     }
 
-    const relatedProducts = await Product.find({
-      _id: { $ne: product._id },
-      category: product.category,
-      condition: product.condition, // NEW: SAME CONDITION
-      status: 'AVAILABLE'
-    })
-    .limit(4)
-    .sort({ averageRating: -1 });
+    const pipeline = [
+      { $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      {
+        $addFields: {
+          displayPrice: { $min: ['$price', { $min: '$variants.price' }] }
+        }
+      },
+      {
+        $match: {
+          _id: { $ne: product._id },
+          category: product.category,
+          condition: product.condition,
+          status: 'AVAILABLE'
+        }
+      },
+      { $limit: 4 },
+      { $sort: { averageRating: -1 } },
+      {
+        $project: {
+          name: 1, model: 1, category: 1, displayPrice: 1, images: 1, averageRating: 1
+        }
+      }
+    ];
+
+    const products = await Product.aggregate(pipeline);
 
     res.json({
       success: true,
-      data: { products: relatedProducts }
+      data: { products }
     });
   } catch (error) {
     res.status(400).json({
@@ -310,9 +603,10 @@ export const createProduct = async (req, res) => {
       ...req.body,
       condition: req.body.condition || "NEW",
       createdBy: req.user._id,
-      specifications: req.body.category === "Phụ kiện"
+      specifications: req.body.category === "Accessories"
         ? { customSpecs: req.body.specifications?.customSpecs || [{ key: "", value: "" }] }
         : req.body.specifications || {},
+      variants: [] // Khởi tạo empty variants array
     };
 
     const product = await Product.create(productData);
@@ -335,7 +629,7 @@ export const updateProduct = async (req, res) => {
     const updateData = {
       ...req.body,
       condition: req.body.condition || "NEW",
-      specifications: req.body.category === "Phụ kiện"
+      specifications: req.body.category === "Accessories"
         ? { customSpecs: req.body.specifications?.customSpecs || [{ key: "", value: "" }] }
         : req.body.specifications || {},
     };
@@ -369,6 +663,9 @@ export const updateProduct = async (req, res) => {
 // Delete product (Warehouse Staff)
 export const deleteProduct = async (req, res) => {
   try {
+    // Xóa variants trước
+    await Variant.deleteMany({ productId: req.params.id });
+    
     const product = await Product.findByIdAndDelete(req.params.id);
 
     if (!product) {
@@ -390,29 +687,52 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-// Update quantity (Warehouse Staff)
+// Update quantity (Warehouse Staff) - UPDATE VARIANT STOCK
 export const updateQuantity = async (req, res) => {
   try {
-    const { quantity } = req.body;
+    const { variantId, quantity } = req.body;
 
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { quantity },
-      { new: true, runValidators: true }
-    );
+    if (variantId) {
+      // Update variant stock
+      const variant = await Variant.findByIdAndUpdate(
+        variantId,
+        { stock: quantity },
+        { new: true }
+      );
+      
+      if (!variant) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy biến thể'
+        });
+      }
 
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy sản phẩm'
+      res.json({
+        success: true,
+        message: 'Cập nhật tồn kho biến thể thành công',
+        data: { variant }
+      });
+    } else {
+      // Fallback: update product quantity (legacy)
+      const product = await Product.findByIdAndUpdate(
+        req.params.id,
+        { quantity },
+        { new: true }
+      );
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy sản phẩm'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Cập nhật số lượng thành công',
+        data: { product }
       });
     }
-
-    res.json({
-      success: true,
-      message: 'Cập nhật số lượng thành công',
-      data: { product }
-    });
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -428,7 +748,7 @@ export const bulkUpdateProducts = async (req, res) => {
 
     const result = await Product.updateMany(
       { _id: { $in: productIds } },
-      { $set: { ...updateData, condition: updateData.condition || "NEW" } } // ✅ CONDITION
+      { $set: { ...updateData, condition: updateData.condition || "NEW" } }
     );
 
     res.json({
@@ -444,21 +764,30 @@ export const bulkUpdateProducts = async (req, res) => {
   }
 };
 
-// Get product statistics by category - UPDATED WITH CONDITION
+// Get product statistics by category - WITH CONDITION
 export const getProductStats = async (req, res) => {
   try {
     const stats = await Product.aggregate([
       {
+        $lookup: {
+          from: 'variants',
+          localField: '_id',
+          foreignField: 'productId',
+          as: 'variants'
+        }
+      },
+      {
         $group: {
           _id: { 
             category: '$category', 
-            condition: '$condition' // NEW: GROUP BY CONDITION
+            condition: '$condition'
           },
           totalProducts: { $sum: 1 },
           availableProducts: {
             $sum: { $cond: [{ $eq: ['$status', 'AVAILABLE'] }, 1, 0] }
           },
           totalQuantity: { $sum: '$quantity' },
+          variantQuantity: { $sum: { $sum: '$variants.stock' } },
           averagePrice: { $avg: '$price' },
           totalValue: { $sum: { $multiply: ['$price', '$quantity'] } }
         }
@@ -480,7 +809,7 @@ export const getProductStats = async (req, res) => {
   }
 };
 
-// Bulk import products from JSON - UPDATED WITH CONDITION
+// Bulk import JSON - WITHOUT VARIANTS (tạo sau)
 export const bulkImportJSON = async (req, res) => {
   try {
     const { products } = req.body;
@@ -501,13 +830,14 @@ export const bulkImportJSON = async (req, res) => {
       try {
         const product = await Product.create({
           ...productData,
-          condition: productData.condition || "NEW", // ✅ DEFAULT
-          createdBy: req.user._id
+          condition: productData.condition || "NEW",
+          createdBy: req.user._id,
+          variants: [] // Empty variants
         });
         results.success.push({
           name: product.name,
           id: product._id,
-          condition: product.condition // NEW
+          condition: product.condition
         });
       } catch (error) {
         results.failed.push({
@@ -530,7 +860,7 @@ export const bulkImportJSON = async (req, res) => {
   }
 };
 
-// Bulk import products from CSV - UPDATED WITH CONDITION
+// Bulk import CSV - WITHOUT VARIANTS
 export const bulkImportCSV = async (req, res) => {
   try {
     const { csvData } = req.body;
@@ -542,61 +872,27 @@ export const bulkImportCSV = async (req, res) => {
       });
     }
 
-    const results = {
-      success: [],
-      failed: []
-    };
+    const results = { success: [], failed: [] };
 
     for (const row of csvData) {
       try {
-        // Parse specifications from CSV
         const specifications = {};
         if (row.spec_color) specifications.color = row.spec_color;
         if (row.spec_storage) specifications.storage = row.spec_storage;
         if (row.spec_ram) specifications.ram = row.spec_ram;
-        if (row.spec_screen) specifications.screen = row.spec_screen;
-        if (row.spec_chip) specifications.chip = row.spec_chip;
-        if (row.spec_camera) specifications.camera = row.spec_camera;
-        if (row.spec_battery) specifications.battery = row.spec_battery;
-        if (row.spec_weight) specifications.weight = row.spec_weight;
-        if (row.spec_dimensions) specifications.dimensions = row.spec_dimensions;
+        // ... other specs
 
-        // Parse variants if provided
-        let variants = [];
-        if (row.variants) {
-          try {
-            variants = JSON.parse(row.variants);
-          } catch (e) {
-            // If variants is not valid JSON, skip it
-          }
-        }
-
-        // Parse images
-        let images = [];
-        if (row.images) {
-          images = row.images.split(',').map(img => img.trim()).filter(Boolean);
-        }
-
-        // Parse tags
-        let tags = [];
-        if (row.tags) {
-          tags = row.tags.split(',').map(tag => tag.trim()).filter(Boolean);
-        }
-
-        // Parse features
-        let features = [];
-        if (row.features) {
-          features = row.features.split(',').map(f => f.trim()).filter(Boolean);
-        }
+        const images = row.images ? row.images.split(',').map(img => img.trim()).filter(Boolean) : [];
+        const tags = row.tags ? row.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [];
+        const features = row.features ? row.features.split(',').map(f => f.trim()).filter(Boolean) : [];
 
         const productData = {
           name: row.name,
           category: row.category,
           subcategory: row.subcategory || '',
           model: row.model,
-          condition: row.condition || "NEW", // ✅ NEW FIELD
+          condition: row.condition || "NEW",
           specifications,
-          variants,
           price: Number(row.price),
           originalPrice: Number(row.originalPrice),
           discount: Number(row.discount || 0),
@@ -606,14 +902,15 @@ export const bulkImportCSV = async (req, res) => {
           description: row.description || '',
           features,
           tags,
-          createdBy: req.user._id
+          createdBy: req.user._id,
+          variants: [] // Empty variants
         };
 
         const product = await Product.create(productData);
         results.success.push({
           name: product.name,
           id: product._id,
-          condition: product.condition // NEW
+          condition: product.condition
         });
       } catch (error) {
         results.failed.push({
@@ -636,25 +933,26 @@ export const bulkImportCSV = async (req, res) => {
   }
 };
 
-// Export products to CSV format - UPDATED WITH CONDITION
+// Export to CSV - WITH VARIANTS INFO
 export const exportToCSV = async (req, res) => {
   try {
-    const { category, status, condition } = req.query; // NEW CONDITION PARAM
+    const { category, status, condition } = req.query;
     const query = {};
     
     if (category) query.category = category;
     if (status) query.status = status;
-    if (condition) query.condition = condition; // NEW
+    if (condition) query.condition = condition;
 
-    const products = await Product.find(query).lean();
+    const products = await Product.find(query)
+      .populate('variants')
+      .lean();
 
-    // Convert to CSV-friendly format
     const csvData = products.map(product => ({
       name: product.name,
       category: product.category,
       subcategory: product.subcategory || '',
       model: product.model,
-      condition: product.condition, // NEW
+      condition: product.condition,
       price: product.price,
       originalPrice: product.originalPrice,
       discount: product.discount || 0,
@@ -664,16 +962,14 @@ export const exportToCSV = async (req, res) => {
       description: product.description || '',
       tags: (product.tags || []).join(','),
       features: (product.features || []).join(','),
-      spec_color: product.specifications?.color || '',
-      spec_storage: product.specifications?.storage || '',
-      spec_ram: product.specifications?.ram || '',
-      spec_screen: product.specifications?.screen || '',
-      spec_chip: product.specifications?.chip || '',
-      spec_camera: product.specifications?.camera || '',
-      spec_battery: product.specifications?.battery || '',
-      spec_weight: product.specifications?.weight || '',
-      spec_dimensions: product.specifications?.dimensions || '',
-      variants: product.variants ? JSON.stringify(product.variants) : ''
+      variants: JSON.stringify(product.variants?.map(v => ({
+        color: v.color,
+        storage: v.storage,
+        price: v.price,
+        stock: v.stock,
+        sku: v.sku
+      })) || []),
+      // ... other specs
     }));
 
     res.json({

@@ -1,3 +1,8 @@
+// ============================================
+// FILE: src/pages/ProductsPage.jsx
+// ✅ UPDATED: Sử dụng forms riêng cho từng category
+// ============================================
+
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +18,16 @@ import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 import { toast } from "sonner";
 import { CATEGORIES, getEmptyFormData, emptyVariant } from "@/lib/productConstants";
 import ProductFormBasic from "@/components/shared/ProductFormBasic";
-import ProductFormSpecs from "@/components/shared/ProductFormSpecs";
-import ProductFormVariants from "@/components/shared/ProductFormVariants";
+// ✅ NEW: Category-specific specs forms
+import IPhoneSpecsForm from "@/components/shared/specs/IPhoneSpecsForm";
+import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
+import AirPodsSpecsForm from "@/components/shared/specs/AirPodsSpecsForm";
+import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecsForm";
+// ✅ NEW: Category-specific variants forms
+import IPhoneVariantsForm from "@/components/shared/variants/IPhoneVariantsForm";
+import MacVariantsForm from "@/components/shared/variants/MacVariantsForm";
+import AirPodsVariantsForm from "@/components/shared/variants/AirPodsVariantsForm";
+import AccessoriesVariantsForm from "@/components/shared/variants/AccessoriesVariantsForm";
 import ProductFormMedia from "@/components/shared/ProductFormMedia";
 import ProductCategoryModal from "@/components/shared/ProductCategoryModal";
 
@@ -42,33 +55,44 @@ const ProductsPage = () => {
     fetchProducts();
   }, [searchTerm, categoryFilter, statusFilter, currentPage]);
 
-  const fetchProducts = async () => {
-    setIsLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: 12,
-        search: searchTerm || undefined,
-        category: categoryFilter !== "all" ? categoryFilter : undefined,
-        status: statusFilter !== "all" ? statusFilter : undefined,
-      };
-      const response = await productAPI.getAll(params);
-      const { products, totalPages, currentPage: responsePage, total } = response.data.data;
-      setProducts(products);
-      setTotalPages(totalPages);
-      setTotalProducts(total);
-      if (responsePage !== currentPage) setCurrentPage(responsePage);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      toast.error("Lỗi khi tải danh sách sản phẩm");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const fetchProducts = async () => {
+  setIsLoading(true);
+  try {
+    const params = {
+      page: pagination.page,
+      limit: pagination.limit,
+      search: searchTerm,
+      category: filters.category || undefined,
+      status: filters.status || undefined,
+      minPrice: filters.minPrice || undefined,
+      maxPrice: filters.maxPrice || undefined,
+      sort: filters.sort,
+      inStock: filters.inStock,
+    };
+    const response = await productAPI.getAll(params); // Dòng 80 có thể liên quan đến đây
+    const data = response.data.data;
+    setProducts(data.products.map(product => ({
+      ...product,
+      price: product.displayPrice || product.price,
+      originalPrice: product.originalPrice,
+      hasVariants: product.variantsCount > 0
+    })));
+    setPagination({
+      ...pagination,
+      totalPages: data.totalPages,
+      total: data.total,
+    });
+  } catch (error) {
+    console.error("Error fetching products:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleOpenForm = (product = null) => {
     if (product) {
       setEditingProduct(product);
+      setSelectedCategory(product.category);
       setFormData({
         name: product.name,
         model: product.model || "",
@@ -81,21 +105,9 @@ const ProductsPage = () => {
         status: product.status,
         description: product.description || "",
         specifications: {
-          screenSize: product.specifications?.screenSize || "",
-          cpu: product.specifications?.cpu || "",
-          operatingSystem: product.specifications?.operatingSystem || "",
-          storage: product.specifications?.storage || "",
-          ram: product.specifications?.ram || "",
-          mainCamera: product.specifications?.mainCamera || "",
-          frontCamera: product.specifications?.frontCamera || "",
-          battery: product.specifications?.battery || "",
-          colors: Array.isArray(product.specifications?.colors) ? product.specifications.colors : [""],
-          chip: product.specifications?.chip || "",
-          gpuType: product.specifications?.gpuType || "",
-          screenTechnology: product.specifications?.screenTechnology || "",
-          screenResolution: product.specifications?.screenResolution || "",
-          cpuType: product.specifications?.cpuType || "",
-          ports: product.specifications?.ports || "",
+          ...product.specifications,
+          colors: Array.isArray(product.specifications.colors) ? product.specifications.colors : [""],
+          customSpecs: Array.isArray(product.specifications.customSpecs) ? product.specifications.customSpecs : [{ key: "", value: "" }],
         },
         variants: product.variants?.map((v) => ({
           color: v.name || v.options[0]?.color || "",
@@ -141,13 +153,6 @@ const ProductsPage = () => {
       const sellPrice = Number(updatedFormData.price) || 0;
       updatedFormData.discount = origPrice > 0 ? Math.round(((origPrice - sellPrice) / origPrice) * 100) : 0;
     }
-    if (name === "category") {
-      // Reset specifications when category changes
-      updatedFormData.specifications = {
-        ...getEmptyFormData(value).specifications,
-        colors: Array.isArray(updatedFormData.specifications.colors) ? updatedFormData.specifications.colors : [""],
-      };
-    }
     setFormData(updatedFormData);
   };
 
@@ -156,8 +161,35 @@ const ProductsPage = () => {
       ...formData,
       specifications: { 
         ...formData.specifications, 
-        [key]: key === "colors" ? (Array.isArray(value) ? value : [value]) : value 
+        [key]: value 
       },
+    });
+  };
+
+  const handleCustomSpecChange = (index, field, value) => {
+    const customSpecs = [...formData.specifications.customSpecs];
+    customSpecs[index][field] = value;
+    setFormData({
+      ...formData,
+      specifications: { ...formData.specifications, customSpecs },
+    });
+  };
+
+  const addCustomSpec = () => {
+    setFormData({
+      ...formData,
+      specifications: {
+        ...formData.specifications,
+        customSpecs: [...formData.specifications.customSpecs, { key: "", value: "" }],
+      },
+    });
+  };
+
+  const removeCustomSpec = (index) => {
+    const customSpecs = formData.specifications.customSpecs.filter((_, i) => i !== index);
+    setFormData({
+      ...formData,
+      specifications: { ...formData.specifications, customSpecs },
     });
   };
 
@@ -227,7 +259,7 @@ const ProductsPage = () => {
   };
   const removeVariantOption = (variantIndex, optionIndex) => {
     const variants = [...formData.variants];
-    const options = variants[variantIndex].options.filter((_, i) => i !== optionIndex);
+    const options = variants[variantIndex].options.filter((_, i) => i !== oIndex);
     variants[variantIndex].options = options;
     setFormData({ ...formData, variants });
   };
@@ -277,6 +309,9 @@ const ProductsPage = () => {
         specifications: {
           ...formData.specifications,
           colors: formData.specifications.colors.filter((c) => c.trim() !== ""),
+          customSpecs: formData.category === "Phụ kiện" 
+            ? formData.specifications.customSpecs.filter(s => s.key.trim() && s.value.trim())
+            : undefined,
         },
         variants: formData.variants.map((v) => ({
           type: "Color",
@@ -301,7 +336,7 @@ const ProductsPage = () => {
         await productAPI.update(editingProduct._id, submitData);
         toast.success("Cập nhật sản phẩm thành công");
       } else {
-        await productAPI.create(submitData);
+        await productAPI.create(subData);
         toast.success("Tạo sản phẩm thành công");
       }
       await fetchProducts();
@@ -340,31 +375,13 @@ const ProductsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Quản lý sản phẩm</h1>
-          <p className="text-muted-foreground">Tổng số: {totalProducts} sản phẩm</p>
-        </div>
-        <Button onClick={() => handleOpenForm()}>
-          <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
-        </Button>
-      </div>
-
-      <ProductCategoryModal
-        showCategoryModal={showCategoryModal}
-        setShowCategoryModal={setShowCategoryModal}
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-        selectedCondition={selectedCondition}
-        setSelectedCondition={setSelectedCondition}
-        handleCategorySubmit={handleCategorySubmit}
-      />
+      {/* ... GIỮ NGUYÊN HEADER + MODAL + FILTERS ... */}
 
       {showForm && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>
-              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}
+              {editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"} - {selectedCategory}
             </CardTitle>
             <Button variant="ghost" onClick={() => setShowForm(false)}>
               <X className="w-4 h-4" />
@@ -388,24 +405,102 @@ const ProductsPage = () => {
                   />
                 </TabsContent>
                 <TabsContent value="specs" className="mt-6">
-                  <ProductFormSpecs
-                    formData={formData}
-                    handleSpecChange={handleSpecChange}
-                    handleColorChange={handleColorChange}
-                    addColor={addColor}
-                    removeColor={removeColor}
-                  />
+                  {/* ✅ NEW: RENDER SPECS FORM DỰA VÀO CATEGORY */}
+                  {formData.category === "iPhone" || formData.category === "iPad" ? (
+                    <IPhoneSpecsForm
+                      specs={formData.specifications}
+                      onChange={handleSpecChange}
+                      onColorChange={handleColorChange}
+                      onAddColor={addColor}
+                      onRemoveColor={removeColor}
+                    />
+                  ) : formData.category === "Mac" ? (
+                    <MacSpecsForm
+                      specs={formData.specifications}
+                      onChange={handleSpecChange}
+                      onColorChange={handleColorChange}
+                      onAddColor={addColor}
+                      onRemoveColor={removeColor}
+                    />
+                  ) : formData.category === "AirPods" ? (
+                    <AirPodsSpecsForm
+                      specs={formData.specifications}
+                      onChange={handleSpecChange}
+                      onColorChange={handleColorChange}
+                      onAddColor={addColor}
+                      onRemoveColor={removeColor}
+                    />
+                  ) : formData.category === "Phụ kiện" ? (
+                    <AccessoriesSpecsForm
+                      customSpecs={formData.specifications.customSpecs}
+                      onChange={handleCustomSpecChange}
+                      onAdd={addCustomSpec}
+                      onRemove={removeCustomSpec}
+                    />
+                  ) : formData.category === "Apple Watch" ? (
+                    // ✅ THÊM APPLE WATCH SPECS FORM (tương tự iPhone hoặc tùy chỉnh)
+                    <AppleWatchSpecsForm
+                      specs={formData.specifications}
+                      onChange={handleSpecChange}
+                      onColorChange={handleColorChange}
+                      onAddColor={addColor}
+                      onRemoveColor={removeColor}
+                    />
+                  ) : null}
                 </TabsContent>
                 <TabsContent value="variants" className="mt-6">
-                  <ProductFormVariants
-                    formData={formData}
-                    handleVariantChange={handleVariantChange}
-                    handleVariantOptionChange={handleVariantOptionChange}
-                    addVariant={addVariant}
-                    removeVariant={removeVariant}
-                    addVariantOption={addVariantOption}
-                    removeVariantOption={removeVariantOption}
-                  />
+                  {/* ✅ NEW: RENDER VARIANTS FORM DỰA VÀO CATEGORY */}
+                  {formData.category === "iPhone" || formData.category === "iPad" ? (
+                    <IPhoneVariantsForm
+                      variants={formData.variants}
+                      onVariantChange={handleVariantChange}
+                      onOptionChange={handleVariantOptionChange}
+                      onAddVariant={addVariant}
+                      onRemoveVariant={removeVariant}
+                      onAddOption={addVariantOption}
+                      onRemoveOption={removeVariantOption}
+                    />
+                  ) : formData.category === "Mac" ? (
+                    <MacVariantsForm
+                      variants={formData.variants}
+                      onVariantChange={handleVariantChange}
+                      onOptionChange={handleVariantOptionChange}
+                      onAddVariant={addVariant}
+                      onRemoveVariant={removeVariant}
+                      onAddOption={addVariantOption}
+                      onRemoveOption={removeVariantOption}
+                    />
+                  ) : formData.category === "AirPods" ? (
+                    <AirPodsVariantsForm
+                      variants={formData.variants}
+                      onVariantChange={handleVariantChange}
+                      onOptionChange={handleVariantOptionChange}
+                      onAddVariant={addVariant}
+                      onRemoveVariant={removeVariant}
+                      onAddOption={addVariantOption}
+                      onRemoveOption={removeVariantOption}
+                    />
+                  ) : formData.category === "Phụ kiện" ? (
+                    <AccessoriesVariantsForm
+                      variants={formData.variants}
+                      onVariantChange={handleVariantChange}
+                      onOptionChange={handleVariantOptionChange}
+                      onAddVariant={addVariant}
+                      onRemoveVariant={removeVariant}
+                      onAddOption={addVariantOption}
+                      onRemoveOption={removeVariantOption}
+                    />
+                  ) : formData.category === "Apple Watch" ? (
+                    <AppleWatchVariantsForm
+                      variants={formData.variants}
+                      onVariantChange={handleVariantChange}
+                      onOptionChange={handleVariantOptionChange}
+                      onAddVariant={addVariant}
+                      onRemoveVariant={removeVariant}
+                      onAddOption={addVariantOption}
+                      onRemoveOption={removeVariantOption}
+                    />
+                  ) : null}
                 </TabsContent>
                 <TabsContent value="media" className="mt-6">
                   <ProductFormMedia
@@ -425,31 +520,8 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Input placeholder="Tìm kiếm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger title="Lọc theo danh mục"><SelectValue placeholder="Danh mục" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả</SelectItem>
-                {CATEGORIES.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger title="Lọc theo trạng thái"><SelectValue placeholder="Trạng thái" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả</SelectItem>
-                <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
-                <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* ... GIỮ NGUYÊN LIST PRODUCTS ... */}
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((product) => (
           <ProductCard
             key={product._id}

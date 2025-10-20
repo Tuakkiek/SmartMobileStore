@@ -1,5 +1,5 @@
 // FILE: src/store/cartStore.js
-// ============================================
+// ✅ VARIANTS SUPPORT: addToCart(variantId, quantity)
 import { create } from "zustand";
 import { cartAPI } from "@/lib/api";
 
@@ -19,11 +19,12 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // Add to cart
-  addToCart: async (productId, quantity = 1) => {
+  // ✅ UPDATED: addToCart nhận variantId thay vì productId
+  addToCart: async (variantId, quantity = 1) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.addToCart({ productId, quantity });
+      // ✅ GỬI { variantId, quantity }
+      const response = await cartAPI.addToCart({ variantId, quantity });
       set({ cart: response.data.data, isLoading: false });
       return { success: true, message: response.data.message };
     } catch (error) {
@@ -33,11 +34,11 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // Update cart item
-  updateCartItem: async (productId, quantity) => {
+  // ✅ UPDATED: updateCartItem nhận variantId
+  updateCartItem: async (variantId, quantity) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.updateItem({ productId, quantity });
+      const response = await cartAPI.updateItem({ variantId, quantity });
       set({ cart: response.data.data, isLoading: false });
       return { success: true };
     } catch (error) {
@@ -47,11 +48,11 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // Remove from cart
-  removeFromCart: async (productId) => {
+  // ✅ UPDATED: removeFromCart nhận variantId
+  removeFromCart: async (variantId) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await cartAPI.removeItem(productId);
+      const response = await cartAPI.removeItem(variantId);
       set({ cart: response.data.data, isLoading: false });
       return { success: true };
     } catch (error) {
@@ -75,7 +76,7 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // Calculate total
+  // ✅ UPDATED: getTotal - DÙNG variant.price
   getTotal: () => {
     const { cart } = get();
     if (!cart || !cart.items) return 0;
@@ -91,6 +92,12 @@ export const useCartStore = create((set, get) => ({
     if (!cart || !cart.items) return 0;
     
     return cart.items.reduce((count, item) => count + item.quantity, 0);
+  },
+
+  // Get item by variantId
+  getItemByVariant: (variantId) => {
+    const { cart } = get();
+    return cart.items.find(item => item.variantId === variantId);
   },
 
   // Clear error

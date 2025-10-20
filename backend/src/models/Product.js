@@ -51,28 +51,6 @@ const specificationsSchema = new mongoose.Schema(
   { _id: false, strict: false }
 ); // strict: false allows flexible fields
 
-// Variant option: a specific color/config with its own price points
-const variantOptionSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true }, // e.g., "Natural Titanium", "Starlight"
-    color: { type: String, trim: true },
-    price: { type: Number, required: true, min: 0 },
-    originalPrice: { type: Number, required: true, min: 0 },
-    sku: { type: String, trim: true }, // Stock Keeping Unit
-  },
-  { _id: false }
-);
-
-// Variant: a configuration level (storage, size, etc.) with multiple options
-const variantSchema = new mongoose.Schema(
-  {
-    type: { type: String, required: true, trim: true }, // e.g., "Storage", "Case Size", "Model"
-    name: { type: String, required: true, trim: true }, // e.g., "256GB", "41mm", "M3"
-    options: { type: [variantOptionSchema], default: [] },
-  },
-  { _id: false }
-);
-
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -100,7 +78,7 @@ const productSchema = new mongoose.Schema(
     specifications: specificationsSchema,
 
     // Variants for different configurations
-    variants: { type: [variantSchema], default: [] },
+    variants: [{ type: mongoose.Schema.Types.ObjectId, ref: "Variant" }],
 
     condition: {
       type: String,
@@ -210,34 +188,6 @@ productSchema.pre("save", function (next) {
     this.status = "OUT_OF_STOCK";
   } else if (this.status === "OUT_OF_STOCK" && this.quantity > 0) {
     this.status = "AVAILABLE";
-  }
-
-  // If variants are provided, ensure base price/originalPrice reflect the minimum
-  if (Array.isArray(this.variants) && this.variants.length > 0) {
-    let minPrice = Infinity;
-    let minOriginal = Infinity;
-
-    this.variants.forEach((v) => {
-      (v.options || []).forEach((opt) => {
-        if (typeof opt.price === "number")
-          minPrice = Math.min(minPrice, opt.price);
-        if (typeof opt.originalPrice === "number")
-          minOriginal = Math.min(minOriginal, opt.originalPrice);
-      });
-    });
-
-    if (isFinite(minPrice)) {
-      this.price = minPrice;
-    }
-    if (isFinite(minOriginal)) {
-      this.originalPrice = minOriginal;
-    }
-
-    // Recompute discount
-    if (this.originalPrice > 0 && this.price >= 0) {
-      const discount = Math.round((1 - this.price / this.originalPrice) * 100);
-      this.discount = Math.max(0, Math.min(100, discount));
-    }
   }
 
   next();

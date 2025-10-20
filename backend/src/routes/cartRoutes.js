@@ -14,4 +14,9 @@ router.put('/update', updateCartItem);
 router.delete('/remove/:productId', removeFromCart);
 router.delete('/clear', clearCart);
 
+// routes/cartRoutes.js
+router.post('/', protect, restrictTo('CUSTOMER'), addToCart); // { variantId, quantity }
+router.put('/', protect, restrictTo('CUSTOMER'), updateCartItem);
+router.delete('/:variantId', protect, restrictTo('CUSTOMER'), removeFromCart);
+
 export default router;
