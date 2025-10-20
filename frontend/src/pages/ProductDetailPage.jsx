@@ -1,3 +1,7 @@
+// ============================================
+// FILE: src/pages/ProductDetailPage.jsx
+// ============================================
+
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,11 +16,13 @@ import { useAuthStore } from "@/store/authStore";
 import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 
 const ProductDetailPage = () => {
+  // Lấy ID sản phẩm từ URL và điều hướng
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCartStore();
-  const { isAuthenticated, user } = useAuthStore();
+  const { addToCart } = useCartStore(); // Hook để thêm sản phẩm vào giỏ hàng
+  const { isAuthenticated, user } = useAuthStore(); // Hook để kiểm tra trạng thái đăng nhập và vai trò người dùng
 
+  // State để quản lý dữ liệu sản phẩm, đánh giá và các lựa chọn
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,19 +31,19 @@ const ProductDetailPage = () => {
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedWarranty, setSelectedWarranty] = useState(null);
 
-  
-
-  // Reset scroll to top when page loads
+  // Cuộn trang về đầu khi tải trang
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Lấy dữ liệu sản phẩm và đánh giá từ API
   useEffect(() => {
     const fetchData = async () => {
       try {
         const productRes = await productAPI.getById(id);
         const p = productRes.data.data.product;
 
+        // Chuẩn hóa thông số kỹ thuật của sản phẩm
         if (p && p.specifications) {
           const s = p.specifications || {};
           p.specifications = {
@@ -64,18 +70,16 @@ const ProductDetailPage = () => {
 
         setProduct(p);
 
+        // Lấy đánh giá của sản phẩm
         try {
           const reviewsRes = await reviewAPI.getByProduct(id);
           setReviews(reviewsRes.data.data.reviews || []);
         } catch (reviewError) {
-          console.warn(
-            "Could not fetch reviews:",
-            reviewError.response?.status
-          );
+          console.warn("Không thể lấy đánh giá:", reviewError.response?.status);
           setReviews([]);
         }
       } catch (error) {
-        console.error("Error fetching product:", error);
+        console.error("Lỗi khi lấy sản phẩm:", error);
         toast.error("Không thể tải thông tin sản phẩm");
       } finally {
         setIsLoading(false);
@@ -84,6 +88,8 @@ const ProductDetailPage = () => {
 
     fetchData();
   }, [id]);
+
+  // Thiết lập mặc định cho bộ nhớ, màu sắc và bảo hành khi sản phẩm được tải
   useEffect(() => {
     if (!product) return;
     const variants = product.variants || [];
@@ -112,6 +118,7 @@ const ProductDetailPage = () => {
     });
   }, [product]);
 
+  // Cập nhật ảnh được chọn khi thay đổi màu sắc
   useEffect(() => {
     if (!product || !selectedColor) return;
     const variants = product.variants || [];
@@ -123,6 +130,7 @@ const ProductDetailPage = () => {
     setSelectedImage(imageIndex);
   }, [selectedColor, product]);
 
+  // Xử lý thêm sản phẩm vào giỏ hàng
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
       navigate("/login");
@@ -146,8 +154,10 @@ const ProductDetailPage = () => {
     }
   };
 
+  // Hiển thị loading nếu dữ liệu chưa sẵn sàng
   if (isLoading || !product) return <Loading />;
 
+  // Lấy danh sách bộ nhớ và màu sắc từ biến thể sản phẩm
   const variants = product.variants || [];
   const storages = Array.from(
     new Set(variants.flatMap((v) => v.options?.map((o) => o.name) || []))
@@ -156,11 +166,21 @@ const ProductDetailPage = () => {
     Boolean
   );
 
+  /**
+   * Lấy danh sách màu sắc tương thích với bộ nhớ được chọn
+   * @param {string} st - Tên bộ nhớ
+   * @returns {string[]} Danh sách màu sắc
+   */
   const colorsForStorage = (st) =>
     variants
       .filter((v) => v.options?.some((o) => o.name === st))
       .map((v) => v.name);
 
+  /**
+   * Tính giá thấp nhất cho bộ nhớ được chọn
+   * @param {string} st - Tên bộ nhớ
+   * @returns {number} Giá thấp nhất
+   */
   const priceForStorage = (st) => {
     const prices = variants
       .filter((v) => v.options?.some((o) => o.name === st))
@@ -168,22 +188,36 @@ const ProductDetailPage = () => {
     return Math.min(...prices);
   };
 
+  /**
+   * Tính giá cho màu sắc và bộ nhớ được chọn
+   * @param {string} color - Tên màu sắc
+   * @param {string} st - Tên bộ nhớ
+   * @returns {number} Giá của biến thể
+   */
   const priceForColorAndStorage = (color, st) => {
     const v = variants.find((v) => v.name === color);
     return v?.options?.find((o) => o.name === st)?.price || 0;
   };
 
+  /**
+   * Lấy URL ảnh cho màu sắc được chọn
+   * @param {string} color - Tên màu sắc
+   * @returns {string} URL ảnh
+   */
   const imageForColor = (color) => {
     const v = variants.find((v) => v.name === color);
     return (
       v?.options?.[0]?.imageUrl || product.images?.[0] || "/placeholder.png"
     );
   };
+
+  // Danh sách tùy chọn bảo hành
   const warrantyOptions = [
     { label: "1 đổi 1 12 tháng", months: 12, extraPrice: 0 },
     { label: "1 đổi 1 24 tháng", months: 24, extraPrice: 1100000 },
   ];
 
+  // Tính giá cuối cùng (bao gồm giá bảo hành)
   const basePrice = priceForColorAndStorage(selectedColor, selectedStorage);
   const finalPrice = basePrice + (selectedWarranty?.extraPrice || 0);
   const originalPrice =
@@ -195,8 +229,11 @@ const ProductDetailPage = () => {
   return (
     <div className="bg-gray-50 min-h-screen">
       <div className="container mx-auto px-4 py-6">
+        {/* Lưới chính: Cột trái (ảnh + thông số kỹ thuật) và cột phải (chi tiết sản phẩm) */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Cột trái: Ảnh sản phẩm và thông số kỹ thuật */}
           <div className="lg:col-span-2 space-y-4">
+            {/* Ảnh chính sản phẩm */}
             <Card className="overflow-hidden">
               <CardContent className="p-6 bg-white">
                 <img
@@ -207,6 +244,7 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
 
+            {/* Bộ sưu tập ảnh thu nhỏ */}
             {product.images?.length > 1 && (
               <div className="grid grid-cols-7 gap-2">
                 {product.images.map((image, index) => (
@@ -228,9 +266,112 @@ const ProductDetailPage = () => {
                 ))}
               </div>
             )}
+
+            {/* Thông số kỹ thuật - Đặt dưới ảnh sản phẩm */}
+            {product.specifications && (
+              <Card>
+                <CardHeader>
+                  <h3 className="text-xl font-bold">Thông số kỹ thuật</h3>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="space-y-2 text-sm">
+                    {product.specifications.screenSize && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Màn hình:</span>
+                        <span className="font-medium">
+                          {product.specifications.screenSize}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.resolution && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Độ phân giải:</span>
+                        <span className="font-medium">
+                          {product.specifications.resolution}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.cpu && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">CPU:</span>
+                        <span className="font-medium">
+                          {product.specifications.cpu}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.ram && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">RAM:</span>
+                        <span className="font-medium">
+                          {product.specifications.ram}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.storage && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Dung lượng:</span>
+                        <span className="font-medium">
+                          {product.specifications.storage}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.mainCamera && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Camera chính:</span>
+                        <span className="font-medium">
+                          {product.specifications.mainCamera}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.frontCamera && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Camera selfie:</span>
+                        <span className="font-medium">
+                          {product.specifications.frontCamera}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.battery && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Pin:</span>
+                        <span className="font-medium">
+                          {product.specifications.battery}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.weight && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Trọng lượng:</span>
+                        <span className="font-medium">
+                          {product.specifications.weight}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.dimensions && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Kích thước:</span>
+                        <span className="font-medium">
+                          {product.specifications.dimensions}
+                        </span>
+                      </div>
+                    )}
+                    {product.specifications.operatingSystem && (
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-gray-600">Hệ điều hành:</span>
+                        <span className="font-medium">
+                          {product.specifications.operatingSystem}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
+          {/* Cột phải: Chi tiết sản phẩm (tên, giá, phiên bản, bảo hành, giao hàng) */}
           <div className="lg:col-span-3 space-y-4">
+            {/* Tên sản phẩm và trạng thái */}
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -282,6 +423,7 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
 
+            {/* Giá và ưu đãi */}
             <Card className="border-2 border-red-500">
               <CardContent className="p-6">
                 <div className="space-y-3">
@@ -313,6 +455,7 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
 
+            {/* Lựa chọn bộ nhớ */}
             {storages.length > 0 && (
               <Card>
                 <CardContent className="p-6">
@@ -356,6 +499,7 @@ const ProductDetailPage = () => {
               </Card>
             )}
 
+            {/* Lựa chọn màu sắc */}
             {allColors.length > 0 && (
               <Card>
                 <CardContent className="p-6">
@@ -395,6 +539,7 @@ const ProductDetailPage = () => {
               </Card>
             )}
 
+            {/* Lựa chọn bảo hành */}
             {warrantyOptions.length > 0 && (
               <Card className="border-2 border-red-500">
                 <CardContent className="p-6">
@@ -448,6 +593,7 @@ const ProductDetailPage = () => {
               </Card>
             )}
 
+            {/* Thông tin giao hàng */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center gap-2 mb-3">
@@ -461,6 +607,7 @@ const ProductDetailPage = () => {
               </CardContent>
             </Card>
 
+            {/* Nút thêm vào giỏ hàng */}
             <div className="relative bg-white border-t pt-4">
               <Button
                 className="w-full h-14 text-lg font-semibold bg-red-500 hover:bg-red-600"
@@ -476,7 +623,9 @@ const ProductDetailPage = () => {
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Phần mô tả và đánh giá */}
+        <div className="mt-8 grid grid-cols-1 gap-6">
+          {/* Mô tả sản phẩm */}
           {product.description && (
             <Card>
               <CardHeader>
@@ -490,141 +639,44 @@ const ProductDetailPage = () => {
             </Card>
           )}
 
-          {product.specifications && (
+          {/* Đánh giá sản phẩm */}
+          {reviews.length > 0 && (
             <Card>
               <CardHeader>
-                <h3 className="text-xl font-bold">Thông số kỹ thuật</h3>
+                <h3 className="text-xl font-bold">
+                  Đánh giá ({reviews.length})
+                </h3>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="space-y-2 text-sm">
-                  {product.specifications.screenSize && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Màn hình:</span>
-                      <span className="font-medium">
-                        {product.specifications.screenSize}
+                {reviews.map((review, idx) => (
+                  <div key={idx} className="border-b py-4 last:border-b-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold">
+                        {review.user?.name || "Ẩn danh"}
                       </span>
+                      <div className="flex gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-4 h-4 ${
+                              i < review.rating
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-gray-300"
+                            }`}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  )}
-                  {product.specifications.resolution && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Độ phân giải:</span>
-                      <span className="font-medium">
-                        {product.specifications.resolution}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.cpu && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">CPU:</span>
-                      <span className="font-medium">
-                        {product.specifications.cpu}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.ram && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">RAM:</span>
-                      <span className="font-medium">
-                        {product.specifications.ram}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.storage && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Dung lượng:</span>
-                      <span className="font-medium">
-                        {product.specifications.storage}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.mainCamera && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Camera chính:</span>
-                      <span className="font-medium">
-                        {product.specifications.mainCamera}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.frontCamera && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Camera selfie:</span>
-                      <span className="font-medium">
-                        {product.specifications.frontCamera}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.battery && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Pin:</span>
-                      <span className="font-medium">
-                        {product.specifications.battery}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.weight && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Trọng lượng:</span>
-                      <span className="font-medium">
-                        {product.specifications.weight}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.dimensions && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Kích thước:</span>
-                      <span className="font-medium">
-                        {product.specifications.dimensions}
-                      </span>
-                    </div>
-                  )}
-                  {product.specifications.operatingSystem && (
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Hệ điều hành:</span>
-                      <span className="font-medium">
-                        {product.specifications.operatingSystem}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                    <p className="text-gray-600">{review.comment}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(review.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
         </div>
-
-        {reviews.length > 0 && (
-          <Card className="mt-8">
-            <CardHeader>
-              <h3 className="text-xl font-bold">Đánh giá ({reviews.length})</h3>
-            </CardHeader>
-            <CardContent className="p-6">
-              {reviews.map((review, idx) => (
-                <div key={idx} className="border-b py-4 last:border-b-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold">
-                      {review.user?.name || "Ẩn danh"}
-                    </span>
-                    <div className="flex gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${
-                            i < review.rating
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-gray-300"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-gray-600">{review.comment}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(review.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
