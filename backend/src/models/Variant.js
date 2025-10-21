@@ -19,20 +19,9 @@ const variantSchema = new mongoose.Schema(
         trim: true,
       },
     ],
-    storage: {
-      type: String,
-      trim: true,
-      required: false,  // Made optional for categories like AirPods/Phụ kiện
-    },
-    ram: {
-      type: String,
-      trim: true,
-      required: false,
-    },
-    cpuGpu: {
-      type: String,
-      trim: true,
-      required: false,
+    attributes: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
     },
     price: {
       type: Number,
@@ -65,7 +54,7 @@ const variantSchema = new mongoose.Schema(
 );
 
 // Compound index for quick lookups
-variantSchema.index({ productId: 1, color: 1, storage: 1 });
+variantSchema.index({ productId: 1, color: 1 });
 
 // Auto-update status and validate price/stock
 variantSchema.pre("save", function (next) {

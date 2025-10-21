@@ -761,16 +761,17 @@ export const createProduct = async (req, res) => {
           const variantDoc = await Variant.create({
             productId: product._id,
             color,
-            images: Array.isArray(images) ? images : [], // Ensure array
-            storage: option.storage || "",
-            ram: option.ram || "",
-            cpuGpu: option.cpuGpu || "",
+            images: Array.isArray(images) ? images : [],
+            attributes: {
+              storage: option.storage,
+              ram: option.ram,
+              cpuGpu: option.cpuGpu,
+              version: option.version,
+            },
             price: Number(option.price || 0),
             originalPrice: Number(option.originalPrice || 0),
             stock: Number(option.quantity || 0),
-            sku: `${product._id}-${color}-${option.storage || "default"}-${
-              option.ram || "default"
-            }`.toUpperCase(),
+            sku: `${product._id}-${color}-${Object.values({storage: option.storage, ram: option.ram, cpuGpu: option.cpuGpu, version: option.version}).filter(Boolean).join('-') || "default"}`.toUpperCase(),
           });
           createdVariants.push(variantDoc._id);
         }
@@ -895,17 +896,22 @@ export const deleteProduct = async (req, res) => {
 
 export const getSpecificVariant = async (req, res) => {
   try {
-    const { productId, color, storage } = req.query;
-    if (!productId || !color || !storage) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Cần cung cấp productId, color, và storage",
-        });
+    const { productId, color, storage, ram, cpuGpu, version } = req.query;
+    if (!productId || !color) {
+    return res
+    .status(400)
+    .json({
+    success: false,
+    message: "Cần cung cấp productId và color",
+    });
     }
 
-    const variant = await Variant.findOne({ productId, color, storage });
+    const match = { productId, color };
+if (storage) match["attributes.storage"] = storage;
+if (ram) match["attributes.ram"] = ram;
+if (cpuGpu) match["attributes.cpuGpu"] = cpuGpu;
+if (version) match["attributes.version"] = version;
+const variant = await Variant.findOne(match);
     if (!variant) {
       return res
         .status(404)
