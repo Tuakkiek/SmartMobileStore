@@ -148,27 +148,27 @@ const ProductsPage = () => {
   }, [searchTerm, categoryFilter, statusFilter, currentPage]);
 
   const fetchProducts = async () => {
-    setIsLoading(true);
-    try {
-      const params = {
-        page: currentPage,
-        limit: 12,
-        search: searchTerm || undefined,
-        category: categoryFilter !== "all" ? categoryFilter : undefined,
-        status: statusFilter !== "all" ? statusFilter : undefined,
-      };
-      const response = await productAPI.getAll(params);
-      const { products, totalPages, currentPage: responsePage, total } = response.data.data;
-      setProducts(products);
-      setTotalPages(totalPages);
-      setTotalProducts(total);
-      if (responsePage !== currentPage) setCurrentPage(responsePage);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      toast.error("Lỗi khi tải danh sách sản phẩm");
-    } finally {
-      setIsLoading(false);
-    }
+  setIsLoading(true);
+  try {
+  const params = new URLSearchParams();
+  params.append('page', currentPage);
+  params.append('limit', 12);
+  if (searchTerm) params.append('search', searchTerm);
+  if (categoryFilter !== "all") params.append('category', categoryFilter);
+  if (statusFilter !== "all") params.append('status', statusFilter);
+  
+  const response = await productAPI.getAll(`?${params.toString()}`);
+  const { products, totalPages, currentPage: responsePage, total } = response.data.data || {};
+  setProducts(products || []);
+  setTotalPages(totalPages || 1);
+  setTotalProducts(total || 0);
+  if (responsePage && responsePage !== currentPage) setCurrentPage(responsePage);
+  } catch (error) {
+  console.error("Detailed error fetching products:", error.response || error);
+  toast.error("Lỗi khi tải danh sách sản phẩm: " + (error.response?.data?.message || error.message));
+  } finally {
+  setIsLoading(false);
+  }
   };
 
   const handleOpenForm = (product = null) => {
@@ -270,41 +270,39 @@ const ProductsPage = () => {
   if (isLoading && products.length === 0) return <Loading />;
 
   const renderSpecsForm = () => {
-    const props = { specs: formData.specifications, onSpecsChange: handleSpecsChange };
-    switch (formData.category) {
-      case "iPhone":
-      case "iPad":
-        return <IPhoneSpecsForm {...props} />;
-      case "Mac":
-        return <MacSpecsForm {...props} />;
-      case "AirPods":
-        return <AirPodsSpecsForm {...props} />;
-      case "Apple Watch":
-        return <AppleWatchSpecsForm {...props} />;
-      case "Accessories":
-        return <AccessoriesSpecsForm {...props} />;
-      default:
-        return null;
-    }
+  const props = { specs: formData.specifications, onSpecsChange: handleSpecsChange };
+  switch (formData.category) {
+  case "iPhone":
+  case "iPad":
+  case "Apple Watch":
+  return <IPhoneSpecsForm {...props} />;
+  case "Mac":
+  return <MacSpecsForm {...props} />;
+  case "AirPods":
+  return <AirPodsSpecsForm {...props} />;
+  case "Accessories":
+  return <AccessoriesSpecsForm {...props} />;
+  default:
+  return null;
+  }
   };
 
   const renderVariantsForm = () => {
-    const props = { variants: formData.variants, onVariantsChange: handleVariantsChange };
-    switch (formData.category) {
-      case "iPhone":
-      case "iPad":
-        return <IPhoneVariantsForm {...props} />;
-      case "Mac":
-        return <MacVariantsForm {...props} />;
-      case "AirPods":
-        return <AirPodsVariantsForm {...props} />;
-      case "Apple Watch":
-        return <AppleWatchVariantsForm {...props} />;
-      case "Accessories":
-        return <AccessoriesVariantsForm {...props} />;
-      default:
-        return null;
-    }
+  const props = { variants: formData.variants, onVariantsChange: handleVariantsChange };
+  switch (formData.category) {
+  case "iPhone":
+  case "iPad":
+  case "Apple Watch":
+  return <IPhoneVariantsForm {...props} />;
+  case "Mac":
+  return <MacVariantsForm {...props} />;
+  case "AirPods":
+  return <AirPodsVariantsForm {...props} />;
+  case "Accessories":
+  return <AccessoriesVariantsForm {...props} />;
+  default:
+  return null;
+  }
   };
 
   return (
