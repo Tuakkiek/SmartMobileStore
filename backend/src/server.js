@@ -16,6 +16,14 @@ import orderRoutes from './routes/orderRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import promotionRoutes from './routes/promotionRoutes.js';
 
+import iPhoneRoutes from './routes/iPhoneRoutes';
+import iPadRoutes from './routes/iPadRoutes';
+import macRoutes from './routes/macRoutes';
+import airPodsRoutes from './routes/airPodsRoutes';
+import appleWatchRoutes from './routes/appleWatchRoutes';
+import accessoryRoutes from './routes/accessoryRoutes';
+
+
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -47,6 +55,13 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/promotions', promotionRoutes);
+
+app.use('/api/iphones', iPhoneRoutes);
+app.use('/api/ipads', iPadRoutes);
+app.use('/api/macs', macRoutes);
+app.use('/api/airpods', airPodsRoutes);
+app.use('/api/applewatches', appleWatchRoutes);
+app.use('/api/accessories', accessoryRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

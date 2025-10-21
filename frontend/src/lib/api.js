@@ -1,16 +1,14 @@
-// FILE: src/lib/api.js
-// ✅ FULL VARIANTS SUPPORT + CORRECT CART ENDPOINTS
+// api.js
 import axios from "axios";
 
+// Tạo axios instance với cấu hình cơ bản
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
 
-// Request interceptor - GIỮ NGUYÊN
+// Interceptors giữ nguyên như trước
 api.interceptors.request.use(
   (config) => {
     const authStorage = localStorage.getItem("auth-storage");
@@ -31,7 +29,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - GIỮ NGUYÊN
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -45,9 +42,68 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
+// Category-specific APIs (sử dụng chung instance `api`)
+// iPhone API
+export const iPhoneAPI = {
+  getAll: (params) => api.get("/iphones", { params }),
+  getById: (id) => api.get(`/iphones/${id}`),
+  create: (data) => api.post("/iphones", data),
+  update: (id, data) => api.put(`/iphones/${id}`, data),
+  delete: (id) => api.delete(`/iphones/${id}`),
+  getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
+};
 
-// ✅ AUTH API - GIỮ NGUYÊN
+// iPad API
+export const iPadAPI = {
+  getAll: (params) => api.get("/ipads", { params }),
+  getById: (id) => api.get(`/ipads/${id}`),
+  create: (data) => api.post("/ipads", data),
+  update: (id, data) => api.put(`/ipads/${id}`, data),
+  delete: (id) => api.delete(`/ipads/${id}`),
+  getVariants: (productId) => api.get(`/ipads/${productId}/variants`),
+};
+
+// Mac API
+export const macAPI = {
+  getAll: (params) => api.get("/macs", { params }),
+  getById: (id) => api.get(`/macs/${id}`),
+  create: (data) => api.post("/macs", data),
+  update: (id, data) => api.put(`/macs/${id}`, data),
+  delete: (id) => api.delete(`/macs/${id}`),
+  getVariants: (productId) => api.get(`/macs/${productId}/variants`),
+};
+
+// AirPods API
+export const airPodsAPI = {
+  getAll: (params) => api.get("/airpods", { params }),
+  getById: (id) => api.get(`/airpods/${id}`),
+  create: (data) => api.post("/airpods", data),
+  update: (id, data) => api.put(`/airpods/${id}`, data),
+  delete: (id) => api.delete(`/airpods/${id}`),
+  getVariants: (productId) => api.get(`/airpods/${productId}/variants`),
+};
+
+// AppleWatch API
+export const appleWatchAPI = {
+  getAll: (params) => api.get("/applewatches", { params }),
+  getById: (id) => api.get(`/applewatches/${id}`),
+  create: (data) => api.post("/applewatches", data),
+  update: (id, data) => api.put(`/applewatches/${id}`, data),
+  delete: (id) => api.delete(`/applewatches/${id}`),
+  getVariants: (productId) => api.get(`/applewatches/${productId}/variants`),
+};
+
+// Accessory API
+export const accessoryAPI = {
+  getAll: (params) => api.get("/accessories", { params }),
+  getById: (id) => api.get(`/accessories/${id}`),
+  create: (data) => api.post("/accessories", data),
+  update: (id, data) => api.put(`/accessories/${id}`, data),
+  delete: (id) => api.delete(`/accessories/${id}`),
+  getVariants: (productId) => api.get(`/accessories/${productId}/variants`),
+};
+
+// ✅ AUTH API - Giữ nguyên
 export const authAPI = {
   register: (data) => api.post("/auth/register", data),
   login: (data) => api.post("/auth/login", data),
@@ -56,47 +112,16 @@ export const authAPI = {
   changePassword: (data) => api.put("/auth/change-password", data),
 };
 
-// ✅ PRODUCT API - FULL VARIANTS SUPPORT
-export const productAPI = {
-  // Basic
-  getAll: (params) => api.get("/products", { params }),
-  getById: (id) => api.get(`/products/${id}`),
-  create: (data) => api.post("/products", data),
-  update: (id, data) => api.put(`/products/${id}`, data),
-  delete: (id) => api.delete(`/products/${id}`),
-  updateQuantity: (id, quantity) => api.patch(`/products/${id}/quantity`, { quantity }),
-
-  // ✅ NEW: VARIANTS ENDPOINTS
-  getVariants: (productId) => api.get(`/products/${productId}/variants`),
-  getVariant: (variantId) => api.get(`/products/variants/${variantId}`),
-  getVariantByAttributes: (productId, color, storage) => 
-    api.get(`/products/${productId}/variants`, { params: { color, storage } }),
-
-  // Categories
-  getCategories: () => api.get("/products/categories"),
-  getByCategory: (category, params) => api.get(`/products/category/${category}`, { params }),
-  getFeatured: (params) => api.get("/products/featured", { params }),
-  getNewArrivals: (params) => api.get("/products/new-arrivals", { params }),
-  getRelated: (id) => api.get(`/products/${id}/related`),
-  getStats: () => api.get("/products/stats/overview"),
-
-  // Bulk
-  bulkImportJSON: (data) => api.post("/products/bulk-import/json", data),
-  bulkImportCSV: (data) => api.post("/products/bulk-import/csv", data),
-  exportCSV: (params) => api.get("/products/export/csv", { params }),
-  bulkUpdate: (data) => api.post("/products/bulk-update", data),
-};
-
-// ✅ CART API - VARIANTS SUPPORT
+// ✅ CART API - Giữ nguyên
 export const cartAPI = {
   getCart: () => api.get("/cart"),
-  addToCart: (data) => api.post("/cart", data), // ✅ { variantId, quantity }
-  updateItem: (data) => api.put("/cart", data), // ✅ { variantId, quantity }
-  removeItem: (variantId) => api.delete(`/cart/${variantId}`), // ✅ variantId
+  addToCart: (data) => api.post("/cart", data),
+  updateItem: (data) => api.put("/cart", data),
+  removeItem: (variantId) => api.delete(`/cart/${variantId}`),
   clearCart: () => api.delete("/cart"),
 };
 
-// ✅ ORDER API - GIỮ NGUYÊN
+// ✅ ORDER API - Giữ nguyên
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
   getMyOrders: (params) => api.get("/orders/my-orders", { params }),
@@ -106,7 +131,7 @@ export const orderAPI = {
   cancel: (id) => api.post(`/orders/${id}/cancel`),
 };
 
-// ✅ REVIEW API - GIỮ NGUYÊN
+// ✅ REVIEW API - Giữ nguyên
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
   create: (data) => api.post("/reviews", data),
@@ -114,7 +139,7 @@ export const reviewAPI = {
   delete: (id) => api.delete(`/reviews/${id}`),
 };
 
-// ✅ PROMOTION API - GIỮ NGUYÊN
+// ✅ PROMOTION API - Giữ nguyên
 export const promotionAPI = {
   getAll: () => api.get("/promotions"),
   getActive: () => api.get("/promotions/active"),
@@ -123,14 +148,46 @@ export const promotionAPI = {
   delete: (id) => api.delete(`/promotions/${id}`),
 };
 
-// ✅ USER API - GIỮ NGUYÊN
+// ✅ USER API - Giữ nguyên
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
   updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
   getAllEmployees: () => api.get("/users/employees"),
-  createEmployee: (data) => api.post("/users/employees", data),
+  createEmployee: (data) => api.post("/users/employees", data), 
   toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
+};
+
+// ... (tất cả code cũ của bạn giữ nguyên)
+
+// ✅ THÊM PRODUCT API - CHO MAINLAYOUT SEARCH
+export const productAPI = {
+  search: (query, params = {}) => api.get("/products/search", { 
+    params: { q: query, ...params } 
+  }),
+  getAll: (params = {}) => api.get("/products", { params }),
+  getById: (id) => api.get(`/products/${id}`),
+  create: (data) => api.post("/products", data),
+  update: (id, data) => api.put(`/products/${id}`, data),
+  delete: (id) => api.delete(`/products/${id}`),
+  getVariants: (productId) => api.get(`/products/${productId}/variants`),
+};
+
+// ✅ DEFAULT EXPORT
+export default {
+  productAPI,
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+  authAPI,
+  cartAPI,
+  orderAPI,
+  reviewAPI,
+  promotionAPI,
+  userAPI,
 };

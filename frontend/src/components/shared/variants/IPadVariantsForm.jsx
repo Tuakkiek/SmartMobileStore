@@ -1,6 +1,6 @@
 // ============================================
-// FILE: src/components/shared/variants/MacVariantsForm.jsx
-// ✅ VARIANTS FORM CHO MAC - ĐỒNG BỘ VỚI MULTI-IMAGES
+// FILE: src/components/shared/variants/IPadVariantsForm.jsx
+// ✅ VARIANTS FORM CHO IPAD - ĐỒNG BỘ VỚI MULTI-IMAGES (TẠO MỚI)
 // ============================================
 
 import React from "react";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 
-const MacVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariantChange, onImageChange, onAddImage, onRemoveImage, onOptionChange, onAddOption, onRemoveOption }) => {
+const IPadVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariantChange, onImageChange, onAddImage, onRemoveImage, onOptionChange, onAddOption, onRemoveOption }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -25,7 +25,7 @@ const MacVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariantCha
             <div className="space-y-2">
               <Label>Màu <span className="text-red-500">*</span></Label>
               <Input
-                placeholder="VD: Space Gray"
+                placeholder="VD: Space Black"
                 value={variant.color || ""}
                 onChange={(e) => onVariantChange(vIdx, "color", e.target.value)}
                 required
@@ -54,39 +54,29 @@ const MacVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariantCha
           </div>
           
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Phiên bản cấu hình:</Label>
+            <Label className="text-sm font-medium">Phiên bản:</Label>
             {variant.options.map((opt, oIdx) => (
               <div key={oIdx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end p-3 border rounded-md">
-                <div className="space-y-2">
-                  <Label>CPU – GPU</Label>
-                  <Input
-                    placeholder="VD: 10 CPU – 10 GPU"
-                    value={opt.cpuGpu || ""}
-                    onChange={(e) => onOptionChange(vIdx, oIdx, "cpuGpu", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>RAM</Label>
-                  <Select value={opt.ram || ""} onValueChange={(value) => onOptionChange(vIdx, oIdx, "ram", value)}>
-                    <SelectTrigger><SelectValue placeholder="Chọn RAM" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="8GB">8GB</SelectItem>
-                      <SelectItem value="16GB">16GB</SelectItem>
-                      <SelectItem value="24GB">24GB</SelectItem>
-                      <SelectItem value="32GB">32GB</SelectItem>
-                      <SelectItem value="64GB">64GB</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label>Bộ nhớ trong</Label>
                   <Select value={opt.storage || ""} onValueChange={(value) => onOptionChange(vIdx, oIdx, "storage", value)}>
                     <SelectTrigger><SelectValue placeholder="Chọn bộ nhớ" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="128GB">128GB</SelectItem>
                       <SelectItem value="256GB">256GB</SelectItem>
                       <SelectItem value="512GB">512GB</SelectItem>
                       <SelectItem value="1TB">1TB</SelectItem>
                       <SelectItem value="2TB">2TB</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Phiên bản</Label>
+                  <Select value={opt.connectivity || ""} onValueChange={(value) => onOptionChange(vIdx, oIdx, "connectivity", value)}>
+                    <SelectTrigger><SelectValue placeholder="Chọn phiên bản" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="WiFi">WiFi</SelectItem>
+                      <SelectItem value="5G">5G</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -121,4 +111,4 @@ const MacVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariantCha
   );
 };
 
-export default MacVariantsForm;
+export default IPadVariantsForm;

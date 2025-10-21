@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/specs/AccessoriesSpecsForm.jsx
-// ✅ NEW: DYNAMIC SPECS FORM CHO PHỤ KIỆN
+// ✅ DYNAMIC SPECS FORM CHO PHỤ KIỆN - KHỚP MODEL
 // ============================================
 
 import React from "react";
@@ -12,9 +12,9 @@ import { Trash2, Plus } from "lucide-react";
 const AccessoriesSpecsForm = ({ customSpecs, onChange, onAdd, onRemove }) => {
   return (
     <div className="space-y-4">
-      <Label>Thông số tùy chỉnh</Label>
+      <Label>Thông số tùy chỉnh (Tên - Giá trị)</Label>
       {customSpecs.map((spec, idx) => (
-        <div key={idx} className="flex items-end gap-2">
+        <div key={idx} className="flex items-end gap-2 p-3 border rounded-md">
           <div className="space-y-2 flex-1">
             <Label>Tên thông số</Label>
             <Input
@@ -31,7 +31,7 @@ const AccessoriesSpecsForm = ({ customSpecs, onChange, onAdd, onRemove }) => {
               placeholder="VD: Nhôm cao cấp"
             />
           </div>
-          <Button type="button" variant="outline" onClick={() => onRemove(idx)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => onRemove(idx)}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>

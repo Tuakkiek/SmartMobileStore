@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/specs/AirPodsSpecsForm.jsx
-// ✅ NEW: SPECS FORM CHO AIRPODS
+// ✅ SPECS FORM CHO AIRPODS - KHỚP MODEL
 // ============================================
 
 import React from "react";
@@ -10,57 +10,76 @@ import { Button } from "@/components/ui/button";
 import { Trash2, Plus } from "lucide-react";
 
 const AirPodsSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRemoveColor }) => {
+  const colors = specs.colors || [''];
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* TAB THÔNG SỐ AIRPODS - KHÔNG CÓ MÀU SẮC RIÊNG */}
       <div className="space-y-2">
-        <Label>Chipset</Label>
-        <Input value={specs.chipset || ""} onChange={(e) => onChange("chipset", e.target.value)} />
+        <Label>Chip</Label>
+        <Input 
+          value={specs.chip || ""} 
+          onChange={(e) => onChange("chip", e.target.value)} 
+          placeholder="VD: H2"
+        />
       </div>
       <div className="space-y-2">
         <Label>Thương hiệu</Label>
-        <Input value={specs.brand || ""} onChange={(e) => onChange("brand", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Công nghệ âm thanh</Label>
-        <Input value={specs.audioTechnology || ""} onChange={(e) => onChange("audioTechnology", e.target.value)} />
+        <Input 
+          value={specs.brand || ""} 
+          onChange={(e) => onChange("brand", e.target.value)} 
+          placeholder="VD: Apple"
+        />
       </div>
       <div className="space-y-2">
         <Label>Thời lượng Pin</Label>
-        <Input value={specs.batteryLife || ""} onChange={(e) => onChange("batteryLife", e.target.value)} />
+        <Input 
+          value={specs.batteryLife || ""} 
+          onChange={(e) => onChange("batteryLife", e.target.value)} 
+          placeholder="VD: 6 giờ nghe + 30 giờ hộp sạc"
+        />
       </div>
       <div className="space-y-2">
-        <Label>Phương thức điều khiển</Label>
-        <Input value={specs.controlMethod || ""} onChange={(e) => onChange("controlMethod", e.target.value)} />
+        <Label>Chống nước</Label>
+        <Input 
+          value={specs.waterResistance || ""} 
+          onChange={(e) => onChange("waterResistance", e.target.value)} 
+          placeholder="VD: IP54"
+        />
       </div>
       <div className="space-y-2">
-        <Label>Micro</Label>
-        <Input value={specs.microphone || ""} onChange={(e) => onChange("microphone", e.target.value)} />
+        <Label>Bluetooth</Label>
+        <Input 
+          value={specs.bluetooth || ""} 
+          onChange={(e) => onChange("bluetooth", e.target.value)} 
+          placeholder="VD: 5.3"
+        />
       </div>
-      <div className="space-y-2">
-        <Label>Cổng kết nối</Label>
-        <Input value={specs.connectionPort || ""} onChange={(e) => onChange("connectionPort", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Tính năng khác</Label>
-        <Input value={specs.otherFeatures || ""} onChange={(e) => onChange("otherFeatures", e.target.value)} />
-      </div>
-      <div className="space-y-2 col-span-2">
+      
+      {/* MÀU SẮC - DYNAMIC ARRAY */}
+      <div className="space-y-2 col-span-full">
         <Label>Màu sắc</Label>
-        <div className="flex flex-wrap gap-2">
-          {specs.colors.map((color, idx) => (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {colors.map((color, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <Input
                 value={color}
                 onChange={(e) => onColorChange(idx, e.target.value)}
                 placeholder="VD: White"
+                className="w-32"
               />
-              <Button type="button" variant="outline" onClick={() => onRemoveColor(idx)}>
-                <Trash2 className="w-4 h-4" />
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => onRemoveColor(idx)}
+              >
+                <Trash2 className="w-3 h-3" />
               </Button>
             </div>
           ))}
-          <Button type="button" variant="outline" onClick={onAddColor}>
-            <Plus className="w-4 h-4 mr-2" /> Thêm màu
+          <Button type="button" variant="outline" size="sm" onClick={onAddColor}>
+            <Plus className="w-3 h-3 mr-1" /> Thêm
           </Button>
         </div>
       </div>
