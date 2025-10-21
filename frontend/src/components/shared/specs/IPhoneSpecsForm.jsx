@@ -1,68 +1,49 @@
-// ============================================
-// FILE: src/components/shared/specs/IPhoneSpecsForm.jsx
-// ✅ NEW: SPECS FORM CHO IPHONE/IPAD
-// ============================================
+import { Input } from '@/components/ui/input.jsx';
+import { Label } from '@/components/ui/label.jsx';
 
-import React from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Trash2, Plus } from "lucide-react";
+const IPhoneSpecsForm = ({ specs, onSpecsChange }) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    onSpecsChange({ ...specs, [name]: value });
+  };
 
-const IPhoneSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRemoveColor }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <Label>Kích thước màn hình</Label>
-        <Input value={specs.screenSize || ""} onChange={(e) => onChange("screenSize", e.target.value)} />
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="chip">Chip</Label>
+        <Input id="chip" name="chip" value={specs.chip} onChange={handleChange} placeholder="Nhập chip" />
       </div>
-      <div className="space-y-2">
-        <Label>CPU</Label>
-        <Input value={specs.cpu || ""} onChange={(e) => onChange("cpu", e.target.value)} />
+      <div>
+        <Label htmlFor="ram">RAM</Label>
+        <Input id="ram" name="ram" value={specs.ram} onChange={handleChange} placeholder="Nhập RAM" />
       </div>
-      <div className="space-y-2">
-        <Label>Hệ điều hành</Label>
-        <Input value={specs.operatingSystem || ""} onChange={(e) => onChange("operatingSystem", e.target.value)} />
+      <div>
+        <Label htmlFor="storage">Dung lượng</Label>
+        <Input id="storage" name="storage" value={specs.storage} onChange={handleChange} placeholder="Nhập dung lượng" />
       </div>
-      <div className="space-y-2">
-        <Label>Bộ nhớ trong</Label>
-        <Input value={specs.storage || ""} onChange={(e) => onChange("storage", e.target.value)} />
+      <div>
+        <Label htmlFor="screenSize">Kích thước màn hình</Label>
+        <Input id="screenSize" name="screenSize" value={specs.screenSize} onChange={handleChange} placeholder="Nhập kích thước màn hình" />
       </div>
-      <div className="space-y-2">
-        <Label>RAM</Label>
-        <Input value={specs.ram || ""} onChange={(e) => onChange("ram", e.target.value)} />
+      <div>
+        <Label htmlFor="screenTech">Công nghệ màn hình</Label>
+        <Input id="screenTech" name="screenTech" value={specs.screenTech} onChange={handleChange} placeholder="Nhập công nghệ màn hình" />
       </div>
-      <div className="space-y-2">
-        <Label>Camera chính</Label>
-        <Input value={specs.mainCamera || ""} onChange={(e) => onChange("mainCamera", e.target.value)} />
+      <div>
+        <Label htmlFor="battery">Pin</Label>
+        <Input id="battery" name="battery" value={specs.battery} onChange={handleChange} placeholder="Nhập dung lượng pin" />
       </div>
-      <div className="space-y-2">
-        <Label>Camera selfie</Label>
-        <Input value={specs.frontCamera || ""} onChange={(e) => onChange("frontCamera", e.target.value)} />
+      <div>
+        <Label htmlFor="os">Hệ điều hành</Label>
+        <Input id="os" name="os" value={specs.os} onChange={handleChange} placeholder="Nhập hệ điều hành" />
       </div>
-      <div className="space-y-2">
-        <Label>Pin</Label>
-        <Input value={specs.battery || ""} onChange={(e) => onChange("battery", e.target.value)} />
+      <div>
+        <Label htmlFor="resolution">Độ phân giải</Label>
+        <Input id="resolution" name="resolution" value={specs.resolution} onChange={handleChange} placeholder="Nhập độ phân giải" />
       </div>
-      <div className="space-y-2 col-span-2">
-        <Label>Màu sắc</Label>
-        <div className="flex flex-wrap gap-2">
-          {specs.colors.map((color, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <Input
-                value={color}
-                onChange={(e) => onColorChange(idx, e.target.value)}
-                placeholder="VD: Black"
-              />
-              <Button type="button" variant="outline" onClick={() => onRemoveColor(idx)}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
-          ))}
-          <Button type="button" variant="outline" onClick={onAddColor}>
-            <Plus className="w-4 h-4 mr-2" /> Thêm màu
-          </Button>
-        </div>
+      <div>
+        <Label htmlFor="ports">Cổng kết nối</Label>
+        <Input id="ports" name="ports" value={specs.ports} onChange={handleChange} placeholder="Nhập cổng kết nối" />
       </div>
     </div>
   );

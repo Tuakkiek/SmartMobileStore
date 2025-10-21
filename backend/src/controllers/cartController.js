@@ -1,4 +1,8 @@
-// controllers/cartController.js - UPDATED WITH VARIANT ID SUPPORT
+// ============================================
+// FILE: backend/src/controllers/cartController.js
+// ✅ FIXED: Cart + Variants - EXPORT DEFAULT OK
+// ============================================
+
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import Variant from "../models/Variant.js";
@@ -50,88 +54,48 @@ export const getCart = async (req, res) => {
 // Thêm sản phẩm vào giỏ hàng - VALIDATE VARIANT ID
 export const addToCart = async (req, res) => {
   try {
-    const { variantId, productId, quantity = 1 } = req.body;
+    const { variantId, quantity = 1 } = req.body;
 
-    let itemData = { quantity };
-
-    // PRIORITY: Use variantId if provided
-    if (variantId) {
-      const variant = await Variant.findById(variantId).populate('productId', 'name model images status');
-      
-      if (!variant) {
-        return res.status(404).json({ 
-          success: false, 
-          message: "Biến thể không tồn tại" 
-        });
-      }
-
-      if (variant.stock < quantity) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Chỉ còn ${variant.stock} sản phẩm trong kho` 
-        });
-      }
-
-      itemData = {
-        ...itemData,
-        variantId: variant._id,
-        productId: variant.productId._id,
-        price: variant.price,
-        sku: variant.sku
-      };
-    } else if (productId) {
-      // Fallback: Use product directly (legacy)
-      const product = await Product.findById(productId);
-      
-      if (!product) {
-        return res.status(404).json({ 
-          success: false, 
-          message: "Sản phẩm không tồn tại" 
-        });
-      }
-
-      if (product.status !== "AVAILABLE") {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Sản phẩm hiện không có sẵn" 
-        });
-      }
-
-      if (product.quantity < quantity) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Chỉ còn ${product.quantity} sản phẩm trong kho` 
-        });
-      }
-
-      itemData = {
-        ...itemData,
-        productId: product._id,
-        price: product.price
-      };
-    } else {
+    if (!variantId) {
       return res.status(400).json({ 
         success: false, 
-        message: "Cần cung cấp variantId hoặc productId" 
+        message: "Cần cung cấp variantId" 
       });
     }
+
+    // Lấy variant info
+    const variant = await Variant.findById(variantId).populate('productId', 'name model images status');
+    
+    if (!variant) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Biến thể không tồn tại" 
+      });
+    }
+
+    if (variant.stock < quantity) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Chỉ còn ${variant.stock} sản phẩm trong kho` 
+      });
+    }
+
+    const itemData = {
+      variantId: variant._id,
+      productId: variant.productId._id,
+      quantity,
+      price: variant.price,
+      sku: variant.sku
+    };
 
     let cart = await Cart.findOne({ customerId: req.user._id });
 
     if (!cart) {
       cart = await Cart.create({ customerId: req.user._id, items: [itemData] });
     } else {
-      // Check if item already exists (by variantId first, then productId)
-      let itemIndex = -1;
-      if (variantId) {
-        itemIndex = cart.items.findIndex(item => 
-          item.variantId && item.variantId.toString() === variantId
-        );
-      } else {
-        itemIndex = cart.items.findIndex(item => 
-          item.productId.toString() === productId
-        );
-      }
+      const itemIndex = cart.items.findIndex(item => 
+        item.variantId && item.variantId.toString() === variantId
+      );
 
       if (itemIndex > -1) {
         cart.items[itemIndex].quantity += quantity;
@@ -226,7 +190,7 @@ export const updateCartItem = async (req, res) => {
 // Xóa sản phẩm khỏi giỏ hàng - SUPPORT VARIANT
 export const removeFromCart = async (req, res) => {
   try {
-    const { itemId } = req.params; // Use itemId instead of productId
+    const { itemId } = req.params;
     const cart = await Cart.findOne({ customerId: req.user._id });
 
     if (!cart) {

@@ -2,7 +2,7 @@
 // FILE: src/components/shared/HeroBanner.jsx
 // ============================================
 import React, { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.jsx";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
