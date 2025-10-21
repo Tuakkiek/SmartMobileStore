@@ -1,11 +1,8 @@
-// ============================================
-// FILE: src/pages/warehouse/ProductsPage.jsx
-// ✅ FIXED: "Thêm sản phẩm" Modal + Form Issues
-// ============================================
-
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -13,75 +10,132 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { ProductCard } from "@/components/shared/ProductCard";
-import { Plus, X } from "lucide-react";
-import { productAPI } from "@/lib/api";
-import { toast } from "sonner";
-import { CATEGORIES, getEmptySpecs } from "@/lib/productConstants";
-
-// ✅ IMPORT ALL COMPONENTS
 import ProductFormBasic from "@/components/shared/ProductFormBasic";
 import IPhoneSpecsForm from "@/components/shared/specs/IPhoneSpecsForm";
 import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
 import AirPodsSpecsForm from "@/components/shared/specs/AirPodsSpecsForm";
-import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecsForm";
 import AppleWatchSpecsForm from "@/components/shared/specs/AppleWatchSpecsForm";
+import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecsForm";
 import IPhoneVariantsForm from "@/components/shared/variants/IPhoneVariantsForm";
 import MacVariantsForm from "@/components/shared/variants/MacVariantsForm";
 import AirPodsVariantsForm from "@/components/shared/variants/AirPodsVariantsForm";
-import AccessoriesVariantsForm from "@/components/shared/variants/AccessoriesVariantsForm";
 import AppleWatchVariantsForm from "@/components/shared/variants/AppleWatchVariantsForm";
+import AccessoriesVariantsForm from "@/components/shared/variants/AccessoriesVariantsForm";
 import ProductFormMedia from "@/components/shared/ProductFormMedia";
-import ProductCategoryModal from "@/components/shared/ProductCategoryModal";
+import { Trash2, Plus, Pencil, Package, X } from "lucide-react";
+import { productAPI } from "@/lib/api";
+import { toast } from "sonner";
+
+const CATEGORIES = [
+  "iPhone",
+  "iPad",
+  "Mac",
+  "AirPods",
+  "Apple Watch",
+  "Accessories",
+];
+
+const CONDITION_OPTIONS = [
+  { value: "New", label: "New" },
+  { value: "Like New", label: "Like New" },
+];
+
+const getEmptyFormData = (category = "iPhone") => ({
+  name: "",
+  model: "",
+  category,
+  condition: "New",
+  originalPrice: "",
+  salePrice: "",
+  discount: 0,
+  quantity: "",
+  status: "AVAILABLE",
+  description: "",
+  specifications: getEmptySpecs(category),
+  variants: [],
+  images: [""],
+});
+
+const getEmptySpecs = (category) => {
+  switch (category) {
+    case "iPhone":
+    case "iPad":
+      return {
+        chip: "",
+        ram: "",
+        storage: "",
+        screenSize: "",
+        screenTechnology: "",
+        battery: "",
+        operatingSystem: "",
+        screenResolution: "",
+        ports: "",
+      };
+    case "Mac":
+      return {
+        chip: "",
+        graphicsCard: "",
+        ram: "",
+        storage: "",
+        screenSize: "",
+        screenTechnology: "",
+        battery: "",
+        operatingSystem: "",
+        screenResolution: "",
+        cpuType: "",
+        ports: "",
+      };
+    case "AirPods":
+      return {
+        chipset: "",
+        brand: "",
+        soundTechnology: "",
+        batteryLife: "",
+        controlMethod: "",
+        microphone: "",
+        connectorType: "",
+        additionalFeatures: "",
+      };
+    case "Apple Watch":
+      return {
+        chip: "",
+        ram: "",
+        storage: "",
+        screenSize: "",
+        screenTechnology: "",
+        battery: "",
+        operatingSystem: "",
+        screenResolution: "",
+        ports: "",
+      };
+    case "Accessories":
+      return {
+        customAttributes: [{ key: "", value: "" }],
+      };
+    default:
+      return {};
+  }
+};
 
 const ProductsPage = () => {
-  // ✅ FUNCTIONS FIRST
-  const emptyVariant = () => ({
-    color: "",
-    images: [""],
-    options: [
-      {
-        size: "",
-        version: "",
-        connection: "",
-        price: "",
-        originalPrice: "",
-        quantity: "",
-      },
-    ],
-  });
-
-  const getEmptyFormData = (category = "iPhone") => ({
-    name: "",
-    model: "",
-    category,
-    condition: "NEW",
-    price: "",
-    originalPrice: "",
-    discount: 0,
-    quantity: "",
-    status: "AVAILABLE",
-    description: "",
-    specifications: getEmptySpecs(category),
-    variants: [emptyVariant()],
-    images: [""],
-    badges: [],
-  });
-
-  // ✅ STATES
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState({ category: "all", status: "all" });
-  const [pagination, setPagination] = useState({ page: 1, limit: 12 });
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("iPhone");
-  const [selectedCondition, setSelectedCondition] = useState("NEW");
+  const [selectedCondition, setSelectedCondition] = useState("New");
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState(getEmptyFormData());
   const [error, setError] = useState("");
@@ -91,21 +145,27 @@ const ProductsPage = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [searchTerm, filters.category, pagination.page]);
+  }, [searchTerm, categoryFilter, statusFilter, currentPage]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
       const params = {
-        page: pagination.page,
-        limit: pagination.limit,
-        search: searchTerm,
-        category: filters.category === "all" ? undefined : filters.category,
+        page: currentPage,
+        limit: 12,
+        search: searchTerm || undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
       };
       const response = await productAPI.getAll(params);
-      setProducts(response.data.data.products);
+      const { products, totalPages, currentPage: responsePage, total } = response.data.data;
+      setProducts(products);
+      setTotalPages(totalPages);
+      setTotalProducts(total);
+      if (responsePage !== currentPage) setCurrentPage(responsePage);
     } catch (error) {
-      toast.error("Lỗi tải sản phẩm");
+      console.error("Error fetching products:", error);
+      toast.error("Lỗi khi tải danh sách sản phẩm");
     } finally {
       setIsLoading(false);
     }
@@ -113,124 +173,74 @@ const ProductsPage = () => {
 
   const handleOpenForm = (product = null) => {
     if (product) {
+      // EDIT MODE
       setEditingProduct(product);
-      setSelectedCategory(product.category);
       setFormData({
+        ...getEmptyFormData(product.category),
         ...product,
-        variants: product.variants?.length ? product.variants : [emptyVariant()],
-        images: product.images?.length ? product.images : [""],
+        variants: product.variants || [],
       });
       setPreviewImage(product.images?.[0] || null);
       setShowForm(true);
       setShowCategoryModal(false);
     } else {
+      // NEW MODE
       setEditingProduct(null);
       setSelectedCategory("iPhone");
-      setSelectedCondition("NEW");
-      setShowCategoryModal(true); // ✅ ĐẢM BẢO MỞ MODAL
+      setSelectedCondition("New");
+      setShowCategoryModal(true);
     }
     setError("");
     setActiveTab("basic");
   };
 
   const handleCategorySubmit = () => {
-    setFormData(getEmptyFormData(selectedCategory));
-    setFormData((prev) => ({ ...prev, condition: selectedCondition })); // ✅ CẬP NHẬT CONDITION
+    const newFormData = getEmptyFormData(selectedCategory);
+    newFormData.condition = selectedCondition;
+    setFormData(newFormData);
     setShowForm(true);
     setShowCategoryModal(false);
   };
 
   const handleChange = (name, value) => {
-    setError("");
-    const updatedFormData = { ...formData, [name]: value };
-    if (name === "originalPrice" || name === "price") {
-      const origPrice = Number(updatedFormData.originalPrice) || 0;
-      const sellPrice = Number(updatedFormData.price) || 0;
-      updatedFormData.discount =
-        origPrice > 0
-          ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
-          : 0;
+    setFormData({ ...formData, [name]: value });
+    if (name === "originalPrice" || name === "salePrice") {
+      const orig = Number(formData.originalPrice) || 0;
+      const sale = Number(formData.salePrice) || 0;
+      formData.discount = orig > 0 ? Math.round(((orig - sale) / orig) * 100) : 0;
     }
-    setFormData(updatedFormData);
   };
 
-  const handleVariantChange = (vIdx, field, value) => {
-    const variants = [...formData.variants];
-    variants[vIdx][field] = value;
-    setFormData({ ...formData, variants });
+  const handleSpecsChange = (newSpecs) => {
+    setFormData({ ...formData, specifications: newSpecs });
   };
 
-  const handleOptionChange = (vIdx, oIdx, field, value) => {
-    const variants = [...formData.variants];
-    variants[vIdx].options[oIdx][field] = value;
-    setFormData({ ...formData, variants });
+  const handleVariantsChange = (newVariants) => {
+    setFormData({ ...formData, variants: newVariants });
   };
 
-  const handleAddVariant = () =>
-    setFormData({ ...formData, variants: [...formData.variants, emptyVariant()] });
-
-  const handleRemoveVariant = (vIdx) =>
-    setFormData({
-      ...formData,
-      variants: formData.variants.filter((_, i) => i !== vIdx),
-    });
-
-  const handleAddOption = (vIdx) => {
-    const variants = [...formData.variants];
-    variants[vIdx].options.push(emptyVariant().options[0]);
-    setFormData({ ...formData, variants });
-  };
-
-  const handleRemoveOption = (vIdx, oIdx) => {
-    const variants = [...formData.variants];
-    variants[vIdx].options = variants[vIdx].options.filter((_, i) => i !== oIdx);
-    setFormData({ ...formData, variants });
-  };
-
-  const handleArrayChange = (field, idx, val) => {
-    const arr = [...formData[field]];
-    arr[idx] = val;
-    setFormData({ ...formData, [field]: arr });
-  };
-
-  const addArrayItem = (field) =>
-    setFormData({ ...formData, [field]: [...formData[field], ""] });
-
-  const removeArrayItem = (field, idx) => {
-    if (formData[field].length <= 1) return;
-    const arr = formData[field].filter((_, i) => i !== idx);
-    setFormData({ ...formData, [field]: arr });
+  const handleMediaChange = (newImages) => {
+    setFormData({ ...formData, images: newImages });
+    setPreviewImage(newImages[0] || null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setError("");
+
     if (!formData.model.trim()) {
+      setError("Model là trường bắt buộc");
       toast.error("Vui lòng nhập model sản phẩm");
+      setIsSubmitting(false);
       return;
     }
-    setIsSubmitting(true);
+
     try {
-      const submitData = {
-        ...formData,
-        price: Number(formData.price || 0),
-        originalPrice: Number(formData.originalPrice || 0),
-        quantity: Number(formData.quantity || 0),
-        variants: formData.variants
-          .filter((v) => v.color.trim())
-          .map((v) => ({
-            color: v.color,
-            images: v.images.filter((img) => img.trim()),
-            options: v.options.map((o) => ({
-              ...o,
-              price: Number(o.price || 0),
-              quantity: Number(o.quantity || 0),
-            })),
-          })),
-        images: formData.images.filter((img) => img.trim()),
-      };
+      const submitData = { ...formData };
       if (editingProduct) {
         await productAPI.update(editingProduct._id, submitData);
-        toast.success("Cập nhật thành công");
+        toast.success("Cập nhật sản phẩm thành công");
       } else {
         await productAPI.create(submitData);
         toast.success("Tạo sản phẩm thành công");
@@ -238,6 +248,8 @@ const ProductsPage = () => {
       await fetchProducts();
       setShowForm(false);
     } catch (error) {
+      console.error("Submit error:", error);
+      setError(error.response?.data?.message || `${editingProduct ? "Cập nhật" : "Tạo"} sản phẩm thất bại`);
       toast.error(error.response?.data?.message || "Có lỗi xảy ra");
     } finally {
       setIsSubmitting(false);
@@ -245,83 +257,111 @@ const ProductsPage = () => {
   };
 
   const handleDelete = async (productId) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa?")) return;
+    if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
     try {
       await productAPI.delete(productId);
-      toast.success("Xóa thành công");
+      toast.success("Xóa sản phẩm thành công");
       await fetchProducts();
     } catch (error) {
-      toast.error("Xóa thất bại");
+      toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
     }
   };
 
   if (isLoading && products.length === 0) return <Loading />;
 
+  const renderSpecsForm = () => {
+    const props = { specs: formData.specifications, onSpecsChange: handleSpecsChange };
+    switch (formData.category) {
+      case "iPhone":
+      case "iPad":
+        return <IPhoneSpecsForm {...props} />;
+      case "Mac":
+        return <MacSpecsForm {...props} />;
+      case "AirPods":
+        return <AirPodsSpecsForm {...props} />;
+      case "Apple Watch":
+        return <AppleWatchSpecsForm {...props} />;
+      case "Accessories":
+        return <AccessoriesSpecsForm {...props} />;
+      default:
+        return null;
+    }
+  };
+
+  const renderVariantsForm = () => {
+    const props = { variants: formData.variants, onVariantsChange: handleVariantsChange };
+    switch (formData.category) {
+      case "iPhone":
+      case "iPad":
+        return <IPhoneVariantsForm {...props} />;
+      case "Mac":
+        return <MacVariantsForm {...props} />;
+      case "AirPods":
+        return <AirPodsVariantsForm {...props} />;
+      case "Apple Watch":
+        return <AppleWatchVariantsForm {...props} />;
+      case "Accessories":
+        return <AccessoriesVariantsForm {...props} />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="space-y-6 p-6">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Quản lý sản phẩm</h1>
-          <p className="text-muted-foreground">Tổng {products.length} sản phẩm</p>
+          <h1 className="text-3xl font-bold mb-2">Quản lý sản phẩm</h1>
+          <p className="text-muted-foreground">Tổng số: {totalProducts} sản phẩm</p>
         </div>
-        <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm sản phẩm
+        <Button onClick={() => handleOpenForm()}>
+          <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
         </Button>
       </div>
 
-      {/* FILTERS */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              placeholder="Tìm kiếm..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <Select
-              value={filters.category}
-              onValueChange={(val) => setFilters({ ...filters, category: val })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Danh mục" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem key="all" value="all">Tất cả</SelectItem>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={fetchProducts} variant="outline">
-              Lọc
+      <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chọn danh mục sản phẩm cần thêm</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Danh mục</Label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Trạng thái</Label>
+              <Select value={selectedCondition} onValueChange={setSelectedCondition}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONDITION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleCategorySubmit} className="w-full">
+              Tiếp tục
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
-      {/* MODAL */}
-      {showCategoryModal && (
-        <ProductCategoryModal
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          selectedCondition={selectedCondition}
-          setSelectedCondition={setSelectedCondition}
-          onSubmit={handleCategorySubmit}
-          onClose={() => setShowCategoryModal(false)}
-        />
-      )}
-
-      {/* FORM */}
       {showForm && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>
-              {editingProduct ? "Chỉnh sửa" : "Thêm"} - {selectedCategory}
-            </CardTitle>
+            <CardTitle>{editingProduct ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}</CardTitle>
             <Button variant="ghost" onClick={() => setShowForm(false)}>
               <X className="w-4 h-4" />
             </Button>
@@ -329,6 +369,7 @@ const ProductsPage = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && <ErrorMessage message={error} />}
+
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="basic">Cơ bản</TabsTrigger>
@@ -337,146 +378,72 @@ const ProductsPage = () => {
                   <TabsTrigger value="media">Media</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="basic" className="mt-6">
-                  <ProductFormBasic
-                    formData={formData}
-                    handleChange={handleChange}
-                    editingProduct={editingProduct}
-                  />
+                <TabsContent value="basic" className="space-y-4 mt-6">
+                  <ProductFormBasic formData={formData} handleChange={handleChange} editingProduct={editingProduct} />
                 </TabsContent>
 
-                <TabsContent value="specs" className="mt-6">
-                  {formData.category === "iPhone" && (
-                    <IPhoneSpecsForm
-                      specs={formData.specifications}
-                      onChange={handleChange}
-                    />
-                  )}
-                  {formData.category === "Mac" && (
-                    <MacSpecsForm
-                      specs={formData.specifications}
-                      onChange={handleChange}
-                    />
-                  )}
-                  {formData.category === "AirPods" && (
-                    <AirPodsSpecsForm
-                      specs={formData.specifications}
-                      onChange={handleChange}
-                    />
-                  )}
-                  {formData.category === "Phụ kiện" && (
-                    <AccessoriesSpecsForm
-                      specs={formData.specifications}
-                      onChange={handleChange}
-                    />
-                  )}
-                  {formData.category === "Apple Watch" && (
-                    <AppleWatchSpecsForm
-                      specs={formData.specifications}
-                      onChange={handleChange}
-                    />
-                  )}
+                <TabsContent value="specs" className="space-y-4 mt-6">
+                  {renderSpecsForm()}
                 </TabsContent>
 
-                <TabsContent value="variants" className="mt-6">
-                  {formData.category === "iPhone" && (
-                    <IPhoneVariantsForm
-                      variants={formData.variants}
-                      onVariantChange={handleVariantChange}
-                      onOptionChange={handleOptionChange}
-                      onAddVariant={handleAddVariant}
-                      onRemoveVariant={handleRemoveVariant}
-                      onAddOption={handleAddOption}
-                      onRemoveOption={handleRemoveOption}
-                    />
-                  )}
-                  {formData.category === "Mac" && (
-                    <MacVariantsForm
-                      variants={formData.variants}
-                      onVariantChange={handleVariantChange}
-                      onOptionChange={handleOptionChange}
-                      onAddVariant={handleAddVariant}
-                      onRemoveVariant={handleRemoveVariant}
-                      onAddOption={handleAddOption}
-                      onRemoveOption={handleRemoveOption}
-                    />
-                  )}
-                  {formData.category === "AirPods" && (
-                    <AirPodsVariantsForm
-                      variants={formData.variants}
-                      onVariantChange={handleVariantChange}
-                      onOptionChange={handleOptionChange}
-                      onAddVariant={handleAddVariant}
-                      onRemoveVariant={handleRemoveVariant}
-                      onAddOption={handleAddOption}
-                      onRemoveOption={handleRemoveOption}
-                    />
-                  )}
-                  {formData.category === "Phụ kiện" && (
-                    <AccessoriesVariantsForm
-                      variants={formData.variants}
-                      onVariantChange={handleVariantChange}
-                      onOptionChange={handleOptionChange}
-                      onAddVariant={handleAddVariant}
-                      onRemoveVariant={handleRemoveVariant}
-                      onAddOption={handleAddOption}
-                      onRemoveOption={handleRemoveOption}
-                    />
-                  )}
-                  {formData.category === "Apple Watch" && (
-                    <AppleWatchVariantsForm
-                      variants={formData.variants}
-                      onVariantChange={handleVariantChange}
-                      onOptionChange={handleOptionChange}
-                      onAddVariant={handleAddVariant}
-                      onRemoveVariant={handleRemoveVariant}
-                      onAddOption={handleAddOption}
-                      onRemoveOption={handleRemoveOption}
-                    />
-                  )}
+                <TabsContent value="variants" className="space-y-4 mt-6">
+                  {renderVariantsForm()}
                 </TabsContent>
 
-                <TabsContent value="media" className="mt-6">
-                  <ProductFormMedia
-                    formData={formData}
-                    handleArrayChange={handleArrayChange}
-                    addArrayItem={addArrayItem}
-                    removeArrayItem={removeArrayItem}
-                    previewImage={previewImage}
-                  />
+                <TabsContent value="media" className="space-y-4 mt-6">
+                  <ProductFormMedia formData={formData} handleChange={handleMediaChange} previewImage={previewImage} />
                 </TabsContent>
               </Tabs>
 
               <Button type="submit" disabled={isSubmitting} className="w-full">
-                {isSubmitting
-                  ? "Đang xử lý..."
-                  : editingProduct
-                  ? "Cập nhật"
-                  : "Tạo sản phẩm"}
+                {isSubmitting ? "Đang xử lý..." : editingProduct ? "Cập nhật" : "Tạo sản phẩm"}
               </Button>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* PRODUCTS GRID */}
       <Card>
-        <CardHeader>
-          <CardTitle>Kết quả ({products.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {products.map((product) => (
-              <ProductCard
-                key={product._id}
-                product={product}
-                onDelete={handleDelete}
-                onEdit={handleOpenForm}
-              />
-            ))}
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Input placeholder="Tìm kiếm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger><SelectValue placeholder="Danh mục" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả</SelectItem>
+                {CATEGORIES.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger><SelectValue placeholder="Trạng thái" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả</SelectItem>
+                <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
+                <SelectItem value="PRE_ORDER">Đặt trước</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {products.map((product) => (
+          <ProductCard key={product._id} product={product} onEdit={() => handleOpenForm(product)} onDelete={() => handleDelete(product._id)} />
+        ))}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center gap-2">
+          <Button variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((prev) => prev - 1)}>
+            Trước
+          </Button>
+          <span className="px-4 py-2">Trang {currentPage} / {totalPages}</span>
+          <Button variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((prev) => prev + 1)}>
+            Sau
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
