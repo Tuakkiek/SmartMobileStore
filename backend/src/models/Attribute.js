@@ -1,3 +1,4 @@
+// backend/src/models/Attribute.js
 import mongoose from "mongoose";
 
 const attributeSchema = new mongoose.Schema({

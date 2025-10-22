@@ -1,3 +1,4 @@
+// backend/src/models/AppleWatch.js
 import mongoose from "mongoose";
 
 const appleWatchVariantSchema = new mongoose.Schema({

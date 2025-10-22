@@ -1,3 +1,4 @@
+// backend/src/models/Mac.js
 import mongoose from "mongoose";
 
 const macVariantSchema = new mongoose.Schema({

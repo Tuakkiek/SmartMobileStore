@@ -1,3 +1,4 @@
+// backend/src/models/IPad.js
 import mongoose from "mongoose";
 
 const iPadVariantSchema = new mongoose.Schema({

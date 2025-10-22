@@ -1,6 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const controller = require('../controllers/iPhoneController');
+import express from 'express';
+import { Router } from 'express';
+import controller from '../controllers/iPhoneController.js';
+
+const router = Router();
+
 
 router.post('/', controller.create);
 router.get('/', controller.findAll);

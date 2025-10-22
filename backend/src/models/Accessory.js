@@ -1,3 +1,4 @@
+// backend/src/models/Accessory.js
 import mongoose from "mongoose";
 
 const accessoryVariantSchema = new mongoose.Schema({
