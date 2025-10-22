@@ -1,6 +1,7 @@
 // backend/src/controllers/macController.js
-import { Mac, MacVariant } from "../models/Mac.js";
+import  Mac, { MacVariant } from "../models/Mac.js";
 
+// Create Mac with variants
 export const create = async (req, res) => {
   try {
     const { variants, ...productData } = req.body;
@@ -22,6 +23,7 @@ export const create = async (req, res) => {
   }
 };
 
+// Get all Macs
 export const findAll = async (req, res) => {
   try {
     const products = await Mac.find(req.query).populate("variants");
@@ -31,6 +33,7 @@ export const findAll = async (req, res) => {
   }
 };
 
+// Get Mac by ID
 export const findOne = async (req, res) => {
   try {
     const product = await Mac.findById(req.params.id).populate("variants");
@@ -41,6 +44,7 @@ export const findOne = async (req, res) => {
   }
 };
 
+// Update Mac
 export const update = async (req, res) => {
   try {
     const { variants, ...productData } = req.body;
@@ -66,6 +70,7 @@ export const update = async (req, res) => {
   }
 };
 
+// Delete Mac
 export const deleteMac = async (req, res) => {
   try {
     const product = await Mac.findById(req.params.id);
@@ -78,6 +83,7 @@ export const deleteMac = async (req, res) => {
   }
 };
 
+// Get variants by product ID
 export const getVariants = async (req, res) => {
   try {
     const variants = await MacVariant.find({ productId: req.params.id });
@@ -85,4 +91,14 @@ export const getVariants = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Exporting all functions
+export default {
+  create,
+  findAll,
+  findOne,
+  update,
+  deleteMac,
+  getVariants,
 };

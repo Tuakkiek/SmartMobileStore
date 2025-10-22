@@ -16,12 +16,12 @@ import orderRoutes from './routes/orderRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import promotionRoutes from './routes/promotionRoutes.js';
 
-import iPhoneRoutes from './routes/iPhoneRoutes';
-import iPadRoutes from './routes/iPadRoutes';
-import macRoutes from './routes/macRoutes';
-import airPodsRoutes from './routes/airPodsRoutes';
-import appleWatchRoutes from './routes/appleWatchRoutes';
-import accessoryRoutes from './routes/accessoryRoutes';
+import iPhoneRoutes from './routes/iPhoneRoutes.js';
+import iPadRoutes from './routes/iPadRoutes.js';
+import macRoutes from './routes/macRoutes.js';
+import airPodsRoutes from './routes/airPodsRoutes.js';
+import appleWatchRoutes from './routes/appleWatchRoutes.js';
+import accessoryRoutes from './routes/accessoryRoutes.js';
 
 
 import dotenv from 'dotenv';
