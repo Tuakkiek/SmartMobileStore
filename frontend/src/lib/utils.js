@@ -95,7 +95,7 @@ export const fetchAllProducts = async (params = {}) => {
     allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return allProducts;
-  } catch (error) {
+} catch (error) {
     console.error('Error fetching all products:', error);
     throw error;  // Re-throw for component-level handling
   }

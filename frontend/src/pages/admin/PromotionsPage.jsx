@@ -1,6 +1,3 @@
-// ============================================
-// FILE: src/pages/admin/PromotionsPage.jsx
-// ============================================
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { Plus, Edit, Trash2, X } from "lucide-react";
-import { promotionAPI, productAPI } from "@/lib/api";
-import { getStatusColor, getStatusText, formatDate } from "@/lib/utils";
+import { promotionAPI } from "@/lib/api";
+import { fetchAllProducts, getStatusColor, getStatusText, formatDate } from "@/lib/utils";
 
 const PromotionsPage = () => {
   const [promotions, setPromotions] = useState([]);
@@ -38,14 +35,24 @@ const PromotionsPage = () => {
 
   const fetchData = async () => {
     try {
-      const [promotionsRes, productsRes] = await Promise.all([
+      const [promotionsRes, productsData] = await Promise.all([
         promotionAPI.getAll(),
-        productAPI.getAll({ limit: 1000 }),
+        fetchAllProducts({ limit: 100 }), // Giảm limit để tránh lỗi
       ]);
-      setPromotions(promotionsRes.data.data.promotions);
-      setProducts(productsRes.data.data.products);
+      console.log("Promotions API response:", promotionsRes);
+      console.log("Products data:", productsData);
+      // Kiểm tra cấu trúc dữ liệu
+      const promotionsData = Array.isArray(promotionsRes.data.data.promotions)
+        ? promotionsRes.data.data.promotions
+        : [];
+      const productsArray = Array.isArray(productsData) ? productsData : [];
+      setPromotions(promotionsData);
+      setProducts(productsArray);
     } catch (error) {
       console.error("Error fetching data:", error);
+      setError(error.response?.data?.message || "Lấy danh sách sản phẩm hoặc khuyến mãi thất bại");
+      setPromotions([]);
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
@@ -161,6 +168,8 @@ const PromotionsPage = () => {
         </Button>
       </div>
 
+      {error && <ErrorMessage message={error} />}
+
       {/* Add/Edit Form */}
       {showForm && (
         <Card>
@@ -270,20 +279,24 @@ const PromotionsPage = () => {
               <div className="space-y-2">
                 <Label>Sản phẩm áp dụng</Label>
                 <div className="border rounded-md p-4 max-h-[300px] overflow-y-auto space-y-2">
-                  {products.map((product) => (
-                    <label
-                      key={product._id}
-                      className="flex items-center space-x-2 cursor-pointer hover:bg-accent p-2 rounded"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.applicableProducts.includes(product._id)}
-                        onChange={() => handleProductSelect(product._id)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm">{product.name}</span>
-                    </label>
-                  ))}
+                  {products.length === 0 ? (
+                    <p className="text-muted-foreground">Không có sản phẩm nào.</p>
+                  ) : (
+                    products.map((product) => (
+                      <label
+                        key={product._id}
+                        className="flex items-center space-x-2 cursor-pointer hover:bg-accent p-2 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.applicableProducts.includes(product._id)}
+                          onChange={() => handleProductSelect(product._id)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{product.name}</span>
+                      </label>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -306,64 +319,68 @@ const PromotionsPage = () => {
 
       {/* Promotions List */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {promotions.map((promotion) => (
-          <Card key={promotion._id}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-lg mb-1">{promotion.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {promotion.description}
-                  </p>
-                  <Badge className={getStatusColor(promotion.status)}>
-                    {getStatusText(promotion.status)}
-                  </Badge>
+        {promotions.length === 0 ? (
+          <p className="text-center text-muted-foreground">Không có khuyến mãi nào.</p>
+        ) : (
+          promotions.map((promotion) => (
+            <Card key={promotion._id}>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg mb-1">{promotion.name}</h3>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {promotion.description}
+                    </p>
+                    <Badge className={getStatusColor(promotion.status)}>
+                      {getStatusText(promotion.status)}
+                    </Badge>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-primary">
+                      {promotion.discountType === "PERCENTAGE"
+                        ? `-${promotion.discountValue}%`
+                        : `-${promotion.discountValue.toLocaleString()}đ`}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">
-                    {promotion.discountType === "PERCENTAGE"
-                      ? `-${promotion.discountValue}%`
-                      : `-${promotion.discountValue.toLocaleString()}đ`}
-                  </p>
-                </div>
-              </div>
 
-              <div className="space-y-2 text-sm mb-4">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Bắt đầu:</span>
-                  <span>{formatDate(promotion.startDate)}</span>
+                <div className="space-y-2 text-sm mb-4">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Bắt đầu:</span>
+                    <span>{formatDate(promotion.startDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Kết thúc:</span>
+                    <span>{formatDate(promotion.endDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Sản phẩm áp dụng:</span>
+                    <span>{promotion.applicableProducts?.length || 0} sản phẩm</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kết thúc:</span>
-                  <span>{formatDate(promotion.endDate)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sản phẩm áp dụng:</span>
-                  <span>{promotion.applicableProducts?.length || 0} sản phẩm</span>
-                </div>
-              </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEdit(promotion)}
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Sửa
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDelete(promotion._id)}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Xóa
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(promotion)}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Sửa
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(promotion._id)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Xóa
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );

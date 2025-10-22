@@ -1,6 +1,3 @@
-// ============================================
-// FILE: src/pages/admin/EmployeesPage.jsx
-// ============================================
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,10 +31,15 @@ const EmployeesPage = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await userAPI.getEmployees();
-      setEmployees(response.data.data.employees);
+      const response = await userAPI.getAllEmployees();
+      console.log('API response:', response); // Debug
+      // Kiểm tra xem response.data.data.employees có phải là mảng không
+      const data = Array.isArray(response.data.data.employees) ? response.data.data.employees : [];
+      setEmployees(data);
     } catch (error) {
       console.error("Error fetching employees:", error);
+      setError(error.response?.data?.message || "Lấy danh sách nhân viên thất bại");
+      setEmployees([]); // Đặt lại mảng rỗng nếu có lỗi
     } finally {
       setIsLoading(false);
     }
@@ -216,66 +218,71 @@ const EmployeesPage = () => {
       )}
 
       {/* Employees List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {employees.map((employee) => (
-          <Card key={employee._id}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-lg mb-1">
-                    {employee.fullName}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {employee.phoneNumber}
-                  </p>
-                  <Badge>
-                    {employee.role === "WAREHOUSE_STAFF" && "Nhân viên kho"}
-                    {employee.role === "ORDER_MANAGER" && "Quản lý đơn hàng"}
-                    {employee.role === "ADMIN" && "Quản trị viên"}
+      {error && <ErrorMessage message={error} />}
+      {employees.length === 0 ? (
+        <p className="text-center text-muted-foreground">Không có nhân viên nào.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {employees.map((employee) => (
+            <Card key={employee._id}>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg mb-1">
+                      {employee.fullName}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {employee.phoneNumber}
+                    </p>
+                    <Badge>
+                      {employee.role === "WAREHOUSE_STAFF" && "Nhân viên kho"}
+                      {employee.role === "ORDER_MANAGER" && "Quản lý đơn hàng"}
+                      {employee.role === "ADMIN" && "Quản trị viên"}
+                    </Badge>
+                  </div>
+                  <Badge className={getStatusColor(employee.status)}>
+                    {getStatusText(employee.status)}
                   </Badge>
                 </div>
-                <Badge className={getStatusColor(employee.status)}>
-                  {getStatusText(employee.status)}
-                </Badge>
-              </div>
 
-              {employee.email && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  {employee.email}
-                </p>
-              )}
+                {employee.email && (
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {employee.email}
+                  </p>
+                )}
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleToggleStatus(employee._id)}
-                >
-                  {employee.status === "ACTIVE" ? (
-                    <>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Khóa
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="w-4 h-4 mr-2" />
-                      Mở khóa
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDelete(employee._id)}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Xóa
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleStatus(employee._id)}
+                  >
+                    {employee.status === "ACTIVE" ? (
+                      <>
+                        <Lock className="w-4 h-4 mr-2" />
+                        Khóa
+                      </>
+                    ) : (
+                      <>
+                        <Unlock className="w-4 h-4 mr-2" />
+                        Mở khóa
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(employee._id)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Xóa
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
