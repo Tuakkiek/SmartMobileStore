@@ -160,7 +160,7 @@ export const userAPI = {
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
 
-// ... (tất cả code cũ của bạn giữ nguyên)
+// 
 
 // ✅ THÊM PRODUCT API - CHO MAINLAYOUT SEARCH
 export const productAPI = {

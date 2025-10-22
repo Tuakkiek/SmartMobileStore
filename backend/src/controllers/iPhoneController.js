@@ -1,5 +1,5 @@
-const IPhone = require('../models/IPhone');
-const IPhoneVariant = require('../models/IPhoneVariant');
+import { IPhone, IPhoneVariant } from '../models/IPhone.js';
+
 
 exports.create = async (req, res) => {
   try {
