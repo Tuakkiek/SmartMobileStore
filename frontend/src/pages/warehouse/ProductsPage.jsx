@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import ProductCategoryModal from '@/components/shared/ProductCategoryModal';
 import ProductFormBasic from '@/components/shared/ProductFormBasic';
-import ProductFormMedia from '@/components/shared/ProductFormMedia';
 
 // Import specific specs and variants forms
 import IPhoneSpecsForm from '@/components/shared/specs/IPhoneSpecsForm';
@@ -32,15 +31,16 @@ const ProductPage = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showCategoryModal, setShowCategoryModal] = useState(!id); // Show modal nếu add new
   const [category, setCategory] = useState(null);
+  const [showCategoryModal, setShowCategoryModal] = useState(!id); // Show modal nếu add new
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedCondition, setSelectedCondition] = useState('NEW');
   const [productData, setProductData] = useState({
     name: '',
     model: '',
     description: '',
-    specifications: {},
+    specifications: {}, // Đối với phụ kiện sẽ là array
     variants: [],
-    images: [], // Product-level images if any
     condition: 'NEW',
     brand: 'Apple',
     status: 'AVAILABLE',
@@ -68,8 +68,9 @@ const ProductPage = () => {
     }
   };
 
-  const handleCategorySelect = (selectedCategory) => {
+  const handleSubmitCategory = () => {
     setCategory(selectedCategory);
+    setProductData((prev) => ({ ...prev, condition: selectedCondition }));
     setShowCategoryModal(false);
   };
 
@@ -77,16 +78,104 @@ const ProductPage = () => {
     setProductData((prev) => ({ ...prev, ...data }));
   };
 
-  const handleMediaChange = (images) => {
-    setProductData((prev) => ({ ...prev, images }));
+  // Handlers for specifications (common for fixed fields)
+  const handleSpecFieldChange = (key, value) => {
+    setProductData((prev) => ({
+      ...prev,
+      specifications: {
+        ...prev.specifications,
+        [key]: value,
+      },
+    }));
   };
 
-  const handleSpecsChange = (specs) => {
-    setProductData((prev) => ({ ...prev, specifications: specs }));
+  // Handlers for colors in specifications
+  const handleSpecColorChange = (index, value) => {
+    const colors = [...(productData.specifications.colors || [])];
+    colors[index] = value;
+    handleSpecFieldChange('colors', colors);
   };
 
-  const handleVariantsChange = (variants) => {
-    setProductData((prev) => ({ ...prev, variants }));
+  const handleAddSpecColor = () => {
+    const colors = [...(productData.specifications.colors || []), ''];
+    handleSpecFieldChange('colors', colors);
+  };
+
+  const handleRemoveSpecColor = (index) => {
+    const colors = (productData.specifications.colors || []).filter((_, i) => i !== index);
+    handleSpecFieldChange('colors', colors);
+  };
+
+  // Handlers for custom specifications (Accessories)
+  const handleCustomSpecChange = (index, field, value) => {
+    const newSpecs = [...(productData.specifications || [])];
+    newSpecs[index][field] = value;
+    setProductData((prev) => ({ ...prev, specifications: newSpecs }));
+  };
+
+  const handleAddCustomSpec = () => {
+    const newSpecs = [...(productData.specifications || []), { key: '', value: '' }];
+    setProductData((prev) => ({ ...prev, specifications: newSpecs }));
+  };
+
+  const handleRemoveCustomSpec = (index) => {
+    const newSpecs = (productData.specifications || []).filter((_, i) => i !== index);
+    setProductData((prev) => ({ ...prev, specifications: newSpecs }));
+  };
+
+  // Handlers for variants (common for all categories)
+  const handleAddVariant = () => {
+    setProductData((prev) => ({
+      ...prev,
+      variants: [...prev.variants, { color: '', images: [''], options: [] }],
+    }));
+  };
+
+  const handleRemoveVariant = (vIdx) => {
+    const newVariants = productData.variants.filter((_, i) => i !== vIdx);
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleVariantChange = (vIdx, field, value) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx][field] = value;
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleAddImage = (vIdx) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].images = [...newVariants[vIdx].images, ''];
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleRemoveImage = (vIdx, imgIdx) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].images = newVariants[vIdx].images.filter((_, i) => i !== imgIdx);
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleImageChange = (vIdx, imgIdx, value) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].images[imgIdx] = value;
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleAddOption = (vIdx) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].options = [...newVariants[vIdx].options, {}];
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleRemoveOption = (vIdx, oIdx) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].options = newVariants[vIdx].options.filter((_, i) => i !== oIdx);
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
+  };
+
+  const handleOptionChange = (vIdx, oIdx, field, value) => {
+    const newVariants = [...productData.variants];
+    newVariants[vIdx].options[oIdx][field] = value;
+    setProductData((prev) => ({ ...prev, variants: newVariants }));
   };
 
   const validateData = () => {
@@ -94,7 +183,7 @@ const ProductPage = () => {
       toast.error('Vui lòng điền đầy đủ thông tin cơ bản');
       return false;
     }
-    if (Object.keys(productData.specifications).length === 0) {
+    if (Object.keys(productData.specifications).length === 0 && !Array.isArray(productData.specifications)) {
       toast.error('Vui lòng điền thông số kỹ thuật');
       return false;
     }
@@ -129,17 +218,64 @@ const ProductPage = () => {
   const renderSpecsForm = () => {
     switch (category) {
       case 'iPhone':
-        return <IPhoneSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <IPhoneSpecsForm
+            specs={productData.specifications}
+            onChange={handleSpecFieldChange}
+            onColorChange={handleSpecColorChange}
+            onAddColor={handleAddSpecColor}
+            onRemoveColor={handleRemoveSpecColor}
+          />
+        );
       case 'iPad':
-        return <IPadSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <IPadSpecsForm
+            specs={productData.specifications}
+            onChange={handleSpecFieldChange}
+            onColorChange={handleSpecColorChange}
+            onAddColor={handleAddSpecColor}
+            onRemoveColor={handleRemoveSpecColor}
+          />
+        );
       case 'Mac':
-        return <MacSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <MacSpecsForm
+            specs={productData.specifications}
+            onChange={handleSpecFieldChange}
+            onColorChange={handleSpecColorChange}
+            onAddColor={handleAddSpecColor}
+            onRemoveColor={handleRemoveSpecColor}
+          />
+        );
       case 'AirPods':
-        return <AirPodsSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <AirPodsSpecsForm
+            specs={productData.specifications}
+            onChange={handleSpecFieldChange}
+            onColorChange={handleSpecColorChange}
+            onAddColor={handleAddSpecColor}
+            onRemoveColor={handleRemoveSpecColor}
+          />
+        );
       case 'AppleWatch':
-        return <AppleWatchSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <AppleWatchSpecsForm
+            specs={productData.specifications}
+            onChange={handleSpecFieldChange}
+            onColorChange={handleSpecColorChange}
+            onAddColor={handleAddSpecColor}
+            onRemoveColor={handleRemoveSpecColor}
+          />
+        );
       case 'Accessories':
-        return <AccessoriesSpecsForm initialData={productData.specifications} onChange={handleSpecsChange} />;
+        return (
+          <AccessoriesSpecsForm
+            customSpecs={productData.specifications || []}
+            onChange={handleCustomSpecChange}
+            onAdd={handleAddCustomSpec}
+            onRemove={handleRemoveCustomSpec}
+          />
+        );
       default:
         return <ErrorMessage message="Chưa chọn danh mục" />;
     }
@@ -148,17 +284,95 @@ const ProductPage = () => {
   const renderVariantsForm = () => {
     switch (category) {
       case 'iPhone':
-        return <IPhoneVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <IPhoneVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       case 'iPad':
-        return <IPadVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <IPadVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       case 'Mac':
-        return <MacVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <MacVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       case 'AirPods':
-        return <AirPodsVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <AirPodsVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       case 'AppleWatch':
-        return <AppleWatchVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <AppleWatchVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       case 'Accessories':
-        return <AccessoriesVariantsForm initialVariants={productData.variants} onChange={handleVariantsChange} />;
+        return (
+          <AccessoriesVariantsForm
+            variants={productData.variants}
+            onAddVariant={handleAddVariant}
+            onRemoveVariant={handleRemoveVariant}
+            onVariantChange={handleVariantChange}
+            onImageChange={handleImageChange}
+            onAddImage={handleAddImage}
+            onRemoveImage={handleRemoveImage}
+            onOptionChange={handleOptionChange}
+            onAddOption={handleAddOption}
+            onRemoveOption={handleRemoveOption}
+          />
+        );
       default:
         return <ErrorMessage message="Chưa chọn danh mục" />;
     }
@@ -173,9 +387,12 @@ const ProductPage = () => {
 
       {showCategoryModal && (
         <ProductCategoryModal
-          isOpen={showCategoryModal}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+          selectedCondition={selectedCondition}
+          setSelectedCondition={setSelectedCondition}
+          onSubmit={handleSubmitCategory}
           onClose={() => navigate('/warehouse/products')}
-          onSelect={handleCategorySelect}
         />
       )}
 
@@ -183,17 +400,12 @@ const ProductPage = () => {
         <Tabs defaultValue="basic" className="space-y-4">
           <TabsList>
             <TabsTrigger value="basic">Cơ bản</TabsTrigger>
-            <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="specs">Thông số</TabsTrigger>
             <TabsTrigger value="variants">Biến thể</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basic">
-            <ProductFormBasic initialData={productData} onChange={handleBasicChange} />
-          </TabsContent>
-
-          <TabsContent value="media">
-            <ProductFormMedia initialImages={productData.images} onChange={handleMediaChange} />
+            <ProductFormBasic initialData={productData} onChange={handleBasicChange} editing={!!id} />
           </TabsContent>
 
           <TabsContent value="specs">{renderSpecsForm()}</TabsContent>

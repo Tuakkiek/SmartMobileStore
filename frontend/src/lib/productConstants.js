@@ -1,15 +1,15 @@
 // ============================================
 // FILE: src/lib/productConstants.js
-// ✅ FIXED: REMOVE DUPLICATE EXPORTS + SYNC WITH FORMS
+// ✅ REWRITTEN: REMOVED ICONS AND JSX, SIMPLIFIED TO PLAIN OBJECTS
 // ============================================
 
 export const CATEGORIES = [
-  "iPhone",
-  "iPad", 
-  "Mac",
-  "AirPods",
-  "Apple Watch",
-  "Phụ kiện",
+  { value: "iPhone", label: "iPhone" },
+  { value: "iPad", label: "iPad" },
+  { value: "Mac", label: "Mac" },
+  { value: "AirPods", label: "AirPods" },
+  { value: "AppleWatch", label: "Apple Watch" },
+  { value: "Accessories", label: "Phụ kiện" },
 ];
 
 export const CONDITION_OPTIONS = [
@@ -29,8 +29,8 @@ export const COLORS_BY_CATEGORY = {
   iPad: ['Space Gray', 'Silver', 'Gold', 'Blue'],
   Mac: ['Space Gray', 'Silver', 'Midnight'],
   AirPods: ['White'],
-  'Apple Watch': ['Midnight', 'Starlight', 'Silver', 'Gold', 'Rose Gold', 'PRODUCT(RED)', 'Blue'],
-  'Phụ kiện': ['Black', 'White', 'Clear', 'Pink', 'Blue'],
+  AppleWatch: ['Midnight', 'Starlight', 'Silver', 'Gold', 'Rose Gold', 'PRODUCT(RED)', 'Blue'],
+  Accessories: ['Black', 'White', 'Clear', 'Pink', 'Blue'],
 };
 
 // Specifications FIELDS (exact match with FORMS)
@@ -50,11 +50,11 @@ export const SPECS_FIELDS = {
   AirPods: [
     'chip', 'brand', 'batteryLife', 'waterResistance', 'bluetooth'
   ],
-  'Apple Watch': [
+  AppleWatch: [
     'batteryLife', 'compatibility', 'brand', 'screenTech', 
     'calling', 'healthFeatures'
   ],
-  'Phụ kiện': [] // Dynamic key-value
+  Accessories: [] // Dynamic key-value
 };
 
 // VARIANT FIELDS (exact match with FORMS)
@@ -63,8 +63,8 @@ export const VARIANT_FIELDS = {
   iPad: ['storage', 'connectivity'],
   Mac: ['cpuGpu', 'ram', 'storage'],
   AirPods: ['variantName'],
-  'Apple Watch': ['variantName', 'bandSize'],
-  'Phụ kiện': ['variantName']
+  AppleWatch: ['variantName', 'bandSize'],
+  Accessories: ['variantName']
 };
 
 // ============================================
@@ -90,13 +90,11 @@ export const getEmptySpecs = (category) => {
       chip: "", brand: "", batteryLife: "", waterResistance: "", 
       bluetooth: "", colors: [""]
     },
-    'Apple Watch': {
+    AppleWatch: {
       batteryLife: "", compatibility: "", brand: "", screenTech: "",
       calling: "", healthFeatures: "", colors: [""]
     },
-    'Phụ kiện': {
-      customSpecs: [{ key: "", value: "" }], colors: [""]
-    }
+    Accessories: [] // Dynamic array of { key: "", value: "" }
   };
   
   return templates[category] || templates.iPhone;
@@ -133,8 +131,8 @@ export const getEmptyVariantOptions = (category) => {
     iPad: [{ storage: "", connectivity: "", originalPrice: "", price: "", stock: "" }],
     Mac: [{ cpuGpu: "", ram: "", storage: "", originalPrice: "", price: "", stock: "" }],
     AirPods: [{ variantName: "", originalPrice: "", price: "", stock: "" }],
-    'Apple Watch': [{ variantName: "", bandSize: "", originalPrice: "", price: "", stock: "" }],
-    'Phụ kiện': [{ variantName: "", originalPrice: "", price: "", stock: "" }]
+    AppleWatch: [{ variantName: "", bandSize: "", originalPrice: "", price: "", stock: "" }],
+    Accessories: [{ variantName: "", originalPrice: "", price: "", stock: "" }]
   };
   
   return templates[category] || [{ storage: "", originalPrice: "", price: "", stock: "" }];
@@ -146,4 +144,3 @@ export const emptyVariant = (category) => ({
   images: [""],
   options: getEmptyVariantOptions(category)
 });
-

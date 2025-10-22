@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/ProductCategoryModal.jsx
-// ✅ FIXED: KEYS cho CATEGORIES.map
+// ✅ ALTERNATIVE: Using index as key for maps
 // ============================================
 
 import React from "react";
@@ -30,9 +30,9 @@ const ProductCategoryModal = ({
         <div className="space-y-4 mb-6">
           <label className="text-sm font-medium">Danh mục sản phẩm</label>
           <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-            {CATEGORIES.map((cat) => (
+            {CATEGORIES.map((cat, index) => (  // ✅ Use index as key
               <Button
-                key={cat.value} // ✅ FIXED: KEY PROP!
+                key={index}
                 variant={selectedCategory === cat.value ? "default" : "outline"}
                 className="justify-start h-12"
                 onClick={() => setSelectedCategory(cat.value)}
@@ -48,16 +48,15 @@ const ProductCategoryModal = ({
         <div className="space-y-4 mb-6">
           <label className="text-sm font-medium">Tình trạng</label>
           <div className="grid grid-cols-2 gap-2">
-            {["NEW", "LIKE_NEW", "GOOD"].map((condition) => (
+            {["NEW", "LIKE_NEW"].map((condition, index) => (  // ✅ Use index as key
               <Button
-                key={condition} // ✅ FIXED: KEY PROP!
+                key={index}
                 variant={selectedCondition === condition ? "default" : "outline"}
                 className="justify-start h-12"
                 onClick={() => setSelectedCondition(condition)}
               >
-                {condition === "NEW" && "🆕 Mới"}
-                {condition === "LIKE_NEW" && "💎 Như mới"}
-                {condition === "GOOD" && "👍 Tốt"}
+                {condition === "NEW" && "Mới 100%"}
+                {condition === "LIKE_NEW" && "Like new"}
               </Button>
             ))}
           </div>
