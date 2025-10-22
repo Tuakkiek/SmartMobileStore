@@ -1,3 +1,4 @@
+// backend/src/controllers/macController.js
 import { Mac, MacVariant } from "../models/Mac.js";
 
 export const create = async (req, res) => {
