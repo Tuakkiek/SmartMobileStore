@@ -1,5 +1,4 @@
-// FILE: src/components/shared/Loading.jsx
-// ============================================
+// frontend/src/components/shared/Loading.jsx
 import React from "react";
 
 export const Loading = () => {

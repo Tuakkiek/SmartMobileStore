@@ -4,7 +4,15 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Package, ShoppingBag, TrendingUp } from "lucide-react";
-import { orderAPI, productAPI, userAPI } from "@/lib/api";
+import { orderAPI, userAPI } from "@/lib/api";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 
 const AdminDashboard = () => {
@@ -23,21 +31,42 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [ordersRes, productsRes, employeesRes] = await Promise.all([
-        orderAPI.getAll({ limit: 10 }),
-        productAPI.getAll({ limit: 1 }),
-        userAPI.getEmployees(),
+      // Fetch recent orders (limit 10) and total orders
+      const ordersRes = await orderAPI.getAll({ limit: 10 });
+      const orders = ordersRes?.data?.data?.orders || [];
+      const totalOrders = ordersRes?.data?.data?.total || 0;
+
+      // Fetch all delivered orders for revenue (use high limit to get all)
+      const deliveredRes = await orderAPI.getAll({ status: "DELIVERED", limit: 10000 });
+      const deliveredOrders = deliveredRes?.data?.data?.orders || [];
+      const revenue = deliveredOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+
+      // Fetch product counts from each category (use limit=1 for paginated APIs to get total without full data)
+      const [iphonesRes, ipadsRes, macsRes, airpodsRes, applewatchesRes, accessoriesRes] = await Promise.all([
+        iPhoneAPI.getAll({ limit: 1 }),
+        iPadAPI.getAll({ limit: 1 }),
+        macAPI.getAll({}),  // No limit for mac since it ignores pagination and returns all
+        airPodsAPI.getAll({ limit: 1 }),
+        appleWatchAPI.getAll({ limit: 1 }),
+        accessoryAPI.getAll({ limit: 1 }),
       ]);
 
-      const orders = ordersRes.data.data.orders;
-      const revenue = orders
-        .filter((order) => order.status === "DELIVERED")
-        .reduce((sum, order) => sum + order.totalAmount, 0);
+      const totalProducts = 
+        (iphonesRes?.data?.data?.total || 0) +
+        (ipadsRes?.data?.data?.total || 0) +
+        (macsRes?.data?.length || 0) +  // Mac returns array, so use length for total
+        (airpodsRes?.data?.data?.total || 0) +
+        (applewatchesRes?.data?.data?.total || 0) +
+        (accessoriesRes?.data?.data?.total || 0);
+
+      // Fetch employees
+      const employeesRes = await userAPI.getAllEmployees();
+      const totalEmployees = employeesRes?.data?.data?.employees?.length || 0;
 
       setStats({
-        totalOrders: ordersRes.data.data.total,
-        totalProducts: productsRes.data.data.total,
-        totalEmployees: employeesRes.data.data.employees.length,
+        totalOrders,
+        totalProducts,
+        totalEmployees,
         totalRevenue: revenue,
         recentOrders: orders.slice(0, 5),
       });

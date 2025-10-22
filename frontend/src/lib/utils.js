@@ -1,6 +1,14 @@
 // frontend/src/lib/utils.js
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from '@/lib/api';
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -59,4 +67,36 @@ export const getStatusText = (status) => {
     BANK_TRANSFER: "Chuyển khoản",
   };
   return texts[status] || status;
+};
+
+// Function to fetch all products across all categories
+export const fetchAllProducts = async (params = {}) => {
+  try {
+    const [iphones, ipads, macs, airpods, applewatches, accessories] = await Promise.all([
+      iPhoneAPI.getAll(params),      // Fetches /iphones with params (e.g., { page: 1, limit: 10, search: 'pro' })
+      iPadAPI.getAll(params),
+      macAPI.getAll(params),
+      airPodsAPI.getAll(params),
+      appleWatchAPI.getAll(params),
+      accessoryAPI.getAll(params),
+    ]);
+
+    // Merge all products into a single array
+    const allProducts = [
+      ... (iphones?.data?.data?.products || []),  // Use optional chaining to handle potential null/undefined
+      ... (ipads?.data?.data?.products || []),
+      ... (macs?.data?.data?.products || []),
+      ... (airpods?.data?.data?.products || []),
+      ... (applewatches?.data?.data?.products || []),
+      ... (accessories?.data?.data?.products || []),
+    ];
+
+    // Optional: Sort or filter the merged list if needed (e.g., by createdAt descending)
+    allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return allProducts;
+  } catch (error) {
+    console.error('Error fetching all products:', error);
+    throw error;  // Re-throw for component-level handling
+  }
 };

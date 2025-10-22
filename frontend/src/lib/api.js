@@ -1,4 +1,4 @@
-// api.js
+// lib/api.js
 import axios from "axios";
 
 // Tạo axios instance với cấu hình cơ bản
@@ -160,8 +160,6 @@ export const userAPI = {
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
 
-// 
-
 // ✅ THÊM PRODUCT API - CHO MAINLAYOUT SEARCH
 export const productAPI = {
   search: (query, params = {}) => api.get("/products/search", { 
@@ -173,6 +171,8 @@ export const productAPI = {
   update: (id, data) => api.put(`/products/${id}`, data),
   delete: (id) => api.delete(`/products/${id}`),
   getVariants: (productId) => api.get(`/products/${productId}/variants`),
+  getFeatured: (params = {}) => api.get("/products/featured", { params }),
+  getNewArrivals: (params = {}) => api.get("/products/new-arrivals", { params }),
 };
 
 // ✅ DEFAULT EXPORT
