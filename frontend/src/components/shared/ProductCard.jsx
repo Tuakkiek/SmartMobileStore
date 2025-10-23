@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/ProductCard.jsx
-// ✅ VARIANTS SUPPORT: displayPrice + first variant image
+// ✅ FIXED: Edit button for ADMIN and SUB_ADMIN only
 // ============================================
 
 import React, { useState } from "react";
@@ -27,7 +27,7 @@ export const ProductCard = ({
   product, 
   onUpdate, 
   onEdit, 
-  showVariantsBadge = false // ✅ NEW PROP
+  showVariantsBadge = false 
 }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
@@ -36,12 +36,14 @@ export const ProductCard = ({
   const [showBadgeEditor, setShowBadgeEditor] = useState(false);
   const [badges, setBadges] = useState(product.badges || []);
 
-  // ✅ LOGIC: DÙNG displayPrice (min variant) + first variant image
   const displayPrice = product.displayPrice || product.price;
   const displayOriginalPrice = product.originalPrice;
   const displayImage = product.variants?.[0]?.images?.[0] || product.images?.[0];
   const hasVariants = product.variantsCount > 0 || showVariantsBadge;
   const totalStock = product.variants?.reduce((sum, v) => sum + v.stock, 0) || product.quantity;
+
+  // ✅ CHECK PERMISSION: ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER
+  const canEdit = isAuthenticated && user && ['ADMIN', 'WAREHOUSE_STAFF', 'ORDER_MANAGER'].includes(user.role);
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
@@ -61,7 +63,6 @@ export const ProductCard = ({
       return;
     }
 
-    // ✅ THÊM VARIANT ĐẦU TIÊN (còn hàng) thay vì product ID
     const firstAvailableVariant = product.variants?.find(v => v.stock > 0);
     const variantId = firstAvailableVariant?._id || product._id;
 
@@ -85,7 +86,13 @@ export const ProductCard = ({
 
   const handleEditProduct = (e) => {
     e.stopPropagation();
-    if (onEdit) onEdit(product);
+    if (onEdit) {
+      console.log("✅ Editing product:", product);
+      onEdit(product);
+    } else {
+      // ✅ Fallback: Navigate to warehouse products page with edit mode
+      navigate(`/warehouse/products?edit=${product._id}`, { state: { product } });
+    }
   };
 
   const categoryColor = CATEGORY_COLORS[product.category] || "bg-gray-500";
@@ -105,7 +112,6 @@ export const ProductCard = ({
       className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white"
       onClick={() => navigate(`/products/${product._id}`)}
     >
-      {/* ✅ IMAGE: DÙNG first variant image */}
       <div className="relative aspect-square bg-gray-100 overflow-hidden badge-editor">
         {displayImage ? (
           <img
@@ -119,21 +125,18 @@ export const ProductCard = ({
           </div>
         )}
 
-        {/* ✅ VARIANTS BADGE - Top Left */}
         {hasVariants && (
           <div className="absolute top-3 left-3 bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold">
             {product.variantsCount || ''} phiên bản
           </div>
         )}
 
-        {/* Discount Badge */}
         {product.discount > 0 && (
           <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1.5 rounded-full font-bold text-sm mt-8">
             Giảm {product.discount}%
           </div>
         )}
 
-        {/* Status & Feature Badges */}
         <div className="absolute top-3 right-3 flex flex-col gap-2">
           {product.status === "AVAILABLE" && totalStock > 0 && (
             <div className="relative group">
@@ -187,7 +190,7 @@ export const ProductCard = ({
           })}
         </div>
 
-        {/* Add to Cart Button */}
+        {/* Add to Cart Button - Only for CUSTOMER */}
         {isAuthenticated && user?.role === "CUSTOMER" && product.status === "AVAILABLE" && totalStock > 0 && (
           <Button
             size="sm"
@@ -200,8 +203,8 @@ export const ProductCard = ({
           </Button>
         )}
 
-        {/* Edit Button */}
-        {isAuthenticated && user?.role === "ADMIN" && (
+        {/* ✅ Edit Button - For ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER */}
+        {canEdit && (
           <Button
             size="sm"
             className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
@@ -213,7 +216,6 @@ export const ProductCard = ({
         )}
       </div>
 
-      {/* ✅ CONTENT: DÙNG displayPrice */}
       <CardContent className="p-4 bg-white">
         <div className="space-y-2">
           <h3 className="font-semibold text-base line-clamp-2 min-h-[2.5rem] text-gray-900">
@@ -248,7 +250,6 @@ export const ProductCard = ({
             </div>
           )}
 
-          {/* ✅ PRICE: displayPrice (min variant) */}
           <div className="pt-2 border-t">
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-blue-600">
@@ -262,7 +263,6 @@ export const ProductCard = ({
             </div>
           </div>
 
-          {/* ✅ SPECS: Lấy từ first variant nếu có */}
           {product.variants?.[0] && (
             <div className="flex flex-wrap gap-1 pt-2">
               {product.variants[0].color && (
@@ -299,7 +299,6 @@ export const ProductCard = ({
             </Badge>
           ))}
 
-          {/* ✅ STOCK: Total từ variants */}
           {totalStock <= 10 && totalStock > 0 && (
             <p className="text-xs text-orange-600 font-medium pt-1">
               Chỉ còn {totalStock} sản phẩm
