@@ -1,6 +1,10 @@
 // ============================================
 // FILE: src/components/shared/ProductCard.jsx
-// ✅ FIXED: Edit button for ADMIN and SUB_ADMIN only
+// ✅ FIXED: Added Delete button for ADMIN only, Edit for ADMIN/WAREHOUSE_STAFF/ORDER_MANAGER, Add to Cart for CUSTOMER
+// ✅ CSS: Delete button on left, Edit button on right
+// ✅ REMOVED: AlertDialog moved to ProductsPage.jsx
+// ✅ FIXED: Simplified delete to call onDelete directly, removed isDeleting state and handleDeleteProduct
+// ✅ REMOVED: Variants badge, discount badge, and badge editor (including "Mới", "Trả góp 0%", "Bán chạy" badges)
 // ============================================
 
 import React, { useState } from "react";
@@ -8,8 +12,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card.jsx";
 import { Badge } from "@/components/ui/badge.jsx";
 import { Button } from "@/components/ui/button.jsx";
-import { ShoppingCart, Star, Pencil } from "lucide-react";
-import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
+import { ShoppingCart, Star, Pencil, Trash2 } from "lucide-react";
+import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
@@ -23,27 +27,26 @@ const CATEGORY_COLORS = {
   Accessories: "bg-orange-500",
 };
 
-export const ProductCard = ({ 
-  product, 
-  onUpdate, 
-  onEdit, 
-  showVariantsBadge = false 
-}) => {
+export const ProductCard = ({ product, onEdit, onDelete }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
   const [isAdding, setIsAdding] = useState(false);
-  const [showBadgeEditor, setShowBadgeEditor] = useState(false);
-  const [badges, setBadges] = useState(product.badges || []);
 
   const displayPrice = product.displayPrice || product.price;
   const displayOriginalPrice = product.originalPrice;
-  const displayImage = product.variants?.[0]?.images?.[0] || product.images?.[0];
-  const hasVariants = product.variantsCount > 0 || showVariantsBadge;
-  const totalStock = product.variants?.reduce((sum, v) => sum + v.stock, 0) || product.quantity;
+  const displayImage =
+    product.variants?.[0]?.images?.[0] || product.images?.[0];
+  const totalStock =
+    product.variants?.reduce((sum, v) => sum + v.stock, 0) || product.quantity;
 
-  // ✅ CHECK PERMISSION: ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER
-  const canEdit = isAuthenticated && user && ['ADMIN', 'WAREHOUSE_STAFF', 'ORDER_MANAGER'].includes(user.role);
+  // Kiểm tra vai trò người dùng
+  const isAdmin = isAuthenticated && user?.role === "ADMIN";
+  const canEdit =
+    isAuthenticated &&
+    user &&
+    ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user.role);
+  const isCustomer = isAuthenticated && user?.role === "CUSTOMER";
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
@@ -53,7 +56,7 @@ export const ProductCard = ({
       return;
     }
 
-    if (!user || user.role !== "CUSTOMER") {
+    if (!isCustomer) {
       toast.error("Chỉ khách hàng mới có thể thêm vào giỏ hàng");
       return;
     }
@@ -63,7 +66,7 @@ export const ProductCard = ({
       return;
     }
 
-    const firstAvailableVariant = product.variants?.find(v => v.stock > 0);
+    const firstAvailableVariant = product.variants?.find((v) => v.stock > 0);
     const variantId = firstAvailableVariant?._id || product._id;
 
     setIsAdding(true);
@@ -72,7 +75,13 @@ export const ProductCard = ({
 
       if (result.success) {
         toast.success("Đã thêm vào giỏ hàng", {
-          description: `${product.name}${hasVariants ? ` • ${firstAvailableVariant?.color || ''} ${firstAvailableVariant?.storage || ''}`.trim() : ''}`,
+          description: `${product.name}${
+            firstAvailableVariant
+              ? ` • ${firstAvailableVariant.color || ""} ${
+                  firstAvailableVariant.storage || ""
+                }`.trim()
+              : ""
+          }`,
         });
       } else {
         toast.error(result.message || "Thêm vào giỏ hàng thất bại");
@@ -90,29 +99,18 @@ export const ProductCard = ({
       console.log("✅ Editing product:", product);
       onEdit(product);
     } else {
-      // ✅ Fallback: Navigate to warehouse products page with edit mode
-      navigate(`/warehouse/products?edit=${product._id}`, { state: { product } });
+      navigate(`/warehouse/products?edit=${product._id}`, {
+        state: { product },
+      });
     }
   };
-
-  const categoryColor = CATEGORY_COLORS[product.category] || "bg-gray-500";
-
-  React.useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (!e.target.closest(".badge-editor")) {
-        setShowBadgeEditor(false);
-      }
-    };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
 
   return (
     <Card
       className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white"
       onClick={() => navigate(`/products/${product._id}`)}
     >
-      <div className="relative aspect-square bg-gray-100 overflow-hidden badge-editor">
+      <div className="relative aspect-square bg-gray-100 overflow-hidden">
         {displayImage ? (
           <img
             src={displayImage}
@@ -125,73 +123,8 @@ export const ProductCard = ({
           </div>
         )}
 
-        {hasVariants && (
-          <div className="absolute top-3 left-3 bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-            {product.variantsCount || ''} phiên bản
-          </div>
-        )}
-
-        {product.discount > 0 && (
-          <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1.5 rounded-full font-bold text-sm mt-8">
-            Giảm {product.discount}%
-          </div>
-        )}
-
-        <div className="absolute top-3 right-3 flex flex-col gap-2">
-          {product.status === "AVAILABLE" && totalStock > 0 && (
-            <div className="relative group">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowBadgeEditor(!showBadgeEditor);
-                }}
-                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full text-xs font-medium border border-green-600 cursor-pointer transition-colors"
-              >
-                ✓ {badges.length > 0 ? badges[0] : "Mới"}
-              </button>
-
-              {showBadgeEditor && (
-                <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50 w-48">
-                  <p className="text-xs font-semibold text-gray-700 mb-2">Chọn tùy chọn:</p>
-                  <div className="space-y-2">
-                    {["Mới", "Trả góp 0%", "Bán chạy"].map((option) => (
-                      <label key={option} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                        <input
-                          type="checkbox"
-                          checked={badges.includes(option)}
-                          onChange={(e) => {
-                            const newBadges = e.target.checked
-                              ? [...badges, option]
-                              : badges.filter((b) => b !== option);
-                            setBadges(newBadges);
-                            if (onUpdate) onUpdate(product._id, { badges: newBadges });
-                          }}
-                          className="w-4 h-4 cursor-pointer"
-                        />
-                        <span className="text-xs text-gray-700">{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {badges.map((badge, idx) => {
-            let bgColor = "bg-green-500";
-            let icon = "✓";
-            if (badge === "Trả góp 0%") { bgColor = "bg-blue-500"; icon = "💳"; }
-            else if (badge === "Bán chạy") { bgColor = "bg-orange-500"; icon = "🔥"; }
-            return (
-              <div key={idx} className={`${bgColor} text-white px-3 py-1 rounded-full text-xs font-medium`}>
-                {icon} {badge}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Add to Cart Button - Only for CUSTOMER */}
-        {isAuthenticated && user?.role === "CUSTOMER" && product.status === "AVAILABLE" && totalStock > 0 && (
+        {/* Nút Thêm vào giỏ hàng - Chỉ cho CUSTOMER */}
+        {isCustomer && product.status === "AVAILABLE" && totalStock > 0 && (
           <Button
             size="sm"
             className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
@@ -203,7 +136,37 @@ export const ProductCard = ({
           </Button>
         )}
 
-        {/* ✅ Edit Button - For ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER */}
+        {/* Nút Xóa - Chỉ cho ADMIN */}
+        {isAdmin && (
+          <Button
+            size="sm"
+            variant="destructive"
+            className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log(
+                "✅ Delete button clicked for product ID:",
+                product._id
+              );
+              if (!product._id) {
+                console.error("❌ Product ID is missing");
+                toast.error("Không thể xóa: ID sản phẩm không hợp lệ");
+                return;
+              }
+              if (!onDelete) {
+                console.error("❌ onDelete prop is not provided");
+                toast.error("Không thể xóa sản phẩm: Lỗi hệ thống");
+                return;
+              }
+              onDelete(product._id);
+            }}
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Xóa
+          </Button>
+        )}
+
+        {/* Nút Sửa - Cho ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER */}
         {canEdit && (
           <Button
             size="sm"
@@ -223,7 +186,9 @@ export const ProductCard = ({
           </h3>
 
           {product.model && (
-            <p className="text-xs text-gray-500 line-clamp-1">{product.model}</p>
+            <p className="text-xs text-gray-500 line-clamp-1">
+              {product.model}
+            </p>
           )}
 
           {product.subcategory && (
@@ -246,7 +211,9 @@ export const ProductCard = ({
                   />
                 ))}
               </div>
-              <span className="text-xs text-gray-500">({product.totalReviews})</span>
+              <span className="text-xs text-gray-500">
+                ({product.totalReviews})
+              </span>
             </div>
           )}
 
@@ -294,7 +261,11 @@ export const ProductCard = ({
           )}
 
           {product.tags?.slice(0, 2).map((tag, idx) => (
-            <Badge key={idx} variant="outline" className="text-xs text-blue-600 border-blue-200">
+            <Badge
+              key={idx}
+              variant="outline"
+              className="text-xs text-blue-600 border-blue-200"
+            >
               {tag}
             </Badge>
           ))}
