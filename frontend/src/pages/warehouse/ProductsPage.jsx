@@ -1,4 +1,3 @@
-//
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -78,8 +77,6 @@ const ProductsPage = () => {
   const [formData, setFormData] = useState(getEmptyFormData("iPhone"));
   const [activeFormTab, setActiveFormTab] = useState("basic");
   const [justCreatedProductId, setJustCreatedProductId] = useState(null);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [deletingProduct, setDeletingProduct] = useState(null);
 
   // Fetch products khi thay đổi tab
   useEffect(() => {
@@ -394,17 +391,19 @@ const ProductsPage = () => {
   // ============================================
   // CRUD OPERATIONS
   // ============================================
-  const handleCreate = () => {
+  const handleCreate = (mode) => {
+    setInputMode(mode);
     setEditingProduct(null);
     setJustCreatedProductId(null);
     setFormData(getEmptyFormData(activeTab));
+    setJsonInput(''); // Reset JSON input
     setShowForm(true);
     setActiveFormTab("basic");
   };
 
-  // Handle edit with proper variant grouping by color
-  const handleEdit = (product) => {
-    console.log("🔄 LOADING PRODUCT DATA:", product.name);
+// Handle edit with proper variant grouping by color
+const handleEdit = (product) => {
+  console.log("🔄 LOADING PRODUCT DATA:", product.name);
 
     setEditingProduct(product);
 
@@ -418,66 +417,58 @@ const ProductsPage = () => {
       specs = getEmptySpecs(activeTab);
     }
 
-    // Group variants by color
-    const colorGroups = {};
-    product.variants.forEach((variant) => {
-      const colorKey = variant.color?.trim().toLowerCase() || "unknown";
-      if (!colorGroups[colorKey]) {
-        colorGroups[colorKey] = {
-          color: variant.color || "",
-          images: Array.isArray(variant.images)
-            ? variant.images.map((img) => String(img || ""))
-            : [""],
-          options: [],
-        };
-      }
-      // Add option (storage combo)
-      colorGroups[colorKey].options.push({
-        storage: String(variant.storage || ""),
-        sku: String(variant.sku || ""),
-        originalPrice: variant.originalPrice
-          ? String(variant.originalPrice)
-          : "",
-        price: variant.price ? String(variant.price) : "",
-        stock: variant.stock ? String(variant.stock) : "",
-      });
-      // If images differ, prioritize the first (assume consistency)
+  // Group variants by color
+  const colorGroups = {};
+  product.variants.forEach((variant) => {
+    const colorKey = variant.color?.trim().toLowerCase() || 'unknown';
+    if (!colorGroups[colorKey]) {
+      colorGroups[colorKey] = {
+        color: variant.color || '',
+        images: Array.isArray(variant.images) ? variant.images.map(img => String(img || '')) : [''],
+        options: []
+      };
+    }
+    // Add option (storage combo)
+    colorGroups[colorKey].options.push({
+      storage: String(variant.storage || ''),
+      sku: String(variant.sku || ''),
+      originalPrice: variant.originalPrice ? String(variant.originalPrice) : '',
+      price: variant.price ? String(variant.price) : '',
+      stock: variant.stock ? String(variant.stock) : ''
     });
+    // If images differ, prioritize the first (assume consistency)
+  });
 
-    const populatedVariants =
-      Object.values(colorGroups).length > 0
-        ? Object.values(colorGroups)
-        : [emptyVariant(activeTab)];
+  const populatedVariants = Object.values(colorGroups).length > 0
+    ? Object.values(colorGroups)
+    : [emptyVariant(activeTab)];
 
-    // Populate form data
-    setFormData({
-      name: String(product.name || ""),
-      model: String(product.model || ""),
-      category: product.category || activeTab,
-      condition: product.condition || "NEW",
-      description: product.description || "",
-      status: product.status || "AVAILABLE",
-      specifications: specs,
-      variants: populatedVariants,
-      originalPrice: product.originalPrice ? String(product.originalPrice) : "",
-      price: product.price ? String(product.price) : "",
-      discount: product.discount ? String(product.discount) : "0",
-      quantity: product.quantity ? String(product.quantity) : "0",
-    });
+  // Populate form data
+  setFormData({
+    name: String(product.name || ''),
+    model: String(product.model || ''),
+    category: product.category || activeTab,
+    condition: product.condition || 'NEW',
+    description: product.description || '',
+    status: product.status || 'AVAILABLE',
+    specifications: specs,
+    variants: populatedVariants,
+    originalPrice: product.originalPrice ? String(product.originalPrice) : '',
+    price: product.price ? String(product.price) : '',
+    discount: product.discount ? String(product.discount) : '0',
+    quantity: product.quantity ? String(product.quantity) : '0',
+  });
 
-    setShowForm(true);
-    setActiveFormTab("basic");
+  setShowForm(true);
+  setActiveFormTab('basic');
 
-    // Debug: Verify form population
-    console.log("✅ FORM POPULATED:", {
-      name: product.name,
-      variantsCount: populatedVariants.length,
-      optionsCount: populatedVariants.reduce(
-        (sum, v) => sum + v.options.length,
-        0
-      ),
-    });
-  };
+  // Debug: Verify form population
+  console.log("✅ FORM POPULATED:", {
+    name: product.name,
+    variantsCount: populatedVariants.length,
+    optionsCount: populatedVariants.reduce((sum, v) => sum + v.options.length, 0),
+  });
+};
 
   const handleDelete = async (productId) => {
     console.log("✅ handleDelete called with productId:", productId);
@@ -598,12 +589,24 @@ const ProductsPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+
+    let dataToClean;
+    if (inputMode === 'json') {
+      try {
+        dataToClean = JSON.parse(jsonInput);
+      } catch (error) {
+        toast.error("JSON không hợp lệ: " + error.message);
+        return;
+      }
+    } else {
+      if (!validateForm()) return;
+      dataToClean = formData;
+    }
 
     setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
-      const payload = cleanPayload(formData);
+      const payload = cleanPayload(dataToClean);
 
       console.log("✅ CLEANED PAYLOAD:", JSON.stringify(payload, null, 2));
 
@@ -723,9 +726,20 @@ const ProductsPage = () => {
             Quản lý sản phẩm theo từng danh mục
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={addMode} onValueChange={setAddMode}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Chọn kiểu thêm" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">Bình thường</SelectItem>
+              <SelectItem value="json">JSON</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={() => handleCreate(addMode)}>
+            <Plus className="w-4 h-4 mr-2" /> Thêm sản phẩm
+          </Button>
+        </div>
       </div>
 
       {/* CATEGORY TABS */}
@@ -831,106 +845,119 @@ const ProductsPage = () => {
 
             <form onSubmit={handleSubmit}>
               <div className="p-6">
-                <Tabs value={activeFormTab} onValueChange={setActiveFormTab}>
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="basic">Cơ bản</TabsTrigger>
-                    <TabsTrigger value="specs">Thông số</TabsTrigger>
-                    <TabsTrigger value="variants">Biến thể</TabsTrigger>
-                  </TabsList>
+                {inputMode === 'normal' ? (
+                  <Tabs value={activeFormTab} onValueChange={setActiveFormTab}>
+                    <TabsList className="grid grid-cols-3 w-full">
+                      <TabsTrigger value="basic">Cơ bản</TabsTrigger>
+                      <TabsTrigger value="specs">Thông số</TabsTrigger>
+                      <TabsTrigger value="variants">Biến thể</TabsTrigger>
+                    </TabsList>
 
-                  {/* TAB CƠ BẢN */}
-                  <TabsContent value="basic" className="space-y-4 mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* TAB CƠ BẢN */}
+                    <TabsContent value="basic" className="space-y-4 mt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>
+                            Tên sản phẩm <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            value={formData.name || ""}
+                            onChange={(e) =>
+                              handleBasicChange("name", e.target.value)
+                            }
+                            placeholder="VD: iPhone 17 Pro Max"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>
+                            Model <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            value={formData.model || ""}
+                            onChange={(e) =>
+                              handleBasicChange("model", e.target.value)
+                            }
+                            placeholder="VD: A3101"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Tình trạng</Label>
+                          <Select
+                            value={formData.condition || "NEW"}
+                            onValueChange={(value) =>
+                              handleBasicChange("condition", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="NEW">Mới 100%</SelectItem>
+                              <SelectItem value="LIKE_NEW">Like new</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Trạng thái</Label>
+                          <Select
+                            value={formData.status || "AVAILABLE"}
+                            onValueChange={(value) =>
+                              handleBasicChange("status", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                              <SelectItem value="OUT_OF_STOCK">
+                                Hết hàng
+                              </SelectItem>
+                              <SelectItem value="DISCONTINUED">
+                                Ngừng kinh doanh
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                       <div className="space-y-2">
-                        <Label>
-                          Tên sản phẩm <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={formData.name || ""}
+                        <Label>Mô tả</Label>
+                        <textarea
+                          value={formData.description || ""}
                           onChange={(e) =>
-                            handleBasicChange("name", e.target.value)
+                            handleBasicChange("description", e.target.value)
                           }
-                          placeholder="VD: iPhone 17 Pro Max"
-                          required
+                          rows={4}
+                          className="w-full px-3 py-2 border rounded-md"
+                          placeholder="Nhập mô tả sản phẩm..."
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label>
-                          Model <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={formData.model || ""}
-                          onChange={(e) =>
-                            handleBasicChange("model", e.target.value)
-                          }
-                          placeholder="VD: A3101"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Tình trạng</Label>
-                        <Select
-                          value={formData.condition || "NEW"}
-                          onValueChange={(value) =>
-                            handleBasicChange("condition", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="NEW">Mới 100%</SelectItem>
-                            <SelectItem value="LIKE_NEW">Like new</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Trạng thái</Label>
-                        <Select
-                          value={formData.status || "AVAILABLE"}
-                          onValueChange={(value) =>
-                            handleBasicChange("status", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                            <SelectItem value="OUT_OF_STOCK">
-                              Hết hàng
-                            </SelectItem>
-                            <SelectItem value="DISCONTINUED">
-                              Ngừng kinh doanh
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Mô tả</Label>
-                      <textarea
-                        value={formData.description || ""}
-                        onChange={(e) =>
-                          handleBasicChange("description", e.target.value)
-                        }
-                        rows={4}
-                        className="w-full px-3 py-2 border rounded-md"
-                        placeholder="Nhập mô tả sản phẩm..."
-                      />
-                    </div>
-                  </TabsContent>
+                    </TabsContent>
 
-                  {/* TAB THÔNG SỐ */}
-                  <TabsContent value="specs" className="mt-4">
-                    {renderSpecsForm()}
-                  </TabsContent>
+                    {/* TAB THÔNG SỐ */}
+                    <TabsContent value="specs" className="mt-4">
+                      {renderSpecsForm()}
+                    </TabsContent>
 
-                  {/* TAB BIẾN THỂ */}
-                  <TabsContent value="variants" className="mt-4">
-                    {renderVariantsForm()}
-                  </TabsContent>
-                </Tabs>
+                    {/* TAB BIẾN THỂ */}
+                    <TabsContent value="variants" className="mt-4">
+                      {renderVariantsForm()}
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Nhập JSON sản phẩm</Label>
+                    <textarea
+                      value={jsonInput}
+                      onChange={(e) => setJsonInput(e.target.value)}
+                      rows={20}
+                      className="w-full px-3 py-2 border rounded-md font-mono"
+                      placeholder="Nhập JSON ở đây... (cấu trúc tương tự formData)"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="p-6 border-t flex justify-end gap-3">

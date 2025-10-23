@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/specs/IPadSpecsForm.jsx
-// ✅ SPECS FORM CHO IPAD - KHỚP MODEL
+// ✅ SPECS FORM CHO IPAD - KHỚP MODEL VÀ THIẾT KẾ SẠCH SẼ
 // ============================================
 
 import React from "react";
@@ -13,107 +13,115 @@ const IPadSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRemoveCol
   const colors = specs.colors || [''];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {/* TAB THÔNG SỐ IPAD - GIỐNG IPHONE NHƯNG KHÔNG CÓ CAMERA TRƯỚC/SAU RIÊNG */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="space-y-2">
-        <Label>Chip</Label>
+        <Label>Chip xử lý <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.chip || ""} 
           onChange={(e) => onChange("chip", e.target.value)} 
-          placeholder="VD: M4"
+          placeholder="VD: A16 Bionic"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Dung lượng RAM</Label>
+        <Label>RAM <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.ram || ""} 
           onChange={(e) => onChange("ram", e.target.value)} 
-          placeholder="VD: 8GB"
+          placeholder="VD: 6GB"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Bộ nhớ trong</Label>
+        <Label>Bộ nhớ trong <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.storage || ""} 
           onChange={(e) => onChange("storage", e.target.value)} 
-          placeholder="VD: 128GB/256GB/512GB"
+          placeholder="VD: 128GB / 256GB / 512GB"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Camera trước</Label>
+        <Label>Camera trước <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.frontCamera || ""} 
           onChange={(e) => onChange("frontCamera", e.target.value)} 
           placeholder="VD: 12MP Ultra Wide"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Camera sau</Label>
+        <Label>Camera sau <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.rearCamera || ""} 
           onChange={(e) => onChange("rearCamera", e.target.value)} 
           placeholder="VD: 12MP Wide"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Kích thước màn hình</Label>
+        <Label>Kích thước màn hình <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.screenSize || ""} 
           onChange={(e) => onChange("screenSize", e.target.value)} 
           placeholder="VD: 11 inch"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Công nghệ màn hình</Label>
+        <Label>Công nghệ màn hình <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.screenTech || ""} 
           onChange={(e) => onChange("screenTech", e.target.value)} 
           placeholder="VD: Liquid Retina"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Pin</Label>
+        <Label>Pin <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.battery || ""} 
           onChange={(e) => onChange("battery", e.target.value)} 
-          placeholder="VD: 10 giờ sử dụng"
+          placeholder="VD: Lên đến 10 giờ sử dụng"
+          required
         />
       </div>
       <div className="space-y-2">
-        <Label>Hệ điều hành</Label>
+        <Label>Hệ điều hành <span className="text-red-500">*</span></Label>
         <Input 
           value={specs.os || ""} 
           onChange={(e) => onChange("os", e.target.value)} 
           placeholder="VD: iPadOS 18"
+          required
         />
       </div>
       
-      {/* MÀU SẮC - DYNAMIC ARRAY */}
-      <div className="space-y-2 col-span-full">
+      {/* MÀU SẮC - MẢNG ĐỘNG VỚI XÓA/THÊM */}
+      <div className="space-y-3 col-span-full">
         <Label>Màu sắc</Label>
-        <div className="flex flex-wrap gap-2 mt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {colors.map((color, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <Input
                 value={color}
                 onChange={(e) => onColorChange(idx, e.target.value)}
                 placeholder="VD: Silver"
-                className="w-32"
+                className="flex-1"
               />
               <Button 
                 type="button" 
-                variant="outline" 
-                size="sm"
+                variant="destructive" 
+                size="icon"
                 onClick={() => onRemoveColor(idx)}
               >
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="w-4 h-4" />
               </Button>
             </div>
           ))}
-          <Button type="button" variant="outline" size="sm" onClick={onAddColor}>
-            <Plus className="w-3 h-3 mr-1" /> Thêm
-          </Button>
         </div>
+        <Button type="button" variant="outline" size="sm" onClick={onAddColor} className="mt-2">
+          <Plus className="w-4 h-4 mr-2" /> Thêm màu
+        </Button>
       </div>
     </div>
   );
