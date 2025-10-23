@@ -161,7 +161,7 @@ const IPadVariantsForm = ({
                       <SelectValue placeholder="Chọn kết nối" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="WiFi">Wi-Fi</SelectItem>
+                      <SelectItem value="WIFI">Wi-Fi</SelectItem>
                       <SelectItem value="5G">5G</SelectItem>
                     </SelectContent>
                   </Select>
@@ -178,7 +178,7 @@ const IPadVariantsForm = ({
                         vIdx,
                         oIdx,
                         "originalPrice",
-                        Number(e.target.value)
+                        e.target.value
                       )
                     }
                     placeholder="VD: 9990000"
@@ -194,7 +194,7 @@ const IPadVariantsForm = ({
                         vIdx,
                         oIdx,
                         "price",
-                        Number(e.target.value)
+                        e.target.value
                       )
                     }
                     placeholder="VD: 9090000"
@@ -212,7 +212,7 @@ const IPadVariantsForm = ({
                         vIdx,
                         oIdx,
                         "stock",
-                        Number(e.target.value)
+                        e.target.value
                       )
                     }
                     placeholder="VD: 30"

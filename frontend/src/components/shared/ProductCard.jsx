@@ -1,12 +1,3 @@
-// ============================================
-// FILE: src/components/shared/ProductCard.jsx
-// ✅ FIXED: Added Delete button for ADMIN only, Edit for ADMIN/WAREHOUSE_STAFF/ORDER_MANAGER, Add to Cart for CUSTOMER
-// ✅ CSS: Delete button on left, Edit button on right
-// ✅ REMOVED: AlertDialog moved to ProductsPage.jsx
-// ✅ FIXED: Simplified delete to call onDelete directly, removed isDeleting state and handleDeleteProduct
-// ✅ REMOVED: Variants badge, discount badge, and badge editor (including "Mới", "Trả góp 0%", "Bán chạy" badges)
-// ============================================
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card.jsx";
@@ -47,6 +38,7 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
     user &&
     ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user.role);
   const isCustomer = isAuthenticated && user?.role === "CUSTOMER";
+
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
@@ -96,13 +88,29 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
   const handleEditProduct = (e) => {
     e.stopPropagation();
     if (onEdit) {
-      console.log("✅ Editing product:", product);
+      console.log("✅ Editing product:", product.name, product._id);
       onEdit(product);
-    } else {
+} else {
       navigate(`/warehouse/products?edit=${product._id}`, {
         state: { product },
       });
     }
+  };
+
+  const handleDeleteProduct = (e) => {
+    e.stopPropagation();
+    if (!product._id) {
+      console.error("❌ Product ID is missing:", product);
+      toast.error("Không thể xóa: ID sản phẩm không hợp lệ");
+      return;
+    }
+    if (!onDelete) {
+      console.error("❌ onDelete prop is not provided for product:", product._id);
+      toast.error("Không thể xóa sản phẩm: Lỗi hệ thống");
+      return;
+    }
+    console.log("✅ Delete button clicked for product ID:", product._id);
+    onDelete(product._id);
   };
 
   return (
@@ -142,24 +150,7 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
             size="sm"
             variant="destructive"
             className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            onClick={(e) => {
-              e.stopPropagation();
-              console.log(
-                "✅ Delete button clicked for product ID:",
-                product._id
-              );
-              if (!product._id) {
-                console.error("❌ Product ID is missing");
-                toast.error("Không thể xóa: ID sản phẩm không hợp lệ");
-                return;
-              }
-              if (!onDelete) {
-                console.error("❌ onDelete prop is not provided");
-                toast.error("Không thể xóa sản phẩm: Lỗi hệ thống");
-                return;
-              }
-              onDelete(product._id);
-            }}
+            onClick={handleDeleteProduct}
           >
             <Trash2 className="w-4 h-4 mr-1" />
             Xóa
@@ -186,7 +177,7 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
           </h3>
 
           {product.model && (
-            <p className="text-xs text-gray-500 line-clamp-1">
+<p className="text-xs text-gray-500 line-clamp-1">
               {product.model}
             </p>
           )}
@@ -272,7 +263,7 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
 
           {totalStock <= 10 && totalStock > 0 && (
             <p className="text-xs text-orange-600 font-medium pt-1">
-              Chỉ còn {totalStock} sản phẩm
+Chỉ còn {totalStock} sản phẩm
             </p>
           )}
 

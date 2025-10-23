@@ -21,6 +21,7 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
+import { generateSKU } from "@/lib/generateSKU"; // ✅ Import generateSKU
 import {
   CATEGORIES,
   getEmptyFormData,
@@ -29,7 +30,7 @@ import {
   emptyVariant,
 } from "@/lib/productConstants";
 import { Loading } from "@/components/shared/Loading";
-import { ProductCard } from "@/components/shared/ProductCard"; // ✅ Imported ProductCard
+import { ProductCard } from "@/components/shared/ProductCard";
 import IPhoneSpecsForm from "@/components/shared/specs/IPhoneSpecsForm";
 import IPadSpecsForm from "@/components/shared/specs/IPadSpecsForm";
 import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
@@ -66,10 +67,9 @@ const ProductsPage = () => {
   const [formData, setFormData] = useState(getEmptyFormData("iPhone"));
   const [activeFormTab, setActiveFormTab] = useState("basic");
   const [justCreatedProductId, setJustCreatedProductId] = useState(null);
-  const [addMode, setAddMode] = useState('normal'); // New state for dropdown selection
-  const [inputMode, setInputMode] = useState('normal'); // New state for modal input mode
-  const [jsonInput, setJsonInput] = useState(''); // New state for JSON textarea
-
+  const [addMode, setAddMode] = useState("normal");
+  const [inputMode, setInputMode] = useState("normal");
+  const [jsonInput, setJsonInput] = useState("");
   // Fetch products khi thay đổi tab
   useEffect(() => {
     fetchProducts();
@@ -89,6 +89,10 @@ const ProductsPage = () => {
     setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
+      if (!api || !api.getAll) {
+        throw new Error(`API for ${activeTab} is not properly configured`);
+      }
+      console.log(`✅ Fetching products for category: ${activeTab}`);
       const response = await api.getAll({ limit: 100 });
       const data = response?.data?.data?.products || response?.data || [];
       setProducts(Array.isArray(data) ? data : []);
@@ -102,8 +106,11 @@ const ProductsPage = () => {
         }
       }
     } catch (error) {
-      console.error("Error fetching products:", error);
-      toast.error("Lỗi khi tải sản phẩm");
+      console.error("❌ Error fetching products:", {
+        message: error.message,
+        response: error.response?.data,
+      });
+      toast.error(error.response?.data?.message || "Lỗi khi tải sản phẩm");
       setProducts([]);
     } finally {
       setIsLoading(false);
@@ -241,10 +248,11 @@ const ProductsPage = () => {
   // ============================================
   // CLEAN PAYLOAD
   // ============================================
+  // ✅ FIX cleanPayload - THÊM CONNECTIVITY CHO IPAD
   const cleanPayload = (data) => {
     const cleaned = { ...data };
 
-    // Get current user ID from token
+    // Get current user ID
     const authStorage = localStorage.getItem("auth-storage");
     let createdBy = null;
     if (authStorage) {
@@ -252,115 +260,55 @@ const ProductsPage = () => {
         const { state } = JSON.parse(authStorage);
         createdBy = state?.user?._id || state?.user?.id;
       } catch (error) {
-        console.error("❌ Error parsing auth-storage for createdBy:", error);
+        console.error("❌ Error parsing auth-storage:", error);
       }
     }
 
-    // Generate unique SKU
-    const generateUniqueSKU = (productName, color, storage, index) => {
-      const timestamp = Date.now();
-      return `${productName}-${color}-${storage}-${timestamp}-${index}`
-        .replace(/\s+/g, "")
-        .toUpperCase();
-    };
-
     // Convert prices/stock to number
-    cleaned.originalPrice = data.originalPrice ? Number(data.originalPrice) : 0;
-    cleaned.price = data.price ? Number(data.price) : 0;
+    cleaned.originalPrice = Number(data.originalPrice || 0);
+    cleaned.price = Number(data.price || 0);
     cleaned.discount = Number(data.discount || 0);
     cleaned.quantity = Number(data.quantity || 0);
 
-    // For iPhone: Separate variants → createVariants array
-    if (activeTab === "iPhone") {
-      cleaned.variants = [];
+    // ✅ FIXED: HANDLE VARIANTS THEO TỪNG CATEGORY
+    if (["iPhone", "iPad", "Mac"].includes(activeTab)) {
       cleaned.createVariants = (data.variants || [])
-        .map((variant, vIndex) => ({
-          color: String(variant.color || "").trim(),
-          images: (variant.images || []).filter((img) => img.trim()),
-          options: (variant.options || [])
-            .map((option, oIndex) => ({
-              storage: String(option.storage || "").trim(),
-              sku:
-                option.sku?.trim() ||
-                generateUniqueSKU(
-                  cleaned.name,
-                  variant.color,
-                  option.storage,
-                  oIndex
-                ),
-              originalPrice: Number(option.originalPrice || 0),
-              price: Number(option.price || 0),
-              stock: Number(option.stock || 0),
-            }))
-            .filter((opt) => opt.sku && opt.storage && opt.price >= 0),
-          productId: null,
-          createdBy: createdBy,
-        }))
-        .filter((variant) => variant.options.length > 0);
-    } else {
-      cleaned.variants = (data.variants || [])
         .map((variant) => ({
           color: String(variant.color || "").trim(),
           images: (variant.images || []).filter((img) => img.trim()),
           options: (variant.options || [])
-            .map((option, oIndex) => ({
-              storage: String(option.storage || "").trim(),
-              sku:
-                option.sku?.trim() ||
-                generateUniqueSKU(
-                  cleaned.name,
-                  variant.color,
-                  option.storage,
-                  oIndex
-                ),
-              originalPrice: Number(option.originalPrice || 0),
-              price: Number(option.price || 0),
-              stock: Number(option.stock || 0),
-            }))
-            .filter((opt) => opt.sku && opt.price >= 0),
+            .map((option) => {
+              const opt = {
+                storage: String(option.storage || "").trim(),
+                sku:
+                  option.sku?.trim() ||
+                  generateSKU(
+                    activeTab,
+                    cleaned.model || "UNKNOWN",
+                    variant.color || "",
+                    option.storage || "",
+                    option.connectivity || "" // ✅ IPAD: connectivity
+                  ),
+                originalPrice: Number(option.originalPrice || 0),
+                price: Number(option.price || 0),
+                stock: Number(option.stock || 0),
+              };
+
+              // ✅ IPAD: THÊM CONNECTIVITY
+              if (activeTab === "iPad") {
+                opt.connectivity = String(option.connectivity || "").trim();
+              }
+
+              return opt;
+            })
+            .filter((opt) => opt.sku && opt.storage && opt.price >= 0),
         }))
-        .filter((variant) => variant.options.length > 0);
-    }
-
-    // Main product: Add createdBy
-    cleaned.createdBy = createdBy;
-
-    // Clean specifications
-    if (activeTab === "Accessories") {
-      cleaned.specifications = (data.specifications || [])
-        .map((spec) => ({
-          key: String(spec.key || "").trim(),
-          value: String(spec.value || "").trim(),
-        }))
-        .filter((spec) => spec.key && spec.value);
-    } else {
-      cleaned.specifications = { ...(data.specifications || {}) };
-      Object.keys(cleaned.specifications).forEach((key) => {
-        if (
-          cleaned.specifications[key] !== null &&
-          cleaned.specifications[key] !== undefined
-        ) {
-          cleaned.specifications[key] = String(
-            cleaned.specifications[key]
-          ).trim();
-        }
-      });
-
-      const colors = cleaned.specifications.colors;
-      if (Array.isArray(colors)) {
-        cleaned.specifications.colors = colors
-          .map((color) => String(color || "").trim())
-          .filter((color) => color);
-      } else if (typeof colors === "string") {
-        cleaned.specifications.colors = [String(colors).trim()].filter(
-          (color) => color
+        .filter(
+          (variant) => variant.options.length > 0 && variant.color.trim()
         );
-      } else {
-        cleaned.specifications.colors = [];
-      }
     }
 
-    // Required fields
+    cleaned.createdBy = createdBy;
     cleaned.category = activeTab;
     cleaned.condition = cleaned.condition || "NEW";
     cleaned.status = cleaned.status || "AVAILABLE";
@@ -368,15 +316,22 @@ const ProductsPage = () => {
     cleaned.model = String(cleaned.model || "").trim();
     cleaned.description = cleaned.description
       ? String(cleaned.description).trim()
-      : null;
+      : "";
 
-    // Clean up extra fields
-    delete cleaned.images;
-    delete cleaned.badges;
-    delete cleaned.seoTitle;
-    delete cleaned.seoDescription;
+    // Clean specifications
+    cleaned.specifications = { ...(data.specifications || {}) };
+    cleaned.specifications.colors = Array.isArray(cleaned.specifications.colors)
+      ? cleaned.specifications.colors
+          .map((c) => String(c).trim())
+          .filter(Boolean)
+      : [];
 
-    console.log("✅ CLEANED PAYLOAD:", JSON.stringify(cleaned, null, 2));
+    console.log(
+      "✅ CLEANED PAYLOAD FOR",
+      activeTab,
+      ":",
+      JSON.stringify(cleaned, null, 2)
+    );
     return cleaned;
   };
 
@@ -388,14 +343,14 @@ const ProductsPage = () => {
     setEditingProduct(null);
     setJustCreatedProductId(null);
     setFormData(getEmptyFormData(activeTab));
-    setJsonInput(''); // Reset JSON input
+    setJsonInput("");
     setShowForm(true);
     setActiveFormTab("basic");
   };
 
   // Handle edit with proper variant grouping by color
   const handleEdit = (product) => {
-    setInputMode('normal'); // Editing always in normal mode
+    setInputMode("normal");
     console.log("🔄 LOADING PRODUCT DATA:", product.name);
 
     setEditingProduct(product);
@@ -413,67 +368,92 @@ const ProductsPage = () => {
     // Group variants by color
     const colorGroups = {};
     product.variants.forEach((variant) => {
-      const colorKey = variant.color?.trim().toLowerCase() || 'unknown';
+      const colorKey = variant.color?.trim().toLowerCase() || "unknown";
       if (!colorGroups[colorKey]) {
         colorGroups[colorKey] = {
-          color: variant.color || '',
-          images: Array.isArray(variant.images) ? variant.images.map(img => String(img || '')) : [''],
-          options: []
+          color: variant.color || "",
+          images: Array.isArray(variant.images)
+            ? variant.images.map((img) => String(img || ""))
+            : [""],
+          options: [],
         };
       }
       // Add option (storage combo)
       colorGroups[colorKey].options.push({
-        storage: String(variant.storage || ''),
-        sku: String(variant.sku || ''),
-        originalPrice: variant.originalPrice ? String(variant.originalPrice) : '',
-        price: variant.price ? String(variant.price) : '',
-        stock: variant.stock ? String(variant.stock) : ''
+        storage: String(variant.storage || ""),
+        sku: String(variant.sku || ""),
+        originalPrice: variant.originalPrice
+          ? String(variant.originalPrice)
+          : "",
+        price: variant.price ? String(variant.price) : "",
+        stock: variant.stock ? String(variant.stock) : "",
+        ram: variant.ram ? String(variant.ram) : undefined, // For Mac
+        cpuGpu: variant.cpuGpu ? String(variant.cpuGpu) : undefined, // For Mac
       });
-      // If images differ, prioritize the first (assume consistency)
     });
 
-    const populatedVariants = Object.values(colorGroups).length > 0
-      ? Object.values(colorGroups)
-      : [emptyVariant(activeTab)];
+    const populatedVariants =
+      Object.values(colorGroups).length > 0
+        ? Object.values(colorGroups)
+        : [emptyVariant(activeTab)];
 
     // Populate form data
     setFormData({
-      name: String(product.name || ''),
-      model: String(product.model || ''),
+      name: String(product.name || ""),
+      model: String(product.model || ""),
       category: product.category || activeTab,
-      condition: product.condition || 'NEW',
-      description: product.description || '',
-      status: product.status || 'AVAILABLE',
+      condition: product.condition || "NEW",
+      description: product.description || "",
+      status: product.status || "AVAILABLE",
       specifications: specs,
       variants: populatedVariants,
-      originalPrice: product.originalPrice ? String(product.originalPrice) : '',
-      price: product.price ? String(product.price) : '',
-      discount: product.discount ? String(product.discount) : '0',
-      quantity: product.quantity ? String(product.quantity) : '0',
+      originalPrice: product.originalPrice ? String(product.originalPrice) : "",
+      price: product.price ? String(product.price) : "",
+      discount: product.discount ? String(product.discount) : "0",
+      quantity: product.quantity ? String(product.quantity) : "0",
     });
 
     setShowForm(true);
-    setActiveFormTab('basic');
+    setActiveFormTab("basic");
 
     // Debug: Verify form population
     console.log("✅ FORM POPULATED:", {
       name: product.name,
       variantsCount: populatedVariants.length,
-      optionsCount: populatedVariants.reduce((sum, v) => sum + v.options.length, 0),
+      optionsCount: populatedVariants.reduce(
+        (sum, v) => sum + v.options.length,
+        0
+      ),
     });
   };
 
   const handleDelete = async (productId) => {
+    if (!productId) {
+      console.error("❌ Product ID is missing");
+      toast.error("Không thể xóa: ID sản phẩm không hợp lệ");
+      return;
+    }
+
     if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
 
+    setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
+      if (!api || !api.delete) {
+        throw new Error(`API for ${activeTab} is not properly configured`);
+      }
+      console.log(`✅ Sending DELETE request for product ID: ${productId}`);
       await api.delete(productId);
       toast.success("Xóa sản phẩm thành công");
-      fetchProducts();
+      await fetchProducts();
     } catch (error) {
-      console.error("Error deleting product:", error);
+      console.error("❌ Error deleting product:", {
+        message: error.message,
+        response: error.response?.data,
+      });
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -516,14 +496,20 @@ const ProductsPage = () => {
 
       for (let j = 0; j < variant.options.length; j++) {
         const option = variant.options[j];
-        if (activeTab === "iPhone" && !option.storage?.trim()) {
+        if (
+          (activeTab === "iPhone" || activeTab === "Mac") &&
+          !option.storage?.trim()
+        ) {
           toast.error(
             `Vui lòng chọn bộ nhớ cho phiên bản ${j + 1} của biến thể ${i + 1}`
           );
           setActiveFormTab("variants");
           return false;
         }
-        if (activeTab === "iPhone" && !option.sku?.trim()) {
+        if (
+          (activeTab === "iPhone" || activeTab === "Mac") &&
+          !option.sku?.trim()
+        ) {
           toast.error(
             `Vui lòng nhập SKU cho phiên bản ${j + 1} của biến thể ${i + 1}`
           );
@@ -577,25 +563,42 @@ const ProductsPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    let dataToClean;
-    if (inputMode === 'json') {
+    let payload;
+
+    if (inputMode === "json") {
       try {
-        dataToClean = JSON.parse(jsonInput);
+        // ✅ FIX: PARSE JSON VÀ CLEAN RIÊNG CHO JSON MODE
+        const rawData = JSON.parse(jsonInput);
+
+        // ✅ JSON MODE: TRỰC TIẾP TỪ rawData
+        payload = {
+          ...rawData,
+          createdBy: rawData.createdBy || getCreatedBy(), // Auto add createdBy
+          category: activeTab,
+          condition: rawData.condition || "NEW",
+          status: rawData.status || "AVAILABLE",
+        };
+
+        // ✅ VALIDATE JSON
+        if (!payload.name?.trim()) throw new Error("Tên sản phẩm bắt buộc");
+        if (!payload.model?.trim()) throw new Error("Model bắt buộc");
+        if (!payload.createVariants?.length)
+          throw new Error("Cần ít nhất 1 variant");
+
+        console.log("✅ JSON PAYLOAD:", JSON.stringify(payload, null, 2));
       } catch (error) {
         toast.error("JSON không hợp lệ: " + error.message);
         return;
       }
     } else {
+      // NORMAL MODE
       if (!validateForm()) return;
-      dataToClean = formData;
+      payload = cleanPayload(formData);
     }
 
     setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
-      const payload = cleanPayload(dataToClean);
-
-      console.log("✅ CLEANED PAYLOAD:", JSON.stringify(payload, null, 2));
 
       let newProductId = null;
 
@@ -616,6 +619,20 @@ const ProductsPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ✅ THÊM HELPER FUNCTION
+  const getCreatedBy = () => {
+    const authStorage = localStorage.getItem("auth-storage");
+    if (authStorage) {
+      try {
+        const { state } = JSON.parse(authStorage);
+        return state?.user?._id || state?.user?.id;
+      } catch (error) {
+        console.error("❌ Error parsing auth-storage:", error);
+      }
+    }
+    return null;
   };
 
   // ============================================
@@ -674,6 +691,7 @@ const ProductsPage = () => {
       onOptionChange: handleVariantOptionChange,
       onAddOption: addVariantOption,
       onRemoveOption: removeVariantOption,
+      model: formData.model, // ✅ Truyền model để sinh SKU
     };
 
     switch (activeTab) {
@@ -773,11 +791,12 @@ const ProductsPage = () => {
                     key={product._id || product.id}
                     product={{
                       ...product,
-                      variantsCount: product.variants?.length || 0, // Add variantsCount for ProductCard
+                      variantsCount: product.variants?.length || 0,
                     }}
                     onEdit={handleEdit}
-                    onUpdate={() => fetchProducts()} // Optional: Refresh products if badges are updated
-                    showVariantsBadge={true} // Show variants badge in warehouse view
+                    onDelete={handleDelete}
+                    onUpdate={() => fetchProducts()}
+                    showVariantsBadge={true}
                   />
                 ))}
               </div>
@@ -810,7 +829,7 @@ const ProductsPage = () => {
 
             <form onSubmit={handleSubmit}>
               <div className="p-6">
-                {inputMode === 'normal' ? (
+                {inputMode === "normal" ? (
                   <Tabs value={activeFormTab} onValueChange={setActiveFormTab}>
                     <TabsList className="grid grid-cols-3 w-full">
                       <TabsTrigger value="basic">Cơ bản</TabsTrigger>
@@ -876,7 +895,9 @@ const ProductsPage = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                              <SelectItem value="AVAILABLE">
+                                Còn hàng
+                              </SelectItem>
                               <SelectItem value="OUT_OF_STOCK">
                                 Hết hàng
                               </SelectItem>
