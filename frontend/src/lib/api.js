@@ -1,4 +1,8 @@
-// lib/api.js
+// ============================================
+// FILE: frontend/src/lib/api.js
+// ✅ FIXED: IPHONEVARIANT SEPARATE COLLECTION
+// ============================================
+
 import axios from "axios";
 
 // Tạo axios instance với cấu hình cơ bản
@@ -8,7 +12,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Interceptors giữ nguyên như trước
+// Interceptors - Giữ nguyên
 api.interceptors.request.use(
   (config) => {
     const authStorage = localStorage.getItem("auth-storage");
@@ -42,13 +46,16 @@ api.interceptors.response.use(
   }
 );
 
-// Category-specific APIs (sử dụng chung instance `api`)
-// iPhone API
+// ============================================
+// CATEGORY-SPECIFIC APIs
+// ============================================
+
+// ✅ IPHONE API - SUPPORT createVariants
 export const iPhoneAPI = {
   getAll: (params) => api.get("/iphones", { params }),
   getById: (id) => api.get(`/iphones/${id}`),
-  create: (data) => api.post("/iphones", data),
-  update: (id, data) => api.put(`/iphones/${id}`, data),
+  create: (data) => api.post("/iphones", data),           // ✅ Receives createVariants
+  update: (id, data) => api.put(`/iphones/${id}`, data), // ✅ Receives createVariants
   delete: (id) => api.delete(`/iphones/${id}`),
   getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
 };
@@ -103,7 +110,9 @@ export const accessoryAPI = {
   getVariants: (productId) => api.get(`/accessories/${productId}/variants`),
 };
 
-// ✅ AUTH API - Giữ nguyên
+// ============================================
+// AUTH API
+// ============================================
 export const authAPI = {
   register: (data) => api.post("/auth/register", data),
   login: (data) => api.post("/auth/login", data),
@@ -112,7 +121,9 @@ export const authAPI = {
   changePassword: (data) => api.put("/auth/change-password", data),
 };
 
-// ✅ CART API - Giữ nguyên
+// ============================================
+// CART API
+// ============================================
 export const cartAPI = {
   getCart: () => api.get("/cart"),
   addToCart: (data) => api.post("/cart", data),
@@ -121,7 +132,9 @@ export const cartAPI = {
   clearCart: () => api.delete("/cart"),
 };
 
-// ✅ ORDER API - Giữ nguyên
+// ============================================
+// ORDER API
+// ============================================
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
   getMyOrders: (params) => api.get("/orders/my-orders", { params }),
@@ -131,7 +144,9 @@ export const orderAPI = {
   cancel: (id) => api.post(`/orders/${id}/cancel`),
 };
 
-// ✅ REVIEW API - Giữ nguyên
+// ============================================
+// REVIEW API
+// ============================================
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
   create: (data) => api.post("/reviews", data),
@@ -139,7 +154,9 @@ export const reviewAPI = {
   delete: (id) => api.delete(`/reviews/${id}`),
 };
 
-// ✅ PROMOTION API - Giữ nguyên
+// ============================================
+// PROMOTION API
+// ============================================
 export const promotionAPI = {
   getAll: () => api.get("/promotions"),
   getActive: () => api.get("/promotions/active"),
@@ -148,7 +165,9 @@ export const promotionAPI = {
   delete: (id) => api.delete(`/promotions/${id}`),
 };
 
-// ✅ USER API - Giữ nguyên
+// ============================================
+// USER API
+// ============================================
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
@@ -160,7 +179,9 @@ export const userAPI = {
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
 
-// ✅ THÊM PRODUCT API - CHO MAINLAYOUT SEARCH
+// ============================================
+// PRODUCT API - CHO MAINLAYOUT SEARCH
+// ============================================
 export const productAPI = {
   search: (query, params = {}) => api.get("/products/search", { 
     params: { q: query, ...params } 
@@ -175,7 +196,9 @@ export const productAPI = {
   getNewArrivals: (params = {}) => api.get("/products/new-arrivals", { params }),
 };
 
-// ✅ DEFAULT EXPORT
+// ============================================
+// DEFAULT EXPORT
+// ============================================
 export default {
   productAPI,
   iPhoneAPI,

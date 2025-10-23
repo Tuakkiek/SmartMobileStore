@@ -127,15 +127,15 @@ export const getEmptyFormData = (category = "iPhone") => ({
 // Get empty variant options for category
 export const getEmptyVariantOptions = (category) => {
   const templates = {
-    iPhone: [{ storage: "", originalPrice: "", price: "", stock: "" }],
-    iPad: [{ storage: "", connectivity: "", originalPrice: "", price: "", stock: "" }],
-    Mac: [{ cpuGpu: "", ram: "", storage: "", originalPrice: "", price: "", stock: "" }],
-    AirPods: [{ variantName: "", originalPrice: "", price: "", stock: "" }],
-    AppleWatch: [{ variantName: "", bandSize: "", originalPrice: "", price: "", stock: "" }],
-    Accessories: [{ variantName: "", originalPrice: "", price: "", stock: "" }]
+    iPhone: [{ storage: "", originalPrice: "", price: "", stock: "", sku: "" }],
+    iPad: [{ storage: "", connectivity: "", originalPrice: "", price: "", stock: "", sku: "" }],
+    Mac: [{ cpuGpu: "", ram: "", storage: "", originalPrice: "", price: "", stock: "", sku: "" }],
+    AirPods: [{ variantName: "", originalPrice: "", price: "", stock: "", sku: "" }],
+    AppleWatch: [{ variantName: "", bandSize: "", originalPrice: "", price: "", stock: "", sku: "" }],
+    Accessories: [{ variantName: "", originalPrice: "", price: "", stock: "", sku: "" }]
   };
   
-  return templates[category] || [{ storage: "", originalPrice: "", price: "", stock: "" }];
+  return templates[category] || [{ storage: "", originalPrice: "", price: "", stock: "", sku: "" }];
 };
 
 // Empty variant template

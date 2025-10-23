@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/variants/IPhoneVariantsForm.jsx
-// ✅ VARIANTS FORM CHO IPHONE - ĐỒNG BỘ VỚI MULTI-IMAGES
+// ✅ CORRECT: type="number" MATCHES BACKEND Number SCHEMA
 // ============================================
 
 import React from "react";
@@ -56,7 +56,7 @@ const IPhoneVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariant
           <div className="space-y-2">
             <Label className="text-sm font-medium">Phiên bản bộ nhớ trong:</Label>
             {variant.options.map((opt, oIdx) => (
-              <div key={oIdx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end p-3 border rounded-md">
+              <div key={oIdx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end p-3 border rounded-md">
                 <div className="space-y-2">
                   <Label>Bộ nhớ trong</Label>
                   <Select value={opt.storage || ""} onValueChange={(value) => onOptionChange(vIdx, oIdx, "storage", value)}>
@@ -69,17 +69,43 @@ const IPhoneVariantsForm = ({ variants, onAddVariant, onRemoveVariant, onVariant
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">SKU</Label>
+                  <Input
+                    value={opt.sku || ''}
+                    onChange={(e) => onOptionChange(vIdx, oIdx, "sku", e.target.value)}
+                    className="text-sm"
+                    placeholder="VD: IPH-AIR-256-BLUE"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Giá gốc</Label>
-                  <Input type="number" value={opt.originalPrice || ""} onChange={(e) => onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)} />
+                  <Input 
+                    type="number" 
+                    min="0"
+                    step="1000"
+                    value={opt.originalPrice || ""} 
+                    onChange={(e) => onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)} 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Giá bán</Label>
-                  <Input type="number" value={opt.price || ""} onChange={(e) => onOptionChange(vIdx, oIdx, "price", e.target.value)} />
+                  <Input 
+                    type="number" 
+                    min="0"
+                    step="1000"
+                    value={opt.price || ""} 
+                    onChange={(e) => onOptionChange(vIdx, oIdx, "price", e.target.value)} 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
-                  <Input type="number" value={opt.stock || ""} onChange={(e) => onOptionChange(vIdx, oIdx, "stock", e.target.value)} />
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={opt.stock || ""} 
+                    onChange={(e) => onOptionChange(vIdx, oIdx, "stock", e.target.value)} 
+                  />
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={() => onRemoveOption(vIdx, oIdx)}>
                   <Trash2 className="w-4 h-4" />
