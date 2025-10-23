@@ -14,17 +14,6 @@ import {
 import { toast } from "sonner";
 import { Plus, Search, Package } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog.jsx";
-import {
   iPhoneAPI,
   iPadAPI,
   macAPI,
@@ -77,6 +66,9 @@ const ProductsPage = () => {
   const [formData, setFormData] = useState(getEmptyFormData("iPhone"));
   const [activeFormTab, setActiveFormTab] = useState("basic");
   const [justCreatedProductId, setJustCreatedProductId] = useState(null);
+  const [addMode, setAddMode] = useState('normal'); // New state for dropdown selection
+  const [inputMode, setInputMode] = useState('normal'); // New state for modal input mode
+  const [jsonInput, setJsonInput] = useState(''); // New state for JSON textarea
 
   // Fetch products khi thay đổi tab
   useEffect(() => {
@@ -401,9 +393,10 @@ const ProductsPage = () => {
     setActiveFormTab("basic");
   };
 
-// Handle edit with proper variant grouping by color
-const handleEdit = (product) => {
-  console.log("🔄 LOADING PRODUCT DATA:", product.name);
+  // Handle edit with proper variant grouping by color
+  const handleEdit = (product) => {
+    setInputMode('normal'); // Editing always in normal mode
+    console.log("🔄 LOADING PRODUCT DATA:", product.name);
 
     setEditingProduct(product);
 
@@ -417,76 +410,70 @@ const handleEdit = (product) => {
       specs = getEmptySpecs(activeTab);
     }
 
-  // Group variants by color
-  const colorGroups = {};
-  product.variants.forEach((variant) => {
-    const colorKey = variant.color?.trim().toLowerCase() || 'unknown';
-    if (!colorGroups[colorKey]) {
-      colorGroups[colorKey] = {
-        color: variant.color || '',
-        images: Array.isArray(variant.images) ? variant.images.map(img => String(img || '')) : [''],
-        options: []
-      };
-    }
-    // Add option (storage combo)
-    colorGroups[colorKey].options.push({
-      storage: String(variant.storage || ''),
-      sku: String(variant.sku || ''),
-      originalPrice: variant.originalPrice ? String(variant.originalPrice) : '',
-      price: variant.price ? String(variant.price) : '',
-      stock: variant.stock ? String(variant.stock) : ''
+    // Group variants by color
+    const colorGroups = {};
+    product.variants.forEach((variant) => {
+      const colorKey = variant.color?.trim().toLowerCase() || 'unknown';
+      if (!colorGroups[colorKey]) {
+        colorGroups[colorKey] = {
+          color: variant.color || '',
+          images: Array.isArray(variant.images) ? variant.images.map(img => String(img || '')) : [''],
+          options: []
+        };
+      }
+      // Add option (storage combo)
+      colorGroups[colorKey].options.push({
+        storage: String(variant.storage || ''),
+        sku: String(variant.sku || ''),
+        originalPrice: variant.originalPrice ? String(variant.originalPrice) : '',
+        price: variant.price ? String(variant.price) : '',
+        stock: variant.stock ? String(variant.stock) : ''
+      });
+      // If images differ, prioritize the first (assume consistency)
     });
-    // If images differ, prioritize the first (assume consistency)
-  });
 
-  const populatedVariants = Object.values(colorGroups).length > 0
-    ? Object.values(colorGroups)
-    : [emptyVariant(activeTab)];
+    const populatedVariants = Object.values(colorGroups).length > 0
+      ? Object.values(colorGroups)
+      : [emptyVariant(activeTab)];
 
-  // Populate form data
-  setFormData({
-    name: String(product.name || ''),
-    model: String(product.model || ''),
-    category: product.category || activeTab,
-    condition: product.condition || 'NEW',
-    description: product.description || '',
-    status: product.status || 'AVAILABLE',
-    specifications: specs,
-    variants: populatedVariants,
-    originalPrice: product.originalPrice ? String(product.originalPrice) : '',
-    price: product.price ? String(product.price) : '',
-    discount: product.discount ? String(product.discount) : '0',
-    quantity: product.quantity ? String(product.quantity) : '0',
-  });
+    // Populate form data
+    setFormData({
+      name: String(product.name || ''),
+      model: String(product.model || ''),
+      category: product.category || activeTab,
+      condition: product.condition || 'NEW',
+      description: product.description || '',
+      status: product.status || 'AVAILABLE',
+      specifications: specs,
+      variants: populatedVariants,
+      originalPrice: product.originalPrice ? String(product.originalPrice) : '',
+      price: product.price ? String(product.price) : '',
+      discount: product.discount ? String(product.discount) : '0',
+      quantity: product.quantity ? String(product.quantity) : '0',
+    });
 
-  setShowForm(true);
-  setActiveFormTab('basic');
+    setShowForm(true);
+    setActiveFormTab('basic');
 
-  // Debug: Verify form population
-  console.log("✅ FORM POPULATED:", {
-    name: product.name,
-    variantsCount: populatedVariants.length,
-    optionsCount: populatedVariants.reduce((sum, v) => sum + v.options.length, 0),
-  });
-};
+    // Debug: Verify form population
+    console.log("✅ FORM POPULATED:", {
+      name: product.name,
+      variantsCount: populatedVariants.length,
+      optionsCount: populatedVariants.reduce((sum, v) => sum + v.options.length, 0),
+    });
+  };
 
   const handleDelete = async (productId) => {
-    console.log("✅ handleDelete called with productId:", productId);
+    if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
+
     try {
       const api = API_MAP[activeTab];
-      if (!api || !api.delete) {
-        console.error("❌ API or delete method not defined for:", activeTab);
-        throw new Error("API không được định nghĩa cho danh mục này");
-      }
-      console.log("✅ Sending DELETE request for product ID:", productId);
       await api.delete(productId);
-      console.log("✅ DELETE request successful for product ID:", productId);
       toast.success("Xóa sản phẩm thành công");
-      await fetchProducts();
+      fetchProducts();
     } catch (error) {
-      console.error("❌ Error deleting product:", error.message);
+      console.error("Error deleting product:", error);
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
-      throw error; // Rethrow to allow ProductCard to handle errors
     }
   };
 
@@ -639,8 +626,8 @@ const handleEdit = (product) => {
       specs: formData.specifications || {},
       onChange: handleSpecChange,
       onColorChange: handleColorChange,
-      onAdd: addColor,
-      onRemove: removeColor,
+      onAddColor: addColor,
+      onRemoveColor: removeColor,
     };
 
     switch (activeTab) {
@@ -786,15 +773,11 @@ const handleEdit = (product) => {
                     key={product._id || product.id}
                     product={{
                       ...product,
-                      variantsCount: product.variants?.length || 0,
+                      variantsCount: product.variants?.length || 0, // Add variantsCount for ProductCard
                     }}
                     onEdit={handleEdit}
-                    onDelete={(productId) => {
-                      setDeletingProduct(productId);
-                      setOpenDeleteDialog(true);
-                    }}
-                    onUpdate={() => fetchProducts()}
-                    showVariantsBadge={true}
+                    onUpdate={() => fetchProducts()} // Optional: Refresh products if badges are updated
+                    showVariantsBadge={true} // Show variants badge in warehouse view
                   />
                 ))}
               </div>
@@ -802,24 +785,6 @@ const handleEdit = (product) => {
           </TabsContent>
         ))}
       </Tabs>
-
-      {/* DELETE CONFIRMATION DIALOG */}
-      <AlertDialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận xóa sản phẩm</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc chắn muốn xóa sản phẩm này? Hành động này không thể hoàn tác.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleDelete(deletingProduct)}>
-              Xóa
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* FORM MODAL */}
       {showForm && (
