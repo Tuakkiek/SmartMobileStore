@@ -3,7 +3,7 @@
 // ✅ FORM TẠO BIẾN THỂ iPad - KHỚP VỚI MÔ HÌNH IPadVariant TRONG BACKEND
 // ============================================
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-
-// 🧩 Import hàm sinh SKU tự động
 import { generateSKU } from "@/lib/generateSKU";
 
 const IPadVariantsForm = ({
@@ -30,68 +28,90 @@ const IPadVariantsForm = ({
   onOptionChange,
   onAddOption,
   onRemoveOption,
-  // 🆕 Thêm 2 props để dùng trong SKU (nếu có)
-  category = "iPad",
-  model = "",
+  model,
 }) => {
-  // 🧠 Hàm cập nhật SKU tự động mỗi khi thay đổi option
-  const handleOptionChange = (vIdx, oIdx, field, value) => {
+  // Tự động tạo SKU khi color, storage hoặc connectivity thay đổi
+  useEffect(() => {
+    variants.forEach((variant, vIdx) => {
+      variant.options.forEach((option, oIdx) => {
+        if (variant.color && option.storage && option.connectivity && !option.sku) {
+          const newSKU = generateSKU(
+            "iPad",
+            model || "UNKNOWN",
+            variant.color,
+            option.storage,
+            option.connectivity
+          );
+          onOptionChange(vIdx, oIdx, "sku", newSKU);
+        }
+      });
+    });
+  }, [variants, model, onOptionChange]);
+
+  const handleLocalOptionChange = (vIdx, oIdx, field, value) => {
     onOptionChange(vIdx, oIdx, field, value);
 
     const variant = variants[vIdx];
     const option = variant.options[oIdx];
 
-    // Lấy dữ liệu hiện tại
     const color = variant.color || "";
     const storage = field === "storage" ? value : option.storage || "";
-    const connectivity =
-      field === "connectivity" ? value : option.connectivity || "";
+    const connectivity = field === "connectivity" ? value : option.connectivity || "";
 
-    // Nếu có đủ dữ kiện thì sinh SKU
     if (color && storage && connectivity) {
-      const sku = generateSKU(category, model, color, storage, connectivity);
-      onOptionChange(vIdx, oIdx, "sku", sku);
+      const newSKU = generateSKU(
+        "iPad",
+        model || "UNKNOWN",
+        color,
+        storage,
+        connectivity
+      );
+      onOptionChange(vIdx, oIdx, "sku", newSKU);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label className="text-lg font-semibold">
-          Biến thể sản phẩm (Màu & Phiên bản)
-        </Label>
-        <Button type="button" variant="outline" size="sm" onClick={onAddVariant}>
-          <Plus className="w-4 h-4 mr-2" /> Thêm màu mới
+        <Label className="text-base">Biến thể sản phẩm (Màu & Phiên bản)</Label>
+        <Button type="button" variant="outline" onClick={onAddVariant}>
+          <Plus className="w-4 h-4 mr-2" /> Thêm màu
         </Button>
       </div>
-
-      {/* Danh sách các biến thể */}
       {variants.map((variant, vIdx) => (
-        <div
-          key={vIdx}
-          className="rounded-lg p-5 space-y-4 border bg-gray-50 shadow-sm"
-        >
-          {/* MÀU SẮC */}
+        <div key={vIdx} className="rounded-md p-4 space-y-3 border">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>
-                Màu sắc <span className="text-red-500">*</span>
-              </Label>
+              <Label>Màu sắc <span className="text-red-500">*</span></Label>
               <Input
-                placeholder="VD: Vàng, Bạc, Hồng, Xanh"
+                placeholder="VD: White"
                 value={variant.color || ""}
-                onChange={(e) => onVariantChange(vIdx, "color", e.target.value)}
+                onChange={(e) => {
+                  onVariantChange(vIdx, "color", e.target.value);
+                  // Tự động cập nhật SKU cho tất cả options khi màu thay đổi
+                  variant.options.forEach((option, oIdx) => {
+                    if (option.storage && option.connectivity) {
+                      const newSKU = generateSKU(
+                        "iPad",
+                        model || "UNKNOWN",
+                        e.target.value,
+                        option.storage,
+                        option.connectivity
+                      );
+                      onOptionChange(vIdx, oIdx, "sku", newSKU);
+                    }
+                  });
+                }}
                 required
               />
             </div>
           </div>
 
-          {/* HÌNH ẢNH */}
+          {/* URL Ảnh - Multi images */}
           <div className="space-y-2">
-            <Label>URL ảnh (thêm nhiều ảnh cho mỗi màu)</Label>
-            {variant.images?.map((img, imgIdx) => (
-              <div key={imgIdx} className="flex items-center gap-3">
+            <Label>URL ảnh</Label>
+            {variant.images.map((img, imgIdx) => (
+              <div key={imgIdx} className="flex items-center gap-2">
                 <Input
                   placeholder="Nhập URL ảnh"
                   value={img}
@@ -99,8 +119,8 @@ const IPadVariantsForm = ({
                 />
                 <Button
                   type="button"
-                  variant="destructive"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   onClick={() => onRemoveImage(vIdx, imgIdx)}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -117,24 +137,18 @@ const IPadVariantsForm = ({
             </Button>
           </div>
 
-          {/* CÁC PHIÊN BẢN (storage + connectivity) */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">
-              Phiên bản (Dung lượng & Kết nối)
-            </Label>
-            {variant.options?.map((opt, oIdx) => (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Phiên bản:</Label>
+            {variant.options.map((opt, oIdx) => (
               <div
                 key={oIdx}
-                className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end p-4 border rounded-md bg-white"
+                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md"
               >
-                {/* STORAGE */}
                 <div className="space-y-2">
-                  <Label>Bộ nhớ</Label>
+                  <Label>Bộ nhớ trong <span className="text-red-500">*</span></Label>
                   <Select
                     value={opt.storage || ""}
-                    onValueChange={(value) =>
-                      handleOptionChange(vIdx, oIdx, "storage", value)
-                    }
+                    onValueChange={(value) => handleLocalOptionChange(vIdx, oIdx, "storage", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn bộ nhớ" />
@@ -147,15 +161,11 @@ const IPadVariantsForm = ({
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* CONNECTIVITY */}
                 <div className="space-y-2">
-                  <Label>Kết nối</Label>
+                  <Label>Kết nối <span className="text-red-500">*</span></Label>
                   <Select
                     value={opt.connectivity || ""}
-                    onValueChange={(value) =>
-                      handleOptionChange(vIdx, oIdx, "connectivity", value)
-                    }
+                    onValueChange={(value) => handleLocalOptionChange(vIdx, oIdx, "connectivity", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn kết nối" />
@@ -166,101 +176,74 @@ const IPadVariantsForm = ({
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* GIÁ */}
-                <div className="space-y-2">
-                  <Label>Giá gốc (VNĐ)</Label>
-                  <Input
-                    type="number"
-                    value={opt.originalPrice || ""}
-                    onChange={(e) =>
-                      onOptionChange(
-                        vIdx,
-                        oIdx,
-                        "originalPrice",
-                        e.target.value
-                      )
-                    }
-                    placeholder="VD: 9990000"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Giá bán (VNĐ)</Label>
-                  <Input
-                    type="number"
-                    value={opt.price || ""}
-                    onChange={(e) =>
-                      onOptionChange(
-                        vIdx,
-                        oIdx,
-                        "price",
-                        e.target.value
-                      )
-                    }
-                    placeholder="VD: 9090000"
-                  />
-                </div>
-
-                {/* TỒN KHO */}
-                <div className="space-y-2">
-                  <Label>Tồn kho</Label>
-                  <Input
-                    type="number"
-                    value={opt.stock || ""}
-                    onChange={(e) =>
-                      onOptionChange(
-                        vIdx,
-                        oIdx,
-                        "stock",
-                        e.target.value
-                      )
-                    }
-                    placeholder="VD: 30"
-                  />
-                </div>
-
-                {/* SKU */}
                 <div className="space-y-2">
                   <Label>SKU</Label>
                   <Input
+                    placeholder="VD: IPAD-IPADPRO-WHITE-256GB-WIFI"
                     value={opt.sku || ""}
                     onChange={(e) =>
                       onOptionChange(vIdx, oIdx, "sku", e.target.value)
                     }
-                    placeholder="Tự động tạo hoặc nhập thủ công"
                   />
                 </div>
-
-                {/* Nút xóa */}
+                <div className="space-y-2">
+                  <Label>Giá gốc</Label>
+                  <Input
+                    type="number"
+                    value={opt.originalPrice || ""}
+                    onChange={(e) =>
+                      onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Giá bán</Label>
+                  <Input
+                    type="number"
+                    value={opt.price || ""}
+                    onChange={(e) =>
+                      onOptionChange(vIdx, oIdx, "price", e.target.value)
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Số lượng</Label>
+                  <Input
+                    type="number"
+                    value={opt.stock || ""}
+                    onChange={(e) =>
+                      onOptionChange(vIdx, oIdx, "stock", e.target.value)
+                    }
+                    required
+                  />
+                </div>
                 <Button
                   type="button"
-                  variant="destructive"
-                  size="icon"
+                  variant="outline"
+                  size="sm"
                   onClick={() => onRemoveOption(vIdx, oIdx)}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             ))}
-
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() => onAddOption(vIdx)}
             >
               <Plus className="w-4 h-4 mr-2" /> Thêm phiên bản
             </Button>
           </div>
 
-          {/* XÓA MÀU */}
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={() => onRemoveVariant(vIdx)}
           >
-            <Trash2 className="w-4 h-4 mr-2" /> Xóa màu này
+            <Trash2 className="w-4 h-4 mr-2" /> Xóa màu
           </Button>
         </div>
       ))}

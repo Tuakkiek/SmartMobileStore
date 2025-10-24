@@ -248,7 +248,6 @@ const ProductsPage = () => {
   // ============================================
   // CLEAN PAYLOAD
   // ============================================
-  // ✅ FIX cleanPayload - THÊM CONNECTIVITY CHO IPAD
   const cleanPayload = (data) => {
     const cleaned = { ...data };
 
@@ -270,43 +269,96 @@ const ProductsPage = () => {
     cleaned.discount = Number(data.discount || 0);
     cleaned.quantity = Number(data.quantity || 0);
 
-    // ✅ FIXED: HANDLE VARIANTS THEO TỪNG CATEGORY
-    if (["iPhone", "iPad", "Mac"].includes(activeTab)) {
-      cleaned.createVariants = (data.variants || [])
-        .map((variant) => ({
-          color: String(variant.color || "").trim(),
-          images: (variant.images || []).filter((img) => img.trim()),
-          options: (variant.options || [])
-            .map((option) => {
-              const opt = {
-                storage: String(option.storage || "").trim(),
-                sku:
-                  option.sku?.trim() ||
-                  generateSKU(
-                    activeTab,
-                    cleaned.model || "UNKNOWN",
-                    variant.color || "",
-                    option.storage || "",
-                    option.connectivity || "" // ✅ IPAD: connectivity
-                  ),
-                originalPrice: Number(option.originalPrice || 0),
-                price: Number(option.price || 0),
-                stock: Number(option.stock || 0),
+    // Clean variants for all categories
+    cleaned.variants = (data.variants || [])
+      .map((variant) => ({
+        color: String(variant.color || "").trim(),
+        images: (variant.images || []).filter((img) => img.trim()),
+        options: (variant.options || [])
+          .map((option) => {
+            let variantOpts;
+            let opt = {
+              originalPrice: Number(option.originalPrice || 0),
+              price: Number(option.price || 0),
+              stock: Number(option.stock || 0),
+            };
+
+            if (activeTab === "iPhone") {
+              variantOpts = option.storage || "";
+              opt.storage = String(option.storage || "").trim();
+              opt.sku =
+                option.sku?.trim() ||
+                generateSKU(
+                  activeTab,
+                  cleaned.model || "UNKNOWN",
+                  variant.color || "",
+                  variantOpts
+                );
+            } else if (activeTab === "iPad") {
+              variantOpts = option.storage || "";
+              opt.storage = String(option.storage || "").trim();
+              opt.connectivity = String(option.connectivity || "").trim();
+              opt.sku =
+                option.sku?.trim() ||
+                generateSKU(
+                  activeTab,
+                  cleaned.model || "UNKNOWN",
+                  variant.color || "",
+                  variantOpts,
+                  option.connectivity || ""
+                );
+            } else if (activeTab === "Mac") {
+              variantOpts = {
+                cpuGpu: option.cpuGpu || "",
+                ram: option.ram || "",
+                storage: option.storage || "",
               };
+              opt.cpuGpu = String(option.cpuGpu || "").trim();
+              opt.ram = String(option.ram || "").trim();
+              opt.storage = String(option.storage || "").trim();
+              opt.sku =
+                option.sku?.trim() ||
+                generateSKU(
+                  activeTab,
+                  cleaned.model || "UNKNOWN",
+                  variant.color || "",
+                  variantOpts
+                );
+            } else if (activeTab === "AirPods" || activeTab === "Accessories") {
+              variantOpts = option.variantName || "";
+              opt.variantName = String(option.variantName || "").trim();
+              opt.sku =
+                option.sku?.trim() ||
+                generateSKU(
+                  activeTab,
+                  cleaned.model || "UNKNOWN",
+                  variant.color || "",
+                  variantOpts
+                );
+            } else if (activeTab === "AppleWatch") {
+              variantOpts = {
+                variantName: option.variantName || "",
+                bandSize: option.bandSize || "",
+              };
+              opt.variantName = String(option.variantName || "").trim();
+              opt.bandSize = String(option.bandSize || "").trim();
+              opt.sku =
+                option.sku?.trim() ||
+                generateSKU(
+                  activeTab,
+                  cleaned.model || "UNKNOWN",
+                  variant.color || "",
+                  variantOpts
+                );
+            }
 
-              // ✅ IPAD: THÊM CONNECTIVITY
-              if (activeTab === "iPad") {
-                opt.connectivity = String(option.connectivity || "").trim();
-              }
-
-              return opt;
-            })
-            .filter((opt) => opt.sku && opt.storage && opt.price >= 0),
-        }))
-        .filter(
-          (variant) => variant.options.length > 0 && variant.color.trim()
-        );
-    }
+            return opt;
+          })
+          .filter((opt) => opt.price >= 0),
+      }))
+      .filter(
+        (variant) => variant.options.length > 0 && variant.color.trim()
+      );
 
     cleaned.createdBy = createdBy;
     cleaned.category = activeTab;
@@ -378,18 +430,30 @@ const ProductsPage = () => {
           options: [],
         };
       }
-      // Add option (storage combo)
-      colorGroups[colorKey].options.push({
-        storage: String(variant.storage || ""),
+      // Add option
+      let option = {
         sku: String(variant.sku || ""),
-        originalPrice: variant.originalPrice
-          ? String(variant.originalPrice)
-          : "",
+        originalPrice: variant.originalPrice ? String(variant.originalPrice) : "",
         price: variant.price ? String(variant.price) : "",
         stock: variant.stock ? String(variant.stock) : "",
-        ram: variant.ram ? String(variant.ram) : undefined, // For Mac
-        cpuGpu: variant.cpuGpu ? String(variant.cpuGpu) : undefined, // For Mac
-      });
+      };
+      if (activeTab === "iPhone" || activeTab === "iPad" || activeTab === "Mac") {
+        option.storage = String(variant.storage || "");
+      }
+      if (activeTab === "iPad") {
+        option.connectivity = String(variant.connectivity || "");
+      }
+      if (activeTab === "Mac") {
+        option.cpuGpu = String(variant.cpuGpu || "");
+        option.ram = String(variant.ram || "");
+      }
+      if (activeTab === "AirPods" || activeTab === "Accessories" || activeTab === "AppleWatch") {
+        option.variantName = String(variant.variantName || "");
+      }
+      if (activeTab === "AppleWatch") {
+        option.bandSize = String(variant.bandSize || "");
+      }
+      colorGroups[colorKey].options.push(option);
     });
 
     const populatedVariants =
@@ -497,7 +561,7 @@ const ProductsPage = () => {
       for (let j = 0; j < variant.options.length; j++) {
         const option = variant.options[j];
         if (
-          (activeTab === "iPhone" || activeTab === "Mac") &&
+          ["iPhone", "iPad", "Mac"].includes(activeTab) &&
           !option.storage?.trim()
         ) {
           toast.error(
@@ -507,9 +571,46 @@ const ProductsPage = () => {
           return false;
         }
         if (
-          (activeTab === "iPhone" || activeTab === "Mac") &&
-          !option.sku?.trim()
+          activeTab === "iPad" &&
+          !option.connectivity?.trim()
         ) {
+          toast.error(
+            `Vui lòng chọn kết nối cho phiên bản ${j + 1} của biến thể ${i + 1}`
+          );
+          setActiveFormTab("variants");
+          return false;
+        }
+        if (
+          activeTab === "Mac" &&
+          (!option.cpuGpu?.trim() || !option.ram?.trim())
+        ) {
+          toast.error(
+            `Vui lòng nhập CPU-GPU và RAM cho phiên bản ${j + 1} của biến thể ${i + 1}`
+          );
+          setActiveFormTab("variants");
+          return false;
+        }
+        if (
+          ["AirPods", "AppleWatch", "Accessories"].includes(activeTab) &&
+          !option.variantName?.trim()
+        ) {
+          toast.error(
+            `Vui lòng nhập tên biến thể cho phiên bản ${j + 1} của biến thể ${i + 1}`
+          );
+          setActiveFormTab("variants");
+          return false;
+        }
+        if (
+          activeTab === "AppleWatch" &&
+          !option.bandSize?.trim()
+        ) {
+          toast.error(
+            `Vui lòng nhập kích cỡ dây cho phiên bản ${j + 1} của biến thể ${i + 1}`
+          );
+          setActiveFormTab("variants");
+          return false;
+        }
+        if (!option.sku?.trim()) {
           toast.error(
             `Vui lòng nhập SKU cho phiên bản ${j + 1} của biến thể ${i + 1}`
           );
@@ -582,7 +683,7 @@ const ProductsPage = () => {
         // ✅ VALIDATE JSON
         if (!payload.name?.trim()) throw new Error("Tên sản phẩm bắt buộc");
         if (!payload.model?.trim()) throw new Error("Model bắt buộc");
-        if (!payload.createVariants?.length)
+        if (!payload.variants?.length)
           throw new Error("Cần ít nhất 1 variant");
 
         console.log("✅ JSON PAYLOAD:", JSON.stringify(payload, null, 2));
@@ -691,7 +792,7 @@ const ProductsPage = () => {
       onOptionChange: handleVariantOptionChange,
       onAddOption: addVariantOption,
       onRemoveOption: removeVariantOption,
-      model: formData.model, // ✅ Truyền model để sinh SKU
+      model: formData.model,
     };
 
     switch (activeTab) {

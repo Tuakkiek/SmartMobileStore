@@ -3,7 +3,7 @@
 // ✅ CORRECT: type="number" MATCHES BACKEND Number SCHEMA
 // ============================================
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { generateSKU } from "@/lib/generateSKU";
 
 const IPhoneVariantsForm = ({
   variants,
@@ -27,7 +28,25 @@ const IPhoneVariantsForm = ({
   onOptionChange,
   onAddOption,
   onRemoveOption,
+  model,
 }) => {
+  // Tự động tạo SKU khi color hoặc storage thay đổi
+  useEffect(() => {
+    variants.forEach((variant, vIdx) => {
+      variant.options.forEach((option, oIdx) => {
+        if (variant.color && option.storage && !option.sku) {
+          const newSKU = generateSKU(
+            "iPhone",
+            model || "UNKNOWN",
+            variant.color,
+            option.storage
+          );
+          onOptionChange(vIdx, oIdx, "sku", newSKU);
+        }
+      });
+    });
+  }, [variants, model, onOptionChange]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -41,12 +60,26 @@ const IPhoneVariantsForm = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
-                Màu <span className="text-red-500">*</span>
+                Màu sắc <span className="text-red-500">*</span>
               </Label>
               <Input
                 placeholder="VD: Space Black"
                 value={variant.color || ""}
-                onChange={(e) => onVariantChange(vIdx, "color", e.target.value)}
+                onChange={(e) => {
+                  onVariantChange(vIdx, "color", e.target.value);
+                  // Tự động cập nhật SKU cho tất cả options khi màu thay đổi
+                  variant.options.forEach((option, oIdx) => {
+                    if (option.storage) {
+                      const newSKU = generateSKU(
+                        "iPhone",
+                        model || "UNKNOWN",
+                        e.target.value,
+                        option.storage
+                      );
+                      onOptionChange(vIdx, oIdx, "sku", newSKU);
+                    }
+                  });
+                }}
                 required
               />
             </div>
@@ -83,21 +116,29 @@ const IPhoneVariantsForm = ({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              Phiên bản bộ nhớ trong:
-            </Label>
+            <Label className="text-sm font-medium">Phiên bản bộ nhớ trong:</Label>
             {variant.options.map((opt, oIdx) => (
               <div
                 key={oIdx}
-                className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end p-3 border rounded-md"
+                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md"
               >
                 <div className="space-y-2">
-                  <Label>Bộ nhớ trong</Label>
+                  <Label>Bộ nhớ trong <span className="text-red-500">*</span></Label>
                   <Select
                     value={opt.storage || ""}
-                    onValueChange={(value) =>
-                      onOptionChange(vIdx, oIdx, "storage", value)
-                    }
+                    onValueChange={(value) => {
+                      onOptionChange(vIdx, oIdx, "storage", value);
+                      // Tự động cập nhật SKU khi storage thay đổi
+                      if (variant.color && value) {
+                        const newSKU = generateSKU(
+                          "iPhone",
+                          model || "UNKNOWN",
+                          variant.color,
+                          value
+                        );
+                        onOptionChange(vIdx, oIdx, "sku", newSKU);
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn bộ nhớ" />
@@ -110,55 +151,47 @@ const IPhoneVariantsForm = ({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">SKU</Label>
+                <div className="space-y-2">
+                  <Label>SKU</Label>
                   <Input
+                    placeholder="VD: IPHONE-IPHONE16PROMAX-SPACEBLACK-256GB"
                     value={opt.sku || ""}
                     onChange={(e) =>
                       onOptionChange(vIdx, oIdx, "sku", e.target.value)
                     }
-                    className="text-sm"
-                    placeholder="VD: IPH-AIR-256-BLUE"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Giá gốc</Label>
                   <Input
                     type="number"
-                    min="0"
-                    step="1000"
                     value={opt.originalPrice || ""}
                     onChange={(e) =>
-                      onOptionChange(
-                        vIdx,
-                        oIdx,
-                        "originalPrice",
-                        e.target.value
-                      )
+                      onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Giá bán</Label>
                   <Input
                     type="number"
-                    min="0"
-                    step="1000"
                     value={opt.price || ""}
                     onChange={(e) =>
                       onOptionChange(vIdx, oIdx, "price", e.target.value)
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
                   <Input
                     type="number"
-                    min="0"
                     value={opt.stock || ""}
                     onChange={(e) =>
                       onOptionChange(vIdx, oIdx, "stock", e.target.value)
                     }
+                    required
                   />
                 </div>
                 <Button
