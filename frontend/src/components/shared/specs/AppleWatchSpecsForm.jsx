@@ -7,6 +7,8 @@ import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 
 const AppleWatchSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRemoveColor }) => {
@@ -16,19 +18,43 @@ const AppleWatchSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRem
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* TAB THÔNG SỐ APPLE WATCH */}
       <div className="space-y-2">
-        <Label>Thời gian dùng</Label>
+        <Label>Kích thước màn hình</Label>
         <Input 
-          value={specs.batteryLife || ""} 
-          onChange={(e) => onChange("batteryLife", e.target.value)} 
-          placeholder="VD: 18 giờ"
+          value={specs.screenSize || ""} 
+          onChange={(e) => onChange("screenSize", e.target.value)} 
+          placeholder="VD: 42mm"
         />
       </div>
       <div className="space-y-2">
-        <Label>Tương thích</Label>
+        <Label>CPU</Label>
         <Input 
-          value={specs.compatibility || ""} 
-          onChange={(e) => onChange("compatibility", e.target.value)} 
-          placeholder="VD: iPhone Xs trở lên"
+          value={specs.cpu || ""} 
+          onChange={(e) => onChange("cpu", e.target.value)} 
+          placeholder="VD: S10 SIP"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Hệ điều hành</Label>
+        <Input 
+          value={specs.os || ""} 
+          onChange={(e) => onChange("os", e.target.value)} 
+          placeholder="VD: watchOS 11"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Bộ nhớ trong</Label>
+        <Input 
+          value={specs.storage || ""} 
+          onChange={(e) => onChange("storage", e.target.value)} 
+          placeholder="VD: 64GB"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Dung lượng pin</Label>
+        <Input 
+          value={specs.batteryLife || ""} 
+          onChange={(e) => onChange("batteryLife", e.target.value)} 
+          placeholder="VD: Lên đến 18 giờ"
         />
       </div>
       <div className="space-y-2">
@@ -39,30 +65,7 @@ const AppleWatchSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRem
           placeholder="VD: Apple"
         />
       </div>
-      <div className="space-y-2">
-        <Label>Công nghệ màn hình</Label>
-        <Input 
-          value={specs.screenTech || ""} 
-          onChange={(e) => onChange("screenTech", e.target.value)} 
-          placeholder="VD: Always-On Retina LTPO OLED"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Nghe gọi</Label>
-        <Input 
-          value={specs.calling || ""} 
-          onChange={(e) => onChange("calling", e.target.value)} 
-          placeholder="VD: Có (LTE)"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Tiện ích sức khỏe</Label>
-        <Input 
-          value={specs.healthFeatures || ""} 
-          onChange={(e) => onChange("healthFeatures", e.target.value)} 
-          placeholder="VD: ECG, SpO2, Nhịp tim"
-        />
-      </div>
+     
       
       {/* MÀU SẮC - DYNAMIC ARRAY */}
       <div className="space-y-2 col-span-full">
@@ -73,7 +76,7 @@ const AppleWatchSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRem
               <Input
                 value={color}
                 onChange={(e) => onColorChange(idx, e.target.value)}
-                placeholder="VD: Midnight"
+                placeholder="VD: Jet Black"
                 className="w-32"
               />
               <Button 
@@ -90,6 +93,23 @@ const AppleWatchSpecsForm = ({ specs, onChange, onColorChange, onAddColor, onRem
             <Plus className="w-3 h-3 mr-1" /> Thêm
           </Button>
         </div>
+      </div>
+
+      <div className="space-y-2 col-span-full">
+        <Label>Tính năng</Label>
+        <Textarea 
+          value={specs.features || ""} 
+          onChange={(e) => onChange("features", e.target.value)} 
+          placeholder="VD: Cam biến điện tim, Cam biến nhiệt độ, Cam biến nhịp tim, Cam biến oxy máu, Theo dõi giấc ngủ, Theo dõi chu kỳ kinh nguyệt, Theo dõi tiếng ồn, Phát hiện ngã, Phát hiện tai nạn xe hơi, SOS khẩn cấp, Theo dõi nhịp thở khi ngủ, Theo dõi độ cao, Theo dõi nhiệt độ nước"
+        />
+      </div>
+      <div className="space-y-2 col-span-full">
+        <Label>Tính năng sức khỏe</Label>
+        <Textarea 
+          value={specs.healthFeatures || ""} 
+          onChange={(e) => onChange("healthFeatures", e.target.value)} 
+          placeholder="VD: Theo dõi nhịp tim, Đo điện tâm đồ, Đo nồng độ oxy trong máu, Theo dõi giấc ngủ, Theo dõi chu kỳ kinh nguyệt, Theo dõi tiếng ồn, Phát hiện ngã, Phát hiện tai nạn xe hơi, SOS khẩn cấp, Theo dõi nhịp thở khi ngủ"
+        />
       </div>
     </div>
   );

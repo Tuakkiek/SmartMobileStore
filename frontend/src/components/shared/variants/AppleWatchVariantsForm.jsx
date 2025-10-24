@@ -7,7 +7,6 @@ import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { generateSKU } from "@/lib/generateSKU";
 
@@ -24,18 +23,17 @@ const AppleWatchVariantsForm = ({
   onRemoveOption,
   model,
 }) => {
-  // Tự động tạo SKU khi color, variantName hoặc bandSize thay đổi
+  // Tự động tạo SKU khi color hoặc variantName thay đổi
   useEffect(() => {
     variants.forEach((variant, vIdx) => {
       variant.options.forEach((option, oIdx) => {
-        if (variant.color && option.variantName && option.bandSize && !option.sku) {
+        if (variant.color && option.variantName && !option.sku) {
           const newSKU = generateSKU(
             "AppleWatch",
             model || "UNKNOWN",
             variant.color,
             {
               variantName: option.variantName,
-              bandSize: option.bandSize,
             }
           );
           onOptionChange(vIdx, oIdx, "sku", newSKU);
@@ -52,14 +50,13 @@ const AppleWatchVariantsForm = ({
 
     const color = variant.color || "";
     const variantName = field === "variantName" ? value : option.variantName || "";
-    const bandSize = field === "bandSize" ? value : option.bandSize || "";
 
-    if (color && variantName && bandSize) {
+    if (color && variantName) {
       const newSKU = generateSKU(
         "AppleWatch",
         model || "UNKNOWN",
         color,
-        { variantName, bandSize }
+        { variantName }
       );
       onOptionChange(vIdx, oIdx, "sku", newSKU);
     }
@@ -78,38 +75,28 @@ const AppleWatchVariantsForm = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Màu sắc <span className="text-red-500">*</span></Label>
-              <Select 
+              <Input
+                placeholder="VD: Midnight"
                 value={variant.color || ""}
-                onValueChange={(value) => {
-                  onVariantChange(vIdx, "color", value);
+                onChange={(e) => {
+                  onVariantChange(vIdx, "color", e.target.value);
                   // Tự động cập nhật SKU cho tất cả options khi màu thay đổi
                   variant.options.forEach((option, oIdx) => {
-                    if (option.variantName && option.bandSize) {
+                    if (option.variantName) {
                       const newSKU = generateSKU(
                         "AppleWatch",
                         model || "UNKNOWN",
-                        value,
+                        e.target.value,
                         {
                           variantName: option.variantName,
-                          bandSize: option.bandSize,
                         }
                       );
                       onOptionChange(vIdx, oIdx, "sku", newSKU);
                     }
                   });
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn màu" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Midnight">Midnight</SelectItem>
-                  <SelectItem value="Starlight">Starlight</SelectItem>
-                  <SelectItem value="Silver">Silver</SelectItem>
-                  <SelectItem value="PRODUCT(RED)">PRODUCT(RED)</SelectItem>
-                  <SelectItem value="Blue">Blue</SelectItem>
-                </SelectContent>
-              </Select>
+                required
+              />
             </div>
           </div>
 
@@ -148,7 +135,7 @@ const AppleWatchVariantsForm = ({
             {variant.options.map((opt, oIdx) => (
               <div
                 key={oIdx}
-                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md"
+                className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end p-3 border rounded-md"
               >
                 <div className="space-y-2">
                   <Label>Tên biến thể <span className="text-red-500">*</span></Label>
@@ -160,18 +147,9 @@ const AppleWatchVariantsForm = ({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Kích cỡ dây <span className="text-red-500">*</span></Label>
-                  <Input
-                    placeholder="VD: S/M"
-                    value={opt.bandSize || ""}
-                    onChange={(e) => handleLocalOptionChange(vIdx, oIdx, "bandSize", e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label>SKU</Label>
                   <Input
-                    placeholder="VD: APPLEWATCH-SERIES10-MIDNIGHT-GPS40MM-SM"
+                    placeholder="VD: APPLEWATCH-SERIES10-MIDNIGHT-GPS40MM"
                     value={opt.sku || ""}
                     onChange={(e) =>
                       onOptionChange(vIdx, oIdx, "sku", e.target.value)

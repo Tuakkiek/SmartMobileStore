@@ -521,7 +521,7 @@ const ProductsPage = () => {
     }
   };
 
-  const validateForm = () => {
+const validateForm = () => {
     if (!formData.name?.trim()) {
       toast.error("Vui lòng nhập tên sản phẩm");
       setActiveFormTab("basic");
@@ -596,16 +596,6 @@ const ProductsPage = () => {
         ) {
           toast.error(
             `Vui lòng nhập tên biến thể cho phiên bản ${j + 1} của biến thể ${i + 1}`
-          );
-          setActiveFormTab("variants");
-          return false;
-        }
-        if (
-          activeTab === "AppleWatch" &&
-          !option.bandSize?.trim()
-        ) {
-          toast.error(
-            `Vui lòng nhập kích cỡ dây cho phiên bản ${j + 1} của biến thể ${i + 1}`
           );
           setActiveFormTab("variants");
           return false;

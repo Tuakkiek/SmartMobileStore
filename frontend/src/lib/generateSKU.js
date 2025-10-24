@@ -31,7 +31,6 @@ export function generateSKU(category, model, color, variantOptions, connectivity
   let normalizedCpuGpu = "";
   let normalizedRam = "";
   let normalizedVariantName = "";
-  let normalizedBandSize = "";
 
   if (category === "Mac") {
     if (typeof variantOptions !== "object") {
@@ -42,10 +41,9 @@ export function generateSKU(category, model, color, variantOptions, connectivity
     normalizedStorage = normalize(variantOptions.storage || "");
   } else if (category === "AppleWatch") {
     if (typeof variantOptions !== "object") {
-      throw new Error("For Apple Watch, variantOptions must be an object with variantName, bandSize");
+      throw new Error("For Apple Watch, variantOptions must be an object with variantName");
     }
     normalizedVariantName = normalize(variantOptions.variantName || "");
-    normalizedBandSize = normalize(variantOptions.bandSize || "");
   } else {
     if (typeof variantOptions === "string") {
       if (["iPhone", "iPad"].includes(category)) {
@@ -56,7 +54,6 @@ export function generateSKU(category, model, color, variantOptions, connectivity
     } else if (typeof variantOptions === "object") {
       normalizedStorage = normalize(variantOptions.storage || "");
       normalizedVariantName = normalize(variantOptions.variantName || "");
-      normalizedBandSize = normalize(variantOptions.bandSize || "");
     }
   }
 
@@ -70,7 +67,7 @@ export function generateSKU(category, model, color, variantOptions, connectivity
     case "AirPods":
       return `${prefix}-${normalizedModel}-${normalizedColor}-${normalizedVariantName}`;
     case "AppleWatch":
-      return `${prefix}-${normalizedModel}-${normalizedColor}-${normalizedVariantName}-${normalizedBandSize}`;
+      return `${prefix}-${normalizedModel}-${normalizedColor}-${normalizedVariantName}`;
     case "Accessories":
       return `${prefix}-${normalizedModel}-${normalizedColor}-${normalizedVariantName}`;
     default:
