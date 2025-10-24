@@ -950,7 +950,7 @@ const ProductsPage = () => {
                             onChange={(e) =>
                               handleBasicChange("name", e.target.value)
                             }
-                            placeholder="VD: iPhone 17 Pro Max"
+                            
                             required
                           />
                         </div>
@@ -963,7 +963,7 @@ const ProductsPage = () => {
                             onChange={(e) =>
                               handleBasicChange("model", e.target.value)
                             }
-                            placeholder="VD: A3101"
+                            
                             required
                           />
                         </div>

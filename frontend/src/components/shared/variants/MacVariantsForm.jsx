@@ -7,7 +7,13 @@ import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { generateSKU } from "@/lib/generateSKU";
 
@@ -28,17 +34,18 @@ const MacVariantsForm = ({
   useEffect(() => {
     variants.forEach((variant, vIdx) => {
       variant.options.forEach((option, oIdx) => {
-        if (variant.color && option.cpuGpu && option.ram && option.storage && !option.sku) {
-          const newSKU = generateSKU(
-            "Mac",
-            model || "UNKNOWN",
-            variant.color,
-            {
-              cpuGpu: option.cpuGpu,
-              ram: option.ram,
-              storage: option.storage,
-            }
-          );
+        if (
+          variant.color &&
+          option.cpuGpu &&
+          option.ram &&
+          option.storage &&
+          !option.sku
+        ) {
+          const newSKU = generateSKU("Mac", model || "UNKNOWN", variant.color, {
+            cpuGpu: option.cpuGpu,
+            ram: option.ram,
+            storage: option.storage,
+          });
           onOptionChange(vIdx, oIdx, "sku", newSKU);
         }
       });
@@ -57,12 +64,11 @@ const MacVariantsForm = ({
     const storage = field === "storage" ? value : option.storage || "";
 
     if (color && cpuGpu && ram && storage) {
-      const newSKU = generateSKU(
-        "Mac",
-        model || "UNKNOWN",
-        color,
-        { cpuGpu, ram, storage }
-      );
+      const newSKU = generateSKU("Mac", model || "UNKNOWN", color, {
+        cpuGpu,
+        ram,
+        storage,
+      });
       onOptionChange(vIdx, oIdx, "sku", newSKU);
     }
   };
@@ -79,7 +85,9 @@ const MacVariantsForm = ({
         <div key={vIdx} className="rounded-md p-4 space-y-3 border">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Màu sắc <span className="text-red-500">*</span></Label>
+              <Label>
+                Màu sắc <span className="text-red-500">*</span>
+              </Label>
               <Input
                 placeholder="VD: Space Gray"
                 value={variant.color || ""}
@@ -145,19 +153,32 @@ const MacVariantsForm = ({
                 className="grid grid-cols-1 md:grid-cols-7 gap-2 items-end p-3 border rounded-md"
               >
                 <div className="space-y-2">
-                  <Label>CPU – GPU <span className="text-red-500">*</span></Label>
+                  <Label>
+                    CPU – GPU <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     placeholder="VD: 10 CPU – 10 GPU"
                     value={opt.cpuGpu || ""}
-                    onChange={(e) => handleLocalOptionChange(vIdx, oIdx, "cpuGpu", e.target.value)}
+                    onChange={(e) =>
+                      handleLocalOptionChange(
+                        vIdx,
+                        oIdx,
+                        "cpuGpu",
+                        e.target.value
+                      )
+                    }
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>RAM <span className="text-red-500">*</span></Label>
+                  <Label>
+                    RAM <span className="text-red-500">*</span>
+                  </Label>
                   <Select
                     value={opt.ram || ""}
-                    onValueChange={(value) => handleLocalOptionChange(vIdx, oIdx, "ram", value)}
+                    onValueChange={(value) =>
+                      handleLocalOptionChange(vIdx, oIdx, "ram", value)
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn RAM" />
@@ -172,10 +193,14 @@ const MacVariantsForm = ({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Bộ nhớ trong <span className="text-red-500">*</span></Label>
+                  <Label>
+                    Bộ nhớ trong <span className="text-red-500">*</span>
+                  </Label>
                   <Select
                     value={opt.storage || ""}
-                    onValueChange={(value) => handleLocalOptionChange(vIdx, oIdx, "storage", value)}
+                    onValueChange={(value) =>
+                      handleLocalOptionChange(vIdx, oIdx, "storage", value)
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn bộ nhớ" />
@@ -204,7 +229,12 @@ const MacVariantsForm = ({
                     type="number"
                     value={opt.originalPrice || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)
+                      onOptionChange(
+                        vIdx,
+                        oIdx,
+                        "originalPrice",
+                        e.target.value
+                      )
                     }
                     required
                   />
