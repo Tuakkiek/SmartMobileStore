@@ -1,7 +1,8 @@
+// frontend/src/pages/HomePage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ProductCard } from "@/components/shared/ProductCard";
+import ProductCard  from "../components/shared/ProductCard";
 import { Loading } from "@/components/shared/Loading";
 import {
   ArrowRight,
@@ -25,7 +26,7 @@ const CATEGORY_ICONS = {
   "Phụ kiện": Box,
 };
 
-const CategorySection = ({ category, products, onViewAll, onEdit }) => {
+const CategorySection = ({ category, products, onViewAll }) => {
   const Icon = CATEGORY_ICONS[category] || Box;
 
   if (!products || products.length === 0) return null;
@@ -46,11 +47,7 @@ const CategorySection = ({ category, products, onViewAll, onEdit }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {products.slice(0, 4).map((product) => (
-            <ProductCard 
-              key={product._id} 
-              product={product}
-              onEdit={onEdit}
-            />
+            <ProductCard key={product._id} product={product} />
           ))}
         </div>
       </div>
@@ -99,14 +96,6 @@ const HomePage = () => {
     navigate(`/products?category=${encodeURIComponent(category)}`);
   };
 
-  // ✅ HANDLE EDIT: Navigate to warehouse products page with edit mode
-  const handleEdit = (product) => {
-    console.log("✅ HomePage: Editing product", product);
-    navigate(`/warehouse/products?edit=${product._id}`, { 
-      state: { product } 
-    });
-  };
-
   if (isLoading) {
     return <Loading />;
   }
@@ -151,7 +140,7 @@ const HomePage = () => {
             </Button>
           </div>
 
-          <NewArrivalsSection onEdit={handleEdit} />
+          <NewArrivalsSection />
         </div>
       </section>
 
@@ -162,7 +151,6 @@ const HomePage = () => {
           category={category}
           products={categoryProducts[category]}
           onViewAll={handleViewAll}
-          onEdit={handleEdit}
         />
       ))}
 
@@ -175,7 +163,7 @@ const HomePage = () => {
 };
 
 // New Arrivals Component
-const NewArrivalsSection = ({ onEdit }) => {
+const NewArrivalsSection = () => {
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -201,11 +189,7 @@ const NewArrivalsSection = ({ onEdit }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       {products.map((product) => (
-        <ProductCard 
-          key={product._id} 
-          product={product}
-          onEdit={onEdit}
-        />
+        <ProductCard key={product._id} product={product} />
       ))}
     </div>
   );

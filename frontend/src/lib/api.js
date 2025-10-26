@@ -1,18 +1,22 @@
 // ============================================
 // FILE: frontend/src/lib/api.js
-// ✅ FIXED: IPHONEVARIANT SEPARATE COLLECTION
+// ✅ FINAL MERGED VERSION (2025)
 // ============================================
 
 import axios from "axios";
 
-// Tạo axios instance với cấu hình cơ bản
+// ============================================
+// AXIOS INSTANCE CONFIGURATION
+// ============================================
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
 
-// Interceptors - Giữ nguyên
+// ============================================
+// INTERCEPTORS
+// ============================================
 api.interceptors.request.use(
   (config) => {
     const authStorage = localStorage.getItem("auth-storage");
@@ -36,7 +40,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !error.config.url.includes("/auth/login")) {
+    if (
+      error.response?.status === 401 &&
+      !error.config.url.includes("/auth/login")
+    ) {
       localStorage.removeItem("auth-storage");
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
@@ -54,8 +61,8 @@ api.interceptors.response.use(
 export const iPhoneAPI = {
   getAll: (params) => api.get("/iphones", { params }),
   getById: (id) => api.get(`/iphones/${id}`),
-  create: (data) => api.post("/iphones", data),           // ✅ Receives createVariants
-  update: (id, data) => api.put(`/iphones/${id}`, data), // ✅ Receives createVariants
+  create: (data) => api.post("/iphones", data),
+  update: (id, data) => api.put(`/iphones/${id}`, data),
   delete: (id) => api.delete(`/iphones/${id}`),
   getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
 };
@@ -171,11 +178,13 @@ export const promotionAPI = {
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
-  updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
+  updateAddress: (addressId, data) =>
+    api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
   getAllEmployees: () => api.get("/users/employees"),
-  createEmployee: (data) => api.post("/users/employees", data), 
-  toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
+  createEmployee: (data) => api.post("/users/employees", data),
+  toggleEmployeeStatus: (id) =>
+    api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
 
@@ -183,9 +192,10 @@ export const userAPI = {
 // PRODUCT API - CHO MAINLAYOUT SEARCH
 // ============================================
 export const productAPI = {
-  search: (query, params = {}) => api.get("/products/search", { 
-    params: { q: query, ...params } 
-  }),
+  search: (query, params = {}) =>
+    api.get("/products/search", {
+      params: { q: query, ...params },
+    }),
   getAll: (params = {}) => api.get("/products", { params }),
   getById: (id) => api.get(`/products/${id}`),
   create: (data) => api.post("/products", data),
@@ -193,7 +203,40 @@ export const productAPI = {
   delete: (id) => api.delete(`/products/${id}`),
   getVariants: (productId) => api.get(`/products/${productId}/variants`),
   getFeatured: (params = {}) => api.get("/products/featured", { params }),
-  getNewArrivals: (params = {}) => api.get("/products/new-arrivals", { params }),
+  getNewArrivals: (params = {}) =>
+    api.get("/products/new-arrivals", { params }),
+};
+
+// ============================================
+// ANALYTICS / DASHBOARD FUNCTIONS
+// (Merged from first code block)
+// ============================================
+
+export const getTopSelling = async (category) => {
+  const response = await api.get(`/analytics/top-products/${category}`);
+  return response.data?.data || [];
+};
+
+export const getAllProductsForCategory = async (cat) => {
+  const response = await api.get(`/${cat}`);
+  const data = response.data?.data;
+  return data?.products || data || [];
+};
+
+export const getTopNewProducts = async () => {
+  const categories = [
+    "iphones",
+    "ipads",
+    "macs",
+    "airpods",
+    "applewatches",
+    "accessories",
+  ];
+  const allProducts = (
+    await Promise.all(categories.map(getAllProductsForCategory))
+  ).flat();
+  allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return allProducts.slice(0, 10).map((p) => p._id?.toString());
 };
 
 // ============================================
@@ -213,4 +256,7 @@ export default {
   reviewAPI,
   promotionAPI,
   userAPI,
+  getTopSelling,
+  getAllProductsForCategory,
+  getTopNewProducts,
 };

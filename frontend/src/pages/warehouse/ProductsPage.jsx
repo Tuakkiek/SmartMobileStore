@@ -21,16 +21,17 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
-import { generateSKU } from "@/lib/generateSKU"; // ✅ Import generateSKU
+import { generateSKU } from "@/lib/generateSKU";
 import {
   CATEGORIES,
   getEmptyFormData,
   getEmptySpecs,
   getEmptyVariantOptions,
   emptyVariant,
+  INSTALLMENT_BADGE_OPTIONS,
 } from "@/lib/productConstants";
 import { Loading } from "@/components/shared/Loading";
-import { ProductCard } from "@/components/shared/ProductCard";
+import ProductCard from "@/components/shared/ProductCard";
 import IPhoneSpecsForm from "@/components/shared/specs/IPhoneSpecsForm";
 import IPadSpecsForm from "@/components/shared/specs/IPadSpecsForm";
 import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
@@ -356,14 +357,13 @@ const ProductsPage = () => {
           })
           .filter((opt) => opt.price >= 0),
       }))
-      .filter(
-        (variant) => variant.options.length > 0 && variant.color.trim()
-      );
+      .filter((variant) => variant.options.length > 0 && variant.color.trim());
 
     cleaned.createdBy = createdBy;
     cleaned.category = activeTab;
     cleaned.condition = cleaned.condition || "NEW";
     cleaned.status = cleaned.status || "AVAILABLE";
+    cleaned.installmentBadge = cleaned.installmentBadge || "NONE";
     cleaned.name = String(cleaned.name || "").trim();
     cleaned.model = String(cleaned.model || "").trim();
     cleaned.description = cleaned.description
@@ -433,11 +433,17 @@ const ProductsPage = () => {
       // Add option
       let option = {
         sku: String(variant.sku || ""),
-        originalPrice: variant.originalPrice ? String(variant.originalPrice) : "",
+        originalPrice: variant.originalPrice
+          ? String(variant.originalPrice)
+          : "",
         price: variant.price ? String(variant.price) : "",
         stock: variant.stock ? String(variant.stock) : "",
       };
-      if (activeTab === "iPhone" || activeTab === "iPad" || activeTab === "Mac") {
+      if (
+        activeTab === "iPhone" ||
+        activeTab === "iPad" ||
+        activeTab === "Mac"
+      ) {
         option.storage = String(variant.storage || "");
       }
       if (activeTab === "iPad") {
@@ -447,7 +453,11 @@ const ProductsPage = () => {
         option.cpuGpu = String(variant.cpuGpu || "");
         option.ram = String(variant.ram || "");
       }
-      if (activeTab === "AirPods" || activeTab === "Accessories" || activeTab === "AppleWatch") {
+      if (
+        activeTab === "AirPods" ||
+        activeTab === "Accessories" ||
+        activeTab === "AppleWatch"
+      ) {
         option.variantName = String(variant.variantName || "");
       }
       if (activeTab === "AppleWatch") {
@@ -469,6 +479,7 @@ const ProductsPage = () => {
       condition: product.condition || "NEW",
       description: product.description || "",
       status: product.status || "AVAILABLE",
+      installmentBadge: product.installmentBadge || "NONE",
       specifications: specs,
       variants: populatedVariants,
       originalPrice: product.originalPrice ? String(product.originalPrice) : "",
@@ -521,7 +532,7 @@ const ProductsPage = () => {
     }
   };
 
-const validateForm = () => {
+  const validateForm = () => {
     if (!formData.name?.trim()) {
       toast.error("Vui lòng nhập tên sản phẩm");
       setActiveFormTab("basic");
@@ -570,10 +581,7 @@ const validateForm = () => {
           setActiveFormTab("variants");
           return false;
         }
-        if (
-          activeTab === "iPad" &&
-          !option.connectivity?.trim()
-        ) {
+        if (activeTab === "iPad" && !option.connectivity?.trim()) {
           toast.error(
             `Vui lòng chọn kết nối cho phiên bản ${j + 1} của biến thể ${i + 1}`
           );
@@ -585,7 +593,9 @@ const validateForm = () => {
           (!option.cpuGpu?.trim() || !option.ram?.trim())
         ) {
           toast.error(
-            `Vui lòng nhập CPU-GPU và RAM cho phiên bản ${j + 1} của biến thể ${i + 1}`
+            `Vui lòng nhập CPU-GPU và RAM cho phiên bản ${j + 1} của biến thể ${
+              i + 1
+            }`
           );
           setActiveFormTab("variants");
           return false;
@@ -595,7 +605,9 @@ const validateForm = () => {
           !option.variantName?.trim()
         ) {
           toast.error(
-            `Vui lòng nhập tên biến thể cho phiên bản ${j + 1} của biến thể ${i + 1}`
+            `Vui lòng nhập tên biến thể cho phiên bản ${j + 1} của biến thể ${
+              i + 1
+            }`
           );
           setActiveFormTab("variants");
           return false;
@@ -668,13 +680,13 @@ const validateForm = () => {
           category: activeTab,
           condition: rawData.condition || "NEW",
           status: rawData.status || "AVAILABLE",
+          installmentBadge: rawData.installmentBadge || "NONE",
         };
 
         // ✅ VALIDATE JSON
         if (!payload.name?.trim()) throw new Error("Tên sản phẩm bắt buộc");
         if (!payload.model?.trim()) throw new Error("Model bắt buộc");
-        if (!payload.variants?.length)
-          throw new Error("Cần ít nhất 1 variant");
+        if (!payload.variants?.length) throw new Error("Cần ít nhất 1 variant");
 
         console.log("✅ JSON PAYLOAD:", JSON.stringify(payload, null, 2));
       } catch (error) {
@@ -940,7 +952,6 @@ const validateForm = () => {
                             onChange={(e) =>
                               handleBasicChange("name", e.target.value)
                             }
-                            
                             required
                           />
                         </div>
@@ -953,7 +964,6 @@ const validateForm = () => {
                             onChange={(e) =>
                               handleBasicChange("model", e.target.value)
                             }
-                            
                             required
                           />
                         </div>
@@ -995,6 +1005,29 @@ const validateForm = () => {
                               <SelectItem value="DISCONTINUED">
                                 Ngừng kinh doanh
                               </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nhãn trả góp</Label>
+                          <Select
+                            value={formData.installmentBadge || "NONE"}
+                            onValueChange={(value) =>
+                              handleBasicChange("installmentBadge", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {INSTALLMENT_BADGE_OPTIONS.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

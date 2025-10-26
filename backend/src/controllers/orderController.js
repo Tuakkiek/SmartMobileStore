@@ -1,7 +1,8 @@
-// controllers/orderController.js
+// backend/src/controllers/orderController.js
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Cart from "../models/Cart.js";
+import { updateSales } from "../services/salesAnalyticsService.js";
 
 // Tạo đơn hàng mới
 export const createOrder = async (req, res) => {
@@ -164,12 +165,21 @@ export const updateOrderStatus = async (req, res) => {
     const { status, note } = req.body;
     console.log("Received status:", status, "note:", note); // Check input from frontend
 
-    const VALID_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "CANCELLED"];
+    const VALID_STATUSES = [
+      "PENDING",
+      "CONFIRMED",
+      "PROCESSING",
+      "SHIPPING",
+      "DELIVERED",
+      "CANCELLED",
+    ];
     if (!status || !VALID_STATUSES.includes(status)) {
       console.log("Invalid status:", status);
       return res.status(400).json({
         success: false,
-        message: `Trạng thái không hợp lệ. Phải là một trong: ${VALID_STATUSES.join(", ")}`,
+        message: `Trạng thái không hợp lệ. Phải là một trong: ${VALID_STATUSES.join(
+          ", "
+        )}`,
       });
     }
 
@@ -177,7 +187,9 @@ export const updateOrderStatus = async (req, res) => {
     console.log("Current order status before update:", order.status); // Check old status
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
     if (order.status === "DELIVERED" || order.status === "CANCELLED") {
       return res.status(400).json({
@@ -186,9 +198,20 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const oldStatus = order.status;
+
     // Gọi update
     const updatedOrder = await order.updateStatus(status, req.user._id, note);
     console.log("Updated order status after save:", updatedOrder.status); // Check new status
+
+    if (status === "DELIVERED" && oldStatus !== "DELIVERED") {
+      for (const item of order.items) {
+        const variantId = item.productId;
+        const qty = item.quantity;
+        const rev = item.price * qty; // Assuming no discount applied to revenue, adjust if needed
+        await updateSales(variantId, qty, rev);
+      }
+    }
 
     res.json({
       success: true,

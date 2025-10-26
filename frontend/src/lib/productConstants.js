@@ -4,6 +4,15 @@
 // ============================================
 
 // =========================
+// INSTALLMENT BADGE OPTIONS
+// =========================
+export const INSTALLMENT_BADGE_OPTIONS = [
+  { value: "NONE", label: "Không hiển thị" },
+  { value: "Trả góp 0%", label: "Trả góp 0%" },
+  { value: "Trả góp 0%, trả trước 0đ", label: "Trả góp 0%, trả trước 0đ" },
+];
+
+// =========================
 // CATEGORY DEFINITIONS
 // =========================
 export const CATEGORIES = [
@@ -24,20 +33,47 @@ export const CONDITION_OPTIONS = [
   { value: "USED", label: "Used (Đã qua sử dụng)" },
 ];
 
-export const STORAGE_OPTIONS = ["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"];
+export const STORAGE_OPTIONS = [
+  "64GB",
+  "128GB",
+  "256GB",
+  "512GB",
+  "1TB",
+  "2TB",
+];
 export const RAM_OPTIONS = ["8GB", "16GB", "24GB", "32GB", "64GB"];
 export const IPAD_CONNECTIVITY = ["WiFi", "5G"];
-export const MAC_CPU_GPU = ["M3 (8CPU-10GPU)", "M3 Pro (11CPU-14GPU)", "M3 Max (16CPU-40GPU)"];
+export const MAC_CPU_GPU = [
+  "M3 (8CPU-10GPU)",
+  "M3 Pro (11CPU-14GPU)",
+  "M3 Max (16CPU-40GPU)",
+];
 
 // =========================
 // COLORS BY CATEGORY
 // =========================
 export const COLORS_BY_CATEGORY = {
-  iPhone: ["Space Black", "Black", "White", "Silver", "Gold", "Rose Gold", "PRODUCT(RED)"],
+  iPhone: [
+    "Space Black",
+    "Black",
+    "White",
+    "Silver",
+    "Gold",
+    "Rose Gold",
+    "PRODUCT(RED)",
+  ],
   iPad: ["Space Gray", "Silver", "Gold", "Blue"],
   Mac: ["Space Gray", "Silver", "Midnight"],
   AirPods: ["White"],
-  AppleWatch: ["Midnight", "Starlight", "Silver", "Gold", "Rose Gold", "PRODUCT(RED)", "Blue"],
+  AppleWatch: [
+    "Midnight",
+    "Starlight",
+    "Silver",
+    "Gold",
+    "Rose Gold",
+    "PRODUCT(RED)",
+    "Blue",
+  ],
   Accessories: ["Black", "White", "Clear", "Pink", "Blue"],
 };
 
@@ -67,9 +103,25 @@ export const SPECS_FIELDS = {
     "battery",
     "os",
   ],
-  Mac: ["chip", "gpu", "ram", "storage", "screenSize", "screenResolution", "battery", "os"],
+  Mac: [
+    "chip",
+    "gpu",
+    "ram",
+    "storage",
+    "screenSize",
+    "screenResolution",
+    "battery",
+    "os",
+  ],
   AirPods: ["chip", "brand", "batteryLife", "waterResistance", "bluetooth"],
-  AppleWatch: ["batteryLife", "compatibility", "brand", "screenTech", "calling", "healthFeatures"],
+  AppleWatch: [
+    "batteryLife",
+    "compatibility",
+    "brand",
+    "screenTech",
+    "calling",
+    "healthFeatures",
+  ],
   Accessories: [], // Dynamic {key, value}
 };
 

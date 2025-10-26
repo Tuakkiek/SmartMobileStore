@@ -19,6 +19,14 @@ const accessoryVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+accessoryVariantSchema.pre("validate", function (next) {
+  if (this.price > this.originalPrice) {
+    next(new Error("Giá bán không thể lớn hơn giá gốc"));
+  } else {
+    next();
+  }
+});
+
 const accessorySchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -55,6 +63,11 @@ const accessorySchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+    installmentBadge: {
+      type: String,
+      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
+      default: "NONE",
+    },
   },
   { timestamps: true }
 );

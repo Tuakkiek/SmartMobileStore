@@ -5,12 +5,19 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ProductCard } from "@/components/shared/ProductCard";
+import ProductCard from "../components/shared/ProductCard";
 import { Loading } from "@/components/shared/Loading";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { productAPI } from "@/lib/api";
 
-const CATEGORIES = ['iPhone', 'iPad', 'Mac', 'Apple Watch', 'AirPods', 'Accessories'];
+const CATEGORIES = [
+  "iPhone",
+  "iPad",
+  "Mac",
+  "Apple Watch",
+  "AirPods",
+  "Accessories",
+];
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,7 +25,7 @@ const ProductsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
-    category: searchParams.get('category') || "",
+    category: searchParams.get("category") || "",
     status: "",
     minPrice: "",
     maxPrice: "",
@@ -50,16 +57,18 @@ const ProductsPage = () => {
 
       const response = await productAPI.getAll(params);
       const data = response.data.data;
-      
+
       // ✅ LOGIC: DÙNG displayPrice (min variant price) trong ProductCard
-      setProducts(data.products.map(product => ({
-        ...product,
-        // displayPrice đã có sẵn từ API (min variant price)
-        price: product.displayPrice || product.price,
-        originalPrice: product.originalPrice,
-        hasVariants: product.variantsCount > 0
-      })));
-      
+      setProducts(
+        data.products.map((product) => ({
+          ...product,
+          // displayPrice đã có sẵn từ API (min variant price)
+          price: product.displayPrice || product.price,
+          originalPrice: product.originalPrice,
+          hasVariants: product.variantsCount > 0,
+        }))
+      );
+
       setPagination({
         ...pagination,
         totalPages: data.totalPages,
@@ -77,7 +86,7 @@ const ProductsPage = () => {
   }, [pagination.page, filters, searchTerm]);
 
   useEffect(() => {
-    const category = searchParams.get('category');
+    const category = searchParams.get("category");
     if (category && category !== filters.category) {
       setFilters({ ...filters, category });
     }
@@ -91,12 +100,12 @@ const ProductsPage = () => {
   const handleFilterChange = (key, value) => {
     setFilters({ ...filters, [key]: value });
     setPagination({ ...pagination, page: 1 });
-    
-    if (key === 'category') {
+
+    if (key === "category") {
       if (value) {
-        searchParams.set('category', value);
+        searchParams.set("category", value);
       } else {
-        searchParams.delete('category');
+        searchParams.delete("category");
       }
       setSearchParams(searchParams);
     }
@@ -112,7 +121,7 @@ const ProductsPage = () => {
       inStock: false,
     });
     setSearchTerm("");
-    searchParams.delete('category');
+    searchParams.delete("category");
     setSearchParams(searchParams);
     setPagination({ ...pagination, page: 1 });
   };
@@ -181,13 +190,21 @@ const ProductsPage = () => {
               {filters.category && (
                 <Badge variant="secondary" className="gap-1">
                   Danh mục: {filters.category}
-                  <button onClick={() => handleFilterChange('category', '')} className="ml-1 hover:bg-gray-300 rounded-full">
+                  <button
+                    onClick={() => handleFilterChange("category", "")}
+                    className="ml-1 hover:bg-gray-300 rounded-full"
+                  >
                     <X className="w-3 h-3" />
                   </button>
                 </Badge>
               )}
               {/* ... other filters */}
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-xs"
+              >
                 Xóa tất cả
               </Button>
             </div>
@@ -202,11 +219,15 @@ const ProductsPage = () => {
                   <select
                     className="w-full px-3 py-2 border rounded-md"
                     value={filters.category}
-                    onChange={(e) => handleFilterChange("category", e.target.value)}
+                    onChange={(e) =>
+                      handleFilterChange("category", e.target.value)
+                    }
                   >
                     <option value="">Tất cả danh mục</option>
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -217,10 +238,15 @@ const ProductsPage = () => {
                   type="checkbox"
                   id="inStock"
                   checked={filters.inStock}
-                  onChange={(e) => handleFilterChange("inStock", e.target.checked)}
+                  onChange={(e) =>
+                    handleFilterChange("inStock", e.target.checked)
+                  }
                   className="w-4 h-4"
                 />
-                <label htmlFor="inStock" className="text-sm font-medium cursor-pointer">
+                <label
+                  htmlFor="inStock"
+                  className="text-sm font-medium cursor-pointer"
+                >
                   Chỉ hiển thị sản phẩm còn hàng
                 </label>
               </div>
@@ -239,7 +265,9 @@ const ProductsPage = () => {
         <Loading />
       ) : products.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground text-lg">Không tìm thấy sản phẩm nào</p>
+          <p className="text-muted-foreground text-lg">
+            Không tìm thấy sản phẩm nào
+          </p>
           <Button variant="outline" onClick={clearFilters} className="mt-4">
             Xóa bộ lọc
           </Button>
@@ -248,8 +276,8 @@ const ProductsPage = () => {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
             {products.map((product) => (
-              <ProductCard 
-                key={product._id} 
+              <ProductCard
+                key={product._id}
                 product={product}
                 // ✅ ProductCard sẽ dùng product.price = displayPrice (min variant)
                 showVariantsBadge={product.hasVariants}
@@ -263,7 +291,9 @@ const ProductsPage = () => {
               <Button
                 variant="outline"
                 disabled={pagination.page === 1}
-                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+                onClick={() =>
+                  setPagination({ ...pagination, page: pagination.page - 1 })
+                }
               >
                 Trước
               </Button>
@@ -273,7 +303,9 @@ const ProductsPage = () => {
               <Button
                 variant="outline"
                 disabled={pagination.page === pagination.totalPages}
-                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+                onClick={() =>
+                  setPagination({ ...pagination, page: pagination.page + 1 })
+                }
               >
                 Sau
               </Button>

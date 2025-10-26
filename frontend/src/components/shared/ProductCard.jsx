@@ -1,44 +1,74 @@
-import React, { useState } from "react";
+// src/components/shared/ProductCard.jsx
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card.jsx";
-import { Badge } from "@/components/ui/badge.jsx";
-import { Button } from "@/components/ui/button.jsx";
-import { ShoppingCart, Star, Pencil, Trash2 } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ShoppingCart, Star } from "lucide-react";
+import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
+import { getTopNewProducts, getTopSelling } from "@/lib/api";
 
-const CATEGORY_COLORS = {
-  iPhone: "bg-blue-500",
-  iPad: "bg-purple-500",
-  Mac: "bg-gray-700",
-  "Apple Watch": "bg-red-500",
-  AirPods: "bg-green-500",
-  Accessories: "bg-orange-500",
+const mapToApiCategory = (category) => {
+  if (!category) return "";
+  return category
+    .toLowerCase()
+    .replace(" ", "")
+    .replace("phụkiện", "accessory");
 };
 
-export const ProductCard = ({ product, onEdit, onDelete }) => {
+const ProductCard = ({ product }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
-  const [isAdding, setIsAdding] = useState(false);
+  const [topNew, setTopNew] = useState([]);
+  const [topSelling, setTopSelling] = useState([]);
 
-  const displayPrice = product.displayPrice || product.price;
-  const displayOriginalPrice = product.originalPrice;
-  const displayImage =
-    product.variants?.[0]?.images?.[0] || product.images?.[0];
-  const totalStock =
-    product.variants?.reduce((sum, v) => sum + v.stock, 0) || product.quantity;
+  const apiCategory = mapToApiCategory(product.category);
 
-  // Kiểm tra vai trò người dùng
-  const isAdmin = isAuthenticated && user?.role === "ADMIN";
-  const canEdit =
-    isAuthenticated &&
-    user &&
-    ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user.role);
-  const isCustomer = isAuthenticated && user?.role === "CUSTOMER";
+  useEffect(() => {
+    if (apiCategory) {
+      getTopNewProducts().then(setTopNew).catch(console.error);
+      getTopSelling(apiCategory).then(setTopSelling).catch(console.error);
+    }
+  }, [apiCategory]);
 
+  const variant = product.variants?.[0] || {
+    price: product.price || 0,
+    originalPrice: product.originalPrice || product.price || 0,
+    images: product.images || [],
+    stock: product.quantity || 0,
+  };
+
+  const discount =
+    variant.originalPrice > 0
+      ? Math.round(
+          ((variant.originalPrice - variant.price) / variant.originalPrice) *
+            100
+        )
+      : 0;
+
+  const isNew = topNew.includes(product._id?.toString());
+  const isBestSelling = topSelling.includes(product._id?.toString());
+
+  let rightBadge = null;
+  let rightBadgeClass = "";
+
+  if (isNew) {
+    rightBadge = "Mới";
+    rightBadgeClass = "bg-green-500 text-white";
+  } else if (isBestSelling) {
+    rightBadge = "Bán chạy";
+    rightBadgeClass = "bg-green-500 text-white";
+  } else if (product.installmentBadge && product.installmentBadge !== "NONE") {
+    rightBadge = product.installmentBadge;
+    rightBadgeClass = "bg-blue-500 text-white";
+  } else if (product.status !== "AVAILABLE") {
+    rightBadge = getStatusText(product.status);
+    rightBadgeClass = getStatusColor(product.status);
+  }
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
@@ -48,82 +78,32 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
       return;
     }
 
-    if (!isCustomer) {
+    if (user?.role !== "CUSTOMER") {
       toast.error("Chỉ khách hàng mới có thể thêm vào giỏ hàng");
       return;
     }
 
-    if (totalStock < 1) {
-      toast.error("Sản phẩm đã hết hàng");
-      return;
-    }
-
-    const firstAvailableVariant = product.variants?.find((v) => v.stock > 0);
-    const variantId = firstAvailableVariant?._id || product._id;
-
-    setIsAdding(true);
-    try {
-      const result = await addToCart(variantId, 1);
-
-      if (result.success) {
-        toast.success("Đã thêm vào giỏ hàng", {
-          description: `${product.name}${
-            firstAvailableVariant
-              ? ` • ${firstAvailableVariant.color || ""} ${
-                  firstAvailableVariant.storage || ""
-                }`.trim()
-              : ""
-          }`,
-        });
-      } else {
-        toast.error(result.message || "Thêm vào giỏ hàng thất bại");
-      }
-    } catch (error) {
-      toast.error(error.message || "Lỗi hệ thống khi thêm vào giỏ hàng");
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  const handleEditProduct = (e) => {
-    e.stopPropagation();
-    if (onEdit) {
-      console.log("✅ Editing product:", product.name, product._id);
-      onEdit(product);
-} else {
-      navigate(`/warehouse/products?edit=${product._id}`, {
-        state: { product },
+    const result = await addToCart(product._id, 1);
+    if (result.success) {
+      toast.success("Đã thêm vào giỏ hàng", {
+        description: product.name,
       });
+    } else {
+      toast.error(result.message || "Thêm vào giỏ hàng thất bại");
     }
-  };
-
-  const handleDeleteProduct = (e) => {
-    e.stopPropagation();
-    if (!product._id) {
-      console.error("❌ Product ID is missing:", product);
-      toast.error("Không thể xóa: ID sản phẩm không hợp lệ");
-      return;
-    }
-    if (!onDelete) {
-      console.error("❌ onDelete prop is not provided for product:", product._id);
-      toast.error("Không thể xóa sản phẩm: Lỗi hệ thống");
-      return;
-    }
-    console.log("✅ Delete button clicked for product ID:", product._id);
-    onDelete(product._id);
   };
 
   return (
     <Card
-      className="overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white"
+      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
       onClick={() => navigate(`/products/${product._id}`)}
     >
-      <div className="relative aspect-square bg-gray-100 overflow-hidden">
-        {displayImage ? (
+      <div className="aspect-square relative bg-gray-100">
+        {variant.images[0] ? (
           <img
-            src={displayImage}
+            src={variant.images[0]}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -131,70 +111,64 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
           </div>
         )}
 
-        {/* Nút Thêm vào giỏ hàng - Chỉ cho CUSTOMER */}
-        {isCustomer && product.status === "AVAILABLE" && totalStock > 0 && (
-          <Button
-            size="sm"
-            className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
-            onClick={handleAddToCart}
-            disabled={isAdding}
-          >
-            <ShoppingCart className="w-4 h-4 mr-1" />
-            {isAdding ? "..." : "Thêm"}
-          </Button>
+        {/* Discount Badge */}
+        {discount > 0 && (
+          <Badge className="absolute top-2 left-2 bg-red-500 text-white">
+            Giảm {discount}%
+          </Badge>
         )}
 
-        {/* Nút Xóa - Chỉ cho ADMIN */}
-        {isAdmin && (
-          <Button
-            size="sm"
-            variant="destructive"
-            className="absolute bottom-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            onClick={handleDeleteProduct}
-          >
-            <Trash2 className="w-4 h-4 mr-1" />
-            Xóa
-          </Button>
+        {/* Right Badge (Special or Status) */}
+        {rightBadge && (
+          <Badge className={`absolute top-2 right-2 ${rightBadgeClass}`}>
+            {rightBadge}
+          </Badge>
         )}
 
-        {/* Nút Sửa - Cho ADMIN, WAREHOUSE_STAFF, ORDER_MANAGER */}
-        {canEdit && (
-          <Button
-            size="sm"
-            className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
-            onClick={handleEditProduct}
-          >
-            <Pencil className="w-4 h-4 mr-1" />
-            Sửa
-          </Button>
-        )}
+        {/* Quick Add Button */}
+        {isAuthenticated &&
+          user?.role === "CUSTOMER" &&
+          product.status === "AVAILABLE" && (
+            <Button
+              size="sm"
+              className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={handleAddToCart}
+            >
+              <ShoppingCart className="w-4 h-4 mr-1" />
+              Thêm
+            </Button>
+          )}
       </div>
 
-      <CardContent className="p-4 bg-white">
+      <CardContent className="p-4">
         <div className="space-y-2">
-          <h3 className="font-semibold text-base line-clamp-2 min-h-[2.5rem] text-gray-900">
+          {/* Product Name */}
+          <h3 className="font-semibold text-lg line-clamp-2 min-h-[3.5rem]">
             {product.name}
           </h3>
 
+          {/* Model */}
           {product.model && (
-<p className="text-xs text-gray-500 line-clamp-1">
+            <p className="text-sm text-muted-foreground line-clamp-1">
               {product.model}
             </p>
           )}
 
+          {/* Subcategory */}
           {product.subcategory && (
-            <Badge variant="outline" className="text-xs w-fit">
+            <Badge variant="outline" className="text-xs">
               {product.subcategory}
             </Badge>
           )}
 
+          {/* Rating */}
           {product.totalReviews > 0 && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-1">
               <div className="flex">
                 {[...Array(5)].map((_, i) => (
                   <Star
                     key={i}
-                    className={`w-3.5 h-3.5 ${
+                    className={`w-4 h-4 ${
                       i < Math.floor(product.averageRating)
                         ? "fill-yellow-400 text-yellow-400"
                         : "text-gray-300"
@@ -202,76 +176,76 @@ export const ProductCard = ({ product, onEdit, onDelete }) => {
                   />
                 ))}
               </div>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 ({product.totalReviews})
               </span>
             </div>
           )}
 
-          <div className="pt-2 border-t">
+          {/* Price */}
+          <div className="space-y-1">
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-blue-600">
-                {formatPrice(displayPrice)}
+              <span className="text-xl font-bold text-primary">
+                {formatPrice(variant.price)}
               </span>
-              {displayOriginalPrice > displayPrice && (
-                <span className="text-xs text-gray-400 line-through">
-                  {formatPrice(displayOriginalPrice)}
-                </span>
-              )}
             </div>
+            {variant.originalPrice > variant.price && (
+              <p className="text-sm text-muted-foreground line-through">
+                {formatPrice(variant.originalPrice)}
+              </p>
+            )}
           </div>
 
-          {product.variants?.[0] && (
-            <div className="flex flex-wrap gap-1 pt-2">
-              {product.variants[0].color && (
-                <Badge variant="secondary" className="text-xs bg-gray-100">
-                  {product.variants[0].color}
-                </Badge>
-              )}
-              {product.variants[0].storage && (
-                <Badge variant="secondary" className="text-xs bg-gray-100">
-                  {product.variants[0].storage}
-                </Badge>
-              )}
-            </div>
-          )}
+          {/* Stock Info */}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Còn lại:</span>
+            <span
+              className={`font-medium ${
+                variant.stock > 10
+                  ? "text-green-600"
+                  : variant.stock > 0
+                  ? "text-orange-600"
+                  : "text-red-600"
+              }`}
+            >
+              {variant.stock} sản phẩm
+            </span>
+          </div>
 
-          {product.specifications && !product.variants?.[0] && (
-            <div className="flex flex-wrap gap-1 pt-2">
+          {/* Specifications Preview */}
+          {product.specifications && (
+            <div className="flex flex-wrap gap-1 pt-2 border-t">
               {product.specifications.storage && (
-                <Badge variant="secondary" className="text-xs bg-gray-100">
+                <Badge variant="secondary" className="text-xs">
                   {product.specifications.storage}
                 </Badge>
               )}
               {product.specifications.color && (
-                <Badge variant="secondary" className="text-xs bg-gray-100">
+                <Badge variant="secondary" className="text-xs">
                   {product.specifications.color}
+                </Badge>
+              )}
+              {product.specifications.chip && (
+                <Badge variant="secondary" className="text-xs">
+                  {product.specifications.chip}
                 </Badge>
               )}
             </div>
           )}
 
-          {product.tags?.slice(0, 2).map((tag, idx) => (
-            <Badge
-              key={idx}
-              variant="outline"
-              className="text-xs text-blue-600 border-blue-200"
-            >
-              {tag}
-            </Badge>
-          ))}
-
-          {totalStock <= 10 && totalStock > 0 && (
-            <p className="text-xs text-orange-600 font-medium pt-1">
-Chỉ còn {totalStock} sản phẩm
-            </p>
-          )}
-
-          {totalStock === 0 && (
-            <p className="text-xs text-red-600 font-medium pt-1">Hết hàng</p>
+          {/* Tags */}
+          {product.tags && product.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {product.tags.slice(0, 3).map((tag, idx) => (
+                <Badge key={idx} variant="outline" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
           )}
         </div>
       </CardContent>
     </Card>
   );
 };
+export default ProductCard;
