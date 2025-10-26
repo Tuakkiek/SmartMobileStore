@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,7 @@ const API_MAP = {
 
 const ProductsPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("iPhone");
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,6 +85,7 @@ const ProductsPage = () => {
     }
   }, [activeTab, editingProduct, justCreatedProductId]);
 
+  
   // ============================================
   // FETCH PRODUCTS
   // ============================================
@@ -889,19 +892,51 @@ const ProductsPage = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product._id || product.id}
-                    product={{
-                      ...product,
-                      variantsCount: product.variants?.length || 0,
-                    }}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onUpdate={() => fetchProducts()}
-                    showVariantsBadge={true}
-                  />
-                ))}
+                {filteredProducts.map((product) => {
+                  const isAdmin =
+                    user?.role === "ADMIN" || user?.role === "STAFF"; // hoặc kiểm tra quyền
+
+                  return (
+                    <div key={product._id} className="relative group">
+                      <ProductCard
+                        product={{
+                          ...product,
+                          variantsCount: product.variants?.length || 0,
+                        }}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        showAdminActions={isAdmin} // Chỉ admin thấy nút sửa
+                      />
+
+                      {/* NÚT XÓA - Chỉ hiện khi đang chỉnh sửa (trong form) */}
+                      {editingProduct?._id === product._id &&
+                        showForm &&
+                        isAdmin && (
+                          <div className="absolute -bottom-12 left-0 right-0 flex justify-center z-10">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (
+                                  window.confirm(
+                                    "Bạn có chắc chắn muốn xóa sản phẩm này?"
+                                  )
+                                ) {
+                                  handleDelete(product._id);
+                                  setShowForm(false);
+                                  setEditingProduct(null);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              Xóa sản phẩm
+                            </Button>
+                          </div>
+                        )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </TabsContent>
