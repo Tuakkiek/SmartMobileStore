@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-// ✅ FULL IMPLEMENTATION: Badges + Discount + Admin Actions
+// ✅ SỬA LẠI THEO ẢNH MẪU + XỬ LÝ TRƯỜNG HỢP "NONE"
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -23,6 +23,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+// Helper component for Star Rating
+const StarRating = ({ rating, reviewCount = 0 }) => {
+  const roundedRating = Math.round(rating);
+  const totalReviewsText = `(${reviewCount || 0} đánh giá)`;
+
+  return (
+    <div className="flex items-center gap-[1px]">
+      {[...Array(5)].map((_, i) => (
+        <Star
+          key={i}
+          className={`w-3 h-3 ${
+            i < roundedRating
+              ? "fill-yellow-400 text-yellow-400"
+              : "text-gray-300"
+          }`}
+        />
+      ))}
+      <span className="text-xs text-gray-500 ml-1">{totalReviewsText}</span>
+    </div>
+  );
+};
 
 const ProductCard = ({
   product,
@@ -47,13 +69,24 @@ const ProductCard = ({
   // === 1. Chọn variant mặc định có stock > 0 ===
   useEffect(() => {
     const available = safeVariants.find((v) => v && v.stock > 0);
-    setSelectedVariant(available || safeVariants[0] || null);
+    // Chọn variant có giá rẻ nhất nếu không có stock > 0
+    const cheapestVariant =
+      safeVariants.length > 0
+        ? safeVariants.reduce(
+            (min, v) => (v.price < min.price ? v : min),
+            safeVariants[0]
+          )
+        : null;
+
+    setSelectedVariant(available || cheapestVariant || null);
   }, [product.variants]);
 
   const current = selectedVariant || {};
   const displayPrice = current.price || product.price || 0;
   const displayOriginalPrice =
     current.originalPrice || product.originalPrice || 0;
+  const rating = product.averageRating || 0;
+  const reviewCount = product.reviewCount || 0;
 
   // === 2. Ảnh hiển thị ===
   const displayImage =
@@ -62,7 +95,7 @@ const ProductCard = ({
     product.image ||
     "/placeholder.png";
 
-  // === 3. % GIẢM GIÁ - HIỂN thị góc trên bên trái ===
+  // === 3. % GIẢM GIÁ - HIỂN thị góc trên bên trái (Giữ nguyên logic cũ) ===
   const discountPercent =
     displayOriginalPrice > displayPrice
       ? Math.round(
@@ -70,30 +103,22 @@ const ProductCard = ({
         )
       : 0;
 
-  // === 4. BADGE GÓC TRÊN BÊN PHẢI - PRIORITY: TOP NEW > TOP SELLER > INSTALLMENT ===
+  // === 4. BADGE GÓC TRÊN BÊN PHẢI - PRIORITY: TOP NEW > TOP SELLER ===
   const getRightBadge = () => {
-    // Priority 1: Mới (top 10 mới nhất)
+    // Priority 1: Mới
     if (isTopNew) {
-      return { text: "Mới", color: "bg-green-500 text-white" };
-    }
-
-    // Priority 2: Bán chạy (top 10 bán nhiều nhất)
-    if (isTopSeller) {
-      return { text: "Bán chạy", color: "bg-yellow-600 text-white" };
-    }
-
-    // Priority 3: Trả góp 0% (do admin set)
-    if (product.installmentBadge === "Trả góp 0%, trả trước 0đ") {
       return {
-        text: "Trả góp 0%, trả trước 0đ",
-        color: "bg-blue-500 text-white text-xs",
+        text: "Mới",
+        color: "bg-green-500 hover:bg-green-500 text-white",
       };
     }
 
-    if (product.installmentBadge === "Trả góp 0%") {
+    // Priority 2: Bán chạy
+    if (isTopSeller) {
+      // Dùng màu Xanh lá (Bán chạy) theo ảnh 2 (image_f138c1.png)
       return {
-        text: "Trả góp 0%",
-        color: "bg-blue-500 text-white",
+        text: "Bán chạy",
+        color: "bg-green-500 hover:bg-green-500 text-white",
       };
     }
 
@@ -102,18 +127,19 @@ const ProductCard = ({
 
   const rightBadge = getRightBadge();
 
-  // === 5. Installment TEXT bên dưới ảnh (chỉ hiển thị khi không có badge Mới/Bán chạy) ===
-  const showInstallmentText =
-    !isTopNew &&
-    !isTopSeller &&
-    (product.installmentBadge === "Trả góp 0%" ||
-      product.installmentBadge === "Trả góp 0%, trả trước 0đ");
+  // === 5. Installment TEXT bên dưới tên sản phẩm ===
+  // ✅ LOGIC CẬP NHẬT: Kiểm tra nếu là chuỗi "none" (không phân biệt hoa thường) thì coi như null
+  const installmentText =
+    product.installmentBadge &&
+    product.installmentBadge.toLowerCase() !== "none"
+      ? product.installmentBadge
+      : null;
 
   // === 6. Danh sách storage options ===
   const storageOptions = Array.from(
     new Set(
       safeVariants
-        .filter((v) => v && v.stock > 0 && v.storage)
+        .filter((v) => v && v.storage) // Lọc những variant có storage
         .map((v) => v.storage)
         .sort((a, b) => parseInt(a) - parseInt(b))
     )
@@ -125,9 +151,16 @@ const ProductCard = ({
   // === 8. Chọn storage ===
   const handleStorageClick = (e, storage) => {
     e.stopPropagation();
-    const variant = safeVariants.find(
+    // Ưu tiên chọn variant có stock > 0
+    let variant = safeVariants.find(
       (v) => v.storage === storage && v.stock > 0
     );
+
+    // Nếu không có stock > 0, chọn variant bất kỳ
+    if (!variant) {
+      variant = safeVariants.find((v) => v.storage === storage);
+    }
+
     if (variant) setSelectedVariant(variant);
   };
 
@@ -178,6 +211,7 @@ const ProductCard = ({
   return (
     <>
       <Card
+        // Thay đổi chiều cao card để phù hợp với ảnh mẫu
         className="w-full max-w-[280px] h-[550px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white border-0 relative"
         onClick={() => !isAdmin && navigate(`/products/${product._id}`)}
       >
@@ -207,20 +241,22 @@ const ProductCard = ({
           </>
         )}
 
-        {/* === Badge GIẢM GIÁ (góc trên trái) === */}
+        {/* === Badge GIẢM GIÁ (góc trên trái) - Màu Đỏ === */}
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
-            <Badge className="bg-red-500 text-white font-bold text-sm px-3 py-1 rounded-md shadow-md">
+            {/* Giảm size text, bo tròn nhẹ hơn */}
+            <Badge className="bg-red-600 hover:bg-red-600 text-white font-bold text-xs px-2 py-1 rounded-md shadow-md">
               -{discountPercent}%
             </Badge>
           </div>
         )}
 
-        {/* === Badge TRẠNG THÁI (góc trên phải) === */}
+        {/* === Badge TRẠNG THÁI (góc trên phải) - Màu Xanh lá/Xanh ngọc === */}
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
+            {/* Giảm size text, bo tròn nhẹ hơn */}
             <Badge
-              className={`${rightBadge.color} font-bold text-sm px-3 py-1 rounded-md shadow-md`}
+              className={`${rightBadge.color} font-bold text-xs px-2 py-1 rounded-md shadow-md`}
             >
               {rightBadge.text}
             </Badge>
@@ -228,14 +264,15 @@ const ProductCard = ({
         )}
 
         {/* === Ảnh sản phẩm === */}
-        <div className="relative aspect-[3/4] bg-gradient-to-b from-gray-50 to-gray-100 overflow-hidden">
+        {/* Aspect ratio 3/4 và padding theo ảnh mẫu */}
+        <div className="relative aspect-[3/4] bg-white overflow-hidden p-6 pt-10">
           <img
             src={displayImage}
             alt={product.name}
-            className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
           />
 
-          {/* === Nút thêm giỏ hàng === */}
+          {/* === Nút thêm giỏ hàng (Chỉ hiển thị cho Customer) === */}
           {!isAdmin &&
             isAuthenticated &&
             user?.role === "CUSTOMER" &&
@@ -253,57 +290,54 @@ const ProductCard = ({
         </div>
 
         {/* === Thông tin sản phẩm === */}
-        <div className="p-4 space-y-3 bg-white">
+        <div className="px-4 space-y-1 bg-white">
+          {/* Tên sản phẩm */}
           <h3 className="font-bold text-lg line-clamp-2 text-gray-900 leading-tight">
             {product.name}
           </h3>
 
-          {/* === Trả góp text (chỉ hiển thị khi KHÔNG có badge Mới/Bán chạy) === */}
-          {showInstallmentText && (
-            <p className="text-xs text-gray-600">{product.installmentBadge}</p>
+          {/* === Trả góp text (Hiển thị ngay dưới tên sản phẩm) === */}
+          {/* ✅ Đã cập nhật logic kiểm tra installmentText */}
+          {installmentText && (
+            <Badge
+              variant="outline"
+              className="bg-gray-200 text-gray-700 font-medium text-xs px-2 py-0.5 rounded-md border-0"
+            >
+              {installmentText}
+            </Badge>
           )}
 
-          {/* === Giá === */}
-          <div className="space-y-1">
+          {/* === Giá gốc (Nếu có giảm giá) === */}
+          <div className="space-y-0.5 pt-1">
             {displayOriginalPrice > displayPrice && (
               <p className="text-sm text-gray-500 line-through">
                 {formatPrice(displayOriginalPrice)}
               </p>
             )}
+            {/* === Giá bán === */}
             <p className="text-2xl font-bold text-red-600">
               {formatPrice(displayPrice)}
             </p>
           </div>
 
-          {/* === Đánh giá === */}
-          {product.reviewCount > 0 && (
-            <div className="flex items-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-4 h-4 ${
-                    i < Math.round(product.rating)
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "text-gray-300"
-                  }`}
-                />
-              ))}
-              <span className="text-xs text-gray-500 ml-1">
-                ({product.reviewCount} đánh giá)
-              </span>
-            </div>
-          )}
+          {/* === Đánh giá (Luôn hiển thị theo ảnh mẫu) === */}
+          <div className="pt-2">
+            <StarRating rating={rating} reviewCount={reviewCount} />
+            {/* Dùng div với border-b để tạo đường line mỏng dưới đánh giá */}
+            <div className="mt-2 border-b border-gray-200"></div>
+          </div>
 
           {/* === Dung lượng === */}
-          {storageOptions.length > 1 && (
-            <div className="flex flex-wrap gap-1 pt-1">
+          {storageOptions.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-3">
               {storageOptions.map((storage) => (
                 <button
                   key={storage}
                   onClick={(e) => handleStorageClick(e, storage)}
+                  // Chỉnh style button nhỏ gọn, bo góc tròn, màu sắc theo ảnh mẫu
                   className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
                     current.storage === storage
-                      ? "bg-black text-white border-black"
+                      ? "bg-red-600 text-white border-red-600" // Màu đỏ khi được chọn
                       : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
                   }`}
                 >
@@ -313,18 +347,19 @@ const ProductCard = ({
             </div>
           )}
 
-          {/* === Tồn kho === */}
-          {totalStock === 0 ? (
-            <p className="text-xs text-red-600 font-medium">Hết hàng</p>
-          ) : totalStock <= 5 ? (
-            <p className="text-xs text-orange-600 font-medium">
+          {/* === Tồn kho (Chỉ hiển thị nếu cần cảnh báo) === */}
+          {totalStock === 0 && (
+            <p className="text-xs text-red-600 font-medium pt-2">Hết hàng</p>
+          )}
+          {totalStock > 0 && totalStock <= 5 && (
+            <p className="text-xs text-orange-600 font-medium pt-2">
               Chỉ còn {totalStock} sản phẩm!
             </p>
-          ) : null}
+          )}
         </div>
       </Card>
 
-      {/* === Dialog xác nhận xóa === */}
+      {/* === Dialog xác nhận xóa (Giữ nguyên) === */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
