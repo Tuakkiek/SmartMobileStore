@@ -1,4 +1,8 @@
-// frontend/src/components/shared/ProductCard.jsx
+// ============================================
+// FILE: frontend/src/components/shared/ProductCard.jsx
+// ✅ FULL IMPLEMENTATION: Badges + Discount + Admin Actions
+// ============================================
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -20,7 +24,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const ProductCard = ({ product, onEdit, onDelete }) => {
+const ProductCard = ({
+  product,
+  isTopNew = false,
+  isTopSeller = false,
+  onEdit,
+  onDelete,
+}) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
@@ -29,9 +39,9 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const isAdmin = user?.role === "ADMIN" || user?.role === "STAFF";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
 
-  // ✅ Luôn an toàn với dữ liệu backend
+  // ✅ Ensure variants is always an array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
 
   // === 1. Chọn variant mặc định có stock > 0 ===
@@ -45,14 +55,14 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
   const displayOriginalPrice =
     current.originalPrice || product.originalPrice || 0;
 
-  // === 2. Ảnh hiển thị an toàn ===
+  // === 2. Ảnh hiển thị ===
   const displayImage =
     current?.images?.[0] ||
     (Array.isArray(product.images) ? product.images[0] : null) ||
     product.image ||
     "/placeholder.png";
 
-  // === 3. % giảm giá ===
+  // === 3. % GIẢM GIÁ - HIỂN thị góc trên bên trái ===
   const discountPercent =
     displayOriginalPrice > displayPrice
       ? Math.round(
@@ -60,24 +70,46 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
         )
       : 0;
 
-  // === 4. Nhãn góc phải (Mới / Bán chạy / Trả góp 0%) ===
+  // === 4. BADGE GÓC TRÊN BÊN PHẢI - PRIORITY: TOP NEW > TOP SELLER > INSTALLMENT ===
   const getRightBadge = () => {
-    if (product.labelType === "new")
+    // Priority 1: Mới (top 10 mới nhất)
+    if (isTopNew) {
       return { text: "Mới", color: "bg-green-500 text-white" };
-    if (product.labelType === "bestseller")
+    }
+
+    // Priority 2: Bán chạy (top 10 bán nhiều nhất)
+    if (isTopSeller) {
       return { text: "Bán chạy", color: "bg-yellow-600 text-white" };
-    if (product.installmentOption === "0%-0đ")
+    }
+
+    // Priority 3: Trả góp 0% (do admin set)
+    if (product.installmentBadge === "Trả góp 0%, trả trước 0đ") {
       return {
         text: "Trả góp 0%, trả trước 0đ",
         color: "bg-blue-500 text-white text-xs",
       };
-    if (product.installmentOption === "0%")
-      return { text: "Trả góp 0%", color: "bg-blue-500 text-white" };
+    }
+
+    if (product.installmentBadge === "Trả góp 0%") {
+      return {
+        text: "Trả góp 0%",
+        color: "bg-blue-500 text-white",
+      };
+    }
+
     return null;
   };
+
   const rightBadge = getRightBadge();
 
-  // === 5. Danh sách dung lượng ===
+  // === 5. Installment TEXT bên dưới ảnh (chỉ hiển thị khi không có badge Mới/Bán chạy) ===
+  const showInstallmentText =
+    !isTopNew &&
+    !isTopSeller &&
+    (product.installmentBadge === "Trả góp 0%" ||
+      product.installmentBadge === "Trả góp 0%, trả trước 0đ");
+
+  // === 6. Danh sách storage options ===
   const storageOptions = Array.from(
     new Set(
       safeVariants
@@ -87,10 +119,10 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
     )
   );
 
-  // === 6. Tổng stock ===
+  // === 7. Tổng stock ===
   const totalStock = safeVariants.reduce((sum, v) => sum + (v?.stock || 0), 0);
 
-  // === 7. Chọn dung lượng ===
+  // === 8. Chọn storage ===
   const handleStorageClick = (e, storage) => {
     e.stopPropagation();
     const variant = safeVariants.find(
@@ -99,7 +131,7 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
     if (variant) setSelectedVariant(variant);
   };
 
-  // === 8. Thêm vào giỏ hàng ===
+  // === 9. Thêm vào giỏ hàng ===
   const handleAddToCart = async (e) => {
     e.stopPropagation();
     if (!isAuthenticated || user?.role !== "CUSTOMER") {
@@ -127,7 +159,7 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
     }
   };
 
-  // === 9. Sửa & Xóa (Admin) ===
+  // === 10. Admin actions ===
   const handleEditClick = (e) => {
     e.stopPropagation();
     onEdit?.(product);
@@ -175,7 +207,7 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
           </>
         )}
 
-        {/* === Badge giảm giá === */}
+        {/* === Badge GIẢM GIÁ (góc trên trái) === */}
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
             <Badge className="bg-red-500 text-white font-bold text-sm px-3 py-1 rounded-md shadow-md">
@@ -184,7 +216,7 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
           </div>
         )}
 
-        {/* === Badge trạng thái === */}
+        {/* === Badge TRẠNG THÁI (góc trên phải) === */}
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
             <Badge
@@ -226,17 +258,10 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
             {product.name}
           </h3>
 
-          {/* === Trả góp === */}
-          {(product.installmentOption === "0%" ||
-            product.installmentOption === "0%-0đ") &&
-            product.labelType !== "new" &&
-            product.labelType !== "bestseller" && (
-              <p className="text-xs text-gray-600">
-                {product.installmentOption === "0%-0đ"
-                  ? "Trả góp 0%, trả trước 0đ"
-                  : "Trả góp 0%"}
-              </p>
-            )}
+          {/* === Trả góp text (chỉ hiển thị khi KHÔNG có badge Mới/Bán chạy) === */}
+          {showInstallmentText && (
+            <p className="text-xs text-gray-600">{product.installmentBadge}</p>
+          )}
 
           {/* === Giá === */}
           <div className="space-y-1">
