@@ -50,7 +50,7 @@ import IPadSpecsForm from "@/components/shared/specs/IPadSpecsForm";
 import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
 import AirPodsSpecsForm from "@/components/shared/specs/AirPodsSpecsForm";
 import AppleWatchSpecsForm from "@/components/shared/specs/AppleWatchSpecsForm";
-import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecsForm";
+import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecs slogForm";
 
 import IPhoneVariantsForm from "@/components/shared/variants/IPhoneVariantsForm";
 import IPadVariantsForm from "@/components/shared/variants/IPadVariantsForm";
