@@ -36,6 +36,7 @@ export const create = async (req, res) => {
       variants: [],
       condition: productData.condition || 'NEW',
       brand: 'Apple',
+      category: productData.category || 'iPad',
       status: productData.status || 'AVAILABLE',
       createdBy: productData.createdBy,
       averageRating: 0,
