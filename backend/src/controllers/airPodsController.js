@@ -37,6 +37,7 @@ export const create = async (req, res) => {
     const productToCreate = {
       name: productData.name.trim(),
       model: productData.model.trim(),
+      category: productData.category?.trim() || "AirPods",
       description: productData.description?.trim() || "",
       specifications: productData.specifications,
       variants: [], // Will be populated after creating variants
