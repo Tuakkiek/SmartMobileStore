@@ -47,8 +47,9 @@ export const create = async (req, res) => {
       variants: [],
       condition: productData.condition || "NEW",
       brand: "Apple",
-      category: productData.category || "iPhone", // ✅ THÊM DÒNG NÀY
+      category: productData.category || "iPhone",
       status: productData.status || "AVAILABLE",
+      installmentBadge: productData.installmentBadge || "NONE", // ✅ THÊM DÒNG NÀY
       createdBy: productData.createdBy,
       averageRating: 0,
       totalReviews: 0,
@@ -218,6 +219,7 @@ export const update = async (req, res) => {
       product.description = productData.description?.trim() || "";
     if (productData.condition) product.condition = productData.condition;
     if (productData.status) product.status = productData.status;
+    if (productData.installmentBadge) product.installmentBadge = productData.installmentBadge; // ✅ THÊM DÒNG NÀY
     if (productData.specifications) {
       // Ensure colors is array
       if (
