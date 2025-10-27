@@ -541,8 +541,6 @@ const ProductsPage = () => {
       return;
     }
 
-    if (!window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
-
     setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
