@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/lib/api.js
-// ✅ FINAL MERGED VERSION (2025)
+// ✅ FIXED: Added analyticsAPI export
 // ============================================
 
 import axios from "axios";
@@ -57,7 +57,7 @@ api.interceptors.response.use(
 // CATEGORY-SPECIFIC APIs
 // ============================================
 
-// ✅ IPHONE API - SUPPORT createVariants
+// iPhone API
 export const iPhoneAPI = {
   getAll: (params) => api.get("/iphones", { params }),
   getById: (id) => api.get(`/iphones/${id}`),
@@ -208,19 +208,49 @@ export const productAPI = {
 };
 
 // ============================================
-// ANALYTICS / DASHBOARD FUNCTIONS
-// (Merged from first code block)
+// ✅ ANALYTICS API - NEW
 // ============================================
+export const analyticsAPI = {
+  getTopSellers: (category, limit = 10) =>
+    api.get(`/analytics/top-sellers/${category}`, { params: { limit } }),
 
+  getTopSellersAll: (limit = 10) =>
+    api.get("/analytics/top-sellers", { params: { limit } }),
+
+  getProductSales: (productId, variantId = null) =>
+    api.get(`/analytics/product/${productId}`, { params: { variantId } }),
+
+  getSalesByTime: (category, startDate, endDate) =>
+    api.get("/analytics/sales-by-time", {
+      params: { category, startDate, endDate },
+    }),
+
+  getDashboard: (category = null) =>
+    api.get("/analytics/dashboard", { params: { category } }),
+};
+
+// ============================================
+// HELPER FUNCTIONS FOR DASHBOARD
+// ============================================
 export const getTopSelling = async (category) => {
-  const response = await api.get(`/analytics/top-products/${category}`);
-  return response.data?.data || [];
+  try {
+    const response = await analyticsAPI.getTopSellers(category, 10);
+    return response.data?.data || [];
+  } catch (error) {
+    console.error("Error fetching top selling:", error);
+    return [];
+  }
 };
 
 export const getAllProductsForCategory = async (cat) => {
-  const response = await api.get(`/${cat}`);
-  const data = response.data?.data;
-  return data?.products || data || [];
+  try {
+    const response = await api.get(`/${cat}`);
+    const data = response.data?.data;
+    return data?.products || data || [];
+  } catch (error) {
+    console.error(`Error fetching products for ${cat}:`, error);
+    return [];
+  }
 };
 
 export const getTopNewProducts = async () => {
@@ -232,11 +262,18 @@ export const getTopNewProducts = async () => {
     "applewatches",
     "accessories",
   ];
-  const allProducts = (
-    await Promise.all(categories.map(getAllProductsForCategory))
-  ).flat();
-  allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return allProducts.slice(0, 10).map((p) => p._id?.toString());
+
+  try {
+    const allProducts = (
+      await Promise.all(categories.map(getAllProductsForCategory))
+    ).flat();
+
+    allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return allProducts.slice(0, 10).map((p) => p._id?.toString());
+  } catch (error) {
+    console.error("Error fetching top new products:", error);
+    return [];
+  }
 };
 
 // ============================================
@@ -256,6 +293,7 @@ export default {
   reviewAPI,
   promotionAPI,
   userAPI,
+  analyticsAPI, // ✅ ADDED
   getTopSelling,
   getAllProductsForCategory,
   getTopNewProducts,

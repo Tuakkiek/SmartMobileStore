@@ -1,13 +1,15 @@
-// backend/src/server.js
-import { connectDB } from "./config/db.js"; // Import connectDB từ db.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import config from "./config/config.js"; // Đảm bảo import đúng file config.js
+import dotenv from "dotenv";
 import path from "path";
+import { connectDB } from "./config/db.js";
+import config from "./config/config.js";
 
-// Import routes
+// ================================
+// 🔹 Import tất cả routes
+// ================================
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
@@ -22,34 +24,41 @@ import macRoutes from "./routes/macRoutes.js";
 import airPodsRoutes from "./routes/airPodsRoutes.js";
 import appleWatchRoutes from "./routes/appleWatchRoutes.js";
 import accessoryRoutes from "./routes/accessoryRoutes.js";
-import analyticsRoutes from "./routes/analyticsRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js"; // ✅ THÊM analytics
 
-import dotenv from "dotenv";
 dotenv.config();
 
-// Khởi tạo ứng dụng Express
+// ================================
+// 🔹 Khởi tạo Express App
+// ================================
 const app = express();
 
-// Middleware
+// ================================
+// 🔹 Middleware
+// ================================
 app.use(
   cors({
-    origin: "http://localhost:5173", // Đồng bộ với frontend Vite (port 5173)
-    credentials: true, // Cho phép gửi cookie/credentials
+    origin: process.env.CLIENT_URL || "http://localhost:5173", // Cho phép frontend truy cập
+    credentials: true,
   })
 );
-app.use(express.json()); // Parse JSON request body
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use(cookieParser()); // Parse cookies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-// Serve static files (nếu có, ví dụ: uploads)
+// Serve static files (nếu có upload ảnh, file,...)
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Kết nối MongoDB
+// ================================
+// 🔹 Kết nối MongoDB
+// ================================
 connectDB()
   .then(() => console.log("✅ MongoDB connected successfully"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Routes
+// ================================
+// 🔹 Đăng ký tất cả routes
+// ================================
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
@@ -64,9 +73,11 @@ app.use("/api/macs", macRoutes);
 app.use("/api/airpods", airPodsRoutes);
 app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/accessories", accessoryRoutes);
-app.use("/api/analytics", analyticsRoutes);
+app.use("/api/analytics", analyticsRoutes); // ✅ THÊM analytics route
 
-// Health check endpoint
+// ================================
+// 🔹 Health Check Endpoint
+// ================================
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -76,22 +87,40 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Error handling middleware
+// ================================
+// 🔹 Error Handling Middleware
+// ================================
 app.use((err, req, res, next) => {
-  console.error("Server Error:", err.stack);
+  console.error("❌ Server Error:", err.stack);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Internal Server Error",
-    error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 });
 
-// Start server
-const PORT = config.port || 5000;
+// ================================
+// 🔹 404 Handler
+// ================================
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+  });
+});
+
+// ================================
+// 🔹 Khởi động server
+// ================================
+const PORT = config.port || process.env.PORT || 5000;
+
 const startServer = () => {
   app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📍 Environment: ${config.nodeEnv}`);
+    console.log(
+      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
+    );
     console.log(
       `⏰ Current time: ${new Date().toLocaleString("en-US", {
         timeZone: "Asia/Ho_Chi_Minh",
@@ -100,12 +129,12 @@ const startServer = () => {
   });
 };
 
-// Xử lý sự cố kết nối MongoDB và khởi động server
+// Xử lý sự cố kết nối MongoDB
 mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err);
-  process.exit(1); // Thoát nếu không kết nối được
+  process.exit(1);
 });
 
 mongoose.connection.once("open", startServer);
 
-export default app; // Xuất app để dùng trong test hoặc module khác nếu cần
+export default app;

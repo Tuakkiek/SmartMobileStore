@@ -22,6 +22,7 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
+import { analyticsAPI } from "@/lib/api";
 import { generateSKU } from "@/lib/generateSKU";
 import {
   CATEGORIES,
@@ -67,7 +68,10 @@ const ProductsPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [formData, setFormData] = useState(getEmptyFormData("iPhone"));
+  const [formData, setFormData] = useState({
+    ...getEmptyFormData("iPhone"),
+    installmentBadge: "NONE", // ✅ Default value
+  });
   const [activeFormTab, setActiveFormTab] = useState("basic");
   const [justCreatedProductId, setJustCreatedProductId] = useState(null);
   const [addMode, setAddMode] = useState("normal");
@@ -85,7 +89,6 @@ const ProductsPage = () => {
     }
   }, [activeTab, editingProduct, justCreatedProductId]);
 
-  
   // ============================================
   // FETCH PRODUCTS
   // ============================================
@@ -96,14 +99,40 @@ const ProductsPage = () => {
       if (!api || !api.getAll) {
         throw new Error(`API for ${activeTab} is not properly configured`);
       }
+
       console.log(`✅ Fetching products for category: ${activeTab}`);
       const response = await api.getAll({ limit: 100 });
       const data = response?.data?.data?.products || response?.data || [];
-      setProducts(Array.isArray(data) ? data : []);
+
+      // ✅ TÍNH TOP 10 MỚI NHẤT
+      const sortedByDate = [...data].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      const top10NewIds = sortedByDate.slice(0, 10).map((p) => p._id);
+
+      // ✅ LẤY TOP 10 BÁN CHẠY
+      let top10SellerIds = [];
+      try {
+        const sellersRes = await analyticsAPI.getTopSellers(activeTab, 10);
+        top10SellerIds = sellersRes.data.data.map((s) => s.productId);
+      } catch (error) {
+        console.warn("Failed to fetch top sellers:", error);
+      }
+
+      // ✅ ATTACH FLAGS VÀO PRODUCTS
+      const productsWithFlags = data.map((p) => ({
+        ...p,
+        isTopNew: top10NewIds.includes(p._id),
+        isTopSeller: top10SellerIds.includes(p._id),
+      }));
+
+      setProducts(Array.isArray(productsWithFlags) ? productsWithFlags : []);
 
       // If we just created a product, find it and auto-open edit
       if (justCreatedProductId) {
-        const createdProduct = data.find((p) => p._id === justCreatedProductId);
+        const createdProduct = productsWithFlags.find(
+          (p) => p._id === justCreatedProductId
+        );
         if (createdProduct) {
           handleEdit(createdProduct);
           setJustCreatedProductId(null);
@@ -663,6 +692,27 @@ const ProductsPage = () => {
         }
       }
     }
+
+    // ✅ VALIDATE: price <= originalPrice cho tất cả options
+    for (let i = 0; i < formData.variants.length; i++) {
+      const variant = formData.variants[i];
+
+      for (let j = 0; j < variant.options.length; j++) {
+        const option = variant.options[j];
+        const price = Number(option.price);
+        const originalPrice = Number(option.originalPrice);
+
+        if (price > originalPrice && originalPrice > 0) {
+          toast.error(
+            `Giá bán (${price.toLocaleString()}đ) không được lớn hơn giá gốc (${originalPrice.toLocaleString()}đ) ` +
+              `tại phiên bản ${j + 1} của biến thể ${i + 1}`
+          );
+          setActiveFormTab("variants");
+          return false;
+        }
+      }
+    }
+
     return true;
   };
 
@@ -899,41 +949,18 @@ const ProductsPage = () => {
                   return (
                     <div key={product._id} className="relative group">
                       <ProductCard
-                        product={{
-                          ...product,
-                          variantsCount: product.variants?.length || 0,
-                        }}
+                        key={product._id || product.id}
+                        product={product}
+                        isTopNew={product.isTopNew} // ✅ Pass flag
+                        isTopSeller={product.isTopSeller} // ✅ Pass flag
                         onEdit={handleEdit}
                         onDelete={handleDelete}
-                        showAdminActions={isAdmin} // Chỉ admin thấy nút sửa
+                        onUpdate={() => fetchProducts()}
+                        showVariantsBadge={true}
+                        showAdminActions={isAdmin}
+                        editingProductId={editingProduct?._id} // Truyền editingProductId
+                        showForm={showForm} // Truyền showForm
                       />
-
-                      {/* NÚT XÓA - Chỉ hiện khi đang chỉnh sửa (trong form) */}
-                      {editingProduct?._id === product._id &&
-                        showForm &&
-                        isAdmin && (
-                          <div className="absolute -bottom-12 left-0 right-0 flex justify-center z-10">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (
-                                  window.confirm(
-                                    "Bạn có chắc chắn muốn xóa sản phẩm này?"
-                                  )
-                                ) {
-                                  handleDelete(product._id);
-                                  setShowForm(false);
-                                  setEditingProduct(null);
-                                }
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Xóa sản phẩm
-                            </Button>
-                          </div>
-                        )}
                     </div>
                   );
                 })}
@@ -1044,7 +1071,7 @@ const ProductsPage = () => {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Nhãn trả góp</Label>
+                          <Label>Trả góp 0%</Label>
                           <Select
                             value={formData.installmentBadge || "NONE"}
                             onValueChange={(value) =>
@@ -1052,7 +1079,7 @@ const ProductsPage = () => {
                             }
                           >
                             <SelectTrigger>
-                              <SelectValue />
+                              <SelectValue placeholder="Chọn chương trình trả góp" />
                             </SelectTrigger>
                             <SelectContent>
                               {INSTALLMENT_BADGE_OPTIONS.map((option) => (
@@ -1065,6 +1092,10 @@ const ProductsPage = () => {
                               ))}
                             </SelectContent>
                           </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Badge này chỉ hiển thị khi sản phẩm không thuộc top
+                            "Mới" hoặc "Bán chạy"
+                          </p>
                         </div>
                       </div>
                       <div className="space-y-2">

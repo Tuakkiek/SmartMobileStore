@@ -2,7 +2,7 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Cart from "../models/Cart.js";
-import { updateSales } from "../services/salesAnalyticsService.js";
+import { recordOrderSales } from "../services/salesAnalyticsService.js"; // ✅ IMPORT
 
 // Tạo đơn hàng mới
 export const createOrder = async (req, res) => {
@@ -159,11 +159,11 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// Cập nhật trạng thái đơn hàng
+// ✅ UPDATED: Cập nhật trạng thái đơn hàng + Record Sales khi DELIVERED
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status, note } = req.body;
-    console.log("Received status:", status, "note:", note); // Check input from frontend
+    console.log("Received status:", status, "note:", note);
 
     const VALID_STATUSES = [
       "PENDING",
@@ -184,7 +184,7 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const order = await Order.findById(req.params.id);
-    console.log("Current order status before update:", order.status); // Check old status
+    console.log("Current order status before update:", order.status);
 
     if (!order) {
       return res
@@ -198,20 +198,23 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const oldStatus = order.status;
+    // ✅ THÊM: Record sales khi chuyển sang DELIVERED
+    if (status === "DELIVERED" && order.status !== "DELIVERED") {
+      try {
+        await recordOrderSales(order);
+        console.log(
+          "✅ Sales recorded successfully for order:",
+          order.orderNumber
+        );
+      } catch (salesError) {
+        console.error("❌ Failed to record sales:", salesError);
+        // Không block update status, chỉ log error
+      }
+    }
 
     // Gọi update
     const updatedOrder = await order.updateStatus(status, req.user._id, note);
-    console.log("Updated order status after save:", updatedOrder.status); // Check new status
-
-    if (status === "DELIVERED" && oldStatus !== "DELIVERED") {
-      for (const item of order.items) {
-        const variantId = item.productId;
-        const qty = item.quantity;
-        const rev = item.price * qty; // Assuming no discount applied to revenue, adjust if needed
-        await updateSales(variantId, qty, rev);
-      }
-    }
+    console.log("Updated order status after save:", updatedOrder.status);
 
     res.json({
       success: true,
@@ -219,7 +222,7 @@ export const updateOrderStatus = async (req, res) => {
       data: { order: updatedOrder },
     });
   } catch (error) {
-    console.error("Error in updateOrderStatus:", error.message); // Log error
+    console.error("Error in updateOrderStatus:", error.message);
     res.status(400).json({ success: false, message: error.message });
   }
 };

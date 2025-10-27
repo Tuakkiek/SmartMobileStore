@@ -19,12 +19,12 @@ const iPhoneVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-iPhoneVariantSchema.pre("validate", function (next) {
+// ✅ Validation: price <= originalPrice
+iPhoneVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
-    next(new Error("Giá bán không thể lớn hơn giá gốc"));
-  } else {
-    next();
+    return next(new Error("Giá bán không được lớn hơn giá gốc"));
   }
+  next();
 });
 
 const iPhoneSchema = new mongoose.Schema(
@@ -58,6 +58,14 @@ const iPhoneSchema = new mongoose.Schema(
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
       default: "AVAILABLE",
     },
+
+    // ✅ THÊM: Installment Badge
+    installmentBadge: {
+      type: String,
+      enum: ["NONE", "INSTALLMENT_0", "INSTALLMENT_0_PREPAY_0"],
+      default: "NONE",
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -65,17 +73,13 @@ const iPhoneSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
-    installmentBadge: {
-      type: String,
-      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
-      default: "NONE",
-    },
   },
   { timestamps: true }
 );
 
 iPhoneSchema.index({ name: "text", model: "text", description: "text" });
 iPhoneSchema.index({ status: 1 });
+iPhoneSchema.index({ createdAt: -1 }); // ✅ For "Mới" badge query
 
 export const IPhoneVariant = mongoose.model(
   "IPhoneVariant",

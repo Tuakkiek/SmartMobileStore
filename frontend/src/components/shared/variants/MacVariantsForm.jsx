@@ -1,8 +1,3 @@
-// ============================================
-// FILE: src/components/shared/variants/MacVariantsForm.jsx
-// ✅ VARIANTS FORM CHO MAC - ĐỒNG BỘ VỚI MULTI-IMAGES
-// ============================================
-
 import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import { generateSKU } from "@/lib/generateSKU";
+import { toast } from "sonner";
 
 const MacVariantsForm = ({
   variants,
@@ -30,7 +26,6 @@ const MacVariantsForm = ({
   onRemoveOption,
   model,
 }) => {
-  // Tự động tạo SKU khi color, cpuGpu, ram hoặc storage thay đổi
   useEffect(() => {
     variants.forEach((variant, vIdx) => {
       variant.options.forEach((option, oIdx) => {
@@ -52,19 +47,38 @@ const MacVariantsForm = ({
     });
   }, [variants, model, onOptionChange]);
 
-  const handleLocalOptionChange = (vIdx, oIdx, field, value) => {
-    onOptionChange(vIdx, oIdx, field, value);
+  const handleVariantOptionChange = (vIdx, oIdx, field, value) => {
+    const variantsCopy = [...variants];
+    const option = variantsCopy[vIdx].options[oIdx];
 
+    if (field === "price" || field === "originalPrice") {
+      const price = field === "price" ? Number(value) : Number(option.price);
+      const originalPrice =
+        field === "originalPrice"
+          ? Number(value)
+          : Number(option.originalPrice);
+
+      if (price > originalPrice && originalPrice > 0) {
+        toast.error(
+          `Giá bán (${price.toLocaleString()}đ) không được lớn hơn giá gốc (${originalPrice.toLocaleString()}đ)`
+        );
+        return;
+      }
+    }
+
+    onOptionChange(vIdx, oIdx, field, value);
+  };
+
+  const handleConfigChange = (vIdx, oIdx, field, value) => {
+    handleVariantOptionChange(vIdx, oIdx, field, value);
     const variant = variants[vIdx];
     const option = variant.options[oIdx];
+    const cpuGpu = field === "cpuGpu" ? value : option.cpuGpu;
+    const ram = field === "ram" ? value : option.ram;
+    const storage = field === "storage" ? value : option.storage;
 
-    const color = variant.color || "";
-    const cpuGpu = field === "cpuGpu" ? value : option.cpuGpu || "";
-    const ram = field === "ram" ? value : option.ram || "";
-    const storage = field === "storage" ? value : option.storage || "";
-
-    if (color && cpuGpu && ram && storage) {
-      const newSKU = generateSKU("Mac", model || "UNKNOWN", color, {
+    if (variant.color && cpuGpu && ram && storage) {
+      const newSKU = generateSKU("Mac", model || "UNKNOWN", variant.color, {
         cpuGpu,
         ram,
         storage,
@@ -81,6 +95,7 @@ const MacVariantsForm = ({
           <Plus className="w-4 h-4 mr-2" /> Thêm màu
         </Button>
       </div>
+
       {variants.map((variant, vIdx) => (
         <div key={vIdx} className="rounded-md p-4 space-y-3 border">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -93,17 +108,16 @@ const MacVariantsForm = ({
                 value={variant.color || ""}
                 onChange={(e) => {
                   onVariantChange(vIdx, "color", e.target.value);
-                  // Tự động cập nhật SKU cho tất cả options khi màu thay đổi
-                  variant.options.forEach((option, oIdx) => {
-                    if (option.cpuGpu && option.ram && option.storage) {
+                  variant.options.forEach((opt, oIdx) => {
+                    if (opt.cpuGpu && opt.ram && opt.storage) {
                       const newSKU = generateSKU(
                         "Mac",
                         model || "UNKNOWN",
                         e.target.value,
                         {
-                          cpuGpu: option.cpuGpu,
-                          ram: option.ram,
-                          storage: option.storage,
+                          cpuGpu: opt.cpuGpu,
+                          ram: opt.ram,
+                          storage: opt.storage,
                         }
                       );
                       onOptionChange(vIdx, oIdx, "sku", newSKU);
@@ -115,7 +129,6 @@ const MacVariantsForm = ({
             </div>
           </div>
 
-          {/* URL Ảnh - Multi images */}
           <div className="space-y-2">
             <Label>URL ảnh</Label>
             {variant.images.map((img, imgIdx) => (
@@ -160,16 +173,12 @@ const MacVariantsForm = ({
                     placeholder="VD: 10 CPU – 10 GPU"
                     value={opt.cpuGpu || ""}
                     onChange={(e) =>
-                      handleLocalOptionChange(
-                        vIdx,
-                        oIdx,
-                        "cpuGpu",
-                        e.target.value
-                      )
+                      handleConfigChange(vIdx, oIdx, "cpuGpu", e.target.value)
                     }
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label>
                     RAM <span className="text-red-500">*</span>
@@ -177,7 +186,7 @@ const MacVariantsForm = ({
                   <Select
                     value={opt.ram || ""}
                     onValueChange={(value) =>
-                      handleLocalOptionChange(vIdx, oIdx, "ram", value)
+                      handleConfigChange(vIdx, oIdx, "ram", value)
                     }
                   >
                     <SelectTrigger>
@@ -192,6 +201,7 @@ const MacVariantsForm = ({
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label>
                     Bộ nhớ trong <span className="text-red-500">*</span>
@@ -199,7 +209,7 @@ const MacVariantsForm = ({
                   <Select
                     value={opt.storage || ""}
                     onValueChange={(value) =>
-                      handleLocalOptionChange(vIdx, oIdx, "storage", value)
+                      handleConfigChange(vIdx, oIdx, "storage", value)
                     }
                   >
                     <SelectTrigger>
@@ -213,23 +223,32 @@ const MacVariantsForm = ({
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label>SKU</Label>
                   <Input
                     placeholder="VD: MAC-MACBOOKPRO-SPACEGRAY-10CPU10GPU-16GB-512GB"
                     value={opt.sku || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "sku", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "sku",
+                        e.target.value
+                      )
                     }
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Giá gốc</Label>
+                  <Label>
+                    Giá gốc <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="number"
                     value={opt.originalPrice || ""}
                     onChange={(e) =>
-                      onOptionChange(
+                      handleVariantOptionChange(
                         vIdx,
                         oIdx,
                         "originalPrice",
@@ -239,28 +258,56 @@ const MacVariantsForm = ({
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Giá bán</Label>
+                  <Label>
+                    Giá bán <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="number"
                     value={opt.price || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "price", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "price",
+                        e.target.value
+                      )
+                    }
+                    className={
+                      Number(opt.price) > Number(opt.originalPrice) &&
+                      Number(opt.originalPrice) > 0
+                        ? "border-red-500 focus:border-red-500"
+                        : ""
                     }
                     required
                   />
+                  {Number(opt.price) > Number(opt.originalPrice) &&
+                    Number(opt.originalPrice) > 0 && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <span>Warning</span> Giá bán phải nhỏ hơn hoặc bằng giá
+                        gốc
+                      </p>
+                    )}
                 </div>
+
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
                   <Input
                     type="number"
                     value={opt.stock || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "stock", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "stock",
+                        e.target.value
+                      )
                     }
                     required
                   />
                 </div>
+
                 <Button
                   type="button"
                   variant="outline"

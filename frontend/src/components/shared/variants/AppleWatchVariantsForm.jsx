@@ -1,14 +1,10 @@
-// ============================================
-// FILE: src/components/shared/variants/AppleWatchVariantsForm.jsx
-// ✅ VARIANTS FORM CHO APPLE WATCH - ĐỒNG BỘ VỚI MULTI-IMAGES
-// ============================================
-
 import React, { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { generateSKU } from "@/lib/generateSKU";
+import { toast } from "sonner";
 
 const AppleWatchVariantsForm = ({
   variants,
@@ -23,7 +19,6 @@ const AppleWatchVariantsForm = ({
   onRemoveOption,
   model,
 }) => {
-  // Tự động tạo SKU khi color hoặc variantName thay đổi
   useEffect(() => {
     variants.forEach((variant, vIdx) => {
       variant.options.forEach((option, oIdx) => {
@@ -32,9 +27,7 @@ const AppleWatchVariantsForm = ({
             "AppleWatch",
             model || "UNKNOWN",
             variant.color,
-            {
-              variantName: option.variantName,
-            }
+            { variantName: option.variantName }
           );
           onOptionChange(vIdx, oIdx, "sku", newSKU);
         }
@@ -42,21 +35,36 @@ const AppleWatchVariantsForm = ({
     });
   }, [variants, model, onOptionChange]);
 
-  const handleLocalOptionChange = (vIdx, oIdx, field, value) => {
+  const handleVariantOptionChange = (vIdx, oIdx, field, value) => {
+    const variantsCopy = [...variants];
+    const option = variantsCopy[vIdx].options[oIdx];
+
+    if (field === "price" || field === "originalPrice") {
+      const price = field === "price" ? Number(value) : Number(option.price);
+      const originalPrice =
+        field === "originalPrice"
+          ? Number(value)
+          : Number(option.originalPrice);
+
+      if (price > originalPrice && originalPrice > 0) {
+        toast.error(
+          `Giá bán (${price.toLocaleString()}đ) không được lớn hơn giá gốc (${originalPrice.toLocaleString()}đ)`
+        );
+        return;
+      }
+    }
+
     onOptionChange(vIdx, oIdx, field, value);
+  };
 
-    const variant = variants[vIdx];
-    const option = variant.options[oIdx];
-
-    const color = variant.color || "";
-    const variantName = field === "variantName" ? value : option.variantName || "";
-
-    if (color && variantName) {
+  const handleVariantNameChange = (vIdx, oIdx, value) => {
+    handleVariantOptionChange(vIdx, oIdx, "variantName", value);
+    if (variants[vIdx].color && value) {
       const newSKU = generateSKU(
         "AppleWatch",
         model || "UNKNOWN",
-        color,
-        { variantName }
+        variants[vIdx].color,
+        { variantName: value }
       );
       onOptionChange(vIdx, oIdx, "sku", newSKU);
     }
@@ -70,26 +78,26 @@ const AppleWatchVariantsForm = ({
           <Plus className="w-4 h-4 mr-2" /> Thêm màu
         </Button>
       </div>
+
       {variants.map((variant, vIdx) => (
         <div key={vIdx} className="rounded-md p-4 space-y-3 border">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Màu sắc <span className="text-red-500">*</span></Label>
+              <Label>
+                Màu sắc <span className="text-red-500">*</span>
+              </Label>
               <Input
                 placeholder="VD: Midnight"
                 value={variant.color || ""}
                 onChange={(e) => {
                   onVariantChange(vIdx, "color", e.target.value);
-                  // Tự động cập nhật SKU cho tất cả options khi màu thay đổi
-                  variant.options.forEach((option, oIdx) => {
-                    if (option.variantName) {
+                  variant.options.forEach((opt, oIdx) => {
+                    if (opt.variantName) {
                       const newSKU = generateSKU(
                         "AppleWatch",
                         model || "UNKNOWN",
                         e.target.value,
-                        {
-                          variantName: option.variantName,
-                        }
+                        { variantName: opt.variantName }
                       );
                       onOptionChange(vIdx, oIdx, "sku", newSKU);
                     }
@@ -100,7 +108,6 @@ const AppleWatchVariantsForm = ({
             </div>
           </div>
 
-          {/* URL Ảnh - Multi images */}
           <div className="space-y-2">
             <Label>URL ảnh</Label>
             {variant.images.map((img, imgIdx) => (
@@ -138,57 +145,103 @@ const AppleWatchVariantsForm = ({
                 className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end p-3 border rounded-md"
               >
                 <div className="space-y-2">
-                  <Label>Tên biến thể <span className="text-red-500">*</span></Label>
+                  <Label>
+                    Tên biến thể <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     placeholder="VD: GPS 40mm"
                     value={opt.variantName || ""}
-                    onChange={(e) => handleLocalOptionChange(vIdx, oIdx, "variantName", e.target.value)}
+                    onChange={(e) =>
+                      handleVariantNameChange(vIdx, oIdx, e.target.value)
+                    }
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label>SKU</Label>
                   <Input
                     placeholder="VD: APPLEWATCH-SERIES10-MIDNIGHT-GPS40MM"
                     value={opt.sku || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "sku", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "sku",
+                        e.target.value
+                      )
                     }
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Giá gốc</Label>
+                  <Label>
+                    Giá gốc <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="number"
                     value={opt.originalPrice || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "originalPrice", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "originalPrice",
+                        e.target.value
+                      )
                     }
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Giá bán</Label>
+                  <Label>
+                    Giá bán <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     type="number"
                     value={opt.price || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "price", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "price",
+                        e.target.value
+                      )
+                    }
+                    className={
+                      Number(opt.price) > Number(opt.originalPrice) &&
+                      Number(opt.originalPrice) > 0
+                        ? "border-red-500 focus:border-red-500"
+                        : ""
                     }
                     required
                   />
+                  {Number(opt.price) > Number(opt.originalPrice) &&
+                    Number(opt.originalPrice) > 0 && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <span>Warning</span> Giá bán phải nhỏ hơn hoặc bằng giá
+                        gốc
+                      </p>
+                    )}
                 </div>
+
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
                   <Input
                     type="number"
                     value={opt.stock || ""}
                     onChange={(e) =>
-                      onOptionChange(vIdx, oIdx, "stock", e.target.value)
+                      handleVariantOptionChange(
+                        vIdx,
+                        oIdx,
+                        "stock",
+                        e.target.value
+                      )
                     }
                     required
                   />
                 </div>
+
                 <Button
                   type="button"
                   variant="outline"

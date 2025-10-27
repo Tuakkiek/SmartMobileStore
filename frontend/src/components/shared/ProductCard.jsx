@@ -1,251 +1,236 @@
-// src/components/shared/ProductCard.jsx
-import React, { useState, useEffect } from "react";
+// frontend/src/components/shared/ProductCard.jsx
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Star } from "lucide-react";
-import { formatPrice, getStatusColor, getStatusText } from "@/lib/utils";
+import { Star, ShoppingCart } from "lucide-react";
+import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
-import { getTopNewProducts, getTopSelling } from "@/lib/api";
 
-const mapToApiCategory = (category) => {
-  if (!category) return "";
-  return category
-    .toLowerCase()
-    .replace(" ", "")
-    .replace("phụkiện", "accessory");
-};
-
-const ProductCard = ({ product }) => {
+const ProductCard = ({ product, isTopNew = false, isTopSeller = false }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
-  const [topNew, setTopNew] = useState([]);
-  const [topSelling, setTopSelling] = useState([]);
+  const [isAdding, setIsAdding] = useState(false);
 
-  const apiCategory = mapToApiCategory(product.category);
+  // Lấy variant đầu tiên có stock > 0 để hiển thị
+  const availableVariant = product.variants?.find((v) => v.stock > 0);
+  const displayVariant = availableVariant || product.variants?.[0];
 
-  useEffect(() => {
-    if (apiCategory) {
-      getTopNewProducts().then(setTopNew).catch(console.error);
-      getTopSelling(apiCategory).then(setTopSelling).catch(console.error);
-    }
-  }, [apiCategory]);
+  const displayPrice = displayVariant?.price || 0;
+  const displayOriginalPrice = displayVariant?.originalPrice || 0;
+  const displayImage = displayVariant?.images?.[0];
+  const totalStock =
+    product.variants?.reduce((sum, v) => sum + v.stock, 0) || 0;
 
-  const variant = product.variants?.[0] || {
-    price: product.price || 0,
-    originalPrice: product.originalPrice || product.price || 0,
-    images: product.images || [],
-    stock: product.quantity || 0,
-  };
-
-  const discount =
-    variant.originalPrice > 0
+  // Tính % giảm giá
+  const discountPercent =
+    displayOriginalPrice > displayPrice
       ? Math.round(
-          ((variant.originalPrice - variant.price) / variant.originalPrice) *
-            100
+          ((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100
         )
       : 0;
 
-  const isNew = topNew.includes(product._id?.toString());
-  const isBestSelling = topSelling.includes(product._id?.toString());
+  // Xác định badge ưu tiên
+  const getPriorityBadge = () => {
+    if (isTopNew) return { text: "Mới", color: "bg-green-500 text-white" };
+    if (isTopSeller)
+      return { text: "Bán chạy", color: "bg-yellow-600 text-white" };
+    if (product.installmentBadge === "INSTALLMENT_0_PREPAY_0")
+      return {
+        text: "Trả góp 0% trả trước 0đ",
+        color: "bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs",
+      };
+    if (product.installmentBadge === "INSTALLMENT_0")
+      return { text: "Trả góp 0%", color: "bg-blue-500 text-white" };
+    return null;
+  };
 
-  let rightBadge = null;
-  let rightBadgeClass = "";
+  const badge = getPriorityBadge();
 
-  if (isNew) {
-    rightBadge = "Mới";
-    rightBadgeClass = "bg-green-500 text-white";
-  } else if (isBestSelling) {
-    rightBadge = "Bán chạy";
-    rightBadgeClass = "bg-green-500 text-white";
-  } else if (product.installmentBadge && product.installmentBadge !== "NONE") {
-    rightBadge = product.installmentBadge;
-    rightBadgeClass = "bg-blue-500 text-white";
-  } else if (product.status !== "AVAILABLE") {
-    rightBadge = getStatusText(product.status);
-    rightBadgeClass = getStatusColor(product.status);
-  }
+  // Lấy danh sách dung lượng duy nhất từ tất cả variants
+  const storageOptions = [
+    ...new Set(
+      product.variants
+        ?.filter((v) => v.stock > 0)
+        .map((v) => v.storage)
+        .sort((a, b) => {
+          const aNum = parseInt(a);
+          const bNum = parseInt(b);
+          return aNum - bNum;
+        })
+    ),
+  ];
 
   const handleAddToCart = async (e) => {
     e.stopPropagation();
-
-    if (!isAuthenticated) {
+    if (!isAuthenticated || user?.role !== "CUSTOMER") {
       navigate("/login");
       return;
     }
-
-    if (user?.role !== "CUSTOMER") {
-      toast.error("Chỉ khách hàng mới có thể thêm vào giỏ hàng");
+    if (totalStock === 0) {
+      toast.error("Sản phẩm tạm hết hàng");
       return;
     }
 
-    const result = await addToCart(product._id, 1);
-    if (result.success) {
-      toast.success("Đã thêm vào giỏ hàng", {
-        description: product.name,
-      });
-    } else {
-      toast.error(result.message || "Thêm vào giỏ hàng thất bại");
+    const variantToAdd = availableVariant || product.variants[0];
+    setIsAdding(true);
+    try {
+      const result = await addToCart(variantToAdd._id, 1);
+      if (result.success) {
+        toast.success("Đã thêm vào giỏ hàng", {
+          description: `${product.name} • ${variantToAdd.color} ${variantToAdd.storage}`,
+        });
+      }
+    } catch (err) {
+      toast.error("Không thể thêm vào giỏ hàng");
+    } finally {
+      setIsAdding(false);
     }
   };
 
   return (
     <Card
-      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+      className="w-full max-w-[280px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-2xl transition-all duration-300 cursor-pointer group bg-white border-0"
       onClick={() => navigate(`/products/${product._id}`)}
     >
-      <div className="aspect-square relative bg-gray-100">
-        {variant.images[0] ? (
-          <img
-            src={variant.images[0]}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-4xl">📦</span>
-          </div>
-        )}
-
-        {/* Discount Badge */}
-        {discount > 0 && (
-          <Badge className="absolute top-2 left-2 bg-red-500 text-white">
-            Giảm {discount}%
+      {/* Badges */}
+      <div className="absolute top-3 left-3 z-20">
+        {discountPercent > 0 && (
+          <Badge className="bg-red-500 text-white font-bold text-sm px-3 py-1 rounded-full shadow-md">
+            -{discountPercent}%
           </Badge>
         )}
-
-        {/* Right Badge (Special or Status) */}
-        {rightBadge && (
-          <Badge className={`absolute top-2 right-2 ${rightBadgeClass}`}>
-            {rightBadge}
-          </Badge>
-        )}
-
-        {/* Quick Add Button */}
-        {isAuthenticated &&
-          user?.role === "CUSTOMER" &&
-          product.status === "AVAILABLE" && (
-            <Button
-              size="sm"
-              className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleAddToCart}
-            >
-              <ShoppingCart className="w-4 h-4 mr-1" />
-              Thêm
-            </Button>
-          )}
       </div>
 
-      <CardContent className="p-4">
-        <div className="space-y-2">
-          {/* Product Name */}
-          <h3 className="font-semibold text-lg line-clamp-2 min-h-[3.5rem]">
-            {product.name}
-          </h3>
+      <div className="absolute top-3 right-3 z-20">
+        {badge && (
+          <Badge
+            className={`${badge.color} font-bold text-sm px-3 py-1 rounded-md shadow-md`}
+          >
+            {badge.text}
+          </Badge>
+        )}
+      </div>
 
-          {/* Model */}
-          {product.model && (
-            <p className="text-sm text-muted-foreground line-clamp-1">
-              {product.model}
+      {/* Image */}
+      <div className="relative aspect-[3/4] bg-gradient-to-b from-gray-50 to-gray-100 overflow-hidden">
+        {displayImage ? (
+          <img
+            src={displayImage}
+            alt={product.name}
+            className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <span className="text-6xl">Phone</span>
+          </div>
+        )}
+
+        {/* Add to Cart Button */}
+        {isAuthenticated && user?.role === "CUSTOMER" && totalStock > 0 && (
+          <Button
+            size="sm"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white text-gray-900 hover:bg-gray-100 shadow-lg"
+            onClick={handleAddToCart}
+            disabled={isAdding}
+          >
+            <ShoppingCart className="w-4 h-4 mr-1" />
+            {isAdding ? "..." : "Thêm"}
+          </Button>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="p-4 space-y-3 bg-white">
+        {/* Title */}
+        <h3 className="font-bold text-lg line-clamp-2 text-gray-900 leading-tight">
+          {product.name}
+        </h3>
+
+        {/* Installment Text */}
+        {product.installmentBadge?.includes("INSTALLMENT") && (
+          <p className="text-xs text-gray-600">
+            {product.installmentBadge === "INSTALLMENT_0_PREPAY_0"
+              ? "Trả góp 0% trả trước 0đ"
+              : "Trả góp 0%"}
+          </p>
+        )}
+
+        {/* Price */}
+        <div className="space-y-1">
+          {displayOriginalPrice > displayPrice && (
+            <p className="text-sm text-gray-500 line-through">
+              {formatPrice(displayOriginalPrice)}
             </p>
           )}
+          <p className="text-2xl font-bold text-red-600">
+            {formatPrice(displayPrice)}
+          </p>
+        </div>
 
-          {/* Subcategory */}
-          {product.subcategory && (
-            <Badge variant="outline" className="text-xs">
-              {product.subcategory}
-            </Badge>
-          )}
-
-          {/* Rating */}
-          {product.totalReviews > 0 && (
-            <div className="flex items-center gap-1">
-              <div className="flex">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`w-4 h-4 ${
-                      i < Math.floor(product.averageRating)
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "text-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-muted-foreground">
-                ({product.totalReviews})
-              </span>
-            </div>
-          )}
-
-          {/* Price */}
-          <div className="space-y-1">
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-primary">
-                {formatPrice(variant.price)}
-              </span>
-            </div>
-            {variant.originalPrice > variant.price && (
-              <p className="text-sm text-muted-foreground line-through">
-                {formatPrice(variant.originalPrice)}
-              </p>
-            )}
-          </div>
-
-          {/* Stock Info */}
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Còn lại:</span>
-            <span
-              className={`font-medium ${
-                variant.stock > 10
-                  ? "text-green-600"
-                  : variant.stock > 0
-                  ? "text-orange-600"
-                  : "text-red-600"
-              }`}
-            >
-              {variant.stock} sản phẩm
+        {/* Rating */}
+        {product.totalReviews > 0 && (
+          <div className="flex items-center gap-1">
+            {[...Array(5)].map((_, i) => (
+              <Star
+                key={i}
+                className={`w-4 h-4 ${
+                  i < Math.floor(product.averageRating)
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "text-gray-300"
+                }`}
+              />
+            ))}
+            <span className="text-xs text-gray-500 ml-1">
+              ({product.totalReviews} đánh giá)
             </span>
           </div>
+        )}
 
-          {/* Specifications Preview */}
-          {product.specifications && (
-            <div className="flex flex-wrap gap-1 pt-2 border-t">
-              {product.specifications.storage && (
-                <Badge variant="secondary" className="text-xs">
-                  {product.specifications.storage}
-                </Badge>
-              )}
-              {product.specifications.color && (
-                <Badge variant="secondary" className="text-xs">
-                  {product.specifications.color}
-                </Badge>
-              )}
-              {product.specifications.chip && (
-                <Badge variant="secondary" className="text-xs">
-                  {product.specifications.chip}
-                </Badge>
-              )}
-            </div>
-          )}
+        {/* Storage Buttons */}
+        {storageOptions.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {storageOptions.map((storage) => (
+              <button
+                key={storage}
+                className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                  displayVariant?.storage === storage
+                    ? "bg-black text-white border-black"
+                    : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const variant = product.variants.find(
+                    (v) => v.storage === storage && v.stock > 0
+                  );
+                  if (variant) {
+                    // Có thể mở modal chọn màu + dung lượng ở đây
+                    navigate(`/products/${product._id}`);
+                  }
+                }}
+              >
+                {storage}
+              </button>
+            ))}
+          </div>
+        )}
 
-          {/* Tags */}
-          {product.tags && product.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {product.tags.slice(0, 3).map((tag, idx) => (
-                <Badge key={idx} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </div>
-      </CardContent>
+        {/* Stock Warning */}
+        {totalStock <= 5 && totalStock > 0 && (
+          <p className="text-xs text-orange-600 font-medium">
+            Chỉ còn {totalStock} sản phẩm!
+          </p>
+        )}
+        {totalStock === 0 && (
+          <p className="text-xs text-red-600 font-medium">Hết hàng</p>
+        )}
+      </div>
     </Card>
   );
 };
+
 export default ProductCard;
