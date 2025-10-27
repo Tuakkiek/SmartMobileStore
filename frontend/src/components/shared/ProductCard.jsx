@@ -178,7 +178,7 @@ const ProductCard = ({
   return (
     <>
       <Card
-        className="w-full max-w-[280px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white border-0 relative"
+        className="w-full max-w-[280px] h-[550px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white border-0 relative"
         onClick={() => !isAdmin && navigate(`/products/${product._id}`)}
       >
         {/* === ADMIN: Sửa / Xóa === */}

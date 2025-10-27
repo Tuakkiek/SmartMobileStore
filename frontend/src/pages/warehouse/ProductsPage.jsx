@@ -942,7 +942,7 @@ const ProductsPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredProducts.map((product) => {
                   const isAdmin =
-                    user?.role === "ADMIN" || user?.role === "STAFF"; // hoặc kiểm tra quyền
+                    user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF"; // hoặc kiểm tra quyền
 
                   return (
                     <div key={product._id} className="relative group">
