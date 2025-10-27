@@ -19,12 +19,12 @@ const appleWatchVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-appleWatchVariantSchema.pre("validate", function (next) {
+// ✅ Validation: price <= originalPrice
+appleWatchVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
-    next(new Error("Giá bán không thể lớn hơn giá gốc"));
-  } else {
-    next();
+    return next(new Error("Giá bán không được lớn hơn giá gốc"));
   }
+  next();
 });
 
 const appleWatchSchema = new mongoose.Schema(
@@ -46,6 +46,13 @@ const appleWatchSchema = new mongoose.Schema(
     variants: [
       { type: mongoose.Schema.Types.ObjectId, ref: "AppleWatchVariant" },
     ],
+    condition: {
+      type: String,
+      enum: ["NEW", "LIKE_NEW"],
+      default: "NEW",
+      required: true,
+    },
+    category: { type: String, required: true, trim: true },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
@@ -58,17 +65,36 @@ const appleWatchSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+
+    // ✅ THÊM: Lượt bán
+    salesCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
+    // ✅ THÊM: Installment Badge
     installmentBadge: {
       type: String,
-      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
+      enum: ["NONE", "INSTALLMENT_0", "INSTALLMENT_0_PREPAY_0"],
       default: "NONE",
     },
   },
   { timestamps: true }
 );
 
+// ✅ THÊM: Method để cập nhật salesCount
+appleWatchSchema.methods.incrementSales = async function (quantity = 1) {
+  this.salesCount += quantity;
+  await this.save();
+  return this.salesCount;
+};
+
 appleWatchSchema.index({ name: "text", model: "text", description: "text" });
 appleWatchSchema.index({ status: 1 });
+appleWatchSchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
+appleWatchSchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
 
 export const AppleWatchVariant = mongoose.model(
   "AppleWatchVariant",

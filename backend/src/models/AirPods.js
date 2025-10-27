@@ -19,12 +19,12 @@ const airPodsVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-airPodsVariantSchema.pre("validate", function (next) {
+// ✅ Validation: price <= originalPrice
+airPodsVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
-    next(new Error("Giá bán không thể lớn hơn giá gốc"));
-  } else {
-    next();
+    return next(new Error("Giá bán không được lớn hơn giá gốc"));
   }
+  next();
 });
 
 const airPodsSchema = new mongoose.Schema(
@@ -40,6 +40,15 @@ const airPodsSchema = new mongoose.Schema(
       bluetooth: { type: String, required: true, trim: true },
       additional: mongoose.Schema.Types.Mixed,
     },
+
+    // ✅ THÊM: Lượt bán
+    salesCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
     variants: [{ type: mongoose.Schema.Types.ObjectId, ref: "AirPodsVariant" }],
     condition: {
       type: String,
@@ -48,6 +57,7 @@ const airPodsSchema = new mongoose.Schema(
       required: true,
     },
     brand: { type: String, default: "Apple", trim: true },
+    category: { type: String, required: true, trim: true },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
@@ -60,17 +70,28 @@ const airPodsSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+
+    // ✅ THÊM: Installment Badge
     installmentBadge: {
       type: String,
-      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
+      enum: ["NONE", "INSTALLMENT_0", "INSTALLMENT_0_PREPAY_0"],
       default: "NONE",
     },
   },
   { timestamps: true }
 );
 
+// ✅ THÊM: Method để cập nhật salesCount
+airPodsSchema.methods.incrementSales = async function (quantity = 1) {
+  this.salesCount += quantity;
+  await this.save();
+  return this.salesCount;
+};
+
 airPodsSchema.index({ name: "text", model: "text", description: "text" });
 airPodsSchema.index({ status: 1 });
+airPodsSchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
+airPodsSchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
 
 export const AirPodsVariant = mongoose.model(
   "AirPodsVariant",

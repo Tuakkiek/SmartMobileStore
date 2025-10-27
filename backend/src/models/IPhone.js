@@ -45,6 +45,7 @@ const iPhoneSchema = new mongoose.Schema(
       colors: [{ type: String, trim: true }],
       additional: mongoose.Schema.Types.Mixed,
     },
+
     variants: [{ type: mongoose.Schema.Types.ObjectId, ref: "IPhoneVariant" }],
     condition: {
       type: String,
@@ -53,6 +54,7 @@ const iPhoneSchema = new mongoose.Schema(
       required: true,
     },
     brand: { type: String, default: "Apple", trim: true },
+    category: { type: String, required: true, trim: true },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
@@ -73,13 +75,30 @@ const iPhoneSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+
+    // ✅ THÊM: Lượt bán
+    salesCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true, // Index để query nhanh
+    },
   },
   { timestamps: true }
 );
 
+// ✅ THÊM: Method để cập nhật salesCount
+iPhoneSchema.methods.incrementSales = async function (quantity = 1) {
+  this.salesCount += quantity;
+  await this.save();
+  return this.salesCount;
+};
+
 iPhoneSchema.index({ name: "text", model: "text", description: "text" });
 iPhoneSchema.index({ status: 1 });
 iPhoneSchema.index({ createdAt: -1 }); // ✅ For "Mới" badge query
+iPhoneSchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
+iPhoneSchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
 
 export const IPhoneVariant = mongoose.model(
   "IPhoneVariant",
