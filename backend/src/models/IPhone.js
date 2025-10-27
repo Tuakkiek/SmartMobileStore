@@ -64,7 +64,7 @@ const iPhoneSchema = new mongoose.Schema(
     // ✅ THÊM: Installment Badge
     installmentBadge: {
       type: String,
-      enum: ["NONE", "INSTALLMENT_0", "INSTALLMENT_0_PREPAY_0"],
+      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
       default: "NONE",
     },
 

@@ -73,6 +73,7 @@ const accessorySchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+    // ✅ THÊM: Installment Badge
     installmentBadge: {
       type: String,
       enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
