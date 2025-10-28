@@ -6,7 +6,7 @@ const iPadVariantSchema = new mongoose.Schema(
   {
     color: { type: String, required: true, trim: true },
     storage: { type: String, required: true, trim: true },
-    connectivity: { type: String, enum: ["WIFI", "5G"], required: true }, // riêng của iPad
+    connectivity: { type: String, enum: ["WIFI", "5G"], default: "WIFI" }, // ✅ THÊM DEFAULT
     originalPrice: { type: Number, required: true, min: 0 },
     price: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
@@ -37,15 +37,15 @@ const iPadSchema = new mongoose.Schema(
     description: { type: String, trim: true },
 
     specifications: {
-      chip: { type: String, required: true, trim: true },
-      ram: { type: String, required: true, trim: true },
-      storage: { type: String, required: true, trim: true },
-      frontCamera: { type: String, required: true, trim: true },
-      rearCamera: { type: String, required: true, trim: true },
-      screenSize: { type: String, required: true, trim: true },
-      screenTech: { type: String, required: true, trim: true },
-      battery: { type: String, required: true, trim: true },
-      os: { type: String, required: true, trim: true },
+      chip: { type: String, trim: true },
+      ram: { type: String, trim: true },
+      storage: { type: String, trim: true },
+      frontCamera: { type: String, trim: true },
+      rearCamera: { type: String, trim: true },
+      screenSize: { type: String, trim: true },
+      screenTech: { type: String, trim: true },
+      battery: { type: String, trim: true },
+      os: { type: String, trim: true },
       colors: [{ type: String, trim: true }],
       additional: mongoose.Schema.Types.Mixed,
     },
@@ -73,14 +73,13 @@ const iPadSchema = new mongoose.Schema(
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
 
-    // ✅ THÊM: Lượt bán
     salesCount: {
       type: Number,
       default: 0,
       min: 0,
       index: true,
     },
-    // ✅ THÊM: Installment Badge
+
     installmentBadge: {
       type: String,
       enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
@@ -90,19 +89,16 @@ const iPadSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ✅ THÊM: Method để cập nhật salesCount
 iPadSchema.methods.incrementSales = async function (quantity = 1) {
   this.salesCount += quantity;
   await this.save();
   return this.salesCount;
 };
 
-// --- Tạo chỉ mục để tìm kiếm nhanh ---
 iPadSchema.index({ name: "text", model: "text", description: "text" });
 iPadSchema.index({ status: 1 });
-iPadSchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
-iPadSchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
+iPadSchema.index({ salesCount: -1 });
+iPadSchema.index({ category: 1, salesCount: -1 });
 
-// --- Xuất model ---
 export const IPadVariant = mongoose.model("IPadVariant", iPadVariantSchema);
 export default mongoose.model("IPad", iPadSchema);

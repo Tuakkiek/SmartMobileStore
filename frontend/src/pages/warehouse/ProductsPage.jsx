@@ -16,7 +16,13 @@ import {
 import { analyticsAPI } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loading } from "@/components/shared/Loading";
 import ProductCard from "@/components/shared/ProductCard";
 import ProductEditModal from "@/components/shared/ProductEditModal";
@@ -84,11 +90,12 @@ const ProductsPage = () => {
         console.warn("Failed to fetch top sellers:", error);
       }
 
-      // ✅ ATTACH FLAGS VÀO PRODUCTS
+      // ✅ ATTACH FLAGS VÀO PRODUCTS (thêm category để modal edit nhận đúng)
       const productsWithFlags = data.map((p) => ({
         ...p,
         isTopNew: top10NewIds.includes(p._id),
         isTopSeller: top10SellerIds.includes(p._id),
+        category: activeTab, // <-- SỬA Ở ĐÂY: Thêm category từ activeTab
       }));
 
       setProducts(Array.isArray(productsWithFlags) ? productsWithFlags : []);
@@ -99,7 +106,7 @@ const ProductsPage = () => {
           (p) => p._id === justCreatedProductId
         );
         if (createdProduct) {
-          setCurrentMode('edit');
+          setCurrentMode("edit");
           setCurrentProduct(createdProduct);
           setShowModal(true);
           setJustCreatedProductId(null);

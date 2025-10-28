@@ -92,6 +92,12 @@ const HomePage = () => {
             const products =
               productsRes.data?.data?.products || productsRes.data || [];
 
+            // Thêm category vào mỗi product
+            const productsWithCategory = products.map((p) => ({
+              ...p,
+              category: cat,
+            }));
+
             let sellerIds = [];
             try {
               const sellersRes = await analyticsAPI.getTopSellers(cat, 10);
@@ -103,7 +109,9 @@ const HomePage = () => {
               console.warn(`Top sellers failed for ${cat}:`, err);
             }
 
-            allProducts[cat] = Array.isArray(products) ? products : [];
+            allProducts[cat] = Array.isArray(productsWithCategory)
+              ? productsWithCategory
+              : [];
             topSellers[cat] = sellerIds;
           } catch (error) {
             console.error(`Error fetching ${cat}:`, error);
@@ -202,7 +210,11 @@ const HomePage = () => {
               <Icon className="w-8 h-8 text-primary" />
               <h2 className="text-3xl font-bold text-gray-900">{category}</h2>
             </div>
-            <Button variant="outline" size="sm" onClick={() => handleViewAll(category)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleViewAll(category)}
+            >
               Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
             </Button>
           </div>
@@ -215,7 +227,11 @@ const HomePage = () => {
                   isTopNew={topNewIds.includes(product._id)}
                   isTopSeller={topSellerIds.includes(product._id)}
                   onEdit={isAdmin ? () => handleEdit(product) : undefined}
-                  onDelete={isAdmin ? () => handleDelete(product._id, category) : undefined}
+                  onDelete={
+                    isAdmin
+                      ? () => handleDelete(product._id, category)
+                      : undefined
+                  }
                   onUpdate={fetchHomeData}
                   showVariantsBadge={true}
                   showAdminActions={isAdmin}
@@ -269,33 +285,34 @@ const HomePage = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Sản phẩm mới</h2>
-            <Button variant="outline" size="sm" onClick={() => navigate("/products?sort=createdAt")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/products?sort=createdAt")}
+            >
               Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
             </Button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
-            {newArrivals.map((product) => {
-              const productCategory =
-                Object.keys(categoryProducts).find((cat) =>
-                  categoryProducts[cat]?.some((p) => p._id === product._id)
-                ) || null;
-
-              return (
-                <div key={product._id} className="relative group">
-                  <ProductCard
-                    product={{ ...product, isTopNew: true }}
-                    isTopNew={true}
-                    isTopSeller={false}
-                    onEdit={isAdmin ? () => handleEdit(product) : undefined}
-                    onDelete={isAdmin && productCategory ? () => handleDelete(product._id, productCategory) : undefined}
-                    onUpdate={fetchHomeData}
-                    showVariantsBadge={true}
-                    showAdminActions={isAdmin}
-                  />
-                </div>
-              );
-            })}
+            {newArrivals.map((product) => (
+              <div key={product._id} className="relative group">
+                <ProductCard
+                  product={{ ...product, isTopNew: true }}
+                  isTopNew={true}
+                  isTopSeller={false}
+                  onEdit={isAdmin ? () => handleEdit(product) : undefined}
+                  onDelete={
+                    isAdmin
+                      ? () => handleDelete(product._id, product.category)
+                      : undefined
+                  }
+                  onUpdate={fetchHomeData}
+                  showVariantsBadge={true}
+                  showAdminActions={isAdmin}
+                />
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -311,17 +328,21 @@ const HomePage = () => {
       <NewArrivalsSection />
 
       {categories.map((cat) => (
-        <CategorySection key={cat} category={cat} products={categoryProducts[cat] || []} />
+        <CategorySection
+          key={cat}
+          category={cat}
+          products={categoryProducts[cat] || []}
+        />
       ))}
 
       {categoryProducts.iPhone?.length > 0 && <IPhoneShowcase />}
 
-      <ProductEditModal 
-        open={showEditModal} 
-        onOpenChange={setShowEditModal} 
-        mode="edit" 
-        product={editingProduct} 
-        onSave={fetchHomeData} 
+      <ProductEditModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        mode="edit"
+        product={editingProduct}
+        onSave={fetchHomeData}
       />
     </div>
   );
