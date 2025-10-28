@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -665,173 +666,176 @@ const ProductEditModal = ({
         className="w-[90vw] max-w-none max-h-[95vh] overflow-y-auto p-0"
         style={{ width: "50vw", maxWidth: "none" }}
       >
-        {!formData || !effectiveCategory ? (
-          <div className="p-6 text-center text-muted-foreground">
-            Đang tải...
-          </div>
-        ) : (
-          <>
-            <DialogHeader className="p-6 border-b">
-              <DialogTitle className="text-2xl font-bold">
-                {isEdit ? "Cập nhật sản phẩm" : "Thêm sản phẩm mới"} -{" "}
-                {effectiveCategory}
-              </DialogTitle>
-            </DialogHeader>
+        <DialogHeader className="p-6 border-b">
+          <DialogTitle className="text-2xl font-bold">
+            {!formData || !effectiveCategory
+              ? "Đang tải..."
+              : `${
+                  isEdit ? "Cập nhật sản phẩm" : "Thêm sản phẩm mới"
+                } - ${effectiveCategory}`}
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            {!formData || !effectiveCategory
+              ? "Đang tải dữ liệu..."
+              : `${
+                  isEdit ? "Chỉnh sửa thông tin sản phẩm" : "Tạo sản phẩm mới"
+                } trong danh mục ${effectiveCategory}`}
+          </DialogDescription>
+        </DialogHeader>
 
-            <div className="p-6">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <Tabs value={activeFormTab} onValueChange={setActiveFormTab}>
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="basic">Cơ bản</TabsTrigger>
-                    <TabsTrigger value="specs">Thông số</TabsTrigger>
-                    <TabsTrigger value="variants">Biến thể</TabsTrigger>
-                  </TabsList>
+        <div className="p-6">
+          {!formData || !effectiveCategory ? (
+            <div className="text-center text-muted-foreground">
+              Đang tải dữ liệu...
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <Tabs value={activeFormTab} onValueChange={setActiveFormTab}>
+                <TabsList className="grid grid-cols-3 w-full">
+                  <TabsTrigger value="basic">Cơ bản</TabsTrigger>
+                  <TabsTrigger value="specs">Thông số</TabsTrigger>
+                  <TabsTrigger value="variants">Biến thể</TabsTrigger>
+                </TabsList>
 
-                  {/* TAB CƠ BẢN */}
-                  <TabsContent value="basic" className="space-y-4 mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>
-                          Tên sản phẩm <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={formData.name || ""}
-                          onChange={(e) =>
-                            handleBasicChange("name", e.target.value)
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>
-                          Model <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={formData.model || ""}
-                          onChange={(e) =>
-                            handleBasicChange("model", e.target.value)
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Tình trạng</Label>
-                        <Select
-                          value={formData.condition || "NEW"}
-                          onValueChange={(value) =>
-                            handleBasicChange("condition", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="NEW">Mới 100%</SelectItem>
-                            <SelectItem value="LIKE_NEW">Like new</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Trạng thái</Label>
-                        <Select
-                          value={formData.status || "AVAILABLE"}
-                          onValueChange={(value) =>
-                            handleBasicChange("status", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
-                            <SelectItem value="OUT_OF_STOCK">
-                              Hết hàng
-                            </SelectItem>
-                            <SelectItem value="DISCONTINUED">
-                              Ngừng kinh doanh
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Trả góp 0%</Label>
-                        <Select
-                          value={formData.installmentBadge || "NONE"}
-                          onValueChange={(value) =>
-                            handleBasicChange("installmentBadge", value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Chọn chương trình trả góp" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {INSTALLMENT_BADGE_OPTIONS.map((option) => (
-                              <SelectItem
-                                key={option.value}
-                                value={option.value}
-                              >
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Badge này chỉ hiển thị khi sản phẩm không thuộc top
-                          "Mới" hoặc "Bán chạy"
-                        </p>
-                      </div>
+                {/* TAB CƠ BẢN */}
+                <TabsContent value="basic" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>
+                        Tên sản phẩm <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={formData.name || ""}
+                        onChange={(e) =>
+                          handleBasicChange("name", e.target.value)
+                        }
+                        required
+                      />
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Mô tả</Label>
-                      <textarea
-                        value={formData.description || ""}
+                      <Label>
+                        Model <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={formData.model || ""}
                         onChange={(e) =>
-                          handleBasicChange("description", e.target.value)
+                          handleBasicChange("model", e.target.value)
                         }
-                        rows={4}
-                        className="w-full px-3 py-2 border rounded-md"
-                        placeholder="Nhập mô tả sản phẩm..."
+                        required
                       />
                     </div>
-                  </TabsContent>
 
-                  {/* TAB THÔNG SỐ */}
-                  <TabsContent value="specs" className="mt-4">
-                    {renderSpecsForm()}
-                  </TabsContent>
+                    <div className="space-y-2">
+                      <Label>Tình trạng</Label>
+                      <Select
+                        value={formData.condition || "NEW"}
+                        onValueChange={(value) =>
+                          handleBasicChange("condition", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NEW">Mới 100%</SelectItem>
+                          <SelectItem value="LIKE_NEW">Like new</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* TAB BIẾN THỂ */}
-                  <TabsContent value="variants" className="mt-4">
-                    {renderVariantsForm()}
-                  </TabsContent>
-                </Tabs>
+                    <div className="space-y-2">
+                      <Label>Trạng thái</Label>
+                      <Select
+                        value={formData.status || "AVAILABLE"}
+                        onValueChange={(value) =>
+                          handleBasicChange("status", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="AVAILABLE">Còn hàng</SelectItem>
+                          <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
+                          <SelectItem value="DISCONTINUED">
+                            Ngừng kinh doanh
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {/* BUTTONS */}
-                <div className="flex justify-end gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    Hủy
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting
-                      ? "Đang lưu..."
-                      : isEdit
-                      ? "Cập nhật"
-                      : "Tạo mới"}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </>
-        )}
+                    <div className="space-y-2">
+                      <Label>Trả góp 0%</Label>
+                      <Select
+                        value={formData.installmentBadge || "NONE"}
+                        onValueChange={(value) =>
+                          handleBasicChange("installmentBadge", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Chọn chương trình trả góp" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INSTALLMENT_BADGE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Badge này chỉ hiển thị khi sản phẩm không thuộc top
+                        "Mới" hoặc "Bán chạy"
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Mô tả</Label>
+                    <textarea
+                      value={formData.description || ""}
+                      onChange={(e) =>
+                        handleBasicChange("description", e.target.value)
+                      }
+                      rows={4}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="Nhập mô tả sản phẩm..."
+                    />
+                  </div>
+                </TabsContent>
+
+                {/* TAB THÔNG SỐ */}
+                <TabsContent value="specs" className="mt-4">
+                  {renderSpecsForm()}
+                </TabsContent>
+
+                {/* TAB BIẾN THỂ */}
+                <TabsContent value="variants" className="mt-4">
+                  {renderVariantsForm()}
+                </TabsContent>
+              </Tabs>
+
+              {/* BUTTONS */}
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting
+                    ? "Đang lưu..."
+                    : isEdit
+                    ? "Cập nhật"
+                    : "Tạo mới"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
