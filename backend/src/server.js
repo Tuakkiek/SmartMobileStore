@@ -25,6 +25,7 @@ import airPodsRoutes from "./routes/airPodsRoutes.js";
 import appleWatchRoutes from "./routes/appleWatchRoutes.js";
 import accessoryRoutes from "./routes/accessoryRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js"; // ✅ THÊM analytics
+import salesRoutes from "./routes/salesRoutes.js";
 
 dotenv.config();
 
@@ -74,6 +75,7 @@ app.use("/api/airpods", airPodsRoutes);
 app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/accessories", accessoryRoutes);
 app.use("/api/analytics", analyticsRoutes); // ✅ THÊM analytics route
+app.use('/api/sales', salesRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

@@ -1,7 +1,7 @@
 // frontend/src/pages/HomePage.jsx
-// ✅ REFACTORED: Lấy sản phẩm theo từng category riêng biệt như ProductsPage
+// ADMIN: Edit sản phẩm ngay trên Homepage – form giống ProductsPage
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,9 +28,10 @@ import {
 } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
+import ProductEditModal from "@/components/shared/ProductEditModal";
 
 // ============================================
-// CATEGORY CONFIGURATION
+// CATEGORY CONFIG
 // ============================================
 const CATEGORY_ICONS = {
   iPhone: Smartphone,
@@ -64,113 +65,108 @@ const HomePage = () => {
   const [newArrivals, setNewArrivals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // EDIT MODAL
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+
   const isAdmin =
     isAuthenticated &&
     ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user?.role);
 
   // ============================================
-  // FETCH DATA FOR ALL CATEGORIES
+  // FETCH DATA
   // ============================================
-  useEffect(() => {
-    const fetchHomeData = async () => {
-      setIsLoading(true);
-      const allProducts = {};
-      const topSellers = {};
+  const fetchHomeData = useCallback(async () => {
+    setIsLoading(true);
+    const allProducts = {};
+    const topSellers = {};
 
-      try {
-        // ✅ FETCH PRODUCTS BY CATEGORY (giống warehouse)
-        await Promise.all(
-          categories.map(async (cat) => {
-            const api = API_MAP[cat];
-            if (!api || !api.getAll) {
-              console.warn(`API not configured for ${cat}`);
-              return;
-            }
+    try {
+      await Promise.all(
+        categories.map(async (cat) => {
+          const api = API_MAP[cat];
+          if (!api?.getAll) return;
 
+          try {
+            const productsRes = await api.getAll({ limit: 8 });
+            const products =
+              productsRes.data?.data?.products || productsRes.data || [];
+
+            let sellerIds = [];
             try {
-              // Fetch products for this category
-              const productsRes = await api.getAll({ limit: 8 });
-              const products =
-                productsRes.data?.data?.products || productsRes.data || [];
-
-              // Fetch top sellers for this category
               const sellersRes = await analyticsAPI.getTopSellers(cat, 10);
-              const sellerIds =
-                sellersRes.data?.data?.map((s) => s.productId) || [];
-
-              allProducts[cat] = Array.isArray(products) ? products : [];
-              topSellers[cat] = sellerIds;
-
-              console.log(`✅ Fetched ${products.length} products for ${cat}`);
-            } catch (error) {
-              console.error(`❌ Error fetching ${cat}:`, error);
-              allProducts[cat] = [];
-              topSellers[cat] = [];
+              const data = sellersRes.data?.data || sellersRes.data;
+              sellerIds = Array.isArray(data)
+                ? data.map((s) => s.productId).filter(Boolean)
+                : [];
+            } catch (err) {
+              console.warn(`Top sellers failed for ${cat}:`, err);
             }
-          })
-        );
 
-        // ✅ GET TOP 10 NEWEST ACROSS ALL CATEGORIES
-        const allProductsList = Object.values(allProducts).flat();
-        const sortedByDate = [...allProductsList].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        setNewArrivals(sortedByDate.slice(0, 8));
+            allProducts[cat] = Array.isArray(products) ? products : [];
+            topSellers[cat] = sellerIds;
+          } catch (error) {
+            console.error(`Error fetching ${cat}:`, error);
+            allProducts[cat] = [];
+            topSellers[cat] = [];
+          }
+        })
+      );
 
-        setCategoryProducts(allProducts);
-        setTopSellersMap(topSellers);
+      const allProductsList = Object.values(allProducts).flat();
+      const sortedNewArrivals = [...allProductsList]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 8);
 
-        console.log("✅ Home data loaded successfully");
-      } catch (err) {
-        console.error("❌ Lỗi tải trang chủ:", err);
-        toast.error("Không thể tải dữ liệu trang chủ");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchHomeData();
+      setNewArrivals(sortedNewArrivals);
+      setCategoryProducts(allProducts);
+      setTopSellersMap(topSellers);
+    } catch (err) {
+      console.error("Lỗi tải trang chủ:", err);
+      toast.error("Không thể tải dữ liệu trang chủ");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchHomeData();
+  }, [fetchHomeData]);
+
   // ============================================
-  // CALCULATE TOP NEW FOR EACH CATEGORY
+  // TOP NEW IDS
   // ============================================
   const getTopNewIds = (products) => {
-    if (!products || products.length === 0) return [];
-    const sorted = [...products].sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    );
-    return sorted.slice(0, 10).map((p) => p._id);
+    if (!Array.isArray(products) || products.length === 0) return [];
+    return [...products]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10)
+      .map((p) => p._id)
+      .filter(Boolean);
   };
 
   // ============================================
-  // HANDLE EDIT & DELETE (ADMIN ONLY)
+  // HANDLE DELETE
   // ============================================
-  const handleEdit = (product) => {
-    navigate(`/warehouse/products?edit=${product._id}`, { state: { product } });
-  };
-
   const handleDelete = async (productId, category) => {
     if (!window.confirm("Xác nhận xóa sản phẩm này?")) return;
 
-    try {
-      const api = API_MAP[category];
-      if (!api || !api.delete) {
-        throw new Error(`API for ${category} not configured`);
-      }
+    const api = API_MAP[category];
+    if (!api?.delete) {
+      toast.error("Không hỗ trợ xóa sản phẩm này");
+      return;
+    }
 
+    try {
       await api.delete(productId);
       toast.success("Xóa sản phẩm thành công");
-
-      // Update state
       setCategoryProducts((prev) => ({
         ...prev,
-        [category]: prev[category].filter((p) => p._id !== productId),
+        [category]: prev[category]?.filter((p) => p._id !== productId) || [],
       }));
-
       setNewArrivals((prev) => prev.filter((p) => p._id !== productId));
+      fetchHomeData();
     } catch (error) {
-      console.error("❌ Xóa thất bại:", error);
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
     }
   };
@@ -180,11 +176,20 @@ const HomePage = () => {
   };
 
   // ============================================
-  // CATEGORY SECTION COMPONENT
+  // HANDLE EDIT
+  // ============================================
+  const handleEdit = (product) => {
+    if (!isAdmin) return;
+    setEditingProduct(product);
+    setShowEditModal(true);
+  };
+
+  // ============================================
+  // SECTIONS
   // ============================================
   const CategorySection = ({ category, products }) => {
     const Icon = CATEGORY_ICONS[category] || Box;
-    if (!products?.length) return null;
+    if (!Array.isArray(products) || products.length === 0) return null;
 
     const topNewIds = getTopNewIds(products);
     const topSellerIds = topSellersMap[category] || [];
@@ -197,30 +202,23 @@ const HomePage = () => {
               <Icon className="w-8 h-8 text-primary" />
               <h2 className="text-3xl font-bold text-gray-900">{category}</h2>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleViewAll(category)}
-            >
+            <Button variant="outline" size="sm" onClick={() => handleViewAll(category)}>
               Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {products.slice(0, 4).map((product) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
+            {products.map((product) => (
               <div key={product._id} className="relative group">
                 <ProductCard
-                  product={{
-                    ...product,
-                    isTopNew: topNewIds.includes(product._id),
-                    isTopSeller: topSellerIds.includes(product._id),
-                  }}
-                  onEdit={isAdmin ? handleEdit : undefined}
-                  onDelete={
-                    isAdmin
-                      ? () => handleDelete(product._id, category)
-                      : undefined
-                  }
+                  product={product}
+                  isTopNew={topNewIds.includes(product._id)}
+                  isTopSeller={topSellerIds.includes(product._id)}
+                  onEdit={isAdmin ? () => handleEdit(product) : undefined}
+                  onDelete={isAdmin ? () => handleDelete(product._id, category) : undefined}
+                  onUpdate={fetchHomeData}
+                  showVariantsBadge={true}
+                  showAdminActions={isAdmin}
                 />
               </div>
             ))}
@@ -230,9 +228,6 @@ const HomePage = () => {
     );
   };
 
-  // ============================================
-  // CATEGORY NAVIGATION
-  // ============================================
   const CategoryNav = () => (
     <section className="py-10 bg-white border-b">
       <div className="container mx-auto px-4">
@@ -266,47 +261,37 @@ const HomePage = () => {
     </section>
   );
 
-  // ============================================
-  // NEW ARRIVALS SECTION
-  // ============================================
   const NewArrivalsSection = () => {
-    if (!newArrivals.length) return null;
+    if (!Array.isArray(newArrivals) || newArrivals.length === 0) return null;
 
     return (
       <section className="py-16 bg-gradient-to-b from-white to-gray-50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Sản phẩm mới</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/products?sort=createdAt")}
-            >
+            <Button variant="outline" size="sm" onClick={() => navigate("/products?sort=createdAt")}>
               Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
             {newArrivals.map((product) => {
-              // Get category to determine API for delete
-              const productCategory = Object.keys(categoryProducts).find(
-                (cat) =>
-                  categoryProducts[cat].some((p) => p._id === product._id)
-              );
+              const productCategory =
+                Object.keys(categoryProducts).find((cat) =>
+                  categoryProducts[cat]?.some((p) => p._id === product._id)
+                ) || null;
 
               return (
                 <div key={product._id} className="relative group">
                   <ProductCard
-                    product={{
-                      ...product,
-                      isTopNew: true,
-                    }}
-                    onEdit={isAdmin ? handleEdit : undefined}
-                    onDelete={
-                      isAdmin
-                        ? () => handleDelete(product._id, productCategory)
-                        : undefined
-                    }
+                    product={{ ...product, isTopNew: true }}
+                    isTopNew={true}
+                    isTopSeller={false}
+                    onEdit={isAdmin ? () => handleEdit(product) : undefined}
+                    onDelete={isAdmin && productCategory ? () => handleDelete(product._id, productCategory) : undefined}
+                    onUpdate={fetchHomeData}
+                    showVariantsBadge={true}
+                    showAdminActions={isAdmin}
                   />
                 </div>
               );
@@ -316,9 +301,7 @@ const HomePage = () => {
       </section>
     );
   };
-  // ============================================
-  // RENDER
-  // ============================================
+
   if (isLoading) return <Loading />;
 
   return (
@@ -328,13 +311,18 @@ const HomePage = () => {
       <NewArrivalsSection />
 
       {categories.map((cat) => (
-        <CategorySection
-          key={cat}
-          category={cat}
-          products={categoryProducts[cat] || []}
-        />
+        <CategorySection key={cat} category={cat} products={categoryProducts[cat] || []} />
       ))}
+
       {categoryProducts.iPhone?.length > 0 && <IPhoneShowcase />}
+
+      <ProductEditModal 
+        open={showEditModal} 
+        onOpenChange={setShowEditModal} 
+        mode="edit" 
+        product={editingProduct} 
+        onSave={fetchHomeData} 
+      />
     </div>
   );
 };

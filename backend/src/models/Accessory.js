@@ -41,6 +41,15 @@ const accessorySchema = new mongoose.Schema(
         },
       ],
     },
+
+    // ✅ THÊM: Lượt bán
+    salesCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
     variants: [
       { type: mongoose.Schema.Types.ObjectId, ref: "AccessoryVariant" },
     ],
@@ -51,6 +60,7 @@ const accessorySchema = new mongoose.Schema(
       required: true,
     },
     brand: { type: String, default: "Apple", trim: true },
+    category: { type: String, required: true, trim: true },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
@@ -63,6 +73,7 @@ const accessorySchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+    // ✅ THÊM: Installment Badge
     installmentBadge: {
       type: String,
       enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
@@ -72,8 +83,17 @@ const accessorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ✅ THÊM: Method để cập nhật salesCount
+accessorySchema.methods.incrementSales = async function (quantity = 1) {
+  this.salesCount += quantity;
+  await this.save();
+  return this.salesCount;
+};
+
 accessorySchema.index({ name: "text", model: "text", description: "text" });
 accessorySchema.index({ status: 1 });
+accessorySchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
+accessorySchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
 
 export const AccessoryVariant = mongoose.model(
   "AccessoryVariant",

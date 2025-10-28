@@ -73,7 +73,7 @@ export const getStatusText = (status) => {
 export const fetchAllProducts = async (params = {}) => {
   try {
     const [iphones, ipads, macs, airpods, applewatches, accessories] = await Promise.all([
-      iPhoneAPI.getAll(params),      // Fetches /iphones with params (e.g., { page: 1, limit: 10, search: 'pro' })
+      iPhoneAPI.getAll(params),
       iPadAPI.getAll(params),
       macAPI.getAll(params),
       airPodsAPI.getAll(params),
@@ -81,22 +81,20 @@ export const fetchAllProducts = async (params = {}) => {
       accessoryAPI.getAll(params),
     ]);
 
-    // Merge all products into a single array
     const allProducts = [
-      ... (iphones?.data?.data?.products || []),  // Use optional chaining to handle potential null/undefined
-      ... (ipads?.data?.data?.products || []),
-      ... (macs?.data?.data?.products || []),
-      ... (airpods?.data?.data?.products || []),
-      ... (applewatches?.data?.data?.products || []),
-      ... (accessories?.data?.data?.products || []),
+      ...(iphones?.data?.data?.products || []),
+      ...(ipads?.data?.data?.products || []),
+      ...(macs?.data?.data?.products || []),
+      ...(airpods?.data?.data?.products || []),
+      ...(applewatches?.data?.data?.products || []),
+      ...(accessories?.data?.data?.products || []),
     ];
 
-    // Optional: Sort or filter the merged list if needed (e.g., by createdAt descending)
     allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return allProducts;
-} catch (error) {
+  } catch (error) {
     console.error('Error fetching all products:', error);
-    throw error;  // Re-throw for component-level handling
+    throw error;
   }
 };

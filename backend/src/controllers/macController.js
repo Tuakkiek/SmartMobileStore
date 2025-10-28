@@ -41,11 +41,10 @@ export const create = async (req, res) => {
     const productToCreate = {
       name: productData.name.trim(),
       model: productData.model.trim(),
+      category: productData.category?.trim() || "Mac", // ✅ thêm dòng này
       description: productData.description?.trim() || "",
       specifications: productData.specifications,
-      variants: [], // Will be populated after creating variants
-      condition: productData.condition || "NEW",
-      brand: "Apple",
+      variants: [],
       status: productData.status || "AVAILABLE",
       createdBy: productData.createdBy,
       averageRating: 0,

@@ -1,8 +1,13 @@
-// backend/src/controllers/orderController.js
+// ============================================
+// FILE: backend/src/controllers/orderController.js
+// ✅ CẬP NHẬT: Tự động update salesCount khi order DELIVERED
+// ============================================
+
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Cart from "../models/Cart.js";
-import { recordOrderSales } from "../services/salesAnalyticsService.js"; // ✅ IMPORT
+import { recordOrderSales } from "../services/salesAnalyticsService.js";
+import { processOrderSales } from "../services/productSalesService.js"; // ✅ THÊM
 
 // Tạo đơn hàng mới
 export const createOrder = async (req, res) => {
@@ -159,7 +164,7 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// ✅ UPDATED: Cập nhật trạng thái đơn hàng + Record Sales khi DELIVERED
+// ✅ UPDATED: Cập nhật trạng thái đơn hàng + Record Sales + Update salesCount
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status, note } = req.body;
@@ -173,13 +178,12 @@ export const updateOrderStatus = async (req, res) => {
       "DELIVERED",
       "CANCELLED",
     ];
+    
     if (!status || !VALID_STATUSES.includes(status)) {
       console.log("Invalid status:", status);
       return res.status(400).json({
         success: false,
-        message: `Trạng thái không hợp lệ. Phải là một trong: ${VALID_STATUSES.join(
-          ", "
-        )}`,
+        message: `Trạng thái không hợp lệ. Phải là một trong: ${VALID_STATUSES.join(", ")}`,
       });
     }
 
@@ -187,10 +191,12 @@ export const updateOrderStatus = async (req, res) => {
     console.log("Current order status before update:", order.status);
 
     if (!order) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Không tìm thấy đơn hàng" 
+      });
     }
+    
     if (order.status === "DELIVERED" || order.status === "CANCELLED") {
       return res.status(400).json({
         success: false,
@@ -198,21 +204,24 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ THÊM: Record sales khi chuyển sang DELIVERED
+    // ✅ THÊM: Khi chuyển sang DELIVERED - cập nhật sales analytics + salesCount
     if (status === "DELIVERED" && order.status !== "DELIVERED") {
       try {
+        // 1. Record vào SalesAnalytics (chi tiết theo variant)
         await recordOrderSales(order);
-        console.log(
-          "✅ Sales recorded successfully for order:",
-          order.orderNumber
-        );
+        console.log("✅ Sales analytics recorded for order:", order.orderNumber);
+
+        // 2. Cập nhật salesCount cho product
+        await processOrderSales(order);
+        console.log("✅ Product salesCount updated for order:", order.orderNumber);
+        
       } catch (salesError) {
         console.error("❌ Failed to record sales:", salesError);
         // Không block update status, chỉ log error
       }
     }
 
-    // Gọi update
+    // Gọi update status
     const updatedOrder = await order.updateStatus(status, req.user._id, note);
     console.log("Updated order status after save:", updatedOrder.status);
 
@@ -223,7 +232,10 @@ export const updateOrderStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in updateOrderStatus:", error.message);
-    res.status(400).json({ success: false, message: error.message });
+    res.status(400).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
