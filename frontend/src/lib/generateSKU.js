@@ -1,14 +1,22 @@
-// src/lib/generateSKU.js
+// frontend/src/lib/generateSKU.js
 
 /**
- * Tạo mã SKU ngẫu nhiên với 8 chữ số, có thể thêm prefix.
- * @param {string} prefix Tiền tố danh mục (vd: "IP" cho iPhone)
- * @returns {string} SKU (vd: "IP00911088")
+ * @returns {string} SKU 8 chữ số
  */
-export function generateSKU(prefix = "") {
-  // Tạo số ngẫu nhiên từ 1,000,000 đến 9,999,999
-  const randomNumber = Math.floor(Math.random() * 9000000 + 1000000);
+export function generateSKU() {
+  // Tạo số ngẫu nhiên từ 00000000 đến 99999999
+  const randomNumber = Math.floor(Math.random() * 100000000);
   
-  // Trả về prefix + số ngẫu nhiên đảm bảo có 8 chữ số (paddingLeft)
-  return `${prefix}${randomNumber.toString().padStart(8, "0")}`;
+  // Đảm bảo có 8 chữ số (padding left với số 0)
+  return randomNumber.toString().padStart(8, "0");
+}
+
+/**
+ * Generate SKU với prefix tùy chỉnh (nếu cần)
+ * @param {string} prefix - Tiền tố (optional)
+ * @returns {string}
+ */
+export function generateSKUWithPrefix(prefix = "") {
+  const sku = generateSKU();
+  return prefix ? `${prefix}${sku}` : sku;
 }

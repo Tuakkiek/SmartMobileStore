@@ -185,7 +185,6 @@ const HomePage = () => {
   // HANDLE EDIT
   // ============================================
   const handleEdit = (product) => {
-    if (!isAdmin) return;
     setEditingProduct(product);
     setShowEditModal(true);
   };

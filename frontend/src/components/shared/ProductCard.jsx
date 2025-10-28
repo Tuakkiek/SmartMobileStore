@@ -251,11 +251,11 @@ const ProductCard = ({
       return;
     }
 
-    // ✅ Map Tên Model (iPhone, Mac) sang Đường dẫn (dien-thoai, macbook)
+    // ✅ Map Category sang đường dẫn
     const categoryPath = {
       iPhone: "dien-thoai",
       iPad: "may-tinh-bang",
-      Mac: "macbook", // Đã chuẩn hóa thành macbook
+      Mac: "macbook",
       AppleWatch: "apple-watch",
       AirPods: "tai-nghe",
       Accessories: "phu-kien",
@@ -267,14 +267,19 @@ const ProductCard = ({
       return;
     }
 
+    // ✅ Lấy variant key (storage/variantName)
+    const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
     const variantKey =
       selectedVariant[keyField]?.toLowerCase().replace(/\s+/g, "-") ||
       "default";
-    const fullSlug = `${product.slug}-${variantKey}`;
-    const sku = selectedVariant.sku;
 
-    // Tạo URL cuối cùng theo chuẩn /dien-thoai/iphone-16-pro-256gb?sku=IP00911088
-    const url = `/${categoryPath}/${fullSlug}?sku=${sku}`;
+    // ✅ Tạo slug: iphone-16-pro-256gb
+    const fullSlug = `${product.slug}-${variantKey}`;
+
+    // ✅ URL cuối cùng: /dien-thoai/iphone-16-pro-256gb?sku=00911089
+    const url = `/${categoryPath}/${fullSlug}?sku=${selectedVariant.sku}`;
+
+    console.log("🔗 Navigating to:", url);
     navigate(url);
   };
 

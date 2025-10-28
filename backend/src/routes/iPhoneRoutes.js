@@ -1,17 +1,21 @@
 // backend/src/routes/iPhoneRoutes.js
 import express from "express";
-import * as controller from "../controllers/iPhoneController.js"; // Sử dụng import tất cả các controller
+import * as controller from "../controllers/iPhoneController.js";
 
 const router = express.Router();
 
-// Đảm bảo controller là hàm hợp lệ
+// ✅ Static routes first
 router.post("/", controller.create);
 router.get("/", controller.findAll);
+
+// ✅ Product detail route (MUST be before /:id)
+// Matches: /iphones/iphone-16-pro-256gb?sku=00911089
+router.get("/:modelSlug-:storage", controller.getProductDetail);
+
+// ✅ ID-specific routes
+router.get("/:id/variants", controller.getVariants);
 router.get("/:id", controller.findOne);
 router.put("/:id", controller.update);
 router.delete("/:id", controller.deleteIPhone);
-router.get("/:id/variants", controller.getVariants);
-router.get("/sku/:sku", controller.findOneBySku); // Optional: add if needed
-router.get("/:modelSlug-:storage", controller.getProductDetail); // New: for product detail URL
 
 export default router;
