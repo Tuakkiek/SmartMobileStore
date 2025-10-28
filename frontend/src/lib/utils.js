@@ -8,7 +8,7 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
-} from '@/lib/api';
+} from "@/lib/api";
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -72,14 +72,15 @@ export const getStatusText = (status) => {
 // Function to fetch all products across all categories
 export const fetchAllProducts = async (params = {}) => {
   try {
-    const [iphones, ipads, macs, airpods, applewatches, accessories] = await Promise.all([
-      iPhoneAPI.getAll(params),
-      iPadAPI.getAll(params),
-      macAPI.getAll(params),
-      airPodsAPI.getAll(params),
-      appleWatchAPI.getAll(params),
-      accessoryAPI.getAll(params),
-    ]);
+    const [iphones, ipads, macs, airpods, applewatches, accessories] =
+      await Promise.all([
+        iPhoneAPI.getAll(params),
+        iPadAPI.getAll(params),
+        macAPI.getAll(params),
+        airPodsAPI.getAll(params),
+        appleWatchAPI.getAll(params),
+        accessoryAPI.getAll(params),
+      ]);
 
     const allProducts = [
       ...(iphones?.data?.data?.products || []),
@@ -94,7 +95,7 @@ export const fetchAllProducts = async (params = {}) => {
 
     return allProducts;
   } catch (error) {
-    console.error('Error fetching all products:', error);
+    console.error("Error fetching all products:", error);
     throw error;
   }
 };

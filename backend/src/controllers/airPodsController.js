@@ -1,6 +1,18 @@
 import mongoose from "mongoose";
 import AirPods, { AirPodsVariant } from "../models/AirPods.js";
 
+// Helper to create slug
+const createSlug = (str) =>
+  str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\-]+/g, "")
+    .replace(/\-\-+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+
 // ============================================
 // CREATE AirPods with variants
 // ============================================
@@ -53,7 +65,11 @@ export const create = async (req, res) => {
     const product = new AirPods(productToCreate);
     await product.save({ session });
 
-    console.log("✅ Product created:", product._id);
+    // ✅ Generate slug
+    product.slug = createSlug(product.model);
+    await product.save({ session });
+
+    console.log("✅ Product created with slug:", product.slug);
 
     // ✅ 3. HANDLE VARIANTS
     const variantsToCreate = createVariants || variants || [];
@@ -204,8 +220,16 @@ export const update = async (req, res) => {
     }
 
     // Update main fields
+    let slugChanged = false;
     if (productData.name) product.name = productData.name.trim();
-    if (productData.model) product.model = productData.model.trim();
+    if (productData.model) {
+      const newModel = productData.model.trim();
+      if (newModel !== product.model) {
+        product.model = newModel;
+        product.slug = createSlug(newModel);
+        slugChanged = true;
+      }
+    }
     if (productData.description !== undefined)
       product.description = productData.description?.trim() || "";
     if (productData.condition) product.condition = productData.condition;
@@ -222,6 +246,9 @@ export const update = async (req, res) => {
     }
 
     await product.save({ session });
+    if (slugChanged) {
+      console.log("✅ Slug updated to:", product.slug);
+    }
     console.log("✅ Product basic info updated");
 
     // ✅ 2. HANDLE VARIANTS UPDATE
@@ -343,6 +370,70 @@ export const update = async (req, res) => {
     });
   } finally {
     session.endSession();
+  }
+};
+
+// ============================================
+// GET AirPods by Slug and VariantName (NEW for URL structure)
+// ============================================
+export const getProductDetail = async (req, res) => {
+  try {
+    const { modelSlug, variantName } = req.params;
+    const sku = req.query.sku?.trim();
+
+    // Find product by slug
+    const product = await AirPods.findOne({ slug: modelSlug })
+      .populate("variants")
+      .populate("createdBy", "fullName email");
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: `Không tìm thấy sản phẩm với slug: ${modelSlug}`,
+      });
+    }
+
+    // Filter variants by variantName
+    const matchingVariants = product.variants.filter(
+      (v) => v.variantName.toLowerCase() === variantName.toLowerCase()
+    );
+
+    if (matchingVariants.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Không tìm thấy biến thể với variantName: ${variantName}`,
+      });
+    }
+
+    let selectedVariant;
+    if (sku) {
+      selectedVariant = matchingVariants.find((v) => v.sku === sku);
+      if (!selectedVariant) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy biến thể với SKU: ${sku} cho variantName ${variantName}`,
+        });
+      }
+    } else {
+      // Default: first variant (sort by color alphabetically)
+      selectedVariant = matchingVariants.sort((a, b) =>
+        a.color.localeCompare(b.color)
+      )[0];
+    }
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        selectedVariantSku: selectedVariant.sku,
+      },
+    });
+  } catch (error) {
+    console.error("❌ GET PRODUCT DETAIL ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
@@ -493,4 +584,5 @@ export default {
   update,
   deleteAirPods,
   getVariants,
+  getProductDetail,
 };

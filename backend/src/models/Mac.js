@@ -33,6 +33,7 @@ const macSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     model: { type: String, required: true, trim: true },
+    slug: { type: String, unique: true, trim: true, index: true }, // ✅ THÊM SLUG
     description: { type: String, trim: true },
     specifications: {
       chip: { type: String, required: true, trim: true },

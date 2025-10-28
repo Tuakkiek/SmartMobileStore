@@ -1,3 +1,4 @@
+// src/routes/productRoutes.js
 import express from 'express';
 import { 
   getAllProducts, 

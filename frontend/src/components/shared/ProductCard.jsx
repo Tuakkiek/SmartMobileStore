@@ -1,6 +1,7 @@
 // ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
 // ✅ SỬA LẠI THEO ẢNH MẪU + XỬ LÝ TRƯỜNG HỢP "NONE"
+// ✅ UPDATED: Use new URL structure for navigation /:categoryPath/:productSlug-:variantKey?sku=xxx
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -23,6 +24,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+// Variant key field per category
+const VARIANT_KEY_FIELD = {
+  iPhone: "storage",
+  iPad: "storage",
+  Mac: "storage",
+  AirPods: "variantName",
+  AppleWatch: "variantName",
+  Accessories: "variantName",
+};
 
 // Helper component for Star Rating
 const StarRating = ({ rating, reviewCount = 0 }) => {
@@ -135,33 +146,56 @@ const ProductCard = ({
       ? product.installmentBadge
       : null;
 
-  // === 6. Danh sách storage options ===
-  const storageOptions = Array.from(
+  // === 6. Danh sách variant key options ===
+  const keyField = VARIANT_KEY_FIELD[product.category] || "variantName";
+  const variantKeyOptions = Array.from(
     new Set(
       safeVariants
-        .filter((v) => v && v.storage) // Lọc những variant có storage
-        .map((v) => v.storage)
-        .sort((a, b) => parseInt(a) - parseInt(b))
+        .filter((v) => v && v[keyField])
+        .map((v) => v[keyField])
+        .sort((a, b) => {
+          const aNum = parseInt(a) || 0;
+          const bNum = parseInt(b) || 0;
+          return aNum - bNum;
+        })
     )
   );
 
   // === 7. Tổng stock ===
   const totalStock = safeVariants.reduce((sum, v) => sum + (v?.stock || 0), 0);
 
-  // === 8. Chọn storage ===
-  const handleStorageClick = (e, storage) => {
+  // === 8. Chọn variant key ===
+  const handleVariantKeyClick = (e, keyValue) => {
     e.stopPropagation();
     // Ưu tiên chọn variant có stock > 0
     let variant = safeVariants.find(
-      (v) => v.storage === storage && v.stock > 0
+      (v) => v[keyField] === keyValue && v.stock > 0
     );
 
     // Nếu không có stock > 0, chọn variant bất kỳ
     if (!variant) {
-      variant = safeVariants.find((v) => v.storage === storage);
+      variant = safeVariants.find((v) => v[keyField] === keyValue);
     }
 
     if (variant) setSelectedVariant(variant);
+  };
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+  const getVariantLabel = (variant) => {
+    if (!variant) return "";
+    const cat = product?.category;
+
+    if (cat === "iPhone") {
+      return variant.storage;
+    } else if (cat === "iPad") {
+      return `${variant.storage} ${variant.connectivity}`;
+    } else if (cat === "Mac") {
+      return `${variant.cpuGpu} • ${variant.ram} • ${variant.storage}`;
+    } else {
+      return variant.variantName || variant.storage || "";
+    }
   };
 
   // === 9. Thêm vào giỏ hàng ===
@@ -182,7 +216,7 @@ const ProductCard = ({
       const result = await addToCart(selectedVariant._id, 1);
       if (result.success) {
         toast.success("Đã thêm vào giỏ hàng", {
-          description: `${product.name} • ${selectedVariant.storage}`,
+          description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
         });
       }
     } catch {
@@ -208,12 +242,48 @@ const ProductCard = ({
     setShowDeleteDialog(false);
   };
 
+  // === 11. Navigate to new URL structure ===
+  const handleCardClick = () => {
+    if (isAdmin) return; // Admin không navigate
+
+    if (!product.slug || !selectedVariant) {
+      navigate(`/products/${product._id}`);
+      return;
+    }
+
+    // ✅ Map Tên Model (iPhone, Mac) sang Đường dẫn (dien-thoai, macbook)
+    const categoryPath = {
+      iPhone: "dien-thoai",
+      iPad: "may-tinh-bang",
+      Mac: "macbook", // Đã chuẩn hóa thành macbook
+      AppleWatch: "apple-watch",
+      AirPods: "tai-nghe",
+      Accessories: "phu-kien",
+    }[product.category];
+
+    if (!categoryPath) {
+      console.error("Không tìm thấy đường dẫn cho danh mục:", product.category);
+      navigate(`/products/${product._id}`);
+      return;
+    }
+
+    const variantKey =
+      selectedVariant[keyField]?.toLowerCase().replace(/\s+/g, "-") ||
+      "default";
+    const fullSlug = `${product.slug}-${variantKey}`;
+    const sku = selectedVariant.sku;
+
+    // Tạo URL cuối cùng theo chuẩn /dien-thoai/iphone-16-pro-256gb?sku=IP00911088
+    const url = `/${categoryPath}/${fullSlug}?sku=${sku}`;
+    navigate(url);
+  };
+
   return (
     <>
       <Card
         // Thay đổi chiều cao card để phù hợp với ảnh mẫu
         className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white border-0 relative"
-        onClick={() => !isAdmin && navigate(`/products/${product._id}`)}
+        onClick={handleCardClick}
       >
         {/* === ADMIN: Sửa / Xóa === */}
         {isAdmin && (
@@ -327,21 +397,21 @@ const ProductCard = ({
             <div className="mt-2 border-b border-gray-200"></div>
           </div>
 
-          {/* === Dung lượng === */}
-          {storageOptions.length > 0 && (
+          {/* === Variant keys === */}
+          {variantKeyOptions.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-3">
-              {storageOptions.map((storage) => (
+              {variantKeyOptions.map((keyValue) => (
                 <button
-                  key={storage}
-                  onClick={(e) => handleStorageClick(e, storage)}
+                  key={keyValue}
+                  onClick={(e) => handleVariantKeyClick(e, keyValue)}
                   // Chỉnh style button nhỏ gọn, bo góc tròn, màu sắc theo ảnh mẫu
                   className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
-                    current.storage === storage
+                    current[keyField] === keyValue
                       ? "bg-red-600 text-white border-red-600" // Màu đỏ khi được chọn
                       : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
                   }`}
                 >
-                  {storage}
+                  {keyValue}
                 </button>
               ))}
             </div>

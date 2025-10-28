@@ -11,5 +11,7 @@ router.get("/:id", controller.findOne);
 router.put("/:id", controller.update);
 router.delete("/:id", controller.deleteIPhone);
 router.get("/:id/variants", controller.getVariants);
+router.get("/sku/:sku", controller.findOneBySku); // Optional: add if needed
+router.get("/:modelSlug-:storage", controller.getProductDetail); // New: for product detail URL
 
 export default router;

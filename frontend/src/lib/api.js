@@ -1,8 +1,3 @@
-// ============================================
-// FILE: frontend/src/lib/api.js
-// ✅ FIXED: Added analyticsAPI export
-// ============================================
-
 import axios from "axios";
 
 // ============================================
@@ -55,6 +50,7 @@ api.interceptors.response.use(
 
 // ============================================
 // CATEGORY-SPECIFIC APIs
+// Hàm .get đã được khôi phục để gọi route detail riêng
 // ============================================
 
 // iPhone API
@@ -65,6 +61,8 @@ export const iPhoneAPI = {
   update: (id, data) => api.put(`/iphones/${id}`, data),
   delete: (id) => api.delete(`/iphones/${id}`),
   getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
+  // ✅ RE-ADDED: Lấy chi tiết sản phẩm theo slug (frontend gọi /iphones/slug?sku=xxx)
+  get: (slug, params) => api.get(`/iphones/${slug}`, { params }),
 };
 
 // iPad API
@@ -75,6 +73,8 @@ export const iPadAPI = {
   update: (id, data) => api.put(`/ipads/${id}`, data),
   delete: (id) => api.delete(`/ipads/${id}`),
   getVariants: (productId) => api.get(`/ipads/${productId}/variants`),
+  // ✅ RE-ADDED
+  get: (slug, params) => api.get(`/ipads/${slug}`, { params }),
 };
 
 // Mac API
@@ -85,6 +85,8 @@ export const macAPI = {
   update: (id, data) => api.put(`/macs/${id}`, data),
   delete: (id) => api.delete(`/macs/${id}`),
   getVariants: (productId) => api.get(`/macs/${productId}/variants`),
+  // ✅ RE-ADDED
+  get: (slug, params) => api.get(`/macs/${slug}`, { params }),
 };
 
 // AirPods API
@@ -95,6 +97,8 @@ export const airPodsAPI = {
   update: (id, data) => api.put(`/airpods/${id}`, data),
   delete: (id) => api.delete(`/airpods/${id}`),
   getVariants: (productId) => api.get(`/airpods/${productId}/variants`),
+  // ✅ RE-ADDED
+  get: (slug, params) => api.get(`/airpods/${slug}`, { params }),
 };
 
 // AppleWatch API
@@ -105,6 +109,8 @@ export const appleWatchAPI = {
   update: (id, data) => api.put(`/applewatches/${id}`, data),
   delete: (id) => api.delete(`/applewatches/${id}`),
   getVariants: (productId) => api.get(`/applewatches/${productId}/variants`),
+  // ✅ RE-ADDED
+  get: (slug, params) => api.get(`/applewatches/${slug}`, { params }),
 };
 
 // Accessory API
@@ -115,6 +121,8 @@ export const accessoryAPI = {
   update: (id, data) => api.put(`/accessories/${id}`, data),
   delete: (id) => api.delete(`/accessories/${id}`),
   getVariants: (productId) => api.get(`/accessories/${productId}/variants`),
+  // ✅ RE-ADDED
+  get: (slug, params) => api.get(`/accessories/${slug}`, { params }),
 };
 
 // ============================================
@@ -189,7 +197,7 @@ export const userAPI = {
 };
 
 // ============================================
-// PRODUCT API - CHO MAINLAYOUT SEARCH
+// PRODUCT API - CHO MAINLAYOUT SEARCH & FEATURED
 // ============================================
 export const productAPI = {
   search: (query, params = {}) =>
@@ -205,10 +213,12 @@ export const productAPI = {
   getFeatured: (params = {}) => api.get("/products/featured", { params }),
   getNewArrivals: (params = {}) =>
     api.get("/products/new-arrivals", { params }),
+
+  // ❌ REMOVED: Hàm get tổng hợp đã được loại bỏ
 };
 
 // ============================================
-// ✅ ANALYTICS API - NEW
+// ANALYTICS API
 // ============================================
 export const analyticsAPI = {
   getTopSellers: (category, limit = 10) =>
@@ -244,6 +254,7 @@ export const getTopSelling = async (category) => {
 
 export const getAllProductsForCategory = async (cat) => {
   try {
+    // Lưu ý: Tên API phải khớp với tiền tố route backend (vd: /iphones, /ipads)
     const response = await api.get(`/${cat}`);
     const data = response.data?.data;
     return data?.products || data || [];
@@ -293,7 +304,7 @@ export default {
   reviewAPI,
   promotionAPI,
   userAPI,
-  analyticsAPI, // ✅ ADDED
+  analyticsAPI,
   getTopSelling,
   getAllProductsForCategory,
   getTopNewProducts,

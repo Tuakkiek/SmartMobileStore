@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
-import {Toaster} from "sonner";
+import { Toaster } from "sonner";
 
 // Layouts
 import MainLayout from "@/layouts/MainLayout";
@@ -42,20 +42,19 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+  if (allowedRoles && !allowedRoles.includes(user.role))
+    return <Navigate to="/" replace />;
 
   return children;
 };
 
 function App() {
-  const {getCurrentUser } = useAuthStore();
+  const { getCurrentUser } = useAuthStore();
 
   useEffect(() => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    getCurrentUser(); // store tự kiểm tra user bên trong
-  }
-}, [getCurrentUser]);
+    const token = localStorage.getItem("token");
+    if (token) getCurrentUser();
+  }, [getCurrentUser]);
 
   return (
     <BrowserRouter>
@@ -64,7 +63,9 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
-          <Route path="/products/:id" element={<ProductDetailPage />} />
+
+          <Route path="/:category/:slug" element={<ProductDetailPage />} />
+            
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -126,7 +127,7 @@ function App() {
           <Route path="/admin/promotions" element={<PromotionsPage />} />
         </Route>
 
-        {/* Warehouse Staff Routes */}
+        {/* Warehouse Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["WAREHOUSE_STAFF", "ADMIN"]}>
@@ -134,7 +135,10 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/warehouse/products" element={<WarehouseProductsPage />} />
+          <Route
+            path="/warehouse/products"
+            element={<WarehouseProductsPage />}
+          />
         </Route>
 
         {/* Order Manager Routes */}
@@ -145,13 +149,17 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/order-manager/orders" element={<OrderManagementPage />} />
+          <Route
+            path="/order-manager/orders"
+            element={<OrderManagementPage />}
+          />
         </Route>
 
         {/* 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-        <Toaster position = "bottom-right" richColors /> 
+
+      <Toaster position="bottom-right" richColors />
     </BrowserRouter>
   );
 }

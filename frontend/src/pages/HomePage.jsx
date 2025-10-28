@@ -157,7 +157,6 @@ const HomePage = () => {
   // HANDLE DELETE
   // ============================================
   const handleDelete = async (productId, category) => {
-
     const api = API_MAP[category];
     if (!api?.delete) {
       toast.error("Không hỗ trợ xóa sản phẩm này");
@@ -297,7 +296,7 @@ const HomePage = () => {
             {newArrivals.map((product) => (
               <div key={product._id} className="relative group">
                 <ProductCard
-                  product={{ ...product, isTopNew: true }}
+                  product={product}
                   isTopNew={true}
                   isTopSeller={false}
                   onEdit={isAdmin ? () => handleEdit(product) : undefined}

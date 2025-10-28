@@ -1,6 +1,18 @@
 import mongoose from "mongoose";
 import Mac, { MacVariant } from "../models/Mac.js";
 
+// Helper to create slug
+const createSlug = (str) =>
+  str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\-]+/g, "")
+    .replace(/\-\-+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+
 // ============================================
 // CREATE Mac with variants
 // ============================================
@@ -54,7 +66,11 @@ export const create = async (req, res) => {
     const product = new Mac(productToCreate);
     await product.save({ session });
 
-    console.log("✅ Product created:", product._id);
+    // ✅ Generate slug
+    product.slug = createSlug(product.model);
+    await product.save({ session });
+
+    console.log("✅ Product created with slug:", product.slug);
 
     // ✅ 3. HANDLE VARIANTS
     const variantsToCreate = createVariants || variants || [];
@@ -211,8 +227,16 @@ export const update = async (req, res) => {
     }
 
     // Update main fields
+    let slugChanged = false;
     if (productData.name) product.name = productData.name.trim();
-    if (productData.model) product.model = productData.model.trim();
+    if (productData.model) {
+      const newModel = productData.model.trim();
+      if (newModel !== product.model) {
+        product.model = newModel;
+        product.slug = createSlug(newModel);
+        slugChanged = true;
+      }
+    }
     if (productData.description !== undefined)
       product.description = productData.description?.trim() || "";
     if (productData.condition) product.condition = productData.condition;
@@ -229,6 +253,9 @@ export const update = async (req, res) => {
     }
 
     await product.save({ session });
+    if (slugChanged) {
+      console.log("✅ Slug updated to:", product.slug);
+    }
     console.log("✅ Product basic info updated");
 
     // ✅ 2. HANDLE VARIANTS UPDATE
@@ -356,6 +383,87 @@ export const update = async (req, res) => {
     });
   } finally {
     session.endSession();
+  }
+};
+
+// ============================================
+// GET Mac by Slug and Storage (NEW for URL structure)
+// Note: For Mac, additional filters like ram/cpuGpu can be in query if needed
+// ============================================
+export const getProductDetail = async (req, res) => {
+  try {
+    const { modelSlug, storage } = req.params;
+    const sku = req.query.sku?.trim();
+    const ram = req.query.ram?.trim(); // Optional
+    const cpuGpu = req.query.cpuGpu?.trim(); // Optional
+
+    // Find product by slug
+    const product = await Mac.findOne({ slug: modelSlug })
+      .populate("variants")
+      .populate("createdBy", "fullName email");
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: `Không tìm thấy sản phẩm với slug: ${modelSlug}`,
+      });
+    }
+
+    // Filter variants by storage (and ram/cpuGpu if provided)
+    let matchingVariants = product.variants.filter(
+      (v) => v.storage.toLowerCase() === storage.toLowerCase()
+    );
+
+    if (ram) {
+      matchingVariants = matchingVariants.filter(
+        (v) => v.ram.toLowerCase() === ram.toLowerCase()
+      );
+    }
+
+    if (cpuGpu) {
+      matchingVariants = matchingVariants.filter(
+        (v) => v.cpuGpu.toLowerCase() === cpuGpu.toLowerCase()
+      );
+    }
+
+    if (matchingVariants.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Không tìm thấy biến thể với dung lượng: ${storage}${
+          ram ? `, RAM: ${ram}` : ""
+        }${cpuGpu ? `, CPU/GPU: ${cpuGpu}` : ""}`,
+      });
+    }
+
+    let selectedVariant;
+    if (sku) {
+      selectedVariant = matchingVariants.find((v) => v.sku === sku);
+      if (!selectedVariant) {
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy biến thể với SKU: ${sku} cho dung lượng ${storage}`,
+        });
+      }
+    } else {
+      // Default: first variant (sort by color alphabetically)
+      selectedVariant = matchingVariants.sort((a, b) =>
+        a.color.localeCompare(b.color)
+      )[0];
+    }
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        selectedVariantSku: selectedVariant.sku,
+      },
+    });
+  } catch (error) {
+    console.error("❌ GET PRODUCT DETAIL ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
@@ -506,4 +614,5 @@ export default {
   update,
   deleteMac,
   getVariants,
+  getProductDetail,
 };
