@@ -38,6 +38,7 @@ export const create = async (req, res) => {
       brand: 'Apple',
       category: productData.category || 'iPad',
       status: productData.status || 'AVAILABLE',
+      installmentBadge: productData.installmentBadge || "NONE", // ✅ THÊM DÒNG NÀY
       createdBy: productData.createdBy,
       averageRating: 0,
       totalReviews: 0,

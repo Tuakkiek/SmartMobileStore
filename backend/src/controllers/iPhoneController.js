@@ -219,7 +219,8 @@ export const update = async (req, res) => {
       product.description = productData.description?.trim() || "";
     if (productData.condition) product.condition = productData.condition;
     if (productData.status) product.status = productData.status;
-    if (productData.installmentBadge) product.installmentBadge = productData.installmentBadge; // ✅ THÊM DÒNG NÀY
+    if (productData.installmentBadge)
+      product.installmentBadge = productData.installmentBadge; // ✅ THÊM DÒNG NÀY
     if (productData.specifications) {
       // Ensure colors is array
       if (
@@ -357,6 +358,50 @@ export const update = async (req, res) => {
     });
   } finally {
     session.endSession();
+  }
+};
+
+// ============================================
+// GET iPhone by Variant SKU (MỚI)
+// ============================================
+export const findOneBySku = async (req, res) => {
+  try {
+    const { sku } = req.params; // 1. Tìm Variant bằng SKU
+
+    const variant = await IPhoneVariant.findOne({ sku: sku.trim() });
+
+    if (!variant) {
+      return res.status(404).json({
+        success: false,
+        message: `Không tìm thấy biến thể với SKU: ${sku}`,
+      });
+    } // 2. Tìm Product cha bằng productId và populate variants
+
+    const product = await IPhone.findById(variant.productId)
+      .populate("variants")
+      .populate("createdBy", "fullName email");
+
+    if (!product) {
+      // Trường hợp lỗi: Variant tồn tại nhưng Product bị xóa
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy sản phẩm chính liên kết",
+      });
+    } // ✅ 3. Trả về sản phẩm (Product) và Biến thể đã chọn (selectedVariantSku)
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        selectedVariantSku: sku, // Gửi lại SKU để Frontend biết biến thể nào được chọn
+      },
+    });
+  } catch (error) {
+    console.error("❌ FIND ONE BY SKU ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
@@ -507,4 +552,5 @@ export default {
   update,
   deleteIPhone,
   getVariants,
+  findOneBySku,
 };

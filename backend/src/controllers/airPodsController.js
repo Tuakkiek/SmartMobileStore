@@ -44,6 +44,7 @@ export const create = async (req, res) => {
       condition: productData.condition || "NEW",
       brand: "Apple",
       status: productData.status || "AVAILABLE",
+      installmentBadge: productData.installmentBadge || "NONE",
       createdBy: productData.createdBy,
       averageRating: 0,
       totalReviews: 0,

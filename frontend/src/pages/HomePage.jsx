@@ -157,7 +157,6 @@ const HomePage = () => {
   // HANDLE DELETE
   // ============================================
   const handleDelete = async (productId, category) => {
-    if (!window.confirm("Xác nhận xóa sản phẩm này?")) return;
 
     const api = API_MAP[category];
     if (!api?.delete) {

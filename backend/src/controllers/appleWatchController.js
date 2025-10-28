@@ -35,11 +35,13 @@ export const create = async (req, res) => {
     const productToCreate = {
       name: productData.name.trim(),
       model: productData.model.trim(),
-      category: productData.category?.trim() || "Unknown",
+      category: productData.category?.trim() || "Apple Watch",
       description: productData.description?.trim() || "",
       specifications: productData.specifications,
       variants: [], // Will be populated after creating variants
       status: productData.status || "AVAILABLE",
+      installmentBadge: productData.installmentBadge || "NONE", // ✅ THÊM DÒNG NÀY
+      createdBy: productData.createdBy,
       createdBy: productData.createdBy,
       averageRating: 0,
       totalReviews: 0,
