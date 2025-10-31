@@ -92,9 +92,9 @@ const ProductDetailPage = () => {
       try {
         // Gọi API riêng của category
         const response = await categoryAPI.get(urlPath, { params: { sku: sku || "" } });
-        
+
         if (!response?.data?.success) {
-          // Có thể backend trả về 404/400 nếu không tìm thấy
+        // Có thể backend trả về 404/400 nếu không tìm thấy
           throw new Error(response.data.message || "Không tìm thấy sản phẩm");
         }
 

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { generateSKU } from "@/lib/generateSKU";
 import { toast } from "sonner";
 
 const IPhoneVariantsForm = ({
@@ -24,43 +23,22 @@ const IPhoneVariantsForm = ({
   onOptionChange,
   onAddOption,
   onRemoveOption,
-  model,
 }) => {
-  useEffect(() => {
-    variants.forEach((variant, vIdx) => {
-      variant.options.forEach((option, oIdx) => {
-        if (variant.color && option.storage && !option.sku) {
-          const newSKU = generateSKU(
-            "iPhone",
-            model || "UNKNOWN",
-            variant.color,
-            option.storage
-          );
-          onOptionChange(vIdx, oIdx, "sku", newSKU);
-        }
-      });
-    });
-  }, [variants, model, onOptionChange]);
-
   const handleVariantOptionChange = (vIdx, oIdx, field, value) => {
-    const variantsCopy = [...variants];
-    const option = variantsCopy[vIdx].options[oIdx];
-
     if (field === "price" || field === "originalPrice") {
-      const price = field === "price" ? Number(value) : Number(option.price);
+      const price =
+        field === "price"
+          ? Number(value)
+          : Number(variants[vIdx].options[oIdx].price);
       const originalPrice =
         field === "originalPrice"
           ? Number(value)
-          : Number(option.originalPrice);
-
+          : Number(variants[vIdx].options[oIdx].originalPrice);
       if (price > originalPrice && originalPrice > 0) {
-        toast.error(
-          `Giá bán (${price.toLocaleString()}đ) không được lớn hơn giá gốc (${originalPrice.toLocaleString()}đ)`
-        );
+        toast.error(`Giá bán không được lớn hơn giá gốc`);
         return;
       }
     }
-
     onOptionChange(vIdx, oIdx, field, value);
   };
 
@@ -83,20 +61,7 @@ const IPhoneVariantsForm = ({
               <Input
                 placeholder="VD: Space Black"
                 value={variant.color || ""}
-                onChange={(e) => {
-                  onVariantChange(vIdx, "color", e.target.value);
-                  variant.options.forEach((opt, oIdx) => {
-                    if (opt.storage) {
-                      const newSKU = generateSKU(
-                        "iPhone",
-                        model || "UNKNOWN",
-                        e.target.value,
-                        opt.storage
-                      );
-                      onOptionChange(vIdx, oIdx, "sku", newSKU);
-                    }
-                  });
-                }}
+                onChange={(e) => onVariantChange(vIdx, "color", e.target.value)}
                 required
               />
             </div>
@@ -107,7 +72,6 @@ const IPhoneVariantsForm = ({
             {variant.images.map((img, imgIdx) => (
               <div key={imgIdx} className="flex items-center gap-2">
                 <Input
-                  placeholder="Nhập URL ảnh"
                   value={img}
                   onChange={(e) => onImageChange(vIdx, imgIdx, e.target.value)}
                 />
@@ -146,18 +110,9 @@ const IPhoneVariantsForm = ({
                   </Label>
                   <Select
                     value={opt.storage || ""}
-                    onValueChange={(value) => {
-                      handleVariantOptionChange(vIdx, oIdx, "storage", value);
-                      if (variant.color && value) {
-                        const newSKU = generateSKU(
-                          "iPhone",
-                          model || "UNKNOWN",
-                          variant.color,
-                          value
-                        );
-                        onOptionChange(vIdx, oIdx, "sku", newSKU);
-                      }
-                    }}
+                    onValueChange={(v) =>
+                      handleVariantOptionChange(vIdx, oIdx, "storage", v)
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn bộ nhớ" />
@@ -172,18 +127,11 @@ const IPhoneVariantsForm = ({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>SKU</Label>
+                  <Label>SKU (Tự động)</Label>
                   <Input
-                    placeholder="VD: IPHONE-IPHONE16PROMAX-SPACEBLACK-256GB"
                     value={opt.sku || ""}
-                    onChange={(e) =>
-                      handleVariantOptionChange(
-                        vIdx,
-                        oIdx,
-                        "sku",
-                        e.target.value
-                      )
-                    }
+                    disabled
+                    className="bg-gray-100"
                   />
                 </div>
 
@@ -224,16 +172,15 @@ const IPhoneVariantsForm = ({
                     className={
                       Number(opt.price) > Number(opt.originalPrice) &&
                       Number(opt.originalPrice) > 0
-                        ? "border-red-500 focus:border-red-500"
+                        ? "border-red-500"
                         : ""
                     }
                     required
                   />
                   {Number(opt.price) > Number(opt.originalPrice) &&
                     Number(opt.originalPrice) > 0 && (
-                      <p className="text-xs text-red-500 flex items-center gap-1">
-                        <span>Warning</span> Giá bán phải nhỏ hơn hoặc bằng giá
-                        gốc
+                      <p className="text-xs text-red-500">
+                        Giá bán phải ≤ giá gốc
                       </p>
                     )}
                 </div>

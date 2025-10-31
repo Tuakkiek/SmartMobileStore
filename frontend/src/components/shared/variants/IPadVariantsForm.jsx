@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { generateSKU } from "@/lib/generateSKU";
 import { toast } from "sonner";
 
 const IPadVariantsForm = ({
@@ -24,69 +23,23 @@ const IPadVariantsForm = ({
   onOptionChange,
   onAddOption,
   onRemoveOption,
-  model,
 }) => {
-  useEffect(() => {
-    variants.forEach((variant, vIdx) => {
-      variant.options.forEach((option, oIdx) => {
-        if (
-          variant.color &&
-          option.storage &&
-          option.connectivity &&
-          !option.sku
-        ) {
-          const newSKU = generateSKU(
-            "iPad",
-            model || "UNKNOWN",
-            variant.color,
-            option.storage,
-            option.connectivity
-          );
-          onOptionChange(vIdx, oIdx, "sku", newSKU);
-        }
-      });
-    });
-  }, [variants, model, onOptionChange]);
-
   const handleVariantOptionChange = (vIdx, oIdx, field, value) => {
-    const variantsCopy = [...variants];
-    const option = variantsCopy[vIdx].options[oIdx];
-
-    if (field === "price" || field === "original51Price") {
-      const price = field === "price" ? Number(value) : Number(option.price);
+    if (field === "price" || field === "originalPrice") {
+      const price =
+        field === "price"
+          ? Number(value)
+          : Number(variants[vIdx].options[oIdx].price);
       const originalPrice =
         field === "originalPrice"
           ? Number(value)
-          : Number(option.originalPrice);
-
+          : Number(variants[vIdx].options[oIdx].originalPrice);
       if (price > originalPrice && originalPrice > 0) {
-        toast.error(
-          `Giá bán (${price.toLocaleString()}đ) không được lớn hơn giá gốc (${originalPrice.toLocaleString()}đ)`
-        );
+        toast.error(`Giá bán không được lớn hơn giá gốc`);
         return;
       }
     }
-
     onOptionChange(vIdx, oIdx, field, value);
-  };
-
-  const handleStorageOrConnectivityChange = (vIdx, oIdx, field, value) => {
-    handleVariantOptionChange(vIdx, oIdx, field, value);
-    const variant = variants[vIdx];
-    const option = variant.options[oIdx];
-    const storage = field === "storage" ? value : option.storage;
-    const connectivity = field === "connectivity" ? value : option.connectivity;
-
-    if (variant.color && storage && connectivity) {
-      const newSKU = generateSKU(
-        "iPad",
-        model || "UNKNOWN",
-        variant.color,
-        storage,
-        connectivity
-      );
-      onOptionChange(vIdx, oIdx, "sku", newSKU);
-    }
   };
 
   return (
@@ -108,21 +61,7 @@ const IPadVariantsForm = ({
               <Input
                 placeholder="VD: White"
                 value={variant.color || ""}
-                onChange={(e) => {
-                  onVariantChange(vIdx, "color", e.target.value);
-                  variant.options.forEach((opt, oIdx) => {
-                    if (opt.storage && opt.connectivity) {
-                      const newSKU = generateSKU(
-                        "iPad",
-                        model || "UNKNOWN",
-                        e.target.value,
-                        opt.storage,
-                        opt.connectivity
-                      );
-                      onOptionChange(vIdx, oIdx, "sku", newSKU);
-                    }
-                  });
-                }}
+                onChange={(e) => onVariantChange(vIdx, "color", e.target.value)}
                 required
               />
             </div>
@@ -133,7 +72,6 @@ const IPadVariantsForm = ({
             {variant.images.map((img, imgIdx) => (
               <div key={imgIdx} className="flex items-center gap-2">
                 <Input
-                  placeholder="Nhập URL ảnh"
                   value={img}
                   onChange={(e) => onImageChange(vIdx, imgIdx, e.target.value)}
                 />
@@ -170,13 +108,8 @@ const IPadVariantsForm = ({
                   </Label>
                   <Select
                     value={opt.storage || ""}
-                    onValueChange={(value) =>
-                      handleStorageOrConnectivityChange(
-                        vIdx,
-                        oIdx,
-                        "storage",
-                        value
-                      )
+                    onValueChange={(v) =>
+                      handleVariantOptionChange(vIdx, oIdx, "storage", v)
                     }
                   >
                     <SelectTrigger>
@@ -197,13 +130,8 @@ const IPadVariantsForm = ({
                   </Label>
                   <Select
                     value={opt.connectivity || ""}
-                    onValueChange={(value) =>
-                      handleStorageOrConnectivityChange(
-                        vIdx,
-                        oIdx,
-                        "connectivity",
-                        value
-                      )
+                    onValueChange={(v) =>
+                      handleVariantOptionChange(vIdx, oIdx, "connectivity", v)
                     }
                   >
                     <SelectTrigger>
@@ -217,18 +145,11 @@ const IPadVariantsForm = ({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>SKU</Label>
+                  <Label>SKU (Tự động)</Label>
                   <Input
-                    placeholder="VD: IPAD-IPADPRO-WHITE-256GB-WIFI"
                     value={opt.sku || ""}
-                    onChange={(e) =>
-                      handleVariantOptionChange(
-                        vIdx,
-                        oIdx,
-                        "sku",
-                        e.target.value
-                      )
-                    }
+                    disabled
+                    className="bg-gray-100"
                   />
                 </div>
 
@@ -269,16 +190,15 @@ const IPadVariantsForm = ({
                     className={
                       Number(opt.price) > Number(opt.originalPrice) &&
                       Number(opt.originalPrice) > 0
-                        ? "border-red-500 focus:border-red-500"
+                        ? "border-red-500"
                         : ""
                     }
                     required
                   />
                   {Number(opt.price) > Number(opt.originalPrice) &&
                     Number(opt.originalPrice) > 0 && (
-                      <p className="text-xs text-red-500 flex items-center gap-1">
-                        <span>Warning</span> Giá bán phải nhỏ hơn hoặc bằng giá
-                        gốc
+                      <p className="text-xs text-red-500">
+                        Giá bán phải ≤ giá gốc
                       </p>
                     )}
                 </div>

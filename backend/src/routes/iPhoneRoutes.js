@@ -9,8 +9,10 @@ router.post("/", controller.create);
 router.get("/", controller.findAll);
 
 // ✅ Product detail route (MUST be before /:id)
-// Matches: /iphones/iphone-16-pro-256gb?sku=00911089
-router.get("/:modelSlug-:storage", controller.getProductDetail);
+// Matches: /iphones/iphone-17-pro (base, default 256GB + default color)
+//          /iphones/iphone-17-pro-512gb (append storage, default color)
+//          /iphones/iphone-17-pro-256gb?sku=00000001 (append storage + ?sku for non-default color)
+router.get("/:slug", controller.getProductDetail);
 
 // ✅ ID-specific routes
 router.get("/:id/variants", controller.getVariants);

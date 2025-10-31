@@ -1,3 +1,4 @@
+// backend/src/server.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -75,7 +76,7 @@ app.use("/api/airpods", airPodsRoutes);
 app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/accessories", accessoryRoutes);
 app.use("/api/analytics", analyticsRoutes); // ✅ THÊM analytics route
-app.use('/api/sales', salesRoutes);
+app.use("/api/sales", salesRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

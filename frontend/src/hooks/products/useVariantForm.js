@@ -1,15 +1,6 @@
-// frontend/src/hooks/products/useVariantForm.js
-
 import { useCallback } from "react";
 import { emptyVariant } from "@/lib/productConstants";
 
-/**
- * Hook quản lý logic cho phần variants của ProductEditModal
- * @param {object} formData - Dữ liệu form hiện tại
- * @param {function} setFormData - Hàm cập nhật formData
- * @param {string} effectiveCategory - Danh mục sản phẩm
- * @returns {object} Các hàm xử lý biến thể
- */
 export const useVariantForm = (formData, setFormData, effectiveCategory) => {
   const addVariant = useCallback(() => {
     setFormData((prev) => ({
@@ -38,7 +29,6 @@ export const useVariantForm = (formData, setFormData, effectiveCategory) => {
     [formData, setFormData]
   );
 
-  // IMAGE HANDLERS
   const handleVariantImageChange = useCallback(
     (vIdx, imgIdx, value) => {
       if (!formData) return;
@@ -71,19 +61,16 @@ export const useVariantForm = (formData, setFormData, effectiveCategory) => {
     [formData, setFormData]
   );
 
-  // OPTION HANDLERS
   const addVariantOption = useCallback(
     (vIdx) => {
       if (!formData) return;
       const variants = [...formData.variants];
       const newOption = {
-        sku: "",
         originalPrice: "",
         price: "",
         stock: "",
       };
 
-      // THÊM FIELD PHÙ HỢP
       if (effectiveCategory === "iPhone") {
         newOption.storage = "";
       } else if (effectiveCategory === "iPad") {

@@ -4,8 +4,8 @@ export const useNavigationSKU = () => {
   const navigate = useNavigate();
 
   const goToProductPage = (category, model, sku) => {
-    const slug = `${category.toLowerCase()}-${model.replace(/\s+/g, "-")}`;
-    navigate(`/${slug}?sku=${sku}`, { replace: true });
+    const baseSlug = `${category.toLowerCase()}-${model.replace(/\s+/g, "-").toLowerCase()}`;
+    navigate(`/${baseSlug}?sku=${sku}`, { replace: true });
   };
 
   return { goToProductPage };
