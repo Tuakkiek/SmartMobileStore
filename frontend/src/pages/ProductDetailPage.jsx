@@ -6,7 +6,7 @@
 // ============================================
 
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -16,16 +16,23 @@ import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
-import { iPhoneAPI, iPadAPI, macAPI, airPodsAPI, appleWatchAPI, accessoryAPI } from "@/lib/api";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 
 // Ánh xạ category path thành Model name
 const CATEGORY_MAP = {
-  "dien-thoai": "iPhone",
-  "may-tinh-bang": "iPad",
-  macbook: "Mac",
-  "apple-watch": "AppleWatch",
-  "tai-nghe": "AirPods",
-  "phu-kien": "Accessories",
+  iphone: { model: "iPhone", api: iPhoneAPI },
+  ipad: { model: "iPad", api: iPadAPI },
+  mac: { model: "Mac", api: macAPI },
+  airpods: { model: "AirPods", api: airPodsAPI },
+  applewatch: { model: "AppleWatch", api: appleWatchAPI },
+  phukien: { model: "Accessories", api: accessoryAPI },
 };
 
 // Variant key field per category
@@ -39,7 +46,11 @@ const VARIANT_KEY_FIELD = {
 };
 
 const ProductDetailPage = () => {
-  const { category, slug } = useParams(); // :category/:slug
+  const { slug } = useParams(); // /iphone/:slug
+  const pathname = window.location.pathname;
+  const categorySlug = pathname.split("/")[1];
+
+  const categoryInfo = CATEGORY_MAP[categorySlug];
   const [searchParams, setSearchParams] = useSearchParams();
   const sku = searchParams.get("sku");
   const navigate = useNavigate();
@@ -62,39 +73,19 @@ const ProductDetailPage = () => {
       setIsLoading(true);
       setError(null);
 
-      const modelName = CATEGORY_MAP[category]; // e.g., "iPhone"
-      if (!modelName) {
-        setError("Danh mục sản phẩm không hợp lệ.");
+      if (!categoryInfo || !slug) {
+        setError("Danh mục hoặc sản phẩm không hợp lệ.");
         setIsLoading(false);
         return;
       }
 
-      // 1. CHỌN ĐÚNG API DỰA TRÊN CATEGORY
-      const API_MAP = {
-        iPhone: iPhoneAPI,
-        iPad: iPadAPI,
-        Mac: macAPI,
-        AirPods: airPodsAPI,
-        AppleWatch: appleWatchAPI,
-        Accessories: accessoryAPI,
-      };
-      
-      const categoryAPI = API_MAP[modelName];
-      if (!categoryAPI || !categoryAPI.get) {
-          setError("Không tìm thấy API cho danh mục sản phẩm này.");
-          setIsLoading(false);
-          return;
-      }
-
-      // 2. TẠO SLUG THEO FORMAT
-      const urlPath = slug; 
-      
       try {
         // Gọi API riêng của category
-        const response = await categoryAPI.get(urlPath, { params: { sku: sku || "" } });
+        const response = await categoryInfo.api.get(slug, {
+          params: { sku: sku || "" },
+        });
 
         if (!response?.data?.success) {
-        // Có thể backend trả về 404/400 nếu không tìm thấy
           throw new Error(response.data.message || "Không tìm thấy sản phẩm");
         }
 
@@ -102,12 +93,16 @@ const ProductDetailPage = () => {
         setProduct(productData);
 
         // Lấy danh sách variants
-        const variantsList = Array.isArray(productData.variants) ? productData.variants : [];
+        const variantsList = Array.isArray(productData.variants)
+          ? productData.variants
+          : [];
         setVariants(variantsList);
 
         // Chọn variant dựa trên sku hoặc default
-        let selectedVar = variantsList.find((v) => v.sku === sku) ||
-                         (variantsList.find((v) => v.stock > 0) || variantsList[0] || null);
+        let selectedVar =
+          variantsList.find((v) => v.sku === sku) ||
+          variantsList.find((v) => v.stock > 0) ||
+          variantsList[0];
         setSelectedVariant(selectedVar);
 
         // Nếu không có sku trong URL nhưng có selectedVar, thêm vào URL
@@ -116,19 +111,17 @@ const ProductDetailPage = () => {
           setSearchParams(searchParams, { replace: true });
         }
       } catch (error) {
-          console.error("Error fetching product:", error);
-          setError("Lỗi khi tải thông tin sản phẩm");
-          toast.error(error.message || "Lỗi khi tải thông tin sản phẩm");
-          navigate("/");
+        console.error("Error fetching product:", error);
+        setError("Lỗi khi tải thông tin sản phẩm");
+        toast.error(error.message || "Lỗi khi tải thông tin sản phẩm");
+        navigate("/");
       } finally {
-          setIsLoading(false);
+        setIsLoading(false);
       }
     };
 
-    if (category && slug) {
-      fetchProductData();
-    }
-  }, [category, slug, sku, navigate, setSearchParams]);
+    fetchProductData();
+  }, [slug, sku, categoryInfo, navigate, setSearchParams]);
 
   // ============================================
   // HANDLE VARIANT SELECTION
@@ -220,10 +213,8 @@ const ProductDetailPage = () => {
 
   const getVariantKeyOptions = () => {
     const cat = product?.category;
-    const keyField = VARIANT_KEY_FIELD[cat] || "storage";
-    const filtered = variants.filter(
-      (v) => v.color === selectedVariant?.color
-    );
+    const keyField = VARIANT_KEY_FIELD[product?.category] || "storage";
+    const filtered = variants.filter((v) => v.color === selectedVariant?.color);
     return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
       const aNum = parseInt(a) || 0;
       const bNum = parseInt(b) || 0;
@@ -257,7 +248,9 @@ const ProductDetailPage = () => {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">{error || "Không tìm thấy sản phẩm"}</h2>
+          <h2 className="text-2xl font-bold mb-4">
+            {error || "Không tìm thấy sản phẩm"}
+          </h2>
           <Button onClick={() => navigate("/")}>Quay lại trang chủ</Button>
         </div>
       </div>
@@ -435,7 +428,9 @@ const ProductDetailPage = () => {
                       v.color === selectedVariant?.color &&
                       v[VARIANT_KEY_FIELD[product.category]] === keyValue
                   );
-                  const isSelected = selectedVariant?.[VARIANT_KEY_FIELD[product.category]] === keyValue;
+                  const isSelected =
+                    selectedVariant?.[VARIANT_KEY_FIELD[product.category]] ===
+                    keyValue;
                   const hasStock = variant?.stock > 0;
 
                   return (

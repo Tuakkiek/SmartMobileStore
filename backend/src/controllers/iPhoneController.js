@@ -1,7 +1,7 @@
 // backend/src/controllers/iPhoneController.js
 import mongoose from "mongoose";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
-import { getNextSKU } from "../lib/generateSKU.js";
+import { getNextSku } from "../lib/generateSKU.js";
 
 // Helper: Tạo slug chuẩn SEO
 const createSlug = (str) =>
@@ -105,7 +105,7 @@ export const create = async (req, res) => {
             continue;
           }
 
-          const sku = await getNextSKU(); // Backend tự sinh
+          const sku = await getNextSku(); // Backend tự sinh
 
           const variantDoc = new IPhoneVariant({
             productId: product._id,
@@ -240,7 +240,7 @@ export const update = async (req, res) => {
 
         for (const opt of options) {
           if (!opt.storage?.trim()) continue;
-          const sku = await getNextSKU();
+          const sku = await getNextSku();
 
           const v = new IPhoneVariant({
             productId: id,
@@ -320,45 +320,56 @@ export const findOneBySku = async (req, res) => {
 // ============================================
 // GET DETAIL BY SLUG
 // ============================================
+// backend/src/controllers/iPhoneController.js
 export const getProductDetail = async (req, res) => {
   try {
-    let { slug } = req.params;
+    let { slug } = req.params; // iphone-17-pro-256gb
     const skuQuery = req.query.sku?.trim();
 
+    // Tách storage (nếu có)
     const parts = slug.split("-");
-    let storage = DEFAULT_STORAGE;
+    let storage = "256GB";
     let baseSlug = slug;
 
-    if (/\d+gb$/i.test(parts[parts.length - 1])) {
-      storage = parts.pop().toUpperCase();
+    const lastPart = parts[parts.length - 1];
+    if (/\d+gb$/i.test(lastPart)) {
+      storage = lastPart.toUpperCase();
+      parts.pop();
       baseSlug = parts.join("-");
     }
 
+    // TÌM PRODUCT THEO baseSlug (không có storage)
     const product = await IPhone.findOne({ slug: baseSlug })
       .populate("variants")
       .populate("createdBy", "fullName email");
-    if (!product)
+
+    if (!product) {
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy sản phẩm" });
+    }
 
     let variant;
     if (skuQuery) {
-      variant = product.variants.find(
-        (v) => v.sku === skuQuery && v.storage === storage
-      );
-    } else {
-      variant = product.variants.find(
-        (v) =>
-          v.color.toLowerCase() === DEFAULT_COLOR.toLowerCase() &&
-          v.storage === storage
-      );
+      variant = product.variants.find((v) => v.sku === skuQuery);
     }
 
-    if (!variant)
+    // Nếu không có sku → tìm theo storage + default color
+    if (!variant) {
+      const defaultColor = "cam vũ trụ";
+      variant =
+        product.variants.find(
+          (v) =>
+            v.storage === storage &&
+            v.color.toLowerCase() === defaultColor.toLowerCase()
+        ) || product.variants.find((v) => v.storage === storage);
+    }
+
+    if (!variant) {
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy biến thể" });
+    }
 
     res.json({
       success: true,
@@ -368,7 +379,6 @@ export const getProductDetail = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // ============================================
 // GET ALL
 // ============================================

@@ -1,10 +1,9 @@
-// backend/src/models/Counter.js
+// backend/src/models/SkuCounter.js
+import mongoose from "mongoose";
 
-const mongoose = require('mongoose');
-
-const counterSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  value: { type: Number, default: 0 }
+const skuCounterSchema = new mongoose.Schema({
+  _id: { type: String, required: true }, // "global"
+  seq: { type: Number, default: 0 },
 });
 
-module.exports = mongoose.model('Counter', counterSchema);
+export default mongoose.model("SkuCounter", skuCounterSchema);

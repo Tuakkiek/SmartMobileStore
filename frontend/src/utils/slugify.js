@@ -9,3 +9,4 @@ export const slugify = (text) => {
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
 };
+

@@ -1,5 +1,4 @@
 // FILE: src/App.jsx
-// ============================================
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
@@ -10,41 +9,29 @@ import { Toaster } from "sonner";
 import MainLayout from "@/layouts/MainLayout";
 import DashboardLayout from "@/layouts/DashboardLayout";
 
-// Public Pages
+// Pages
 import HomePage from "@/pages/HomePage";
 import ProductsPage from "@/pages/ProductsPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
-
-// Customer Pages
 import CartPage from "@/pages/customer/CartPage";
 import CheckoutPage from "@/pages/customer/CheckoutPage";
 import OrdersPage from "@/pages/customer/OrdersPage";
 import OrderDetailPage from "@/pages/customer/OrderDetailPage";
 import ProfilePage from "@/pages/customer/ProfilePage";
-
-// Admin Pages
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import EmployeesPage from "@/pages/admin/EmployeesPage";
 import PromotionsPage from "@/pages/admin/PromotionsPage";
-
-// Warehouse Pages
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
-
-// Order Manager Pages
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
-
   if (rehydrating) return <Loading />;
-
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-
   if (allowedRoles && !allowedRoles.includes(user.role))
     return <Navigate to="/" replace />;
-
   return children;
 };
 
@@ -63,9 +50,14 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
+          
+          <Route path="/dien-thoai/:slug" element={<ProductDetailPage />} />
+          <Route path="/may-tinh-bang/:slug" element={<ProductDetailPage />} />
+          <Route path="/macbook/:slug" element={<ProductDetailPage />} />
+          <Route path="/tai-nghe/:slug" element={<ProductDetailPage />} />
+          <Route path="/apple-watch/:slug" element={<ProductDetailPage />} />
+          <Route path="/phu-kien/:slug" element={<ProductDetailPage />} />
 
-          <Route path="/:category/:slug" element={<ProductDetailPage />} />
-            
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -127,7 +119,7 @@ function App() {
           <Route path="/admin/promotions" element={<PromotionsPage />} />
         </Route>
 
-        {/* Warehouse Routes */}
+        {/* Warehouse & Order Manager */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["WAREHOUSE_STAFF", "ADMIN"]}>
@@ -140,8 +132,6 @@ function App() {
             element={<WarehouseProductsPage />}
           />
         </Route>
-
-        {/* Order Manager Routes */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["ORDER_MANAGER", "ADMIN"]}>
@@ -158,7 +148,6 @@ function App() {
         {/* 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
       <Toaster position="bottom-right" richColors />
     </BrowserRouter>
   );

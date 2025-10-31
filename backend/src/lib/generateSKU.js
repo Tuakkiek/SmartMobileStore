@@ -1,18 +1,21 @@
 // backend/src/lib/generateSKU.js
+import SkuCounter from "../models/SkuCounter.js";
 
-let skuCounters = {};
-
-// Hàm sinh SKU tự động
-export const getNextSKU = (prefix) => {
-  if (!skuCounters[prefix]) {
-    skuCounters[prefix] = 1;
-  } else {
-    skuCounters[prefix]++;
-  }
-  return `${prefix}-${String(skuCounters[prefix]).padStart(4, "0")}`;
+/**
+ * Sinh SKU toàn cục 8 chữ số: 00000001, 00000002, ...
+ */
+export const getNextSku = async () => {
+  const counter = await SkuCounter.findByIdAndUpdate(
+    "global",
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  return String(counter.seq).padStart(8, "0");
 };
 
-// Hàm sinh slug từ model (dùng chung)
+/**
+ * Sinh slug từ chuỗi (giữ nguyên)
+ */
 export const generateSlug = (model) => {
   return model
     .toLowerCase()
@@ -21,7 +24,6 @@ export const generateSlug = (model) => {
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
 };
-
 // Hàm sinh SKU theo format cũ (nếu cần giữ lại)
 export const generateSKU = (category, model, color, ...rest) => {
   const slug = generateSlug(model);

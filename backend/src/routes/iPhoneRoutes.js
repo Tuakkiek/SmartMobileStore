@@ -12,7 +12,9 @@ router.get("/", controller.findAll);
 // Matches: /iphones/iphone-17-pro (base, default 256GB + default color)
 //          /iphones/iphone-17-pro-512gb (append storage, default color)
 //          /iphones/iphone-17-pro-256gb?sku=00000001 (append storage + ?sku for non-default color)
-router.get("/:slug", controller.getProductDetail);
+const response = await axios.get(`/iphones/${slug}`, { params: { sku } });
+
+
 
 // ✅ ID-specific routes
 router.get("/:id/variants", controller.getVariants);

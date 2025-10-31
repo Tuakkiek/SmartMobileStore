@@ -1,7 +1,7 @@
 // ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-// ✅ SỬA LẠI THEO ẢNH MẪU + XỬ LÝ TRƯỜNG HỢP "NONE"
-// ✅ UPDATED: Use new URL structure for navigation /:categoryPath/:productSlug-:variantKey?sku=xxx
+// FIXED: Prevent ?sku=undefined
+// ADDED: Debug UI + Loading + Safe Navigation
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -71,25 +71,36 @@ const ProductCard = ({
   const [isAdding, setIsAdding] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isVariantReady, setIsVariantReady] = useState(false); // NEW
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
 
-  // ✅ Ensure variants is always an array
+  // Ensure variants is always an array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
 
-  // === 1. Chọn variant mặc định có stock > 0 ===
+  // === 1. Chọn variant mặc định có stock > 0 + có SKU ===
   useEffect(() => {
-    const available = safeVariants.find((v) => v && v.stock > 0);
-    // Chọn variant có giá rẻ nhất nếu không có stock > 0
-    const cheapestVariant =
-      safeVariants.length > 0
-        ? safeVariants.reduce(
-            (min, v) => (v.price < min.price ? v : min),
-            safeVariants[0]
-          )
-        : null;
+    if (!safeVariants.length) {
+      setSelectedVariant(null);
+      setIsVariantReady(false);
+      return;
+    }
 
-    setSelectedVariant(available || cheapestVariant || null);
+    // Ưu tiên: stock > 0 + có sku
+    let variant = safeVariants.find((v) => v.stock > 0 && v.sku);
+    if (!variant) variant = safeVariants.find((v) => v.sku); // có sku dù hết hàng
+    if (!variant) variant = safeVariants[0]; // fallback
+
+    setSelectedVariant(variant);
+setIsVariantReady(!!variant?.sku); // Chỉ sẵn sàng nếu có SKU
+
+    // DEBUG LOG
+    console.log("ProductCard DEBUG:", {
+      name: product.name,
+      variantsCount: safeVariants.length,
+      selectedSKU: variant?.sku,
+      isReady: !!variant?.sku,
+    });
   }, [product.variants]);
 
   const current = selectedVariant || {};
@@ -106,7 +117,7 @@ const ProductCard = ({
     product.image ||
     "/placeholder.png";
 
-  // === 3. % GIẢM GIÁ - HIỂN thị góc trên bên trái (Giữ nguyên logic cũ) ===
+  // === 3. % GIẢM GIÁ ===
   const discountPercent =
     displayOriginalPrice > displayPrice
       ? Math.round(
@@ -114,32 +125,25 @@ const ProductCard = ({
         )
       : 0;
 
-  // === 4. BADGE GÓC TRÊN BÊN PHẢI - PRIORITY: TOP NEW > TOP SELLER ===
+  // === 4. BADGE GÓC TRÊN BÊN PHẢI ===
   const getRightBadge = () => {
-    // Priority 1: Mới
     if (isTopNew) {
       return {
         text: "Mới",
         color: "bg-green-500 hover:bg-green-500 text-white",
       };
     }
-
-    // Priority 2: Bán chạy
     if (isTopSeller) {
-      // Dùng màu Xanh lá (Bán chạy) theo ảnh 2 (image_f138c1.png)
       return {
         text: "Bán chạy",
         color: "bg-green-500 hover:bg-green-500 text-white",
       };
     }
-
     return null;
   };
-
   const rightBadge = getRightBadge();
 
-  // === 5. Installment TEXT bên dưới tên sản phẩm ===
-  // ✅ LOGIC CẬP NHẬT: Kiểm tra nếu là chuỗi "none" (không phân biệt hoa thường) thì coi như null
+  // === 5. Installment TEXT ===
   const installmentText =
     product.installmentBadge &&
     product.installmentBadge.toLowerCase() !== "none"
@@ -167,34 +171,15 @@ const ProductCard = ({
   // === 8. Chọn variant key ===
   const handleVariantKeyClick = (e, keyValue) => {
     e.stopPropagation();
-    // Ưu tiên chọn variant có stock > 0
     let variant = safeVariants.find(
       (v) => v[keyField] === keyValue && v.stock > 0
     );
-
-    // Nếu không có stock > 0, chọn variant bất kỳ
     if (!variant) {
       variant = safeVariants.find((v) => v[keyField] === keyValue);
     }
-
-    if (variant) setSelectedVariant(variant);
-  };
-
-  // ============================================
-  // HELPER FUNCTIONS
-  // ============================================
-  const getVariantLabel = (variant) => {
-    if (!variant) return "";
-    const cat = product?.category;
-
-    if (cat === "iPhone") {
-      return variant.storage;
-    } else if (cat === "iPad") {
-      return `${variant.storage} ${variant.connectivity}`;
-    } else if (cat === "Mac") {
-      return `${variant.cpuGpu} • ${variant.ram} • ${variant.storage}`;
-    } else {
-      return variant.variantName || variant.storage || "";
+    if (variant) {
+      setSelectedVariant(variant);
+      setIsVariantReady(!!variant.sku);
     }
   };
 
@@ -214,7 +199,7 @@ const ProductCard = ({
     setIsAdding(true);
     try {
       const result = await addToCart(selectedVariant._id, 1);
-      if (result.success) {
+if (result.success) {
         toast.success("Đã thêm vào giỏ hàng", {
           description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
         });
@@ -242,16 +227,19 @@ const ProductCard = ({
     setShowDeleteDialog(false);
   };
 
-  // === 11. Navigate to new URL structure ===
+  // === 11. Navigate to new URL structure (CHỈ KHI CÓ SKU) ===
   const handleCardClick = () => {
-    if (isAdmin) return; // Admin không navigate
+    if (isAdmin) return;
 
-    if (!product.slug || !selectedVariant) {
+    if (!product.slug || !selectedVariant?.sku) {
+      console.warn("Cannot navigate: missing slug or SKU", {
+        product,
+        selectedVariant,
+      });
       navigate(`/products/${product._id}`);
       return;
     }
 
-    // ✅ Map Category sang đường dẫn
     const categoryPath = {
       iPhone: "dien-thoai",
       iPad: "may-tinh-bang",
@@ -262,34 +250,55 @@ const ProductCard = ({
     }[product.category];
 
     if (!categoryPath) {
-      console.error("Không tìm thấy đường dẫn cho danh mục:", product.category);
       navigate(`/products/${product._id}`);
       return;
     }
 
-    // ✅ Lấy variant key (storage/variantName)
     const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
     const variantKey =
       selectedVariant[keyField]?.toLowerCase().replace(/\s+/g, "-") ||
       "default";
-
-    // ✅ Tạo slug: iphone-16-pro-256gb
     const fullSlug = `${product.slug}-${variantKey}`;
-
-    // ✅ URL cuối cùng: /dien-thoai/iphone-16-pro-256gb?sku=00911089
     const url = `/${categoryPath}/${fullSlug}?sku=${selectedVariant.sku}`;
 
-    console.log("🔗 Navigating to:", url);
+    console.log("Navigating to:", url);
     navigate(url);
+  };
+
+  // === HELPER: getVariantLabel ===
+  const getVariantLabel = (variant) => {
+    if (!variant) return "";
+    const cat = product?.category;
+    if (cat === "iPhone") return variant.storage;
+    if (cat === "iPad") return `${variant.storage} ${variant.connectivity}`;
+    if (cat === "Mac")
+      return `${variant.cpuGpu} • ${variant.ram} • ${variant.storage}`;
+    return variant.variantName || variant.storage || "";
   };
 
   return (
     <>
       <Card
-        // Thay đổi chiều cao card để phù hợp với ảnh mẫu
-        className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group bg-white border-0 relative"
-        onClick={handleCardClick}
+        className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 bg-white border-0 relative"
+        onClick={isVariantReady ? handleCardClick : undefined} // CHỈ CLICK KHI SẴN SÀNG
+        style={{ cursor: isVariantReady ? "pointer" : "default" }}
       >
+        {/* LOADING KHI CHƯA CÓ SKU */}
+        {!isVariantReady && (
+          <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
+          </div>
+        )}
+
+        {/* === DEBUG UI: SLUG + SKU === */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="absolute top-12 left-3 z-50 bg-black/80 text-white text-xs px-2 py-1 rounded font-mono space-y-1">
+<div>Slug: <code className="text-green-400">{product.slug || "NULL"}</code></div>
+            <div>SKU: <code className="text-yellow-400">{selectedVariant?.sku || "NULL"}</code></div>
+          </div>
+        )}
+
+
         {/* === ADMIN: Sửa / Xóa === */}
         {isAdmin && (
           <>
@@ -316,20 +325,18 @@ const ProductCard = ({
           </>
         )}
 
-        {/* === Badge GIẢM GIÁ (góc trên trái) - Màu Đỏ === */}
+        {/* === Badge GIẢM GIÁ === */}
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
-            {/* Giảm size text, bo tròn nhẹ hơn */}
             <Badge className="bg-red-600 hover:bg-red-600 text-white font-bold text-xs px-2 py-1 rounded-md shadow-md">
               -{discountPercent}%
             </Badge>
           </div>
         )}
 
-        {/* === Badge TRẠNG THÁI (góc trên phải) - Màu Xanh lá/Xanh ngọc === */}
+        {/* === Badge TRẠNG THÁI === */}
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
-            {/* Giảm size text, bo tròn nhẹ hơn */}
             <Badge
               className={`${rightBadge.color} font-bold text-xs px-2 py-1 rounded-md shadow-md`}
             >
@@ -339,7 +346,6 @@ const ProductCard = ({
         )}
 
         {/* === Ảnh sản phẩm === */}
-        {/* Aspect ratio 3/4 và padding theo ảnh mẫu */}
         <div className="relative aspect-[3/4] bg-white overflow-hidden p-6 pt-10">
           <img
             src={displayImage}
@@ -347,7 +353,7 @@ const ProductCard = ({
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
           />
 
-          {/* === Nút thêm giỏ hàng (Chỉ hiển thị cho Customer) === */}
+          {/* === Nút thêm giỏ hàng === */}
           {!isAdmin &&
             isAuthenticated &&
             user?.role === "CUSTOMER" &&
@@ -366,13 +372,10 @@ const ProductCard = ({
 
         {/* === Thông tin sản phẩm === */}
         <div className="px-4 space-y-1 bg-white">
-          {/* Tên sản phẩm */}
           <h3 className="font-bold text-lg line-clamp-2 text-gray-900 leading-tight">
-            {product.name}
+{product.name}
           </h3>
 
-          {/* === Trả góp text (Hiển thị ngay dưới tên sản phẩm) === */}
-          {/* ✅ Đã cập nhật logic kiểm tra installmentText */}
           {installmentText && (
             <Badge
               variant="outline"
@@ -382,37 +385,31 @@ const ProductCard = ({
             </Badge>
           )}
 
-          {/* === Giá gốc (Nếu có giảm giá) === */}
           <div className="space-y-0.5 pt-1">
             {displayOriginalPrice > displayPrice && (
               <p className="text-sm text-gray-500 line-through">
                 {formatPrice(displayOriginalPrice)}
               </p>
             )}
-            {/* === Giá bán === */}
             <p className="text-2xl font-bold text-red-600">
               {formatPrice(displayPrice)}
             </p>
           </div>
 
-          {/* === Đánh giá (Luôn hiển thị theo ảnh mẫu) === */}
           <div className="pt-2">
             <StarRating rating={rating} reviewCount={reviewCount} />
-            {/* Dùng div với border-b để tạo đường line mỏng dưới đánh giá */}
             <div className="mt-2 border-b border-gray-200"></div>
           </div>
 
-          {/* === Variant keys === */}
           {variantKeyOptions.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-3">
               {variantKeyOptions.map((keyValue) => (
                 <button
                   key={keyValue}
                   onClick={(e) => handleVariantKeyClick(e, keyValue)}
-                  // Chỉnh style button nhỏ gọn, bo góc tròn, màu sắc theo ảnh mẫu
                   className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
                     current[keyField] === keyValue
-                      ? "bg-red-600 text-white border-red-600" // Màu đỏ khi được chọn
+                      ? "bg-red-600 text-white border-red-600"
                       : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
                   }`}
                 >
@@ -422,7 +419,6 @@ const ProductCard = ({
             </div>
           )}
 
-          {/* === Tồn kho (Chỉ hiển thị nếu cần cảnh báo) === */}
           {totalStock === 0 && (
             <p className="text-xs text-red-600 font-medium pt-2">Hết hàng</p>
           )}
@@ -434,7 +430,7 @@ const ProductCard = ({
         </div>
       </Card>
 
-      {/* === Dialog xác nhận xóa (Giữ nguyên) === */}
+      {/* === Dialog xác nhận xóa === */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
