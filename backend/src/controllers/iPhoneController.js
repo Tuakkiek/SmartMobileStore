@@ -318,65 +318,119 @@ export const findOneBySku = async (req, res) => {
 };
 
 // ============================================
-// GET DETAIL BY SLUG
+// FILE: backend/src/controllers/iPhoneController.js
+// ✅ FIXED: getProductDetail - xử lý slug có storage
 // ============================================
-// backend/src/controllers/iPhoneController.js
+
 export const getProductDetail = async (req, res) => {
   try {
-    let { slug } = req.params; // iphone-17-pro-256gb
+    let { slug } = req.params; // iphone-16-128gb hoặc iphone-16
     const skuQuery = req.query.sku?.trim();
 
-    // Tách storage (nếu có)
+    console.log("🔍 getProductDetail:", { slug, sku: skuQuery });
+
+    // BƯỚC 1: Tách storage từ slug (nếu có)
     const parts = slug.split("-");
-    let storage = "256GB";
+    let storage = null;
     let baseSlug = slug;
 
+    // Kiểm tra part cuối có phải dạng 128gb, 256gb không
     const lastPart = parts[parts.length - 1];
-    if (/\d+gb$/i.test(lastPart)) {
-      storage = lastPart.toUpperCase();
+    if (/^\d+gb$/i.test(lastPart)) {
+      storage = lastPart.toUpperCase(); // 128GB
       parts.pop();
-      baseSlug = parts.join("-");
+      baseSlug = parts.join("-"); // iphone-16
+      console.log("✅ Extracted storage from slug:", storage);
     }
 
-    // TÌM PRODUCT THEO baseSlug (không có storage)
+    // BƯỚC 2: TÌM PRODUCT theo baseSlug (không có storage)
     const product = await IPhone.findOne({ slug: baseSlug })
       .populate("variants")
       .populate("createdBy", "fullName email");
 
     if (!product) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy sản phẩm" });
+      console.log("❌ Product not found with slug:", baseSlug);
+      return res.status(404).json({ 
+        success: false, 
+        message: "Không tìm thấy sản phẩm" 
+      });
     }
 
-    let variant;
+    console.log("✅ Product found:", product.name, "| Variants:", product.variants.length);
+
+    // BƯỚC 3: TÌM VARIANT PHÙ HỢP
+    let variant = null;
+
+    // Ưu tiên 1: Tìm theo SKU từ query string
     if (skuQuery) {
       variant = product.variants.find((v) => v.sku === skuQuery);
+      if (variant) {
+        console.log("✅ Found variant by SKU:", skuQuery);
+      }
     }
 
-    // Nếu không có sku → tìm theo storage + default color
-    if (!variant) {
+    // Ưu tiên 2: Tìm theo storage + default color
+    if (!variant && storage) {
       const defaultColor = "cam vũ trụ";
-      variant =
-        product.variants.find(
-          (v) =>
-            v.storage === storage &&
-            v.color.toLowerCase() === defaultColor.toLowerCase()
-        ) || product.variants.find((v) => v.storage === storage);
+      
+      // Tìm variant với storage + default color
+      variant = product.variants.find(
+        (v) =>
+          v.storage?.toUpperCase() === storage &&
+          v.color?.toLowerCase() === defaultColor.toLowerCase()
+      );
+
+      // Nếu không có, tìm variant với storage bất kỳ màu nào
+      if (!variant) {
+        variant = product.variants.find(
+          (v) => v.storage?.toUpperCase() === storage
+        );
+      }
+
+      if (variant) {
+        console.log("✅ Found variant by storage:", storage, "| Color:", variant.color);
+      }
     }
 
+    // Ưu tiên 3: Fallback - lấy variant đầu tiên có stock > 0
     if (!variant) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy biến thể" });
+      variant = product.variants.find((v) => v.stock > 0);
+      if (variant) {
+        console.log("✅ Fallback: Using first variant with stock");
+      }
     }
 
+    // Ưu tiên 4: Lấy variant đầu tiên
+    if (!variant && product.variants.length > 0) {
+      variant = product.variants[0];
+      console.log("⚠️ Fallback: Using first variant (no stock check)");
+    }
+
+    // BƯỚC 4: KHÔNG TÌM THẤY VARIANT NÀO
+    if (!variant) {
+      console.log("❌ No variant found for product:", product.name);
+      return res.status(404).json({ 
+        success: false, 
+        message: "Không tìm thấy biến thể sản phẩm" 
+      });
+    }
+
+    // BƯỚC 5: TRẢ VỀ KẾT QUẢ
+    console.log("✅ Returning product with variant SKU:", variant.sku);
+    
     res.json({
       success: true,
-      data: { product, selectedVariantSku: variant.sku },
+      data: { 
+        product, 
+        selectedVariantSku: variant.sku 
+      },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("❌ getProductDetail error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || "Lỗi server" 
+    });
   }
 };
 // ============================================

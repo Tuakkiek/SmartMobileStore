@@ -1,8 +1,10 @@
+// ============================================
+// FILE: frontend/src/lib/api.js
+// ✅ FIXED: API .get() methods for slug-based queries
+// ============================================
+
 import axios from "axios";
 
-// ============================================
-// AXIOS INSTANCE CONFIGURATION
-// ============================================
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   headers: { "Content-Type": "application/json" },
@@ -21,7 +23,6 @@ api.interceptors.request.use(
         const token = state?.token;
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
-          console.log("✅ Token attached:", token.substring(0, 20) + "...");
         }
       } catch (error) {
         console.error("❌ Error parsing auth-storage:", error);
@@ -50,7 +51,6 @@ api.interceptors.response.use(
 
 // ============================================
 // CATEGORY-SPECIFIC APIs
-// Hàm .get đã được khôi phục để gọi route detail riêng
 // ============================================
 
 // iPhone API
@@ -61,8 +61,11 @@ export const iPhoneAPI = {
   update: (id, data) => api.put(`/iphones/${id}`, data),
   delete: (id) => api.delete(`/iphones/${id}`),
   getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
-  // ✅ RE-ADDED: Lấy chi tiết sản phẩm theo slug (frontend gọi /iphones/slug?sku=xxx)
-  get: (slug, params) => api.get(`/iphones/${slug}`, { params }),
+  // ✅ FIXED: Get by slug with optional SKU query param
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/iphones/${slug}`, { params });
+  },
 };
 
 // iPad API
@@ -73,8 +76,10 @@ export const iPadAPI = {
   update: (id, data) => api.put(`/ipads/${id}`, data),
   delete: (id) => api.delete(`/ipads/${id}`),
   getVariants: (productId) => api.get(`/ipads/${productId}/variants`),
-  // ✅ RE-ADDED
-  get: (slug, params) => api.get(`/ipads/${slug}`, { params }),
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/ipads/${slug}`, { params });
+  },
 };
 
 // Mac API
@@ -85,8 +90,10 @@ export const macAPI = {
   update: (id, data) => api.put(`/macs/${id}`, data),
   delete: (id) => api.delete(`/macs/${id}`),
   getVariants: (productId) => api.get(`/macs/${productId}/variants`),
-  // ✅ RE-ADDED
-  get: (slug, params) => api.get(`/macs/${slug}`, { params }),
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/macs/${slug}`, { params });
+  },
 };
 
 // AirPods API
@@ -97,8 +104,10 @@ export const airPodsAPI = {
   update: (id, data) => api.put(`/airpods/${id}`, data),
   delete: (id) => api.delete(`/airpods/${id}`),
   getVariants: (productId) => api.get(`/airpods/${productId}/variants`),
-  // ✅ RE-ADDED
-  get: (slug, params) => api.get(`/airpods/${slug}`, { params }),
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/airpods/${slug}`, { params });
+  },
 };
 
 // AppleWatch API
@@ -109,8 +118,10 @@ export const appleWatchAPI = {
   update: (id, data) => api.put(`/applewatches/${id}`, data),
   delete: (id) => api.delete(`/applewatches/${id}`),
   getVariants: (productId) => api.get(`/applewatches/${productId}/variants`),
-  // ✅ RE-ADDED
-  get: (slug, params) => api.get(`/applewatches/${slug}`, { params }),
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/applewatches/${slug}`, { params });
+  },
 };
 
 // Accessory API
@@ -121,8 +132,10 @@ export const accessoryAPI = {
   update: (id, data) => api.put(`/accessories/${id}`, data),
   delete: (id) => api.delete(`/accessories/${id}`),
   getVariants: (productId) => api.get(`/accessories/${productId}/variants`),
-  // ✅ RE-ADDED
-  get: (slug, params) => api.get(`/accessories/${slug}`, { params }),
+  get: (slug, options = {}) => {
+    const { params = {} } = options;
+    return api.get(`/accessories/${slug}`, { params });
+  },
 };
 
 // ============================================
@@ -197,7 +210,7 @@ export const userAPI = {
 };
 
 // ============================================
-// PRODUCT API - CHO MAINLAYOUT SEARCH & FEATURED
+// PRODUCT API
 // ============================================
 export const productAPI = {
   search: (query, params = {}) =>
@@ -213,8 +226,6 @@ export const productAPI = {
   getFeatured: (params = {}) => api.get("/products/featured", { params }),
   getNewArrivals: (params = {}) =>
     api.get("/products/new-arrivals", { params }),
-
-  // ❌ REMOVED: Hàm get tổng hợp đã được loại bỏ
 };
 
 // ============================================
@@ -223,24 +234,20 @@ export const productAPI = {
 export const analyticsAPI = {
   getTopSellers: (category, limit = 10) =>
     api.get(`/analytics/top-sellers/${category}`, { params: { limit } }),
-
   getTopSellersAll: (limit = 10) =>
     api.get("/analytics/top-sellers", { params: { limit } }),
-
   getProductSales: (productId, variantId = null) =>
     api.get(`/analytics/product/${productId}`, { params: { variantId } }),
-
   getSalesByTime: (category, startDate, endDate) =>
     api.get("/analytics/sales-by-time", {
       params: { category, startDate, endDate },
     }),
-
   getDashboard: (category = null) =>
     api.get("/analytics/dashboard", { params: { category } }),
 };
 
 // ============================================
-// HELPER FUNCTIONS FOR DASHBOARD
+// HELPER FUNCTIONS
 // ============================================
 export const getTopSelling = async (category) => {
   try {
@@ -254,7 +261,6 @@ export const getTopSelling = async (category) => {
 
 export const getAllProductsForCategory = async (cat) => {
   try {
-    // Lưu ý: Tên API phải khớp với tiền tố route backend (vd: /iphones, /ipads)
     const response = await api.get(`/${cat}`);
     const data = response.data?.data;
     return data?.products || data || [];
@@ -287,9 +293,6 @@ export const getTopNewProducts = async () => {
   }
 };
 
-// ============================================
-// DEFAULT EXPORT
-// ============================================
 export default {
   productAPI,
   iPhoneAPI,

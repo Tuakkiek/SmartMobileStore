@@ -1,4 +1,8 @@
-// FILE: src/App.jsx
+// ============================================
+// FILE: frontend/src/App.jsx
+// ✅ FIXED: Routes để hỗ trợ slug có storage
+// ============================================
+
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
@@ -50,13 +54,14 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
-          
-          <Route path="/dien-thoai/:slug" element={<ProductDetailPage />} />
-          <Route path="/may-tinh-bang/:slug" element={<ProductDetailPage />} />
-          <Route path="/macbook/:slug" element={<ProductDetailPage />} />
-          <Route path="/tai-nghe/:slug" element={<ProductDetailPage />} />
-          <Route path="/apple-watch/:slug" element={<ProductDetailPage />} />
-          <Route path="/phu-kien/:slug" element={<ProductDetailPage />} />
+
+          {/* ✅ FIXED: Sử dụng * để match cả slug có storage */}
+          <Route path="/dien-thoai/*" element={<ProductDetailPage />} />
+          <Route path="/may-tinh-bang/*" element={<ProductDetailPage />} />
+          <Route path="/macbook/*" element={<ProductDetailPage />} />
+          <Route path="/tai-nghe/*" element={<ProductDetailPage />} />
+          <Route path="/apple-watch/*" element={<ProductDetailPage />} />
+          <Route path="/phu-kien/*" element={<ProductDetailPage />} />
 
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

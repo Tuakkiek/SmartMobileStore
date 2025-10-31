@@ -1,12 +1,10 @@
 // ============================================
 // FILE: frontend/src/pages/ProductDetailPage.jsx
-// ✅ REDESIGNED: Theo ảnh mẫu iPhone Air 256GB
-// ✅ UPDATED: Support new URL structure /:category/:slug?sku=xxx
-// ✅ FIXED: Handle variant selection and display
+// ✅ FIXED: Lấy slug từ URL path thay vì useParams
 // ============================================
 
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -25,14 +23,14 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 
-// Ánh xạ category path thành Model name
+// ✅ FIXED: Category mapping với paths chính xác
 const CATEGORY_MAP = {
-  iphone: { model: "iPhone", api: iPhoneAPI },
-  ipad: { model: "iPad", api: iPadAPI },
-  mac: { model: "Mac", api: macAPI },
-  airpods: { model: "AirPods", api: airPodsAPI },
-  applewatch: { model: "AppleWatch", api: appleWatchAPI },
-  phukien: { model: "Accessories", api: accessoryAPI },
+  "dien-thoai": { model: "iPhone", api: iPhoneAPI },
+  "may-tinh-bang": { model: "iPad", api: iPadAPI },
+  macbook: { model: "Mac", api: macAPI },
+  "tai-nghe": { model: "AirPods", api: airPodsAPI },
+  "apple-watch": { model: "AppleWatch", api: appleWatchAPI },
+  "phu-kien": { model: "Accessories", api: accessoryAPI },
 };
 
 // Variant key field per category
@@ -46,16 +44,24 @@ const VARIANT_KEY_FIELD = {
 };
 
 const ProductDetailPage = () => {
-  const { slug } = useParams(); // /iphone/:slug
-  const pathname = window.location.pathname;
-  const categorySlug = pathname.split("/")[1];
-
-  const categoryInfo = CATEGORY_MAP[categorySlug];
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const sku = searchParams.get("sku");
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
+
+  // ✅ LẤY SLUG TỪ PATHNAME
+  // pathname: /dien-thoai/iphone-16-128gb
+  const pathname = location.pathname;
+  const pathParts = pathname.split("/").filter(Boolean);
+
+  const categorySlug = pathParts[0]; // "dien-thoai"
+  const slug = pathParts.slice(1).join("-"); // "iphone-16-128gb"
+
+  const categoryInfo = CATEGORY_MAP[categorySlug];
+  const sku = searchParams.get("sku");
+
+  console.log("🔍 ProductDetailPage:", { pathname, categorySlug, slug, sku });
 
   const [product, setProduct] = useState(null);
   const [variants, setVariants] = useState([]);
@@ -80,7 +86,11 @@ const ProductDetailPage = () => {
       }
 
       try {
-        // Gọi API riêng của category
+        console.log(
+          `📡 Fetching: /${categoryInfo.model}s/${slug}?sku=${sku || ""}`
+        );
+
+        // ✅ Gọi API với slug NGUYÊN VẸN (có thể chứa storage)
         const response = await categoryInfo.api.get(slug, {
           params: { sku: sku || "" },
         });
@@ -103,25 +113,27 @@ const ProductDetailPage = () => {
           variantsList.find((v) => v.sku === sku) ||
           variantsList.find((v) => v.stock > 0) ||
           variantsList[0];
+
         setSelectedVariant(selectedVar);
+        console.log("✅ Selected variant:", selectedVar?.sku);
 
         // Nếu không có sku trong URL nhưng có selectedVar, thêm vào URL
-        if (!sku && selectedVar) {
+        if (!sku && selectedVar?.sku) {
           searchParams.set("sku", selectedVar.sku);
           setSearchParams(searchParams, { replace: true });
+          console.log("✅ Added SKU to URL:", selectedVar.sku);
         }
       } catch (error) {
-        console.error("Error fetching product:", error);
-        setError("Lỗi khi tải thông tin sản phẩm");
+        console.error("❌ Error fetching product:", error);
+        setError(error.message || "Lỗi khi tải thông tin sản phẩm");
         toast.error(error.message || "Lỗi khi tải thông tin sản phẩm");
-        navigate("/");
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchProductData();
-  }, [slug, sku, categoryInfo, navigate, setSearchParams]);
+  }, [slug, sku, categoryInfo]);
 
   // ============================================
   // HANDLE VARIANT SELECTION
@@ -129,7 +141,9 @@ const ProductDetailPage = () => {
   const handleVariantSelect = (variant) => {
     if (!variant) return;
 
-    // Cập nhật query string với sku mới
+    console.log("🔄 Changing variant to:", variant.sku);
+
+    // ✅ Cập nhật URL với SKU mới
     searchParams.set("sku", variant.sku);
     setSearchParams(searchParams, { replace: true });
 
@@ -164,7 +178,6 @@ const ProductDetailPage = () => {
         toast.success("Đã thêm vào giỏ hàng", {
           description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
         });
-        navigate("/cart");
       }
     } catch (error) {
       console.error("Add to cart error:", error);
@@ -212,7 +225,6 @@ const ProductDetailPage = () => {
   };
 
   const getVariantKeyOptions = () => {
-    const cat = product?.category;
     const keyField = VARIANT_KEY_FIELD[product?.category] || "storage";
     const filtered = variants.filter((v) => v.color === selectedVariant?.color);
     return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
