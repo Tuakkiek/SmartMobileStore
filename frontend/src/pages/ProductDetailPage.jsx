@@ -1,6 +1,6 @@
 // frontend/src/pages/ProductDetailPage.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -39,14 +39,15 @@ const VARIANT_KEY_FIELD = {
 
 const ProductDetailPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
 
-  // Lấy baseSlug từ URL (không bao gồm storage)
+  // Lấy slug từ URL
   const pathParts = location.pathname.split("/").filter(Boolean);
   const categorySlug = pathParts[0];
-  const baseSlug = pathParts.slice(1).join("-");
+  const fullSlug = pathParts.slice(1).join("/"); // Bao gồm cả color + storage nếu có
   const categoryInfo = CATEGORY_MAP[categorySlug];
   const sku = searchParams.get("sku");
 
@@ -69,7 +70,7 @@ const ProductDetailPage = () => {
       setError(null);
       hasHandledDefaultVariant.current = false;
 
-      if (!categoryInfo || !baseSlug) {
+      if (!categoryInfo || !fullSlug) {
         setError("Danh mục hoặc sản phẩm không hợp lệ.");
         setIsLoading(false);
         return;
@@ -77,9 +78,9 @@ const ProductDetailPage = () => {
 
       try {
         console.log(
-          `Fetching: /${categoryInfo.model}s/${baseSlug}?sku=${sku || ""}`
+          `Fetching: /${categoryInfo.model}s/${fullSlug}?sku=${sku || ""}`
         );
-        const response = await categoryInfo.api.get(baseSlug, {
+        const response = await categoryInfo.api.get(fullSlug, {
           params: { sku: sku || "" },
         });
 
@@ -95,6 +96,14 @@ const ProductDetailPage = () => {
 
         setProduct(productData);
         setVariants(variantsList);
+
+        // ✅ XỬ LÝ REDIRECT
+        if (res.redirect && res.redirectSlug) {
+          console.log("🔄 Redirect to:", res.redirectSlug);
+          const newUrl = `/${categorySlug}/${res.redirectSlug}?sku=${res.redirectSku}`;
+          navigate(newUrl, { replace: true });
+          return;
+        }
 
         let selectedVar = null;
 
@@ -116,9 +125,6 @@ const ProductDetailPage = () => {
         }
 
         setSelectedVariant(selectedVar);
-
-        // CHỈ thêm SKU vào URL khi người dùng CHỌN variant (không tự động)
-        // → Không làm gì ở đây nếu chưa có sku
       } catch (err) {
         console.error("Error:", err);
         setError(err.message || "Lỗi khi tải sản phẩm");
@@ -129,16 +135,26 @@ const ProductDetailPage = () => {
     };
 
     fetchProductData();
-  }, [baseSlug, sku, categoryInfo]);
+  }, [fullSlug, sku, categoryInfo, categorySlug, navigate]);
 
   // ============================================
-  // KHI NGƯỜI DÙNG CHỌN VARIANT → MỚI THÊM SKU VÀO URL
+  // ✅ KHI NGƯỜI DÙNG CHỌN VARIANT → UPDATE URL VỚI VARIANT SLUG
   // ============================================
   const handleVariantSelect = (variant) => {
-    if (!variant) return;
+    if (!variant || !variant.slug) return;
 
-    // Cập nhật URL: thêm ?sku=...
-    setSearchParams({ sku: variant.sku }, { replace: false });
+    console.log("🎯 Selecting variant:", {
+      sku: variant.sku,
+      slug: variant.slug,
+      color: variant.color,
+      storage: variant.storage,
+    });
+
+    // ✅ UPDATE URL: Thay đổi path + query param
+    const newUrl = `/${categorySlug}/${variant.slug}?sku=${variant.sku}`;
+    console.log("🔄 Navigating to:", newUrl);
+
+    navigate(newUrl, { replace: false }); // Không replace để có history
     setSelectedVariant(variant);
     setSelectedImage(0);
   };
@@ -268,6 +284,17 @@ const ProductDetailPage = () => {
         <span className="mx-2">/</span>
         <span className="text-gray-900 font-medium">{product.name}</span>
       </div>
+
+      {/* DEBUG INFO */}
+      {process.env.NODE_ENV === "development" && (
+        <div className="mb-4 p-4 bg-black/90 text-white font-mono text-xs rounded">
+          <div>Current URL: {location.pathname}</div>
+          <div>Full Slug: {fullSlug}</div>
+          <div>Selected SKU: {selectedVariant?.sku}</div>
+          <div>Selected Slug: {selectedVariant?.slug}</div>
+          <div>Base Slug: {product.baseSlug}</div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* IMAGE GALLERY */}
@@ -493,7 +520,7 @@ const ProductDetailPage = () => {
         </div>
       </div>
 
-      {/* SPECIFICATIONS */}
+      {/* SPECIFICATIONS & DESCRIPTION sections remain the same */}
       <div className="mt-16">
         <h2 className="text-2xl font-bold mb-6">Thông số kỹ thuật</h2>
         <Card className="p-6">
@@ -533,7 +560,6 @@ const ProductDetailPage = () => {
         </Card>
       </div>
 
-      {/* DESCRIPTION */}
       {product.description && (
         <div className="mt-12">
           <h2 className="text-2xl font-bold mb-6">Mô tả sản phẩm</h2>

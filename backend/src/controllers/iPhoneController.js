@@ -15,10 +15,11 @@ const createSlug = (str) =>
     .replace(/^-+/, "")
     .replace(/-+$/, "");
 
-// ✅ Helper: Tạo variant slug từ base slug + storage
-const createVariantSlug = (baseSlug, storage) => {
+// ✅ FIXED: Tạo variant slug = baseSlug + color + storage
+const createVariantSlug = (baseSlug, color, storage) => {
+  const colorSlug = createSlug(color); // Chuyển color thành slug
   const storageSlug = storage.toLowerCase().replace(/\s+/g, "");
-  return `${baseSlug}-${storageSlug}`;
+  return `${baseSlug}-${colorSlug}-${storageSlug}`;
 };
 
 // ============================================
@@ -34,7 +35,7 @@ export const create = async (req, res) => {
     const {
       createVariants,
       variants,
-      slug: frontendSlug, // ✅ Frontend gửi "slug"
+      slug: frontendSlug,
       ...productData
     } = req.body;
 
@@ -73,8 +74,8 @@ export const create = async (req, res) => {
     const product = new IPhone({
       name: productData.name.trim(),
       model: productData.model.trim(),
-      slug: finalSlug, // ✅ Lưu slug (frontend compatibility)
-      baseSlug: finalSlug, // ✅ Lưu baseSlug (variant logic)
+      slug: finalSlug,
+      baseSlug: finalSlug,
       description: productData.description?.trim() || "",
       specifications: { ...productData.specifications, colors },
       condition: productData.condition || "NEW",
@@ -122,7 +123,12 @@ export const create = async (req, res) => {
           }
 
           const sku = await getNextSku();
-          const variantSlug = createVariantSlug(finalSlug, opt.storage.trim());
+          // ✅ FIXED: Thêm color vào slug
+          const variantSlug = createVariantSlug(
+            finalSlug,
+            color.trim(),
+            opt.storage.trim()
+          );
 
           // Kiểm tra variant slug trùng
           const existingVariantSlug = await IPhoneVariant.findOne({
@@ -283,8 +289,10 @@ export const update = async (req, res) => {
           if (!opt.storage?.trim()) continue;
 
           const sku = await getNextSku();
+          // ✅ FIXED: Thêm color vào slug
           const variantSlug = createVariantSlug(
             product.baseSlug || product.slug,
+            color.trim(),
             opt.storage.trim()
           );
 
@@ -360,7 +368,7 @@ export const getProductDetail = async (req, res) => {
     let product = null;
 
     if (variant) {
-      // Case 1: Tìm thấy variant slug (vd: iphone-air-256gb)
+      // Case 1: Tìm thấy variant slug (vd: iphone-air-xanh-256gb)
       console.log("✅ Variant found by slug:", variant.sku);
 
       product = await IPhone.findById(variant.productId)
@@ -445,9 +453,7 @@ export const getProductDetail = async (req, res) => {
   }
 };
 
-// ============================================
-// GET BY SKU
-// ============================================
+// Export các functions còn lại giữ nguyên...
 export const findOneBySku = async (req, res) => {
   try {
     const { sku } = req.params;
@@ -471,9 +477,6 @@ export const findOneBySku = async (req, res) => {
   }
 };
 
-// ============================================
-// GET ALL
-// ============================================
 export const findAll = async (req, res) => {
   try {
     const { page = 1, limit = 12, search, status } = req.query;
@@ -511,9 +514,6 @@ export const findAll = async (req, res) => {
   }
 };
 
-// ============================================
-// GET ONE BY ID
-// ============================================
 export const findOne = async (req, res) => {
   try {
     const product = await IPhone.findById(req.params.id)
@@ -531,9 +531,6 @@ export const findOne = async (req, res) => {
   }
 };
 
-// ============================================
-// DELETE
-// ============================================
 export const deleteIPhone = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -555,9 +552,6 @@ export const deleteIPhone = async (req, res) => {
   }
 };
 
-// ============================================
-// GET VARIANTS
-// ============================================
 export const getVariants = async (req, res) => {
   try {
     const variants = await IPhoneVariant.find({
@@ -569,7 +563,6 @@ export const getVariants = async (req, res) => {
   }
 };
 
-// Export
 export default {
   create,
   update,
@@ -580,4 +573,3 @@ export default {
   findOneBySku,
   getProductDetail,
 };
-  

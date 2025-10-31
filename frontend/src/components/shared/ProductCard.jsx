@@ -233,7 +233,6 @@ const ProductCard = ({
 
   // === 11. Navigate - Hỗ trợ cả baseSlug và variant slug ===
   const handleCardClick = () => {
-    if (isAdmin) return;
 
     const categoryPath = {
       iPhone: "dien-thoai",
