@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/routes/iPhoneRoutes.js
-// ✅ FIXED: Proper route ordering without regex
+// ✅ FIXED: Support variant slug routing
 // ============================================
 
 import express from "express";
@@ -15,9 +15,8 @@ router.post("/", controller.create);
 router.get("/", controller.findAll);
 
 // ============================================
-// SPECIFIC ID ROUTES (với pattern đặc biệt)
+// SPECIFIC ID ROUTES
 // ============================================
-// Các route này phải đặt trước dynamic slug route
 router.get("/:id/variants", controller.getVariants);
 router.put("/:id", controller.update);
 router.delete("/:id", controller.deleteIPhone);
@@ -27,18 +26,23 @@ router.delete("/:id", controller.deleteIPhone);
 // ============================================
 
 // Middleware để phân biệt ObjectId vs Slug
-const isObjectId = (req, res, next) => {
+const routeHandler = (req, res, next) => {
   const { id } = req.params;
+
+  console.log("🔍 Route handler received:", { id, query: req.query });
+
   // MongoDB ObjectId có 24 ký tự hex
   if (/^[0-9a-fA-F]{24}$/.test(id)) {
-    return next(); // Đây là ObjectId, tiếp tục
+    console.log("✅ Detected ObjectId, calling findOne");
+    return controller.findOne(req, res, next);
   }
-  // Không phải ObjectId, chuyển sang getProductDetail
+
+  // Không phải ObjectId → là slug (có thể chứa storage)
+  console.log("✅ Detected slug, calling getProductDetail");
   return controller.getProductDetail(req, res, next);
 };
 
-// Route này sẽ match cả ObjectId và slug
-// Middleware isObjectId sẽ quyết định gọi hàm nào
-router.get("/:id", isObjectId, controller.findOne);
+// Route này match cả ObjectId và slug
+router.get("/:id", routeHandler);
 
 export default router;

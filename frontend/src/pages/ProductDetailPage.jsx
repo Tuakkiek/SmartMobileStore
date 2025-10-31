@@ -1,10 +1,6 @@
-// ============================================
-// FILE: frontend/src/pages/ProductDetailPage.jsx
-// ✅ FIXED: Lấy slug từ URL path thay vì useParams
-// ============================================
-
-import React, { useEffect, useState } from "react";
-import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+// frontend/src/pages/ProductDetailPage.jsx
+import React, { useEffect, useState, useRef } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -23,7 +19,6 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 
-// ✅ FIXED: Category mapping với paths chính xác
 const CATEGORY_MAP = {
   "dien-thoai": { model: "iPhone", api: iPhoneAPI },
   "may-tinh-bang": { model: "iPad", api: iPadAPI },
@@ -33,7 +28,6 @@ const CATEGORY_MAP = {
   "phu-kien": { model: "Accessories", api: accessoryAPI },
 };
 
-// Variant key field per category
 const VARIANT_KEY_FIELD = {
   iPhone: "storage",
   iPad: "storage",
@@ -46,22 +40,15 @@ const VARIANT_KEY_FIELD = {
 const ProductDetailPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
 
-  // ✅ LẤY SLUG TỪ PATHNAME
-  // pathname: /dien-thoai/iphone-16-128gb
-  const pathname = location.pathname;
-  const pathParts = pathname.split("/").filter(Boolean);
-
-  const categorySlug = pathParts[0]; // "dien-thoai"
-  const slug = pathParts.slice(1).join("-"); // "iphone-16-128gb"
-
+  // Lấy baseSlug từ URL (không bao gồm storage)
+  const pathParts = location.pathname.split("/").filter(Boolean);
+  const categorySlug = pathParts[0];
+  const baseSlug = pathParts.slice(1).join("-");
   const categoryInfo = CATEGORY_MAP[categorySlug];
   const sku = searchParams.get("sku");
-
-  console.log("🔍 ProductDetailPage:", { pathname, categorySlug, slug, sku });
 
   const [product, setProduct] = useState(null);
   const [variants, setVariants] = useState([]);
@@ -71,6 +58,8 @@ const ProductDetailPage = () => {
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [error, setError] = useState(null);
 
+  const hasHandledDefaultVariant = useRef(false);
+
   // ============================================
   // FETCH PRODUCT DATA
   // ============================================
@@ -78,8 +67,9 @@ const ProductDetailPage = () => {
     const fetchProductData = async () => {
       setIsLoading(true);
       setError(null);
+      hasHandledDefaultVariant.current = false;
 
-      if (!categoryInfo || !slug) {
+      if (!categoryInfo || !baseSlug) {
         setError("Danh mục hoặc sản phẩm không hợp lệ.");
         setIsLoading(false);
         return;
@@ -87,11 +77,9 @@ const ProductDetailPage = () => {
 
       try {
         console.log(
-          `📡 Fetching: /${categoryInfo.model}s/${slug}?sku=${sku || ""}`
+          `Fetching: /${categoryInfo.model}s/${baseSlug}?sku=${sku || ""}`
         );
-
-        // ✅ Gọi API với slug NGUYÊN VẸN (có thể chứa storage)
-        const response = await categoryInfo.api.get(slug, {
+        const response = await categoryInfo.api.get(baseSlug, {
           params: { sku: sku || "" },
         });
 
@@ -99,73 +87,74 @@ const ProductDetailPage = () => {
           throw new Error(response.data.message || "Không tìm thấy sản phẩm");
         }
 
-        const productData = response.data.data.product || response.data.product;
-        setProduct(productData);
-
-        // Lấy danh sách variants
+        const res = response.data;
+        const productData = res.data?.product || res.product;
         const variantsList = Array.isArray(productData.variants)
           ? productData.variants
           : [];
+
+        setProduct(productData);
         setVariants(variantsList);
 
-        // Chọn variant dựa trên sku hoặc default
-        let selectedVar =
-          variantsList.find((v) => v.sku === sku) ||
-          variantsList.find((v) => v.stock > 0) ||
-          variantsList[0];
+        let selectedVar = null;
+
+        // 1. Ưu tiên SKU từ URL
+        if (sku) {
+          selectedVar = variantsList.find((v) => v.sku === sku);
+        }
+
+        // 2. Nếu không có SKU → chọn variant đầu tiên có hàng
+        if (!selectedVar && !hasHandledDefaultVariant.current) {
+          selectedVar =
+            variantsList.find((v) => v.stock > 0) || variantsList[0];
+          hasHandledDefaultVariant.current = true;
+        }
+
+        // 3. Nếu vẫn không có → lấy variant đầu
+        if (!selectedVar) {
+          selectedVar = variantsList[0];
+        }
 
         setSelectedVariant(selectedVar);
-        console.log("✅ Selected variant:", selectedVar?.sku);
 
-        // Nếu không có sku trong URL nhưng có selectedVar, thêm vào URL
-        if (!sku && selectedVar?.sku) {
-          searchParams.set("sku", selectedVar.sku);
-          setSearchParams(searchParams, { replace: true });
-          console.log("✅ Added SKU to URL:", selectedVar.sku);
-        }
-      } catch (error) {
-        console.error("❌ Error fetching product:", error);
-        setError(error.message || "Lỗi khi tải thông tin sản phẩm");
-        toast.error(error.message || "Lỗi khi tải thông tin sản phẩm");
+        // CHỈ thêm SKU vào URL khi người dùng CHỌN variant (không tự động)
+        // → Không làm gì ở đây nếu chưa có sku
+      } catch (err) {
+        console.error("Error:", err);
+        setError(err.message || "Lỗi khi tải sản phẩm");
+        toast.error(err.message || "Lỗi khi tải sản phẩm");
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchProductData();
-  }, [slug, sku, categoryInfo]);
+  }, [baseSlug, sku, categoryInfo]);
 
   // ============================================
-  // HANDLE VARIANT SELECTION
+  // KHI NGƯỜI DÙNG CHỌN VARIANT → MỚI THÊM SKU VÀO URL
   // ============================================
   const handleVariantSelect = (variant) => {
     if (!variant) return;
 
-    console.log("🔄 Changing variant to:", variant.sku);
-
-    // ✅ Cập nhật URL với SKU mới
-    searchParams.set("sku", variant.sku);
-    setSearchParams(searchParams, { replace: true });
-
+    // Cập nhật URL: thêm ?sku=...
+    setSearchParams({ sku: variant.sku }, { replace: false });
     setSelectedVariant(variant);
     setSelectedImage(0);
   };
 
   // ============================================
-  // HANDLE ADD TO CART
+  // ADD TO CART
   // ============================================
   const handleAddToCart = async () => {
     if (!isAuthenticated || user?.role !== "CUSTOMER") {
       toast.error("Vui lòng đăng nhập để thêm vào giỏ hàng");
-      navigate("/login");
       return;
     }
-
     if (!selectedVariant) {
       toast.error("Vui lòng chọn phiên bản sản phẩm");
       return;
     }
-
     if (selectedVariant.stock <= 0) {
       toast.error("Sản phẩm tạm hết hàng");
       return;
@@ -180,7 +169,6 @@ const ProductDetailPage = () => {
         });
       }
     } catch (error) {
-      console.error("Add to cart error:", error);
       toast.error("Không thể thêm vào giỏ hàng");
     } finally {
       setIsAddingToCart(false);
@@ -193,35 +181,27 @@ const ProductDetailPage = () => {
   const getVariantLabel = (variant) => {
     if (!variant) return "";
     const cat = product?.category;
-
-    if (cat === "iPhone") {
-      return variant.storage;
-    } else if (cat === "iPad") {
-      return `${variant.storage} ${variant.connectivity}`;
-    } else if (cat === "Mac") {
+    if (cat === "iPhone") return variant.storage;
+    if (cat === "iPad") return `${variant.storage} ${variant.connectivity}`;
+    if (cat === "Mac")
       return `${variant.cpuGpu} • ${variant.ram} • ${variant.storage}`;
-    } else {
-      return variant.variantName || variant.storage || "";
-    }
+    return variant.variantName || variant.storage || "";
   };
 
   const getGroupedVariants = () => {
     const grouped = {};
-    variants.forEach((variant) => {
-      const color = variant.color || "Unknown";
-      if (!grouped[color]) {
-        grouped[color] = [];
-      }
-      grouped[color].push(variant);
+    variants.forEach((v) => {
+      const color = v.color || "Unknown";
+      if (!grouped[color]) grouped[color] = [];
+      grouped[color].push(v);
     });
     return grouped;
   };
 
   const getCurrentImages = () => {
-    if (selectedVariant?.images?.length > 0) {
-      return selectedVariant.images;
-    }
-    return product?.images || [];
+    return selectedVariant?.images?.length > 0
+      ? selectedVariant.images
+      : product?.images || [];
   };
 
   const getVariantKeyOptions = () => {
@@ -237,14 +217,13 @@ const ProductDetailPage = () => {
   const getDiscountPercent = () => {
     if (!selectedVariant) return 0;
     const { price, originalPrice } = selectedVariant;
-    if (originalPrice > price) {
-      return Math.round(((originalPrice - price) / originalPrice) * 100);
-    }
-    return 0;
+    return originalPrice > price
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+      : 0;
   };
 
   // ============================================
-  // RENDER LOADING/ERROR STATE
+  // RENDER
   // ============================================
   if (isLoading) {
     return (
@@ -258,20 +237,15 @@ const ProductDetailPage = () => {
 
   if (error || !product || !selectedVariant) {
     return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">
-            {error || "Không tìm thấy sản phẩm"}
-          </h2>
-          <Button onClick={() => navigate("/")}>Quay lại trang chủ</Button>
-        </div>
+      <div className="container mx-auto px-4 py-12 text-center">
+        <h2 className="text-2xl font-bold mb-4">
+          {error || "Không tìm thấy sản phẩm"}
+        </h2>
+        <Button onClick={() => window.history.back()}>Quay lại</Button>
       </div>
     );
   }
 
-  // ============================================
-  // MAIN RENDER
-  // ============================================
   const images = getCurrentImages();
   const discount = getDiscountPercent();
   const groupedVariants = getGroupedVariants();
@@ -283,15 +257,12 @@ const ProductDetailPage = () => {
       <div className="text-sm text-gray-500 mb-6">
         <span
           className="hover:text-gray-700 cursor-pointer"
-          onClick={() => navigate("/")}
+          onClick={() => (window.location.href = "/")}
         >
           Trang chủ
         </span>
         <span className="mx-2">/</span>
-        <span
-          className="hover:text-gray-700 cursor-pointer"
-          onClick={() => navigate(`/products?category=${product.category}`)}
-        >
+        <span className="hover:text-gray-700 cursor-pointer">
           {product.category}
         </span>
         <span className="mx-2">/</span>
@@ -299,9 +270,8 @@ const ProductDetailPage = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* LEFT: IMAGE GALLERY */}
+        {/* IMAGE GALLERY */}
         <div className="space-y-4">
-          {/* Main Image */}
           <div className="relative aspect-square bg-gray-50 rounded-2xl overflow-hidden">
             <img
               src={images[selectedImage] || "/placeholder.png"}
@@ -309,13 +279,11 @@ const ProductDetailPage = () => {
               className="w-full h-full object-contain p-8"
             />
             {discount > 0 && (
-              <Badge className="absolute top-4 left-4 bg-red-600 hover:bg-red-600 text-white font-bold text-sm px-3 py-1">
+              <Badge className="absolute top-4 left-4 bg-red-600 text-white font-bold text-sm px-3 py-1">
                 -{discount}%
               </Badge>
             )}
           </div>
-
-          {/* Thumbnail Images */}
           {images.length > 1 && (
             <div className="grid grid-cols-5 gap-2">
               {images.map((img, idx) => (
@@ -330,7 +298,7 @@ const ProductDetailPage = () => {
                 >
                   <img
                     src={img}
-                    alt={`${product.name} ${idx + 1}`}
+                    alt=""
                     className="w-full h-full object-contain p-2"
                   />
                 </div>
@@ -339,9 +307,8 @@ const ProductDetailPage = () => {
           )}
         </div>
 
-        {/* RIGHT: PRODUCT INFO */}
+        {/* PRODUCT INFO */}
         <div className="space-y-6">
-          {/* Product Name */}
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               {product.name}
@@ -367,7 +334,7 @@ const ProductDetailPage = () => {
             )}
           </div>
 
-          {/* Price */}
+          {/* PRICE */}
           <div className="bg-gray-50 rounded-xl p-6">
             <div className="flex items-baseline gap-3">
               {selectedVariant.originalPrice > selectedVariant.price && (
@@ -379,8 +346,6 @@ const ProductDetailPage = () => {
                 {formatPrice(selectedVariant.price)}
               </span>
             </div>
-
-            {/* Installment Badge */}
             {product.installmentBadge &&
               product.installmentBadge !== "NONE" && (
                 <Badge
@@ -394,7 +359,7 @@ const ProductDetailPage = () => {
 
           <Separator />
 
-          {/* Color Selection */}
+          {/* COLOR SELECTION */}
           <div>
             <h3 className="font-semibold text-lg mb-3">Màu sắc</h3>
             <div className="flex flex-wrap gap-2">
@@ -403,7 +368,6 @@ const ProductDetailPage = () => {
                 const hasStock = groupedVariants[color].some(
                   (v) => v.stock > 0
                 );
-
                 return (
                   <Button
                     key={color}
@@ -429,7 +393,7 @@ const ProductDetailPage = () => {
             </div>
           </div>
 
-          {/* Variant Key Selection (storage/variantName) */}
+          {/* VERSION SELECTION */}
           {variantKeyOptions.length > 0 && (
             <div>
               <h3 className="font-semibold text-lg mb-3">Phiên bản</h3>
@@ -444,7 +408,6 @@ const ProductDetailPage = () => {
                     selectedVariant?.[VARIANT_KEY_FIELD[product.category]] ===
                     keyValue;
                   const hasStock = variant?.stock > 0;
-
                   return (
                     <Button
                       key={keyValue}
@@ -466,24 +429,23 @@ const ProductDetailPage = () => {
             </div>
           )}
 
-          {/* Stock Status */}
+          {/* STOCK STATUS */}
           {selectedVariant.stock <= 5 && selectedVariant.stock > 0 && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
               <p className="text-sm text-orange-600 font-medium">
-                ⚠️ Chỉ còn {selectedVariant.stock} sản phẩm!
+                Chỉ còn {selectedVariant.stock} sản phẩm!
               </p>
             </div>
           )}
-
           {selectedVariant.stock === 0 && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-sm text-red-600 font-medium">
-                ❌ Sản phẩm tạm hết hàng
+                Sản phẩm tạm hết hàng
               </p>
             </div>
           )}
 
-          {/* Action Buttons */}
+          {/* ADD TO CART */}
           <div className="space-y-3">
             <Button
               size="lg"
@@ -498,7 +460,7 @@ const ProductDetailPage = () => {
 
           <Separator />
 
-          {/* Benefits */}
+          {/* BENEFITS */}
           <div className="space-y-3">
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
@@ -531,7 +493,7 @@ const ProductDetailPage = () => {
         </div>
       </div>
 
-      {/* SPECIFICATIONS SECTION */}
+      {/* SPECIFICATIONS */}
       <div className="mt-16">
         <h2 className="text-2xl font-bold mb-6">Thông số kỹ thuật</h2>
         <Card className="p-6">
@@ -544,7 +506,6 @@ const ProductDetailPage = () => {
                   (Array.isArray(value) && value.length === 0)
                 )
                   return null;
-
                 const label =
                   {
                     chip: "Chip xử lý",
@@ -556,15 +517,7 @@ const ProductDetailPage = () => {
                     screenTech: "Công nghệ màn hình",
                     battery: "Pin",
                     os: "Hệ điều hành",
-                    gpu: "GPU",
-                    screenResolution: "Độ phân giải",
-                    brand: "Thương hiệu",
-                    batteryLife: "Thời lượng pin",
-                    waterResistance: "Chống nước",
-                    bluetooth: "Bluetooth",
-                    connectivity: "Kết nối",
                   }[key] || key;
-
                 return (
                   <div key={key} className="flex py-3 border-b">
                     <span className="font-medium text-gray-700 w-1/2">

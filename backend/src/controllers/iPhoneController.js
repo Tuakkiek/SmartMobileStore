@@ -15,9 +15,11 @@ const createSlug = (str) =>
     .replace(/^-+/, "")
     .replace(/-+$/, "");
 
-// Default values
-const DEFAULT_STORAGE = "256GB";
-const DEFAULT_COLOR = "cam vũ trụ";
+// ✅ Helper: Tạo variant slug từ base slug + storage
+const createVariantSlug = (baseSlug, storage) => {
+  const storageSlug = storage.toLowerCase().replace(/\s+/g, "");
+  return `${baseSlug}-${storageSlug}`;
+};
 
 // ============================================
 // CREATE iPhone
@@ -27,12 +29,12 @@ export const create = async (req, res) => {
   session.startTransaction();
 
   try {
-    console.log("CREATE REQUEST:", JSON.stringify(req.body, null, 2));
+    console.log("📝 CREATE REQUEST:", JSON.stringify(req.body, null, 2));
 
     const {
       createVariants,
       variants,
-      slug: frontendSlug,
+      slug: frontendSlug, // ✅ Frontend gửi "slug"
       ...productData
     } = req.body;
 
@@ -50,20 +52,29 @@ export const create = async (req, res) => {
       ? [productData.specifications.colors.trim()]
       : [];
 
-    // === 2. TẠO SLUG (ưu tiên frontend, fallback từ model) ===
-    const slug = frontendSlug?.trim() || createSlug(productData.model.trim());
+    // === 2. TẠO SLUG ===
+    const finalSlug =
+      frontendSlug?.trim() || createSlug(productData.model.trim());
 
-    if (!slug) throw new Error("Không thể tạo slug từ model");
+    if (!finalSlug) throw new Error("Không thể tạo slug từ model");
 
-    // Kiểm tra slug trùng (tránh E11000)
-    const existingBySlug = await IPhone.findOne({ slug }).session(session);
-    if (existingBySlug) throw new Error(`Slug đã tồn tại: ${slug}`);
+    console.log("🏷️  Generated slug:", finalSlug);
+
+    // ✅ Kiểm tra trùng slug/baseSlug
+    const existingBySlug = await IPhone.findOne({
+      $or: [{ slug: finalSlug }, { baseSlug: finalSlug }],
+    }).session(session);
+
+    if (existingBySlug) {
+      throw new Error(`Slug đã tồn tại: ${finalSlug}`);
+    }
 
     // === 3. TẠO PRODUCT CHÍNH ===
     const product = new IPhone({
       name: productData.name.trim(),
       model: productData.model.trim(),
-      slug,
+      slug: finalSlug, // ✅ Lưu slug (frontend compatibility)
+      baseSlug: finalSlug, // ✅ Lưu baseSlug (variant logic)
       description: productData.description?.trim() || "",
       specifications: { ...productData.specifications, colors },
       condition: productData.condition || "NEW",
@@ -74,38 +85,53 @@ export const create = async (req, res) => {
       createdBy: productData.createdBy,
       averageRating: 0,
       totalReviews: 0,
+      salesCount: 0,
       variants: [],
     });
 
     await product.save({ session });
-    console.log("Product created with slug:", slug);
+    console.log("✅ Product created:", {
+      slug: finalSlug,
+      baseSlug: finalSlug,
+      name: product.name,
+    });
 
     // === 4. XỬ LÝ VARIANTS ===
     const variantGroups = createVariants || variants || [];
     const createdVariantIds = [];
 
     if (variantGroups.length > 0) {
-      console.log(`Processing ${variantGroups.length} variant group(s)`);
+      console.log(`📦 Processing ${variantGroups.length} variant group(s)`);
 
       for (const group of variantGroups) {
         const { color, images = [], options = [] } = group;
 
         if (!color?.trim()) {
-          console.warn("Skipping: missing color");
+          console.warn("⚠️  Skipping: missing color");
           continue;
         }
         if (!Array.isArray(options) || options.length === 0) {
-          console.warn(`Skipping ${color}: no options`);
+          console.warn(`⚠️  Skipping ${color}: no options`);
           continue;
         }
 
         for (const opt of options) {
           if (!opt.storage?.trim()) {
-            console.warn(`Skipping option: missing storage`, opt);
+            console.warn(`⚠️  Skipping option: missing storage`, opt);
             continue;
           }
 
-          const sku = await getNextSku(); // Backend tự sinh
+          const sku = await getNextSku();
+          const variantSlug = createVariantSlug(finalSlug, opt.storage.trim());
+
+          // Kiểm tra variant slug trùng
+          const existingVariantSlug = await IPhoneVariant.findOne({
+            slug: variantSlug,
+          }).session(session);
+
+          if (existingVariantSlug) {
+            throw new Error(`Variant slug đã tồn tại: ${variantSlug}`);
+          }
 
           const variantDoc = new IPhoneVariant({
             productId: product._id,
@@ -116,11 +142,12 @@ export const create = async (req, res) => {
             stock: Number(opt.stock) || 0,
             images: images.filter((img) => img?.trim()),
             sku,
+            slug: variantSlug,
           });
 
           await variantDoc.save({ session });
           createdVariantIds.push(variantDoc._id);
-          console.log(`Created variant: ${sku} (${color} - ${opt.storage})`);
+          console.log(`✅ Created variant: ${sku} → ${variantSlug}`);
         }
       }
 
@@ -156,14 +183,15 @@ export const create = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("CREATE ERROR:", error.message);
+    console.error("❌ CREATE ERROR:", error.message);
     console.error("Stack:", error.stack);
 
     if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
+      const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
       return res.status(400).json({
         success: false,
-        message: `Trường ${field} đã tồn tại: ${error.keyValue[field]}`,
+        message: `Trường ${field} đã tồn tại: ${value}`,
       });
     }
 
@@ -187,6 +215,8 @@ export const update = async (req, res) => {
     const { id } = req.params;
     const { createVariants, variants, slug: frontendSlug, ...data } = req.body;
 
+    console.log("📝 UPDATE REQUEST:", id);
+
     const product = await IPhone.findById(id).session(session);
     if (!product) throw new Error("Không tìm thấy sản phẩm");
 
@@ -198,22 +228,30 @@ export const update = async (req, res) => {
     if (data.status) product.status = data.status;
     if (data.installmentBadge) product.installmentBadge = data.installmentBadge;
 
-    // Cập nhật slug nếu model thay đổi hoặc frontend gửi
-    let newSlug = product.slug;
+    // ✅ Cập nhật slug nếu model thay đổi hoặc frontend gửi
+    let newSlug = product.slug || product.baseSlug;
+
     if (data.model && data.model.trim() !== product.model) {
       newSlug = createSlug(data.model.trim());
     } else if (frontendSlug?.trim()) {
       newSlug = frontendSlug.trim();
     }
 
-    if (newSlug !== product.slug) {
+    if (newSlug !== (product.slug || product.baseSlug)) {
+      // Kiểm tra slug mới có trùng không
       const slugExists = await IPhone.findOne({
-        slug: newSlug,
+        $or: [{ slug: newSlug }, { baseSlug: newSlug }],
         _id: { $ne: id },
       }).session(session);
+
       if (slugExists) throw new Error(`Slug đã tồn tại: ${newSlug}`);
+
+      // ✅ Cập nhật CẢ HAI
       product.slug = newSlug;
+      product.baseSlug = newSlug;
       product.model = data.model?.trim() || product.model;
+
+      console.log("✅ Updated slug & baseSlug to:", newSlug);
     }
 
     // Cập nhật specifications
@@ -231,6 +269,9 @@ export const update = async (req, res) => {
     // === XỬ LÝ VARIANTS ===
     const variantGroups = createVariants || variants || [];
     if (variantGroups.length > 0) {
+      console.log(`📦 Updating ${variantGroups.length} variant group(s)`);
+
+      // Xóa variants cũ
       await IPhoneVariant.deleteMany({ productId: id }, { session });
       const newIds = [];
 
@@ -240,7 +281,12 @@ export const update = async (req, res) => {
 
         for (const opt of options) {
           if (!opt.storage?.trim()) continue;
+
           const sku = await getNextSku();
+          const variantSlug = createVariantSlug(
+            product.baseSlug || product.slug,
+            opt.storage.trim()
+          );
 
           const v = new IPhoneVariant({
             productId: id,
@@ -251,9 +297,12 @@ export const update = async (req, res) => {
             stock: Number(opt.stock) || 0,
             images: images.filter((i) => i?.trim()),
             sku,
+            slug: variantSlug,
           });
+
           await v.save({ session });
           newIds.push(v._id);
+          console.log(`✅ Updated variant: ${sku} → ${variantSlug}`);
         }
       }
 
@@ -285,13 +334,114 @@ export const update = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("UPDATE ERROR:", error);
+    console.error("❌ UPDATE ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi cập nhật",
     });
   } finally {
     session.endSession();
+  }
+};
+
+// ============================================
+// GET BY VARIANT SLUG hoặc BASE SLUG
+// ============================================
+export const getProductDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const slug = id;
+    const skuQuery = req.query.sku?.trim();
+
+    console.log("🔍 getProductDetail:", { slug, sku: skuQuery });
+
+    // ✅ BƯỚC 1: TÌM VARIANT THEO SLUG TRƯỚC
+    let variant = await IPhoneVariant.findOne({ slug });
+    let product = null;
+
+    if (variant) {
+      // Case 1: Tìm thấy variant slug (vd: iphone-air-256gb)
+      console.log("✅ Variant found by slug:", variant.sku);
+
+      product = await IPhone.findById(variant.productId)
+        .populate("variants")
+        .populate("createdBy", "fullName email");
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
+
+      // Nếu có SKU query, tìm variant theo SKU
+      if (skuQuery) {
+        const variantBySku = product.variants.find((v) => v.sku === skuQuery);
+        if (variantBySku) {
+          variant = variantBySku;
+          console.log("✅ Switched to variant by SKU:", skuQuery);
+        }
+      }
+    } else {
+      // Case 2: Không tìm thấy variant → tìm theo baseSlug hoặc slug
+      console.log("⚠️  Variant not found, trying baseSlug/slug...");
+
+      product = await IPhone.findOne({
+        $or: [{ baseSlug: slug }, { slug: slug }],
+      })
+        .populate("variants")
+        .populate("createdBy", "fullName email");
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
+
+      console.log("✅ Product found:", product.name);
+
+      // Lấy variant đầu tiên (có stock > 0 nếu có)
+      const variants = product.variants || [];
+      variant = variants.find((v) => v.stock > 0) || variants[0];
+
+      if (!variant) {
+        return res.status(404).json({
+          success: false,
+          message: "Sản phẩm không có biến thể",
+        });
+      }
+
+      console.log("✅ Using first variant:", variant.sku, variant.slug);
+
+      // ✅ REDIRECT đến URL đầy đủ với variant slug
+      return res.json({
+        success: true,
+        redirect: true,
+        redirectSlug: variant.slug,
+        redirectSku: variant.sku,
+        data: {
+          product,
+          selectedVariantSku: variant.sku,
+        },
+      });
+    }
+
+    console.log("✅ Returning product:", product.name, "variant:", variant.sku);
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        selectedVariantSku: variant.sku,
+      },
+    });
+  } catch (error) {
+    console.error("❌ getProductDetail error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Lỗi server",
+    });
   }
 };
 
@@ -303,136 +453,24 @@ export const findOneBySku = async (req, res) => {
     const { sku } = req.params;
     const variant = await IPhoneVariant.findOne({ sku: sku.trim() });
     if (!variant)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy SKU" });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy SKU",
+      });
 
     const product = await IPhone.findById(variant.productId)
       .populate("variants")
       .populate("createdBy", "fullName email");
 
-    res.json({ success: true, data: { product, selectedVariantSku: sku } });
+    res.json({
+      success: true,
+      data: { product, selectedVariantSku: sku },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ============================================
-// FILE: backend/src/controllers/iPhoneController.js
-// ✅ FIXED: getProductDetail - xử lý slug có storage
-// ============================================
-
-export const getProductDetail = async (req, res) => {
-  try {
-    let { slug } = req.params; // iphone-16-128gb hoặc iphone-16
-    const skuQuery = req.query.sku?.trim();
-
-    console.log("🔍 getProductDetail:", { slug, sku: skuQuery });
-
-    // BƯỚC 1: Tách storage từ slug (nếu có)
-    const parts = slug.split("-");
-    let storage = null;
-    let baseSlug = slug;
-
-    // Kiểm tra part cuối có phải dạng 128gb, 256gb không
-    const lastPart = parts[parts.length - 1];
-    if (/^\d+gb$/i.test(lastPart)) {
-      storage = lastPart.toUpperCase(); // 128GB
-      parts.pop();
-      baseSlug = parts.join("-"); // iphone-16
-      console.log("✅ Extracted storage from slug:", storage);
-    }
-
-    // BƯỚC 2: TÌM PRODUCT theo baseSlug (không có storage)
-    const product = await IPhone.findOne({ slug: baseSlug })
-      .populate("variants")
-      .populate("createdBy", "fullName email");
-
-    if (!product) {
-      console.log("❌ Product not found with slug:", baseSlug);
-      return res.status(404).json({ 
-        success: false, 
-        message: "Không tìm thấy sản phẩm" 
-      });
-    }
-
-    console.log("✅ Product found:", product.name, "| Variants:", product.variants.length);
-
-    // BƯỚC 3: TÌM VARIANT PHÙ HỢP
-    let variant = null;
-
-    // Ưu tiên 1: Tìm theo SKU từ query string
-    if (skuQuery) {
-      variant = product.variants.find((v) => v.sku === skuQuery);
-      if (variant) {
-        console.log("✅ Found variant by SKU:", skuQuery);
-      }
-    }
-
-    // Ưu tiên 2: Tìm theo storage + default color
-    if (!variant && storage) {
-      const defaultColor = "cam vũ trụ";
-      
-      // Tìm variant với storage + default color
-      variant = product.variants.find(
-        (v) =>
-          v.storage?.toUpperCase() === storage &&
-          v.color?.toLowerCase() === defaultColor.toLowerCase()
-      );
-
-      // Nếu không có, tìm variant với storage bất kỳ màu nào
-      if (!variant) {
-        variant = product.variants.find(
-          (v) => v.storage?.toUpperCase() === storage
-        );
-      }
-
-      if (variant) {
-        console.log("✅ Found variant by storage:", storage, "| Color:", variant.color);
-      }
-    }
-
-    // Ưu tiên 3: Fallback - lấy variant đầu tiên có stock > 0
-    if (!variant) {
-      variant = product.variants.find((v) => v.stock > 0);
-      if (variant) {
-        console.log("✅ Fallback: Using first variant with stock");
-      }
-    }
-
-    // Ưu tiên 4: Lấy variant đầu tiên
-    if (!variant && product.variants.length > 0) {
-      variant = product.variants[0];
-      console.log("⚠️ Fallback: Using first variant (no stock check)");
-    }
-
-    // BƯỚC 4: KHÔNG TÌM THẤY VARIANT NÀO
-    if (!variant) {
-      console.log("❌ No variant found for product:", product.name);
-      return res.status(404).json({ 
-        success: false, 
-        message: "Không tìm thấy biến thể sản phẩm" 
-      });
-    }
-
-    // BƯỚC 5: TRẢ VỀ KẾT QUẢ
-    console.log("✅ Returning product with variant SKU:", variant.sku);
-    
-    res.json({
-      success: true,
-      data: { 
-        product, 
-        selectedVariantSku: variant.sku 
-      },
-    });
-  } catch (error) {
-    console.error("❌ getProductDetail error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || "Lỗi server" 
-    });
-  }
-};
 // ============================================
 // GET ALL
 // ============================================
@@ -482,9 +520,10 @@ export const findOne = async (req, res) => {
       .populate("variants")
       .populate("createdBy", "fullName email");
     if (!product)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy" });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy",
+      });
 
     res.json({ success: true, data: { product } });
   } catch (error) {
@@ -541,3 +580,4 @@ export default {
   findOneBySku,
   getProductDetail,
 };
+  

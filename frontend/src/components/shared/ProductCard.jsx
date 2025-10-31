@@ -1,7 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-// FIXED: Prevent ?sku=undefined
-// ADDED: Debug UI + Loading + Safe Navigation
+// ✅ FIXED: Use variant.slug instead of generating slug
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -71,14 +70,14 @@ const ProductCard = ({
   const [isAdding, setIsAdding] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isVariantReady, setIsVariantReady] = useState(false); // NEW
+  const [isVariantReady, setIsVariantReady] = useState(false);
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
 
   // Ensure variants is always an array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
 
-  // === 1. Chọn variant mặc định có stock > 0 + có SKU ===
+  // === 1. Chọn variant mặc định ===
   useEffect(() => {
     if (!safeVariants.length) {
       setSelectedVariant(null);
@@ -86,22 +85,27 @@ const ProductCard = ({
       return;
     }
 
-    // Ưu tiên: stock > 0 + có sku
-    let variant = safeVariants.find((v) => v.stock > 0 && v.sku);
-    if (!variant) variant = safeVariants.find((v) => v.sku); // có sku dù hết hàng
+    // ✅ Ưu tiên: stock > 0 + có sku + có slug
+    let variant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
+    if (!variant) variant = safeVariants.find((v) => v.sku && v.slug); // có sku + slug dù hết hàng
+    if (!variant) variant = safeVariants.find((v) => v.sku); // chỉ có sku (sẽ dùng baseSlug)
     if (!variant) variant = safeVariants[0]; // fallback
 
     setSelectedVariant(variant);
-setIsVariantReady(!!variant?.sku); // Chỉ sẵn sàng nếu có SKU
+    // ✅ Sẵn sàng nếu có (SKU + slug) HOẶC (SKU + baseSlug)
+    setIsVariantReady(!!(variant?.sku && (variant?.slug || product.baseSlug)));
 
     // DEBUG LOG
     console.log("ProductCard DEBUG:", {
       name: product.name,
+      baseSlug: product.baseSlug,
       variantsCount: safeVariants.length,
       selectedSKU: variant?.sku,
-      isReady: !!variant?.sku,
+      selectedSlug: variant?.slug,
+      hasBaseSlug: !!product.baseSlug,
+      isReady: !!(variant?.sku && (variant?.slug || product.baseSlug)),
     });
-  }, [product.variants]);
+  }, [product.variants, product.baseSlug, product.name, safeVariants]);
 
   const current = selectedVariant || {};
   const displayPrice = current.price || product.price || 0;
@@ -172,14 +176,14 @@ setIsVariantReady(!!variant?.sku); // Chỉ sẵn sàng nếu có SKU
   const handleVariantKeyClick = (e, keyValue) => {
     e.stopPropagation();
     let variant = safeVariants.find(
-      (v) => v[keyField] === keyValue && v.stock > 0
+      (v) => v[keyField] === keyValue && v.stock > 0 && v.slug
     );
     if (!variant) {
-      variant = safeVariants.find((v) => v[keyField] === keyValue);
+      variant = safeVariants.find((v) => v[keyField] === keyValue && v.slug);
     }
     if (variant) {
       setSelectedVariant(variant);
-      setIsVariantReady(!!variant.sku);
+      setIsVariantReady(!!(variant.sku && variant.slug));
     }
   };
 
@@ -199,7 +203,7 @@ setIsVariantReady(!!variant?.sku); // Chỉ sẵn sàng nếu có SKU
     setIsAdding(true);
     try {
       const result = await addToCart(selectedVariant._id, 1);
-if (result.success) {
+      if (result.success) {
         toast.success("Đã thêm vào giỏ hàng", {
           description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
         });
@@ -227,18 +231,9 @@ if (result.success) {
     setShowDeleteDialog(false);
   };
 
-  // === 11. Navigate to new URL structure (CHỈ KHI CÓ SKU) ===
+  // === 11. Navigate - Hỗ trợ cả baseSlug và variant slug ===
   const handleCardClick = () => {
     if (isAdmin) return;
-
-    if (!product.slug || !selectedVariant?.sku) {
-      console.warn("Cannot navigate: missing slug or SKU", {
-        product,
-        selectedVariant,
-      });
-      navigate(`/products/${product._id}`);
-      return;
-    }
 
     const categoryPath = {
       iPhone: "dien-thoai",
@@ -250,19 +245,32 @@ if (result.success) {
     }[product.category];
 
     if (!categoryPath) {
-      navigate(`/products/${product._id}`);
+      console.warn("Unknown category:", product.category);
       return;
     }
 
-    const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
-    const variantKey =
-      selectedVariant[keyField]?.toLowerCase().replace(/\s+/g, "-") ||
-      "default";
-    const fullSlug = `${product.slug}-${variantKey}`;
-    const url = `/${categoryPath}/${fullSlug}?sku=${selectedVariant.sku}`;
+    // ✅ Ưu tiên: Dùng variant.slug nếu có
+    if (selectedVariant?.sku && selectedVariant?.slug) {
+      const url = `/${categoryPath}/${selectedVariant.slug}?sku=${selectedVariant.sku}`;
+      console.log("✅ Navigating to variant slug:", url);
+      navigate(url);
+      return;
+    }
 
-    console.log("Navigating to:", url);
-    navigate(url);
+    // ✅ Fallback: Dùng baseSlug (sẽ redirect đến variant đầu tiên)
+    if (product.baseSlug) {
+      const url = `/${categoryPath}/${product.baseSlug}`;
+      console.log("✅ Navigating to baseSlug (will redirect):", url);
+      navigate(url);
+      return;
+    }
+
+    // ❌ Không có slug nào
+    console.warn("Cannot navigate: no slug available", {
+      product,
+      selectedVariant,
+    });
+    toast.error("Không thể xem chi tiết sản phẩm");
   };
 
   // === HELPER: getVariantLabel ===
@@ -279,25 +287,40 @@ if (result.success) {
   return (
     <>
       <Card
-        className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 bg-white border-0 relative"
-        onClick={isVariantReady ? handleCardClick : undefined} // CHỈ CLICK KHI SẴN SÀNG
+        className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 bg-white border-0 relative group"
+        onClick={isVariantReady ? handleCardClick : undefined}
         style={{ cursor: isVariantReady ? "pointer" : "default" }}
       >
-        {/* LOADING KHI CHƯA CÓ SKU */}
+        {/* LOADING KHI CHƯA CÓ SKU/SLUG */}
         {!isVariantReady && (
           <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
           </div>
         )}
 
-        {/* === DEBUG UI: SLUG + SKU === */}
+        {/* === DEBUG UI: BASE SLUG + VARIANT SLUG + SKU === */}
         {process.env.NODE_ENV === "development" && (
-          <div className="absolute top-12 left-3 z-50 bg-black/80 text-white text-xs px-2 py-1 rounded font-mono space-y-1">
-<div>Slug: <code className="text-green-400">{product.slug || "NULL"}</code></div>
-            <div>SKU: <code className="text-yellow-400">{selectedVariant?.sku || "NULL"}</code></div>
+          <div className="absolute top-12 left-3 z-50 bg-black/90 text-white text-[10px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px]">
+            <div className="truncate">
+              Base:{" "}
+              <code className="text-blue-400">
+                {product.baseSlug || "NULL"}
+              </code>
+            </div>
+            <div className="truncate">
+              Var:{" "}
+              <code className="text-green-400">
+                {selectedVariant?.slug || "NULL"}
+              </code>
+            </div>
+            <div className="truncate">
+              SKU:{" "}
+              <code className="text-yellow-400">
+                {selectedVariant?.sku || "NULL"}
+              </code>
+            </div>
           </div>
         )}
-
 
         {/* === ADMIN: Sửa / Xóa === */}
         {isAdmin && (
@@ -373,7 +396,7 @@ if (result.success) {
         {/* === Thông tin sản phẩm === */}
         <div className="px-4 space-y-1 bg-white">
           <h3 className="font-bold text-lg line-clamp-2 text-gray-900 leading-tight">
-{product.name}
+            {product.name}
           </h3>
 
           {installmentText && (
