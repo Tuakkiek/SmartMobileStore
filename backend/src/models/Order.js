@@ -244,7 +244,6 @@ orderSchema.methods.trackOrder = function () {
 };
 
 // Index for search optimization
-orderSchema.index({ orderNumber: 1 });
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 

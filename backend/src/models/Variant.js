@@ -7,7 +7,7 @@ const variantSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       required: true,
-      index: true,
+       
     },
     color: {
       type: String,

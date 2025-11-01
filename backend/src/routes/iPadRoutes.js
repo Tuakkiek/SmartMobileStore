@@ -1,15 +1,25 @@
 // backend/src/routes/iPadRoutes.js
 import express from "express";
-import * as controller from "../controllers/iPadController.js";
+import controller from "../controllers/iPadController.js";
 
 const router = express.Router();
 
 router.post("/", controller.create);
 router.get("/", controller.findAll);
-router.get("/:id", controller.findOne);
+
+router.get("/:id/variants", controller.getVariants);
 router.put("/:id", controller.update);
 router.delete("/:id", controller.deleteIPad);
-router.get("/:id/variants", controller.getVariants);
-router.get("/:modelSlug-:storage", controller.getProductDetail); // New: for product detail URL
+
+const routeHandler = (req, res, next) => {
+  const { id } = req.params;
+
+  if (/^[0-9a-fA-F]{24}$/.test(id)) {
+    return controller.findOne(req, res, next);
+  }
+  return controller.getProductDetail(req, res, next);
+};
+
+router.get("/:id", routeHandler);
 
 export default router;

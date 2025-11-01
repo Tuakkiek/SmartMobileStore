@@ -1,15 +1,22 @@
-// backend/src/models/Accessory.js
 import mongoose from "mongoose";
 
 const accessoryVariantSchema = new mongoose.Schema(
   {
     color: { type: String, required: true, trim: true },
-    variantName: { type: String, required: true, trim: true }, // e.g., "Smart Folio 11 inch"
+    variantName: { type: String, required: true, trim: true },
     originalPrice: { type: Number, required: true, min: 0 },
     price: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
     images: [{ type: String, trim: true }],
     sku: { type: String, required: true, unique: true },
+
+    slug: {
+      type: String,
+      required: true,
+
+      sparse: true,
+    },
+
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Accessory",
@@ -19,19 +26,31 @@ const accessoryVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-accessoryVariantSchema.pre("validate", function (next) {
+accessoryVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
-    next(new Error("Giá bán không thể lớn hơn giá gốc"));
-  } else {
-    next();
+    return next(new Error("Giá bán không thể lớn hơn giá gốc"));
   }
+  next();
 });
 
 const accessorySchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     model: { type: String, required: true, trim: true },
-    slug: { type: String, unique: true, trim: true, index: true }, // ✅ THÊM SLUG
+
+    baseSlug: {
+      type: String,
+      required: true,
+      unique: true,
+      sparse: true,
+    },
+
+    slug: {
+      type: String,
+
+      sparse: true,
+    },
+
     description: { type: String, trim: true },
     specifications: {
       colors: [{ type: String, trim: true }],
@@ -41,14 +60,6 @@ const accessorySchema = new mongoose.Schema(
           value: { type: String, required: true, trim: true },
         },
       ],
-    },
-
-    // ✅ THÊM: Lượt bán
-    salesCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-      index: true,
     },
 
     variants: [
@@ -61,11 +72,21 @@ const accessorySchema = new mongoose.Schema(
       required: true,
     },
     brand: { type: String, default: "Apple", trim: true },
-    category: { type: String, required: true, trim: true },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      default: "Accessory",
+    },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
       default: "AVAILABLE",
+    },
+    installmentBadge: {
+      type: String,
+      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
+      default: "NONE",
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -74,17 +95,18 @@ const accessorySchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
-    // ✅ THÊM: Installment Badge
-    installmentBadge: {
-      type: String,
-      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
-      default: "NONE",
-    },
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
-// ✅ THÊM: Method để cập nhật salesCount
+accessorySchema.pre("save", function (next) {
+  if (this.baseSlug && !this.slug) {
+    this.slug = this.baseSlug;
+  }
+  next();
+});
+
 accessorySchema.methods.incrementSales = async function (quantity = 1) {
   this.salesCount += quantity;
   await this.save();
@@ -93,8 +115,13 @@ accessorySchema.methods.incrementSales = async function (quantity = 1) {
 
 accessorySchema.index({ name: "text", model: "text", description: "text" });
 accessorySchema.index({ status: 1 });
-accessorySchema.index({ salesCount: -1 }); // Sắp xếp theo lượt bán giảm dần
-accessorySchema.index({ category: 1, salesCount: -1 }); // Query theo category + sales
+accessorySchema.index({ createdAt: -1 });
+accessorySchema.index({ salesCount: -1 });
+accessorySchema.index({ category: 1, salesCount: -1 });
+
+
+// Variant indexes
+accessoryVariantSchema.index({ productId: 1 });
 
 export const AccessoryVariant = mongoose.model(
   "AccessoryVariant",

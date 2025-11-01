@@ -1,27 +1,33 @@
-// backend/src/models/IPad.js
 import mongoose from "mongoose";
 
-// --- Biến thể iPad ---
 const iPadVariantSchema = new mongoose.Schema(
   {
     color: { type: String, required: true, trim: true },
     storage: { type: String, required: true, trim: true },
-    connectivity: { type: String, enum: ["WIFI", "5G"], default: "WIFI" }, // ✅ THÊM DEFAULT
+    connectivity: { type: String, enum: ["WIFI", "5G"], default: "WIFI" },
     originalPrice: { type: Number, required: true, min: 0 },
     price: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
     images: [{ type: String, trim: true }],
     sku: { type: String, required: true, unique: true },
+
+    slug: {
+      type: String,
+      required: true,
+       
+      sparse: true,
+    },
+
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "IPad",
       required: true,
+       
     },
   },
   { timestamps: true }
 );
 
-// ✅ Validation: price <= originalPrice
 iPadVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
     return next(new Error("Giá bán không được lớn hơn giá gốc"));
@@ -29,12 +35,25 @@ iPadVariantSchema.pre("save", function (next) {
   next();
 });
 
-// --- Sản phẩm iPad ---
 const iPadSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     model: { type: String, required: true, trim: true },
-    slug: { type: String, unique: true, trim: true, index: true }, // ✅ THÊM SLUG
+
+    baseSlug: {
+      type: String,
+      required: true,
+      unique: true,
+      sparse: true,
+       
+    },
+
+    slug: {
+      type: String,
+       
+      sparse: true,
+    },
+
     description: { type: String, trim: true },
 
     specifications: {
@@ -60,11 +79,16 @@ const iPadSchema = new mongoose.Schema(
       required: true,
     },
     brand: { type: String, default: "Apple", trim: true },
-    category: { type: String, required: true, trim: true },
+    category: { type: String, required: true, trim: true, default: "iPad" },
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
       default: "AVAILABLE",
+    },
+    installmentBadge: {
+      type: String,
+      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
+      default: "NONE",
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -73,22 +97,17 @@ const iPadSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
-
-    salesCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-      index: true,
-    },
-
-    installmentBadge: {
-      type: String,
-      enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
-      default: "NONE",
-    },
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
+
+iPadSchema.pre("save", function (next) {
+  if (this.baseSlug && !this.slug) {
+    this.slug = this.baseSlug;
+  }
+  next();
+});
 
 iPadSchema.methods.incrementSales = async function (quantity = 1) {
   this.salesCount += quantity;
@@ -98,8 +117,14 @@ iPadSchema.methods.incrementSales = async function (quantity = 1) {
 
 iPadSchema.index({ name: "text", model: "text", description: "text" });
 iPadSchema.index({ status: 1 });
+iPadSchema.index({ createdAt: -1 });
 iPadSchema.index({ salesCount: -1 });
 iPadSchema.index({ category: 1, salesCount: -1 });
+
+
+// Variant indexes
+iPadVariantSchema.index({ productId: 1 });
+
 
 export const IPadVariant = mongoose.model("IPadVariant", iPadVariantSchema);
 export default mongoose.model("IPad", iPadSchema);

@@ -1,28 +1,28 @@
 // backend/src/routes/macRoutes.js
 import express from "express";
-import * as controller from "../controllers/macController.js"; // Đảm bảo tên file controller đúng
+import controller from "../controllers/macController.js";
 
 const router = express.Router();
 
-// Route để tạo mới Mac
-router.post("/", controller.create);
+// STATIC ROUTES
+router.post("/", controller.createMac);     // ← dùng createMac
+router.get("/", controller.findAllMac);     // ← dùng findAllMac
 
-// Route để lấy tất cả các Mac
-router.get("/", controller.findAll);
+// SPECIFIC ROUTES
+router.get("/:id/variants", controller.getVariantsMac);  // ← getVariantsMac
+router.put("/:id", controller.updateMac);                // ← updateMac
+router.delete("/:id", controller.deleteMac);             // ← deleteMac
 
-// Route để lấy thông tin chi tiết một Mac theo ID
-router.get("/:id", controller.findOne);
+// DYNAMIC ROUTE: ObjectId or slug (macbook-pro-m3-silver-512gb)
+const routeHandler = (req, res, next) => {
+  const { id } = req.params;
 
-// Route để cập nhật thông tin của một Mac theo ID
-router.put("/:id", controller.update);
+  if (/^[0-9a-fA-F]{24}$/.test(id)) {
+    return controller.findOneMac(req, res, next);  // ← findOneMac
+  }
+  return controller.getProductDetailMac(req, res, next); // ← getProductDetailMac
+};
 
-// Route để xóa một Mac theo ID
-router.delete("/:id", controller.deleteMac);
-
-// Route để lấy tất cả các variants của một Mac
-router.get("/:id/variants", controller.getVariants);
-
-// New: for product detail URL
-router.get("/:modelSlug-:storage", controller.getProductDetail);
+router.get("/:id", routeHandler);
 
 export default router;

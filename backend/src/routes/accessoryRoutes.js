@@ -1,28 +1,25 @@
 // backend/src/routes/accessoryRoutes.js
 import express from "express";
-import * as controller from "../controllers/accessoryController.js";
+import controller from "../controllers/accessoryController.js";
 
 const router = express.Router();
 
-// Create a new accessory (with variants)
 router.post("/", controller.create);
-
-// Get all accessories
 router.get("/", controller.findAll);
 
-// Get accessory by ID
-router.get("/:id", controller.findOne);
-
-// Update accessory by ID
+router.get("/:id/variants", controller.getVariants);
 router.put("/:id", controller.update);
-
-// Delete accessory by ID
 router.delete("/:id", controller.deleteAccessory);
 
-// Get variants of a specific accessory by its ID
-router.get("/:id/variants", controller.getVariants);
+const routeHandler = (req, res, next) => {
+  const { id } = req.params;
 
-// New: for product detail URL (adapted for variantName)
-router.get("/:modelSlug-:variantName", controller.getProductDetail);
+  if (/^[0-9a-fA-F]{24}$/.test(id)) {
+    return controller.findOne(req, res, next);
+  }
+  return controller.getProductDetail(req, res, next);
+};
+
+router.get("/:id", routeHandler);
 
 export default router;

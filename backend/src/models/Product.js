@@ -60,13 +60,13 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      index: true,
+       
     },
     category: {
       type: String,
       enum: ["iPhone", "iPad", "Mac", "Apple Watch", "AirPods", "Accessories"],
       required: true,
-      index: true,
+       
     },
     subcategory: {
       type: String,
@@ -76,7 +76,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      index: true,
+       
     },
     specifications: specificationsSchema,
 
@@ -93,7 +93,7 @@ const productSchema = new mongoose.Schema(
       enum: ["NEW", "LIKE_NEW"],
       default: "NEW",
       required: true,
-      index: true,
+       
     },
 
     // Base/Display price (minimum price from variants or standalone)
@@ -101,7 +101,7 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0,
-      index: true,
+       
     },
     originalPrice: {
       type: Number,
@@ -126,7 +126,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
       default: "AVAILABLE",
-      index: true,
+       
     },
 
     images: [
@@ -157,7 +157,7 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
       max: 5,
-      index: true,
+       
     },
     totalReviews: {
       type: Number,

@@ -6,19 +6,19 @@ const salesAnalyticsSchema = new mongoose.Schema(
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      index: true,
+       
     },
 
     variantId: {
       type: mongoose.Schema.Types.ObjectId,
-      index: true,
+       
     },
 
     category: {
       type: String,
       enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"],
       required: true,
-      index: true,
+       
     },
 
     sales: {
