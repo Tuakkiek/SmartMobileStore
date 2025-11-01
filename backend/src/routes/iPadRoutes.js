@@ -1,7 +1,7 @@
 // backend/src/routes/iPadRoutes.js
 import express from "express";
 import controller from "../controllers/iPadController.js";
-
+console.log("controller keys:", Object.keys(controller));
 const router = express.Router();
 
 router.post("/", controller.create);
