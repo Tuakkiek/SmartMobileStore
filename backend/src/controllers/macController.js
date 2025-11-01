@@ -1,7 +1,9 @@
 // backend/src/controllers/macController.js
 import mongoose from "mongoose";
 import Mac, { MacVariant } from "../models/Mac.js";
+import { getNextSku } from "../lib/generateSKU.js";
 
+// Helper: Tạo slug chuẩn SEO
 const createSlug = (str) =>
   str
     .toLowerCase()
@@ -13,18 +15,22 @@ const createSlug = (str) =>
     .replace(/^-+/, "")
     .replace(/-+$/, "");
 
-// Variant slug: baseSlug-color-storage
-const createVariantSlug = (baseSlug, color, storage) => {
-  const colorSlug = createSlug(color);
+// FIXED: Tạo variant slug = baseSlug + storage (không có color)
+const createVariantSlug = (baseSlug, storage) => {
   const storageSlug = storage.toLowerCase().replace(/\s+/g, "");
-  return `${baseSlug}-${colorSlug}-${storageSlug}`;
+  return `${baseSlug}-${storageSlug}`;
 };
 
+// ============================================
+// CREATE Mac
+// ============================================
 const createMac = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
+    console.log("CREATE MAC REQUEST:", JSON.stringify(req.body, null, 2));
+
     const {
       createVariants,
       variants,
@@ -32,27 +38,43 @@ const createMac = async (req, res) => {
       ...productData
     } = req.body;
 
+    // === 1. VALIDATE REQUIRED FIELDS ===
     if (!productData.name?.trim()) throw new Error("Tên sản phẩm là bắt buộc");
     if (!productData.model?.trim()) throw new Error("Model là bắt buộc");
     if (!productData.createdBy) throw new Error("createdBy là bắt buộc");
+    if (!productData.specifications)
+      throw new Error("Thông số kỹ thuật là bắt buộc");
 
+    // Chuẩn hóa colors
+    const colors = Array.isArray(productData.specifications.colors)
+      ? productData.specifications.colors.map((c) => c?.trim()).filter(Boolean)
+      : productData.specifications.colors
+      ? [productData.specifications.colors.trim()]
+      : [];
+
+    // === 2. TẠO SLUG ===
     const finalSlug =
       frontendSlug?.trim() || createSlug(productData.model.trim());
+
     if (!finalSlug) throw new Error("Không thể tạo slug từ model");
 
+    // Kiểm tra slug trùng (product)
     const existingBySlug = await Mac.findOne({
       $or: [{ slug: finalSlug }, { baseSlug: finalSlug }],
     }).session(session);
 
     if (existingBySlug) throw new Error(`Slug đã tồn tại: ${finalSlug}`);
 
+    console.log("Generated slug:", finalSlug);
+
+    // === 3. TẠO PRODUCT CHÍNH ===
     const product = new Mac({
       name: productData.name.trim(),
       model: productData.model.trim(),
       slug: finalSlug,
       baseSlug: finalSlug,
       description: productData.description?.trim() || "",
-      specifications: productData.specifications || {},
+      specifications: { ...productData.specifications, colors },
       condition: productData.condition || "NEW",
       brand: "Apple",
       category: "Mac",
@@ -66,29 +88,43 @@ const createMac = async (req, res) => {
     });
 
     await product.save({ session });
+    console.log("Product created:", {
+      slug: finalSlug,
+      baseSlug: finalSlug,
+      name: product.name,
+    });
 
+    // === 4. XỬ LÝ VARIANTS ===
     const variantGroups = createVariants || variants || [];
     const createdVariantIds = [];
 
     if (variantGroups.length > 0) {
+      console.log(`Processing ${variantGroups.length} variant group(s)`);
+
       for (const group of variantGroups) {
         const { color, images = [], options = [] } = group;
-        if (!color?.trim() || !options.length) continue;
+
+        if (!color?.trim()) {
+          console.warn("Skipping: missing color");
+          continue;
+        }
+        if (!Array.isArray(options) || options.length === 0) {
+          console.warn(`Skipping ${color}: no options`);
+          continue;
+        }
 
         for (const opt of options) {
-          if (!opt.storage?.trim() || !opt.sku?.trim()) continue;
+          if (!opt.storage?.trim()) {
+            console.warn(`Skipping option: missing storage`, opt);
+            continue;
+          }
 
-          const variantSlug = createVariantSlug(
-            finalSlug,
-            color.trim(),
-            opt.storage.trim()
-          );
+          const sku = await getNextSku(); // TỰ ĐỘNG TẠO SKU
+          const variantSlug = createVariantSlug(finalSlug, opt.storage.trim());
 
-          const existingVariantSlug = await MacVariant.findOne({
-            slug: variantSlug,
-          }).session(session);
-          if (existingVariantSlug)
-            throw new Error(`Variant slug đã tồn tại: ${variantSlug}`);
+          // ĐÃ XÓA KIỂM TRA TRÙNG SLUG → CHO PHÉP TRÙNG
+          // const existingVariantSlug = await MacVariant.findOne({ slug: variantSlug }).session(session);
+          // if (existingVariantSlug) throw new Error(`Variant slug đã tồn tại: ${variantSlug}`);
 
           const variantDoc = new MacVariant({
             productId: product._id,
@@ -100,29 +136,35 @@ const createMac = async (req, res) => {
             price: Number(opt.price) || 0,
             stock: Number(opt.stock) || 0,
             images: images.filter((img) => img?.trim()),
-            sku: opt.sku.trim(),
+            sku,
             slug: variantSlug,
           });
 
           await variantDoc.save({ session });
           createdVariantIds.push(variantDoc._id);
+          console.log(`Created variant: ${sku} → ${variantSlug}`);
         }
       }
 
+      // Cập nhật product với variant IDs + auto-specs
       const allColors = [...new Set(variantGroups.map((g) => g.color.trim()))];
-      const storages = variantGroups.flatMap((g) =>
-        g.options.map((o) => o.storage.trim())
-      );
-      const uniqueStorages = [...new Set(storages)].sort(
-        (a, b) => parseInt(a) - parseInt(b)
-      );
+      const allStorages = variantGroups
+        .flatMap((g) => g.options.map((o) => o.storage.trim()))
+        .filter(Boolean);
+      const uniqueStorages = [...new Set(allStorages)].sort((a, b) => {
+        const aNum = parseInt(a),
+          bNum = parseInt(b);
+        return aNum - bNum;
+      });
 
       product.variants = createdVariantIds;
       product.specifications.colors = allColors;
       product.specifications.storage = uniqueStorages.join(" / ");
+
       await product.save({ session });
     }
 
+    // === 5. COMMIT & RETURN ===
     await session.commitTransaction();
 
     const populated = await Mac.findById(product._id)
@@ -136,13 +178,18 @@ const createMac = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+    console.error("CREATE MAC ERROR:", error.message);
+    console.error("Stack:", error.stack);
+
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
+      const value = error.keyValue[field];
       return res.status(400).json({
         success: false,
-        message: `Trường ${field} đã tồn tại: ${error.keyValue[field]}`,
+        message: `Trường ${field} đã tồn tại: ${value}`,
       });
     }
+
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi khi tạo sản phẩm",
@@ -152,6 +199,9 @@ const createMac = async (req, res) => {
   }
 };
 
+// ============================================
+// UPDATE Mac
+// ============================================
 const updateMac = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -160,9 +210,20 @@ const updateMac = async (req, res) => {
     const { id } = req.params;
     const { createVariants, variants, slug: frontendSlug, ...data } = req.body;
 
+    console.log("UPDATE MAC REQUEST:", id);
+
     const product = await Mac.findById(id).session(session);
     if (!product) throw new Error("Không tìm thấy sản phẩm");
 
+    // Cập nhật cơ bản
+    if (data.name) product.name = data.name.trim();
+    if (data.description !== undefined)
+      product.description = data.description?.trim() || "";
+    if (data.condition) product.condition = data.condition;
+    if (data.status) product.status = data.status;
+    if (data.installmentBadge) product.installmentBadge = data.installmentBadge;
+
+    // Cập nhật slug nếu model thay đổi hoặc frontend gửi
     let newSlug = product.slug || product.baseSlug;
 
     if (data.model && data.model.trim() !== product.model) {
@@ -182,20 +243,27 @@ const updateMac = async (req, res) => {
       product.slug = newSlug;
       product.baseSlug = newSlug;
       product.model = data.model?.trim() || product.model;
+
+      console.log("Updated slug & baseSlug to:", newSlug);
     }
 
-    if (data.name) product.name = data.name.trim();
-    if (data.description !== undefined)
-      product.description = data.description?.trim() || "";
-    if (data.condition) product.condition = data.condition;
-    if (data.status) product.status = data.status;
-    if (data.installmentBadge) product.installmentBadge = data.installmentBadge;
-    if (data.specifications) product.specifications = data.specifications;
+    // Cập nhật specifications
+    if (data.specifications) {
+      const colors = Array.isArray(data.specifications.colors)
+        ? data.specifications.colors.map((c) => c?.trim()).filter(Boolean)
+        : data.specifications.colors
+        ? [data.specifications.colors.trim()]
+        : product.specifications.colors;
+      product.specifications = { ...data.specifications, colors };
+    }
 
     await product.save({ session });
 
+    // === XỬ LÝ VARIANTS ===
     const variantGroups = createVariants || variants || [];
     if (variantGroups.length > 0) {
+      console.log(`Updating ${variantGroups.length} variant group(s)`);
+
       await MacVariant.deleteMany({ productId: id }, { session });
       const newIds = [];
 
@@ -204,11 +272,11 @@ const updateMac = async (req, res) => {
         if (!color?.trim() || !options.length) continue;
 
         for (const opt of options) {
-          if (!opt.storage?.trim() || !opt.sku?.trim()) continue;
+          if (!opt.storage?.trim()) continue;
 
+          const sku = await getNextSku(); // TỰ ĐỘNG TẠO SKU
           const variantSlug = createVariantSlug(
             product.baseSlug || product.slug,
-            color.trim(),
             opt.storage.trim()
           );
 
@@ -222,19 +290,20 @@ const updateMac = async (req, res) => {
             price: Number(opt.price) || 0,
             stock: Number(opt.stock) || 0,
             images: images.filter((i) => i?.trim()),
-            sku: opt.sku.trim(),
+            sku,
             slug: variantSlug,
           });
 
           await v.save({ session });
           newIds.push(v._id);
+          console.log(`Updated variant: ${sku} → ${variantSlug}`);
         }
       }
 
       const allColors = [...new Set(variantGroups.map((g) => g.color.trim()))];
-      const storages = variantGroups.flatMap((g) =>
-        g.options.map((o) => o.storage.trim())
-      );
+      const storages = variantGroups
+        .flatMap((g) => g.options.map((o) => o.storage.trim()))
+        .filter(Boolean);
       const sorted = [...new Set(storages)].sort(
         (a, b) => parseInt(a) - parseInt(b)
       );
@@ -258,6 +327,7 @@ const updateMac = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+    console.error("UPDATE MAC ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi cập nhật",
@@ -267,11 +337,16 @@ const updateMac = async (req, res) => {
   }
 };
 
+// ============================================
+// GET BY VARIANT SLUG hoặc BASE SLUG
+// ============================================
 const getProductDetailMac = async (req, res) => {
   try {
     const { id } = req.params;
     const slug = id;
     const skuQuery = req.query.sku?.trim();
+
+    console.log("getProductDetailMac:", { slug, sku: skuQuery });
 
     let variant = await MacVariant.findOne({ slug });
     let product = null;
@@ -281,14 +356,19 @@ const getProductDetailMac = async (req, res) => {
         .populate("variants")
         .populate("createdBy", "fullName email");
 
-      if (!product)
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy sản phẩm" });
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
 
       if (skuQuery) {
         const variantBySku = product.variants.find((v) => v.sku === skuQuery);
-        if (variantBySku) variant = variantBySku;
+        if (variantBySku) {
+          variant = variantBySku;
+          console.log("Switched to variant by SKU:", skuQuery);
+        }
       }
     } else {
       product = await Mac.findOne({
@@ -297,39 +377,52 @@ const getProductDetailMac = async (req, res) => {
         .populate("variants")
         .populate("createdBy", "fullName email");
 
-      if (!product)
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy sản phẩm" });
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
 
       const variants = product.variants || [];
       variant = variants.find((v) => v.stock > 0) || variants[0];
 
-      if (!variant)
-        return res
-          .status(404)
-          .json({ success: false, message: "Sản phẩm không có biến thể" });
+      if (!variant) {
+        return res.status(404).json({
+          success: false,
+          message: "Sản phẩm không có biến thể",
+        });
+      }
 
       return res.json({
         success: true,
         redirect: true,
         redirectSlug: variant.slug,
         redirectSku: variant.sku,
-        data: { product, selectedVariantSku: variant.sku },
+        data: {
+          product,
+          selectedVariantSku: variant.sku,
+        },
       });
     }
 
     res.json({
       success: true,
-      data: { product, selectedVariantSku: variant.sku },
+      data: {
+        product,
+        selectedVariantSku: variant.sku,
+      },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: error.message || "Lỗi server" });
+    console.error("getProductDetailMac error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Lỗi server",
+    });
   }
 };
 
+// Export các functions còn lại giữ nguyên...
 const findAllMac = async (req, res) => {
   try {
     const { page = 1, limit = 12, search, status } = req.query;
@@ -373,9 +466,10 @@ const findOneMac = async (req, res) => {
       .populate("variants")
       .populate("createdBy", "fullName email");
     if (!product)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy" });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy",
+      });
 
     res.json({ success: true, data: { product } });
   } catch (error) {
@@ -406,10 +500,9 @@ const deleteMac = async (req, res) => {
 
 const getVariantsMac = async (req, res) => {
   try {
-    const variants = await MacVariant.find({ productId: req.params.id }).sort({
-      color: 1,
-      storage: 1,
-    });
+    const variants = await MacVariant.find({
+      productId: req.params.id,
+    }).sort({ color: 1, storage: 1 });
     res.json({ success: true, data: { variants } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
