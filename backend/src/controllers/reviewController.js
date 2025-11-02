@@ -1,8 +1,49 @@
-// controllers/reviewController.js
-import pkg from '../models/Review.js';
-const { Review } = pkg; // Sử dụng destructuring để lấy 'Review' từ module
+// ============================================
+// FILE: backend/src/controllers/reviewController.js
+// ✅ UPDATED: Work with category models
+// ============================================
 
-// Lấy tất cả đánh giá của một sản phẩm
+import mongoose from "mongoose";
+
+const Review = mongoose.model("Review");
+
+// ✅ Helper: Find product and update rating
+const findProductAndUpdateRating = async (productId) => {
+  const IPhone = (await import("../models/IPhone.js")).default;
+  const IPad = (await import("../models/IPad.js")).default;
+  const Mac = (await import("../models/Mac.js")).default;
+  const AirPods = (await import("../models/AirPods.js")).default;
+  const AppleWatch = (await import("../models/AppleWatch.js")).default;
+  const Accessory = (await import("../models/Accessory.js")).default;
+
+  const models = [IPhone, IPad, Mac, AirPods, AppleWatch, Accessory];
+
+  for (const Model of models) {
+    const product = await Model.findById(productId);
+    if (product) {
+      // Calculate rating
+      const reviews = await Review.find({ productId });
+
+      if (reviews.length > 0) {
+        const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
+        product.averageRating = sum / reviews.length;
+        product.totalReviews = reviews.length;
+      } else {
+        product.averageRating = 0;
+        product.totalReviews = 0;
+      }
+
+      await product.save();
+      return product;
+    }
+  }
+
+  return null;
+};
+
+// ============================================
+// GET PRODUCT REVIEWS
+// ============================================
 export const getProductReviews = async (req, res) => {
   try {
     const reviews = await Review.find({ productId: req.params.productId })
@@ -15,12 +56,23 @@ export const getProductReviews = async (req, res) => {
   }
 };
 
-// Tạo đánh giá mới cho sản phẩm
+// ============================================
+// CREATE REVIEW
+// ============================================
 export const createReview = async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
 
-    // Tạo đánh giá mới
+    // Verify product exists
+    const product = await findProductAndUpdateRating(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy sản phẩm",
+      });
+    }
+
+    // Create review
     const review = await Review.create({
       productId,
       customerId: req.user._id,
@@ -28,9 +80,8 @@ export const createReview = async (req, res) => {
       comment,
     });
 
-    // Cập nhật rating cho sản phẩm
-    const product = await Product.findById(productId);
-    await product.updateRating();
+    // Update rating
+    await findProductAndUpdateRating(productId);
 
     res.status(201).json({
       success: true,
@@ -38,7 +89,6 @@ export const createReview = async (req, res) => {
       data: { review },
     });
   } catch (error) {
-    // Kiểm tra lỗi nếu người dùng đã đánh giá sản phẩm này rồi
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -49,15 +99,20 @@ export const createReview = async (req, res) => {
   }
 };
 
-// Cập nhật đánh giá của người dùng
+// ============================================
+// UPDATE REVIEW
+// ============================================
 export const updateReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
+
     if (!review) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá" });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đánh giá",
+      });
     }
 
-    // Kiểm tra nếu người dùng không phải là chủ sở hữu đánh giá
     if (review.customerId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -65,15 +120,13 @@ export const updateReview = async (req, res) => {
       });
     }
 
-    // Cập nhật thông tin đánh giá
     const { rating, comment } = req.body;
     review.rating = rating;
     review.comment = comment;
     await review.save();
 
-    // Cập nhật lại rating cho sản phẩm
-    const product = await Product.findById(review.productId);
-    await product.updateRating();
+    // Update product rating
+    await findProductAndUpdateRating(review.productId);
 
     res.json({
       success: true,
@@ -85,15 +138,20 @@ export const updateReview = async (req, res) => {
   }
 };
 
-// Xóa đánh giá
+// ============================================
+// DELETE REVIEW
+// ============================================
 export const deleteReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
+
     if (!review) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá" });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đánh giá",
+      });
     }
 
-    // Kiểm tra nếu người dùng không phải là chủ sở hữu đánh giá
     if (review.customerId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -104,9 +162,8 @@ export const deleteReview = async (req, res) => {
     const productId = review.productId;
     await review.deleteOne();
 
-    // Cập nhật lại rating cho sản phẩm
-    const product = await Product.findById(productId);
-    await product.updateRating();
+    // Update product rating
+    await findProductAndUpdateRating(productId);
 
     res.json({ success: true, message: "Xóa đánh giá thành công" });
   } catch (error) {

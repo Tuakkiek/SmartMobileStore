@@ -1,8 +1,4 @@
-// ============================================
 // FILE: backend/src/controllers/cartController.js
-// ✅ FIXED: Cart + Variants - EXPORT DEFAULT OK
-// ============================================
-
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import Variant from "../models/Variant.js";

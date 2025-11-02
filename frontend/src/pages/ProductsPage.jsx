@@ -1,5 +1,8 @@
-// FILE: src/pages/ProductsPage.jsx
-// ✅ HIỂN THỊ displayPrice (MIN VARIANT PRICE)
+// ============================================
+// FILE: frontend/src/pages/ProductsPage.jsx
+// ✅ UPDATED: Use category APIs instead of productAPI
+// ============================================
+
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,16 +11,32 @@ import { Badge } from "@/components/ui/badge";
 import ProductCard from "../components/shared/ProductCard";
 import { Loading } from "@/components/shared/Loading";
 import { Search, SlidersHorizontal, X } from "lucide-react";
-import { productAPI } from "@/lib/api";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 
 const CATEGORIES = [
   "iPhone",
   "iPad",
   "Mac",
-  "Apple Watch",
+  "AppleWatch",
   "AirPods",
   "Accessories",
 ];
+
+const API_MAP = {
+  iPhone: iPhoneAPI,
+  iPad: iPadAPI,
+  Mac: macAPI,
+  AppleWatch: appleWatchAPI,
+  AirPods: airPodsAPI,
+  Accessories: accessoryAPI,
+};
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,6 +59,7 @@ const ProductsPage = () => {
   });
   const [showFilters, setShowFilters] = useState(false);
 
+  // ✅ Fetch products from category APIs
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
@@ -47,7 +67,6 @@ const ProductsPage = () => {
         page: pagination.page,
         limit: pagination.limit,
         search: searchTerm,
-        category: filters.category || undefined,
         status: filters.status || undefined,
         minPrice: filters.minPrice || undefined,
         maxPrice: filters.maxPrice || undefined,
@@ -55,27 +74,51 @@ const ProductsPage = () => {
         inStock: filters.inStock,
       };
 
-      const response = await productAPI.getAll(params);
-      const data = response.data.data;
+      let allProducts = [];
+      let totalCount = 0;
 
-      // ✅ LOGIC: DÙNG displayPrice (min variant price) trong ProductCard
-      setProducts(
-        data.products.map((product) => ({
-          ...product,
-          // displayPrice đã có sẵn từ API (min variant price)
-          price: product.displayPrice || product.price,
-          originalPrice: product.originalPrice,
-          hasVariants: product.variantsCount > 0,
-        }))
-      );
+      if (filters.category) {
+        // Fetch from specific category
+        const api = API_MAP[filters.category];
+        if (api) {
+          const response = await api.getAll(params);
+          const data = response.data.data;
+          allProducts = data.products || [];
+          totalCount = data.total || allProducts.length;
+        }
+      } else {
+        // Fetch from all categories
+        const responses = await Promise.all(
+          CATEGORIES.map((cat) =>
+            API_MAP[cat]
+              .getAll({ ...params, limit: 3 })
+              .catch(() => ({ data: { data: { products: [] } } }))
+          )
+        );
 
+        allProducts = responses
+          .flatMap((r) => r.data.data.products || [])
+          .slice(0, pagination.limit);
+        totalCount = allProducts.length;
+      }
+
+      // Add category info and format prices
+      const formattedProducts = allProducts.map((product) => ({
+        ...product,
+        price: product.price || 0,
+        originalPrice: product.originalPrice || 0,
+        hasVariants: (product.variants?.length || 0) > 0,
+      }));
+
+      setProducts(formattedProducts);
       setPagination({
         ...pagination,
-        totalPages: data.totalPages,
-        total: data.total,
+        totalPages: Math.ceil(totalCount / pagination.limit) || 1,
+        total: totalCount,
       });
     } catch (error) {
       console.error("Error fetching products:", error);
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
@@ -136,10 +179,11 @@ const ProductsPage = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header - GIỮ NGUYÊN */}
+      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-4">Sản phẩm</h1>
         <div className="space-y-4">
+          {/* Search Bar */}
           <div className="flex flex-col md:flex-row gap-4">
             <form onSubmit={handleSearch} className="flex-1">
               <div className="relative">
@@ -178,12 +222,11 @@ const ProductsPage = () => {
                 <option value="price-desc">Giá giảm dần</option>
                 <option value="rating">Đánh giá cao</option>
                 <option value="name">Tên A-Z</option>
-                <option value="popularity">Phổ biến</option>
               </select>
             </div>
           </div>
 
-          {/* Active Filters - GIỮ NGUYÊN */}
+          {/* Active Filters */}
           {activeFiltersCount > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">Đang lọc:</span>
@@ -198,7 +241,6 @@ const ProductsPage = () => {
                   </button>
                 </Badge>
               )}
-              {/* ... other filters */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -210,7 +252,7 @@ const ProductsPage = () => {
             </div>
           )}
 
-          {/* Advanced Filters - GIỮ NGUYÊN */}
+          {/* Advanced Filters */}
           {showFilters && (
             <div className="border rounded-lg p-4 space-y-4 bg-gray-50">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -231,7 +273,6 @@ const ProductsPage = () => {
                     ))}
                   </select>
                 </div>
-                {/* ... other filters */}
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -260,7 +301,7 @@ const ProductsPage = () => {
         </div>
       </div>
 
-      {/* ✅ PRODUCTS GRID - TRUYỀN displayPrice VÀ hasVariants */}
+      {/* Products Grid */}
       {isLoading ? (
         <Loading />
       ) : products.length === 0 ? (
@@ -279,13 +320,12 @@ const ProductsPage = () => {
               <ProductCard
                 key={product._id}
                 product={product}
-                // ✅ ProductCard sẽ dùng product.price = displayPrice (min variant)
                 showVariantsBadge={product.hasVariants}
               />
             ))}
           </div>
 
-          {/* Pagination - GIỮ NGUYÊN */}
+          {/* Pagination */}
           {pagination.totalPages > 1 && (
             <div className="flex justify-center gap-2">
               <Button

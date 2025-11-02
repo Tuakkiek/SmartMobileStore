@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
-import { productAPI } from "@/lib/api";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 
 const MainLayout = () => {
   const navigate = useNavigate();
@@ -269,11 +276,39 @@ const MainLayout = () => {
       if (searchQuery.trim() && searchOpen) {
         setIsSearching(true);
         try {
-          const response = await productAPI.getAll({
-            search: searchQuery,
-            limit: 6,
-          });
-          setSearchResults(response.data.data.products);
+          // ✅ Tìm kiếm trên tất cả category APIs
+          const [iphones, ipads, macs, airpods, watches, accessories] =
+            await Promise.all([
+              iPhoneAPI
+                .getAll({ search: searchQuery, limit: 2 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+              iPadAPI
+                .getAll({ search: searchQuery, limit: 2 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+              macAPI
+                .getAll({ search: searchQuery, limit: 2 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+              airPodsAPI
+                .getAll({ search: searchQuery, limit: 1 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+              appleWatchAPI
+                .getAll({ search: searchQuery, limit: 1 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+              accessoryAPI
+                .getAll({ search: searchQuery, limit: 1 })
+                .catch(() => ({ data: { data: { products: [] } } })),
+            ]);
+
+          const allResults = [
+            ...(iphones.data.data.products || []),
+            ...(ipads.data.data.products || []),
+            ...(macs.data.data.products || []),
+            ...(airpods.data.data.products || []),
+            ...(watches.data.data.products || []),
+            ...(accessories.data.data.products || []),
+          ].slice(0, 6); // Giới hạn 6 kết quả
+
+          setSearchResults(allResults);
         } catch (error) {
           console.error("Search error:", error);
           setSearchResults([]);
