@@ -12,11 +12,7 @@ const iPhoneVariantSchema = new mongoose.Schema(
     stock: { type: Number, required: true, min: 0, default: 0 },
     images: [{ type: String, trim: true }],
 
-    // ✅ SKU: duy nhất, là định danh thực sự
     sku: { type: String, required: true, unique: true },
-
-    // ✅ Slug cho biến thể (ví dụ: iphone-17-pro-max-256gb)
-    // ❌ Không unique, vì các màu khác nhau có thể cùng slug
     slug: {
       type: String,
       required: true,
@@ -24,7 +20,6 @@ const iPhoneVariantSchema = new mongoose.Schema(
       sparse: true,
     },
 
-    // ✅ Tham chiếu đến sản phẩm gốc (iPhone)
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "IPhone",

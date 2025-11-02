@@ -82,8 +82,7 @@ const DashboardLayout = () => {
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b">
             <Link to="/" className="flex items-center space-x-2">
-              <Package className="h-6 w-6" />
-              <span className="font-bold text-xl">iPhone Store</span>
+              <span className="font-bold text-xl">Trang chủ</span>
             </Link>
             <Button
               variant="ghost"
