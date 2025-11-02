@@ -186,13 +186,16 @@ export const reviewAPI = {
 // PROMOTION API
 // ============================================
 export const promotionAPI = {
+  // === ADMIN ONLY ===
   getAll: () => api.get("/promotions"),
-  getActive: () => api.get("/promotions/active"),
   create: (data) => api.post("/promotions", data),
   update: (id, data) => api.put(`/promotions/${id}`, data),
   delete: (id) => api.delete(`/promotions/${id}`),
-};
 
+  // === PUBLIC / CUSTOMER ===
+  getActive: () => api.get("/promotions/active"),
+  apply: (data) => api.post("/promotions/apply", data),
+};
 // ============================================
 // USER API
 // ============================================
@@ -208,7 +211,6 @@ export const userAPI = {
     api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
-
 
 // ============================================
 // ANALYTICS API

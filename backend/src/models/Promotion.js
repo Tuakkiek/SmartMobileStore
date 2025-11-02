@@ -1,122 +1,88 @@
 // models/Promotion.js
-
 import mongoose from "mongoose";
 
 const promotionSchema = new mongoose.Schema(
   {
-    name: {
+    name: { type: String, required: true, trim: true },
+    code: {
       type: String,
       required: true,
+      unique: true,
+      uppercase: true,
       trim: true,
-    },
-    description: {
-      type: String,
-      trim: true,
+      match: /^[A-Z0-9]+$/,
+      minlength: 4,
+      maxlength: 15,
     },
     discountType: {
       type: String,
       enum: ["PERCENTAGE", "FIXED"],
       required: true,
     },
-    discountValue: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    startDate: {
-      type: Date,
-      required: true,
-    },
+    discountValue: { type: Number, required: true, min: 0 },
+    startDate: { type: Date, required: true },
     endDate: {
       type: Date,
       required: true,
       validate: {
-        validator: function(value) {
-          return value > this.startDate;
+        validator: function (v) {
+          return v > this.startDate;
         },
-        message: "End date must be after start date",
+        message: "Ngày kết thúc phải sau ngày bắt đầu",
       },
     },
-    applicableProducts: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-    }],
-    status: {
-      type: String,
-      enum: ["ACTIVE", "INACTIVE", "EXPIRED"],
-      default: "ACTIVE",
-    },
+    usageLimit: { type: Number, required: true, min: 1 },
+    usedCount: { type: Number, default: 0, min: 0 },
+    minOrderValue: { type: Number, default: 0, min: 0 },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Method to check if promotion is active
-promotionSchema.methods.isActive = function () {
+/* ========================================
+   INSTANCE METHODS (dùng trong controller)
+   ======================================== */
+
+// Kiểm tra mã có đang hoạt động không (dùng trong applyPromotion)
+promotionSchema.methods.isActive = function (orderTotal = 0) {
   const now = new Date();
-  
-  if (this.status === "INACTIVE" || this.status === "EXPIRED") {
-    return false;
-  }
-  
-  if (now < this.startDate || now > this.endDate) {
-    return false;
-  }
-  
-  return true;
+  return (
+    now >= this.startDate &&
+    now <= this.endDate &&
+    this.usedCount < this.usageLimit &&
+    orderTotal >= this.minOrderValue
+  );
 };
 
-// Method to activate promotion
-promotionSchema.methods.activate = async function () {
-  const now = new Date();
-  
-  if (now > this.endDate) {
-    throw new Error("Cannot activate expired promotion");
+// Áp dụng giảm giá (trả về tổng sau giảm)
+promotionSchema.methods.applyDiscount = function (total) {
+  if (!this.isActive(total)) {
+    throw new Error(
+      `Đơn hàng phải từ ${this.minOrderValue.toLocaleString()}₫ để áp dụng mã này.`
+    );
   }
-  
-  this.status = "ACTIVE";
-  return this.save();
-};
 
-// Method to deactivate promotion
-promotionSchema.methods.deactivate = async function () {
-  this.status = "INACTIVE";
-  return this.save();
-};
-
-// Method to apply discount to product price
-promotionSchema.methods.applyToProduct = function (productPrice) {
-  if (!this.isActive()) {
-    return productPrice;
-  }
-  
   if (this.discountType === "PERCENTAGE") {
-    return productPrice * (1 - this.discountValue / 100);
-  } else {
-    // FIXED discount
-    return Math.max(0, productPrice - this.discountValue);
+    return Math.max(0, total * (1 - this.discountValue / 100));
   }
+  return Math.max(0, total - this.discountValue);
 };
 
-// Automatically update status based on dates
-promotionSchema.pre("save", function (next) {
-  const now = new Date();
-  
-  if (now > this.endDate && this.status !== "EXPIRED") {
-    this.status = "EXPIRED";
-  }
-  
-  next();
-});
+// Tăng lượt sử dụng (dùng trong applyPromotion với transaction)
+promotionSchema.methods.incrementUsage = async function () {
+  this.usedCount += 1;
+  await this.save();
+};
 
-// Index for search optimization
-promotionSchema.index({ status: 1, startDate: 1, endDate: 1 });
-promotionSchema.index({ applicableProducts: 1 });
+/* ========================================
+   INDEXES (tối ưu query)
+   ======================================== */
+promotionSchema.index({ code: 1 }); // Tìm nhanh theo code
+promotionSchema.index({ startDate: 1, endDate: 1 }); // Query mã active
+promotionSchema.index({ createdBy: 1 }); // Admin xem mã của mình
 
 export default mongoose.model("Promotion", promotionSchema);
