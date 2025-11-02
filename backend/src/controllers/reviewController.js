@@ -1,21 +1,18 @@
 // ============================================
 // FILE: backend/src/controllers/reviewController.js
-// ✅ UPDATED: Work with category models
+// ✅ FIXED: Import Review model correctly
 // ============================================
 
-import mongoose from "mongoose";
-
-const Review = mongoose.model("Review");
+import Review from "../models/Review.js";
+import IPhone from "../models/IPhone.js";
+import IPad from "../models/IPad.js";
+import Mac from "../models/Mac.js";
+import AirPods from "../models/AirPods.js";
+import AppleWatch from "../models/AppleWatch.js";
+import Accessory from "../models/Accessory.js";
 
 // ✅ Helper: Find product and update rating
 const findProductAndUpdateRating = async (productId) => {
-  const IPhone = (await import("../models/IPhone.js")).default;
-  const IPad = (await import("../models/IPad.js")).default;
-  const Mac = (await import("../models/Mac.js")).default;
-  const AirPods = (await import("../models/AirPods.js")).default;
-  const AppleWatch = (await import("../models/AppleWatch.js")).default;
-  const Accessory = (await import("../models/Accessory.js")).default;
-
   const models = [IPhone, IPad, Mac, AirPods, AppleWatch, Accessory];
 
   for (const Model of models) {
@@ -169,4 +166,11 @@ export const deleteReview = async (req, res) => {
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
+};
+
+export default {
+  getProductReviews,
+  createReview,
+  updateReview,
+  deleteReview,
 };

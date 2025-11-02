@@ -1,16 +1,24 @@
-// models/Review.js
-import mongoose from 'mongoose';
+// ============================================
+// FILE: backend/src/models/Review.js
+// ============================================
+
+import mongoose from "mongoose";
 
 const reviewSchema = new mongoose.Schema(
   {
     productId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Product',
       required: true,
+      refPath: "productModel",
+    },
+    productModel: {
+      type: String,
+      required: true,
+      enum: ["IPhone", "IPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
     },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     rating: {
@@ -21,7 +29,26 @@ const reviewSchema = new mongoose.Schema(
     },
     comment: {
       type: String,
+      required: true,
       trim: true,
+      maxlength: 1000,
+    },
+    images: [
+      {
+        type: String,
+      },
+    ],
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+    helpful: {
+      type: Number,
+      default: 0,
+    },
+    unhelpful: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -29,27 +56,11 @@ const reviewSchema = new mongoose.Schema(
   }
 );
 
-// Ensure one review per customer per product
+// Index để tìm kiếm nhanh
 reviewSchema.index({ productId: 1, customerId: 1 }, { unique: true });
+reviewSchema.index({ productId: 1, createdAt: -1 });
+reviewSchema.index({ customerId: 1 });
 
-// Update product rating after save
-reviewSchema.post('save', async function () {
-  const Product = mongoose.model('Product');
-  const product = await Product.findById(this.productId);
-  if (product) {
-    await product.updateRating();
-  }
-});
+const Review = mongoose.model("Review", reviewSchema);
 
-// Update product rating after delete
-reviewSchema.post('findOneAndDelete', async function (doc) {
-  if (doc) {
-    const Product = mongoose.model('Product');
-    const product = await Product.findById(doc.productId);
-    if (product) {
-      await product.updateRating();
-    }
-  }
-});
-
-export default mongoose.model('Review', reviewSchema);  // Sử dụng export ESM
+export default Review;

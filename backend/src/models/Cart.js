@@ -1,57 +1,79 @@
-// backend/src/models/Cart.js
+// ============================================
+// FILE: backend/src/models/Cart.js
+// ✅ UPDATED: Added productType field
+// ============================================
+
 import mongoose from "mongoose";
 
-const cartItemSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Product",
-    required: true,
+const cartItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    productType: {
+      type: String,
+      required: true,
+      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    sku: {
+      type: String,
+      required: true,
+    },
   },
-  variantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Variant",
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-    default: 1,
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  sku: {
-    type: String,
-  },
-  addedAt: {
-    type: Date,
-    default: Date.now,
-  },
-}, { _id: true });
+  {
+    timestamps: true,
+  }
+);
 
-const cartSchema = new mongoose.Schema({
-  customerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
+const cartSchema = new mongoose.Schema(
+  {
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
+    items: [cartItemSchema],
   },
-  items: [cartItemSchema],
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
+  {
+    timestamps: true,
+  }
+);
+
+// Virtual để tính tổng tiền
+cartSchema.virtual("totalAmount").get(function () {
+  return this.items.reduce((total, item) => {
+    return total + item.price * item.quantity;
+  }, 0);
 });
 
-// Update timestamp on save
-cartSchema.pre("save", function (next) {
-  this.updatedAt = Date.now();
-  next();
+// Virtual để tính tổng số lượng
+cartSchema.virtual("totalItems").get(function () {
+  return this.items.reduce((total, item) => {
+    return total + item.quantity;
+  }, 0);
 });
 
-export default mongoose.model("Cart", cartSchema);
+// Đảm bảo virtuals được include khi convert to JSON
+cartSchema.set("toJSON", { virtuals: true });
+cartSchema.set("toObject", { virtuals: true });
+
+const Cart = mongoose.model("Cart", cartSchema);
+
+export default Cart;
