@@ -10,14 +10,14 @@ const SecondaryBanners = ({ slideIndex = 0 }) => {
     0: [
       // Slide 1 - iPhone 17 Pro Max
       {
-        imageSrc: "/banners/fridge.png",
-        alt: "Tủ lạnh - Điện Máy FPT",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=Accessories",
         height: "200px",
       },
       {
-        imageSrc: "/banners/venu4.png",
-        alt: "VENU 4 - Đồng hồ thông minh",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=AppleWatch",
         height: "200px",
       },
@@ -25,14 +25,14 @@ const SecondaryBanners = ({ slideIndex = 0 }) => {
     1: [
       // Slide 2 - iPhone Air
       {
-        imageSrc: "/banners/water-filter.png",
-        alt: "Máy lọc nước",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=Accessories",
         height: "200px",
       },
       {
-        imageSrc: "/banners/venu4.png",
-        alt: "VENU 4",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=AppleWatch",
         height: "200px",
       },
@@ -40,14 +40,14 @@ const SecondaryBanners = ({ slideIndex = 0 }) => {
     2: [
       // Slide 3 - iPhone 17
       {
-        imageSrc: "/banners/gaming-laptop.png",
-        alt: "Laptop Gaming X2",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=Mac",
         height: "200px",
       },
       {
-        imageSrc: "/banners/honor-x7d.png",
-        alt: "HONOR X7d",
+        imageSrc: "/ip16e.png",
+        alt: "",
         link: "/products?category=iPhone",
         height: "200px",
       },

@@ -262,11 +262,7 @@ export const applyPromotion = async (req, res) => {
       code: normalizedCode,
       startDate: { $lte: now },
       endDate: { $gte: now },
-      usedCount: {
-        $lt: mongoose.Types.Decimal128.fromString(
-          promotion?.usageLimit?.toString() || "0"
-        ),
-      }, // Fix $expr
+      $expr: { $lt: ["$usedCount", "$usageLimit"] },
     }).session(session);
 
     if (!promotion) {
@@ -358,5 +354,56 @@ export const applyPromotion = async (req, res) => {
       .json({ success: false, message: "Lỗi hệ thống, vui lòng thử lại" });
   } finally {
     session.endSession();
+  }
+};
+
+/* ========================================
+   7. LỊCH SỬ SỬ DỤNG MÃ (ADMIN) – Ai đã dùng mã này
+   ======================================== */
+export const getPromotionUsageHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const usages = await PromotionUsage.find({ promotion: id })
+      .populate("user", "fullName email phone")
+      .populate("promotion", "code name")
+      .populate("order", "orderNumber totalAmount status")
+      .select("user promotion order orderTotal discountAmount usedAt createdAt")
+      .sort({ usedAt: -1 });
+
+    res.json({
+      success: true,
+      data: { usages, total: usages.length },
+    });
+  } catch (error) {
+    console.error("getPromotionUsageHistory error:", error);
+    res.status(500).json({ success: false, message: "Lỗi hệ thống" });
+  }
+};
+
+/* ========================================
+   8. LỊCH SỬ MÃ CỦA TÔI (CUSTOMER) – Mã mình đã dùng
+   ======================================== */
+export const getMyPromotionUsage = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const usages = await PromotionUsage.find({ user: userId })
+      .populate("promotion", "code name discountType discountValue endDate")
+      .populate("order", "orderNumber totalAmount status")
+      .select("promotion order orderTotal discountAmount usedAt")
+      .sort({ usedAt: -1 });
+
+    res.json({
+      success: true,
+      data: {
+        usages,
+        total: usages.length,
+        message: usages.length ? null : "Bạn chưa sử dụng mã khuyến mãi nào",
+      },
+    });
+  } catch (error) {
+    console.error("getMyPromotionUsage error:", error);
+    res.status(500).json({ success: false, message: "Lỗi hệ thống" });
   }
 };
