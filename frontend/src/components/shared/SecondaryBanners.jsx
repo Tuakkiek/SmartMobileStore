@@ -5,50 +5,18 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 const SecondaryBanners = ({ slideIndex = 0 }) => {
-  // Mỗi slide của hero banner có các secondary banner riêng
   const bannersBySlide = {
     0: [
-      // Slide 1 - iPhone 17 Pro Max
       {
         imageSrc: "/ip16e.png",
-        alt: "",
+        alt: "iPhone 16e Accessories",
         link: "/products?category=Accessories",
         height: "200px",
       },
       {
         imageSrc: "/ip16e.png",
-        alt: "",
+        alt: "Apple Watch",
         link: "/products?category=AppleWatch",
-        height: "200px",
-      },
-    ],
-    1: [
-      // Slide 2 - iPhone Air
-      {
-        imageSrc: "/ip16e.png",
-        alt: "",
-        link: "/products?category=Accessories",
-        height: "200px",
-      },
-      {
-        imageSrc: "/ip16e.png",
-        alt: "",
-        link: "/products?category=AppleWatch",
-        height: "200px",
-      },
-    ],
-    2: [
-      // Slide 3 - iPhone 17
-      {
-        imageSrc: "/ip16e.png",
-        alt: "",
-        link: "/products?category=Mac",
-        height: "200px",
-      },
-      {
-        imageSrc: "/ip16e.png",
-        alt: "",
-        link: "/products?category=iPhone",
         height: "200px",
       },
     ],
@@ -64,23 +32,34 @@ const SecondaryBanners = ({ slideIndex = 0 }) => {
             key={index}
             onClick={() => banner.link && (window.location.href = banner.link)}
             className={cn(
-              "relative w-full overflow-hidden rounded-2xl group transition-all duration-300 hover:scale-[1.02] hover:shadow-lg bg-gradient-to-br from-gray-100 to-gray-200",
+              "relative w-full overflow-hidden rounded-2xl group transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
               banner.className
             )}
             style={{ height: banner.height || "200px" }}
           >
-            {/* Placeholder với gradient và text */}
-            <div className="w-full h-full flex items-center justify-center p-6">
-              <div className="text-center">
-                <p className="text-gray-600 text-base font-semibold mb-1">
-                  {banner.alt}
-                </p>
-                <p className="text-gray-400 text-xs">Nhấn để xem chi tiết</p>
-              </div>
-            </div>
+            {/* HÌNH ẢNH CHÍNH - THÊM VÀO ĐÂY */}
+            <img
+              src={banner.imageSrc}
+              alt={banner.alt}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback nếu ảnh không load được
+                e.target.style.display = "none";
+              }}
+            />
 
             {/* Overlay khi hover */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            {/* TEXT OVERLAY - CHỈ HIỂN THỊ KHI KHÔNG CÓ ẢNH HOẶC HOVER */}
+            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <div className="text-center bg-black/20 bg-opacity-0 group-hover:bg-opacity-100 rounded-lg p-2 transition-all">
+                <p className="text-white text-sm font-semibold mb-1">
+                  {banner.alt || "Xem chi tiết"}
+                </p>
+                <p className="text-white/80 text-xs">Nhấn để xem</p>
+              </div>
+            </div>
           </button>
         ))}
       </div>
