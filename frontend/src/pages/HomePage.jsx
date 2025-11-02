@@ -1,5 +1,7 @@
-// frontend/src/pages/HomePage.jsx
-// ADMIN: Edit sản phẩm ngay trên Homepage – form giống ProductsPage
+// ============================================
+// FILE: src/pages/HomePage.jsx
+// Trang chủ theo phong cách FPT Shop
+// ============================================
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +16,8 @@ import {
   Box,
 } from "lucide-react";
 import { HeroBannerCarousel } from "@/components/shared/HeroBanner";
+import SecondaryBanners from "@/components/shared/SecondaryBanners";
+import PromoStrip from "@/components/shared/PromoStrip";
 import ProductCard from "@/components/shared/ProductCard";
 import IPhoneShowcase from "@/components/shared/iPhoneShowcase";
 import { Loading } from "@/components/shared/Loading";
@@ -54,12 +58,178 @@ const API_MAP = {
 const categories = Object.keys(CATEGORY_ICONS);
 
 // ============================================
+// HERO SECTION WITH BANNERS
+// ============================================
+const HeroSection = ({ currentSlide, onSlideChange }) => {
+  return (
+    <div className="bg-gradient-to-b from-red-50 to-white">
+      <HeroBannerCarousel onSlideChange={onSlideChange} />
+      <SecondaryBanners slideIndex={currentSlide} />
+    </div>
+  );
+};
+
+// ============================================
+// CATEGORY NAVIGATION
+// ============================================
+const CategoryNav = ({ onCategoryClick, productCounts }) => {
+  return (
+    <section className="bg-white border-b border-gray-100 py-6">
+      <div className="container mx-auto px-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          {categories.map((cat) => {
+            const Icon = CATEGORY_ICONS[cat] || Box;
+            const count = productCounts[cat] || 0;
+
+            return (
+              <button
+                key={cat}
+                onClick={() => onCategoryClick(cat)}
+                className="group flex flex-col items-center gap-2 p-4 bg-gray-50 rounded-xl hover:bg-primary hover:shadow-lg transition-all duration-300"
+              >
+                <div className="w-12 h-12 flex items-center justify-center rounded-full bg-white group-hover:bg-white/90 transition-colors">
+                  <Icon className="w-6 h-6 text-primary transition-transform group-hover:scale-110" />
+                </div>
+                <div className="text-center">
+                  <span className="text-xs md:text-sm font-medium text-gray-900 group-hover:text-white block">
+                    {cat}
+                  </span>
+                  {count > 0 && (
+                    <span className="text-[10px] md:text-xs text-gray-500 group-hover:text-white/80">
+                      {count}+
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ============================================
+// NEW ARRIVALS SECTION
+// ============================================
+const NewArrivalsSection = ({
+  products,
+  isAdmin,
+  onEdit,
+  onDelete,
+  onViewAll,
+}) => {
+  if (!Array.isArray(products) || products.length === 0) return null;
+
+  return (
+    <section className="py-10 bg-white">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+            Sản phẩm mới
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onViewAll}
+            className="hover:bg-primary hover:text-white transition-colors"
+          >
+            Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
+          {products.map((product) => (
+            <div key={product._id} className="relative group">
+              <ProductCard
+                product={product}
+                isTopNew={true}
+                isTopSeller={false}
+                onEdit={isAdmin ? () => onEdit(product) : undefined}
+                onDelete={
+                  isAdmin
+                    ? () => onDelete(product._id, product.category)
+                    : undefined
+                }
+                showVariantsBadge={true}
+                showAdminActions={isAdmin}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ============================================
+// CATEGORY SECTION
+// ============================================
+const CategorySection = ({
+  category,
+  products,
+  topNewIds,
+  topSellerIds,
+  isAdmin,
+  onEdit,
+  onDelete,
+  onViewAll,
+}) => {
+  const Icon = CATEGORY_ICONS[category] || Box;
+  if (!Array.isArray(products) || products.length === 0) return null;
+
+  return (
+    <section className="py-10 bg-gray-50">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Icon className="w-6 h-6 text-primary" />
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+              {category}
+            </h2>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewAll(category)}
+            className="hover:bg-primary hover:text-white transition-colors"
+          >
+            Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
+          {products.map((product) => (
+            <div key={product._id} className="relative group">
+              <ProductCard
+                product={product}
+                isTopNew={topNewIds?.includes(product._id)}
+                isTopSeller={topSellerIds?.includes(product._id)}
+                onEdit={isAdmin ? () => onEdit(product) : undefined}
+                onDelete={
+                  isAdmin ? () => onDelete(product._id, category) : undefined
+                }
+                showVariantsBadge={true}
+                showAdminActions={isAdmin}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 const HomePage = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
 
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [categoryProducts, setCategoryProducts] = useState({});
   const [topSellersMap, setTopSellersMap] = useState({});
   const [newArrivals, setNewArrivals] = useState([]);
@@ -92,7 +262,6 @@ const HomePage = () => {
             const products =
               productsRes.data?.data?.products || productsRes.data || [];
 
-            // Thêm category vào mỗi product
             const productsWithCategory = products.map((p) => ({
               ...p,
               category: cat,
@@ -142,7 +311,7 @@ const HomePage = () => {
   }, [fetchHomeData]);
 
   // ============================================
-  // TOP NEW IDS
+  // HANDLERS
   // ============================================
   const getTopNewIds = (products) => {
     if (!Array.isArray(products) || products.length === 0) return [];
@@ -153,9 +322,6 @@ const HomePage = () => {
       .filter(Boolean);
   };
 
-  // ============================================
-  // HANDLE DELETE
-  // ============================================
   const handleDelete = async (productId, category) => {
     const api = API_MAP[category];
     if (!api?.delete) {
@@ -166,174 +332,74 @@ const HomePage = () => {
     try {
       await api.delete(productId);
       toast.success("Xóa sản phẩm thành công");
-      setCategoryProducts((prev) => ({
-        ...prev,
-        [category]: prev[category]?.filter((p) => p._id !== productId) || [],
-      }));
-      setNewArrivals((prev) => prev.filter((p) => p._id !== productId));
       fetchHomeData();
     } catch (error) {
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
     }
   };
 
-  const handleViewAll = (category) => {
-    navigate(`/products?category=${encodeURIComponent(category)}`);
-  };
-
-  // ============================================
-  // HANDLE EDIT
-  // ============================================
   const handleEdit = (product) => {
     setEditingProduct(product);
     setShowEditModal(true);
   };
 
-  // ============================================
-  // SECTIONS
-  // ============================================
-  const CategorySection = ({ category, products }) => {
-    const Icon = CATEGORY_ICONS[category] || Box;
-    if (!Array.isArray(products) || products.length === 0) return null;
-
-    const topNewIds = getTopNewIds(products);
-    const topSellerIds = topSellersMap[category] || [];
-
-    return (
-      <section className="py-12 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <Icon className="w-8 h-8 text-primary" />
-              <h2 className="text-3xl font-bold text-gray-900">{category}</h2>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleViewAll(category)}
-            >
-              Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
-            {products.map((product) => (
-              <div key={product._id} className="relative group">
-                <ProductCard
-                  product={product}
-                  isTopNew={topNewIds.includes(product._id)}
-                  isTopSeller={topSellerIds.includes(product._id)}
-                  onEdit={isAdmin ? () => handleEdit(product) : undefined}
-                  onDelete={
-                    isAdmin
-                      ? () => handleDelete(product._id, category)
-                      : undefined
-                  }
-                  onUpdate={fetchHomeData}
-                  showVariantsBadge={true}
-                  showAdminActions={isAdmin}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
+  const handleViewAll = (category) => {
+    if (category) {
+      navigate(`/products?category=${encodeURIComponent(category)}`);
+    } else {
+      navigate("/products?sort=createdAt");
+    }
   };
 
-  const CategoryNav = () => (
-    <section className="py-10 bg-white border-b">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-          {categories.map((cat) => {
-            const Icon = CATEGORY_ICONS[cat] || Box;
-            const productCount = categoryProducts[cat]?.length || 0;
-
-            return (
-              <button
-                key={cat}
-                onClick={() => handleViewAll(cat)}
-                className="group flex flex-col items-center gap-3 p-5 bg-gray-50 rounded-xl hover:bg-primary hover:text-white transition-all duration-300"
-              >
-                <Icon className="w-9 h-9 text-primary group-hover:text-white transition-colors" />
-                <div className="text-center">
-                  <span className="text-sm font-medium group-hover:text-white block">
-                    {cat}
-                  </span>
-                  {productCount > 0 && (
-                    <span className="text-xs text-muted-foreground group-hover:text-white/80">
-                      {productCount} sản phẩm
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-
-  const NewArrivalsSection = () => {
-    if (!Array.isArray(newArrivals) || newArrivals.length === 0) return null;
-
-    return (
-      <section className="py-16 bg-gradient-to-b from-white to-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Sản phẩm mới</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/products?sort=createdAt")}
-            >
-              Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
-            {newArrivals.map((product) => (
-              <div key={product._id} className="relative group">
-                <ProductCard
-                  product={product}
-                  isTopNew={true}
-                  isTopSeller={false}
-                  onEdit={isAdmin ? () => handleEdit(product) : undefined}
-                  onDelete={
-                    isAdmin
-                      ? () => handleDelete(product._id, product.category)
-                      : undefined
-                  }
-                  onUpdate={fetchHomeData}
-                  showVariantsBadge={true}
-                  showAdminActions={isAdmin}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  };
+  const productCounts = Object.keys(categoryProducts).reduce((acc, cat) => {
+    acc[cat] = categoryProducts[cat]?.length || 0;
+    return acc;
+  }, {});
 
   if (isLoading) return <Loading />;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <HeroBannerCarousel />
-      <CategoryNav />
-      <NewArrivalsSection />
+      {/* Hero Banner với Secondary Banners */}
+      <HeroSection currentSlide={currentSlide} />
 
+      {/* Promo Strip */}
+      <PromoStrip />
+
+      {/* Category Navigation */}
+      <CategoryNav
+        onCategoryClick={handleViewAll}
+        productCounts={productCounts}
+      />
+
+      {/* New Arrivals */}
+      <NewArrivalsSection
+        products={newArrivals}
+        isAdmin={isAdmin}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onViewAll={() => handleViewAll()}
+      />
+
+      {/* Category Sections */}
       {categories.map((cat) => (
         <CategorySection
           key={cat}
           category={cat}
           products={categoryProducts[cat] || []}
+          topNewIds={getTopNewIds(categoryProducts[cat] || [])}
+          topSellerIds={topSellersMap[cat] || []}
+          isAdmin={isAdmin}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onViewAll={handleViewAll}
         />
       ))}
 
+      {/* iPhone Showcase */}
       {categoryProducts.iPhone?.length > 0 && <IPhoneShowcase />}
 
+      {/* Edit Modal */}
       <ProductEditModal
         open={showEditModal}
         onOpenChange={setShowEditModal}

@@ -1,5 +1,13 @@
+// ================================================
+// FILE: models/IPad.js
+// ✅ UPDATED 2025: Bổ sung quản lý lượt bán (sales tracking)
+// ================================================
+
 import mongoose from "mongoose";
 
+// ===============================
+// VARIANT SCHEMA (Mỗi biến thể màu + dung lượng + kết nối)
+// ===============================
 const iPadVariantSchema = new mongoose.Schema(
   {
     color: { type: String, required: true, trim: true },
@@ -11,23 +19,21 @@ const iPadVariantSchema = new mongoose.Schema(
     images: [{ type: String, trim: true }],
     sku: { type: String, required: true, unique: true },
 
-    slug: {
-      type: String,
-      required: true,
-       
-      sparse: true,
-    },
+    slug: { type: String, required: true, sparse: true },
 
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "IPad",
       required: true,
-       
     },
+
+    // ✅ MỚI: Theo dõi lượt bán cho từng biến thể
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
+// ✅ Kiểm tra logic giá
 iPadVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
     return next(new Error("Giá bán không được lớn hơn giá gốc"));
@@ -35,26 +41,25 @@ iPadVariantSchema.pre("save", function (next) {
   next();
 });
 
+// ✅ MỚI: Hàm tăng lượt bán cho biến thể
+iPadVariantSchema.methods.incrementSales = async function (quantity = 1) {
+  this.salesCount += quantity;
+  await this.save();
+  return this.salesCount;
+};
+
+// ===============================
+// MAIN iPAD SCHEMA
+// ===============================
 const iPadSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     model: { type: String, required: true, trim: true },
 
-    baseSlug: {
-      type: String,
-      required: true,
-      unique: true,
-      sparse: true,
-       
-    },
+    baseSlug: { type: String, required: true, unique: true, sparse: true },
+    slug: { type: String, sparse: true },
 
-    slug: {
-      type: String,
-       
-      sparse: true,
-    },
-
-    description: { type: String, trim: true },
+    description: { type: String, trim: true, default: "" },
 
     specifications: {
       chip: { type: String, trim: true },
@@ -97,34 +102,58 @@ const iPadSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
+
+    // ✅ Tổng lượt bán của toàn bộ model
     salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
+// ===============================
+// HOOKS & METHODS
+// ===============================
+
+// ✅ Tự đồng bộ slug nếu thiếu
 iPadSchema.pre("save", function (next) {
   if (this.baseSlug && !this.slug) {
     this.slug = this.baseSlug;
+    console.log(`[iPad Pre-save] Synced slug from baseSlug: ${this.slug}`);
   }
   next();
 });
 
-iPadSchema.methods.incrementSales = async function (quantity = 1) {
+// ✅ CẬP NHẬT: Tăng lượt bán của model & variant đồng bộ
+iPadSchema.methods.incrementSales = async function (variantId, quantity = 1) {
   this.salesCount += quantity;
   await this.save();
+
+  if (variantId) {
+    const { IPadVariant } = mongoose.models;
+    await IPadVariant.findByIdAndUpdate(variantId, {
+      $inc: { salesCount: quantity },
+    });
+  }
+
   return this.salesCount;
 };
 
+// ===============================
+// INDEXES
+// ===============================
+
+// ✅ Tối ưu tìm kiếm và sắp xếp
 iPadSchema.index({ name: "text", model: "text", description: "text" });
 iPadSchema.index({ status: 1 });
 iPadSchema.index({ createdAt: -1 });
 iPadSchema.index({ salesCount: -1 });
 iPadSchema.index({ category: 1, salesCount: -1 });
 
-
-// Variant indexes
+// ✅ Variant indexes
 iPadVariantSchema.index({ productId: 1 });
+iPadVariantSchema.index({ salesCount: -1 }); // ✅ MỚI: để lọc/tìm biến thể bán chạy
 
-
+// ===============================
+// EXPORT MODELS
+// ===============================
 export const IPadVariant = mongoose.model("IPadVariant", iPadVariantSchema);
 export default mongoose.model("IPad", iPadSchema);

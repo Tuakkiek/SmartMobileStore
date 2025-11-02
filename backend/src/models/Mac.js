@@ -1,3 +1,8 @@
+// ============================================
+// FILE: models/Mac.js
+// ✅ UPDATED 2025: Thêm quản lý lượt bán (sales tracking) và tối ưu an toàn cập nhật
+// ============================================
+
 import mongoose from "mongoose";
 
 // ============================================
@@ -16,31 +21,37 @@ const macVariantSchema = new mongoose.Schema(
     sku: { type: String, required: true, unique: true, trim: true },
 
     // Slug: KHÔNG unique, chỉ index
-    slug: {
-      type: String,
-      required: true,
-       
-      sparse: true,
-      trim: true,
-    },
+    slug: { type: String, required: true, sparse: true, trim: true },
 
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Mac",
       required: true,
-       
     },
+
+    // ✅ MỚI: Theo dõi lượt bán riêng cho từng biến thể
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
-// Validation
+// ✅ Kiểm tra logic giá
 macVariantSchema.pre("save", function (next) {
   if (this.price > this.originalPrice) {
     return next(new Error("Giá bán không được lớn hơn giá gốc"));
   }
   next();
 });
+
+// ✅ MỚI: Hàm cập nhật lượt bán cho biến thể (dùng $inc để tránh conflict)
+macVariantSchema.methods.incrementSales = async function (quantity = 1) {
+  const updated = await this.constructor.findByIdAndUpdate(
+    this._id,
+    { $inc: { salesCount: quantity } },
+    { new: true }
+  );
+  return updated.salesCount;
+};
 
 // ============================================
 // MAIN MAC SCHEMA
@@ -55,18 +66,11 @@ const macSchema = new mongoose.Schema(
       required: true,
       unique: true,
       sparse: true,
-       
       trim: true,
     },
+    slug: { type: String, sparse: true, trim: true },
 
-    slug: {
-      type: String,
-       
-      sparse: true,
-      trim: true,
-    },
-
-    description: { type: String, trim: true },
+    description: { type: String, trim: true, default: "" },
 
     specifications: {
       chip: { type: String, required: true, trim: true },
@@ -113,37 +117,63 @@ const macSchema = new mongoose.Schema(
 
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0, min: 0 },
-    salesCount: { type: Number, default: 0, min: 0   },
+
+    // ✅ Tổng lượt bán của toàn bộ model
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
-// Pre-save: sync slug
+// ============================================
+// HOOKS & METHODS
+// ============================================
+
+// ✅ Cập nhật slug tự động nếu thiếu
 macSchema.pre("save", function (next) {
   if (this.baseSlug && !this.slug) {
     this.slug = this.baseSlug;
+    console.log(`[Mac Pre-save] Synced slug from baseSlug: ${this.slug}`);
   }
   next();
 });
 
-// Method
-macSchema.methods.incrementSales = async function (quantity = 1) {
-  this.salesCount += quantity;
-  await this.save();
-  return this.salesCount;
+// ✅ CẬP NHẬT: Hàm tăng lượt bán, đồng bộ cả product và variant
+macSchema.methods.incrementSales = async function (variantId, quantity = 1) {
+  // Atomic update để tránh ghi đè dữ liệu khi có nhiều request đồng thời
+  await this.constructor.findByIdAndUpdate(
+    this._id,
+    { $inc: { salesCount: quantity } },
+    { new: true }
+  );
+
+  if (variantId) {
+    const { MacVariant } = mongoose.models;
+    await MacVariant.findByIdAndUpdate(variantId, {
+      $inc: { salesCount: quantity },
+    });
+  }
+
+  const updated = await this.constructor.findById(this._id);
+  return updated.salesCount;
 };
 
-// Indexes
+// ============================================
+// INDEXES
+// ============================================
+
+// ✅ Tối ưu tìm kiếm & sắp xếp
 macSchema.index({ name: "text", model: "text", description: "text" });
 macSchema.index({ status: 1 });
 macSchema.index({ createdAt: -1 });
 macSchema.index({ salesCount: -1 });
 macSchema.index({ category: 1, salesCount: -1 });
 
-
-// Variant indexes
+// ✅ Variant indexes
 macVariantSchema.index({ productId: 1 });
+macVariantSchema.index({ salesCount: -1 }); // ✅ MỚI: Lọc biến thể bán chạy
 
-
+// ============================================
+// EXPORT MODELS
+// ============================================
 export const MacVariant = mongoose.model("MacVariant", macVariantSchema);
 export default mongoose.model("Mac", macSchema);

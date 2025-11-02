@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 import SearchOverlay from "@/components/shared/SearchOverlay";
+import CategoryDropdown from "@/components/shared/CategoryDropdown";
 
 const MainLayout = () => {
   const navigate = useNavigate();
@@ -189,81 +190,8 @@ const MainLayout = () => {
                 </button>
               )}
 
-              {/* Danh mục với Dropdown */}
-              <div className="relative" ref={categoryMenuRef}>
-                <button
-                  onClick={() => setCategoryMenuOpen(!categoryMenuOpen)}
-                  className="bg-white text-black rounded-full px-6 py-3 flex items-center gap-2 transition-all duration-300 hover:bg-gray-200 hover:scale-105"
-                >
-                  <Menu className="w-5 h-5 transition-colors duration-300 hover:text-gray-700" />
-                  <span className="font-medium transition-colors duration-300 hover:text-gray-700">
-                    Danh mục
-                  </span>
-                </button>
-
-                {/* Category Dropdown Menu */}
-                {categoryMenuOpen && (
-                  <div className="absolute top-full right-0 mt-2 bg-white rounded-3xl shadow-2xl overflow-hidden w-[820px]">
-                    {/* Categories - Nằm trên cùng */}
-                    <div className="bg-black px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {["iPhone", "iPad", "Mac", "AirPods", "Apple Watch"].map((name, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleCategoryClick(idx)}
-                            className={`px-6 py-3 rounded-full text-sm font-medium transition-all duration-300 ${
-                              selectedCategory === idx
-                                ? "bg-white text-black"
-                                : "text-white hover:bg-white/10"
-                            }`}
-                          >
-                            {name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Content - Nằm dưới */}
-                    <div className="p-6">
-                      {selectedCategory !== null ? (
-                        <div className="h-full overflow-y-auto max-h-[500px] pr-2">
-                          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-                            Chọn theo dòng
-                          </h3>
-                          <div className="grid grid-cols-4 gap-4">
-                            {/* Placeholder cho subcategories - có thể tách riêng sau */}
-                            <div className="text-xs text-gray-600">
-                              <p className="font-semibold text-black mb-2">Dòng sản phẩm</p>
-                              <p className="py-0.5 hover:underline cursor-pointer">iPhone 17 Pro Max</p>
-                              <p className="py-0.5 hover:underline cursor-pointer">iPhone 17 Pro</p>
-                              <p className="py-0.5 hover:underline cursor-pointer">iPhone 17</p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="h-full">
-                          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-                            Sản phẩm hot
-                          </h3>
-                          <div className="grid grid-cols-5 gap-4">
-                            {[1, 2, 3, 4, 5].map((idx) => (
-                              <div
-                                key={idx}
-                                className="flex flex-col items-center gap-2"
-                              >
-                                <div className="w-24 h-24 bg-gray-100 rounded-xl"></div>
-                                <span className="text-xs text-gray-400">
-                                  Sản phẩm {idx}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+               {/* Category Dropdown - Component riêng */}
+              <CategoryDropdown />
             </div>
           </div>
         </div>

@@ -56,9 +56,6 @@ const HeroBanner = ({
         />
       </div>
 
-      {/* Gradient Overlay */}
-      {/* <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" /> */}
-
       {/* Content Overlay */}
       {(title || subtitle || ctaText) && (
         <div
@@ -85,7 +82,7 @@ const HeroBanner = ({
 };
 
 // Carousel Component
-const HeroBannerCarousel = () => {
+const HeroBannerCarousel = ({ onSlideChange }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
@@ -94,7 +91,6 @@ const HeroBannerCarousel = () => {
       imageSrc: "/ip17pm.png",
       alt: "iPhone 17 Pro Max",
       height: 580,
-
       ctaText: "Tìm hiểu thêm",
       ctaLink: "/products/iphone-17-pro-max",
     },
@@ -119,33 +115,44 @@ const HeroBannerCarousel = () => {
     if (!isAutoPlaying) return;
 
     const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
-    }, 5000); // Change slide every 5 seconds
+      setCurrentIndex((prevIndex) => {
+        const newIndex = (prevIndex + 1) % banners.length;
+        if (onSlideChange) onSlideChange(newIndex);
+        return newIndex;
+      });
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [isAutoPlaying, banners.length]);
+  }, [isAutoPlaying, banners.length, onSlideChange]);
 
   const goToPrevious = () => {
     setIsAutoPlaying(false);
-    setCurrentIndex((prevIndex) =>
-      prevIndex === 0 ? banners.length - 1 : prevIndex - 1
-    );
+    setCurrentIndex((prevIndex) => {
+      const newIndex = prevIndex === 0 ? banners.length - 1 : prevIndex - 1;
+      if (onSlideChange) onSlideChange(newIndex);
+      return newIndex;
+    });
   };
 
   const goToNext = () => {
     setIsAutoPlaying(false);
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
+    setCurrentIndex((prevIndex) => {
+      const newIndex = (prevIndex + 1) % banners.length;
+      if (onSlideChange) onSlideChange(newIndex);
+      return newIndex;
+    });
   };
 
   const goToSlide = (index) => {
     setIsAutoPlaying(false);
     setCurrentIndex(index);
+    if (onSlideChange) onSlideChange(index);
   };
 
   return (
     <div className="relative w-full mb-2.5 group/carousel">
       {/* Carousel Container */}
-      <div className="relative overflow-hidden rounded-lg ">
+      <div className="relative overflow-hidden rounded-none md:rounded-2xl">
         <div
           className="flex transition-transform duration-700 ease-in-out"
           style={{ transform: `translateX(-${currentIndex * 100}%)` }}
@@ -170,7 +177,7 @@ const HeroBannerCarousel = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-12 h-12 opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
+        className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-12 h-12 opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
         onClick={goToPrevious}
       >
         <ChevronLeft className="h-6 w-6" />
@@ -179,7 +186,7 @@ const HeroBannerCarousel = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-12 h-12 opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
+        className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-12 h-12 opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
         onClick={goToNext}
       >
         <ChevronRight className="h-6 w-6" />
@@ -192,9 +199,9 @@ const HeroBannerCarousel = () => {
             key={index}
             onClick={() => goToSlide(index)}
             className={cn(
-              "w-3 h-3 rounded-full transition-all duration-300",
+              "w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-300",
               currentIndex === index
-                ? "bg-white w-8"
+                ? "bg-white w-6 md:w-8"
                 : "bg-white/50 hover:bg-white/75"
             )}
             aria-label={`Go to slide ${index + 1}`}
@@ -205,7 +212,7 @@ const HeroBannerCarousel = () => {
       {/* Pause/Play Button */}
       <button
         onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-        className="absolute top-4 right-4 bg-gray-500 hover:bg-gray-400 text-white backdrop-blur-sm rounded-full px-4 py-2 text-sm font-medium opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
+        className="hidden md:block absolute top-4 right-4 bg-black/30 hover:bg-black/50 text-white backdrop-blur-sm rounded-full px-4 py-2 text-sm font-medium opacity-0 group-hover/carousel:opacity-100 transition-opacity duration-300"
       >
         {isAutoPlaying ? "Pause" : "Play"}
       </button>
