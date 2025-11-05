@@ -3,13 +3,12 @@ import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   Star,
   ShoppingCart,
-  Shield,
-  Truck,
-  RefreshCw,
-  Gift,
-  CreditCard,
-  Check,
-  Package,
+  ChevronRight,
+  ChevronLeft,
+  Heart,
+  Share2,
+  Play,
+  Package2,
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import {
@@ -60,16 +59,14 @@ const ProductDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
+  const [userSelectedKey, setUserSelectedKey] = useState(null);
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
-  const hasHandledDefaultVariant = useRef(false);
 
-  // Scroll to top on mount
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [fullSlug]);
 
-  // Fetch product data from real API
   useEffect(() => {
     const fetchProductData = async () => {
       if (!categoryInfo || !fullSlug) {
@@ -80,10 +77,12 @@ const ProductDetailPage = () => {
 
       setIsLoading(true);
       setError(null);
-      hasHandledDefaultVariant.current = false;
 
       try {
-        const response = await categoryInfo.api.get(fullSlug, {
+        const baseSlugMatch = fullSlug.match(/^(.+?)(?:-\d+(?:gb|tb))?$/i);
+        const baseSlug = baseSlugMatch ? baseSlugMatch[1] : fullSlug;
+
+        const response = await categoryInfo.api.get(baseSlug, {
           params: sku ? { sku } : {},
         });
         const data = response.data.data;
@@ -93,7 +92,6 @@ const ProductDetailPage = () => {
         setProduct(fetchedProduct);
         setVariants(fetchedVariants);
 
-        // Xác định variant được chọn
         let variantToSelect = null;
         if (sku) {
           variantToSelect = fetchedVariants.find((v) => v.sku === sku);
@@ -102,7 +100,13 @@ const ProductDetailPage = () => {
           variantToSelect = fetchedVariants[0];
         }
 
-        setSelectedVariant(variantToSelect);
+        if (variantToSelect) {
+          setSelectedVariant(variantToSelect);
+          const keyField =
+            VARIANT_KEY_FIELD[fetchedProduct.category] || "storage";
+          setUserSelectedKey(variantToSelect[keyField]);
+        }
+
         setIsLoading(false);
       } catch (err) {
         console.error("Error fetching product:", err);
@@ -112,36 +116,47 @@ const ProductDetailPage = () => {
     };
 
     fetchProductData();
-  }, [fullSlug, sku, categoryInfo]);
+  }, [categorySlug, categoryInfo]);
 
-  // Update URL and UI when variant changes
-  const handleVariantSelect = (variant) => {
+  const handleVariantSelect = (variant, isColorChange = false) => {
     if (!variant) return;
 
-    const currentSlug = fullSlug; // slug hiện tại trong URL
-    const isSameSlug = variant.slug === currentSlug;
+    const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
 
-    // Giữ lại ảnh hiện đang xem nếu tồn tại trong variant mới
-    const currentImageUrl = images[selectedImage];
-    const newImageIndex = variant.images?.indexOf(currentImageUrl);
-    const finalImageIndex = newImageIndex >= 0 ? newImageIndex : 0;
-
-    // Nếu slug khác -> điều hướng trang (tức sản phẩm khác hoàn toàn)
-    if (!isSameSlug) {
-      const newUrl = `/${categorySlug}/${variant.slug}?sku=${variant.sku}`;
-      navigate(newUrl, { replace: true });
+    if (!isColorChange) {
+      setUserSelectedKey(variant[keyField]);
+      const newUrl = `/${categorySlug}/${fullSlug
+        .split("-")
+        .slice(0, -1)
+        .join("-")}-${variant[keyField].toLowerCase().replace(/\s+/g, "")}?sku=${
+        variant.sku
+      }`;
+      window.history.replaceState(null, "", newUrl);
+      updateVariantUI(variant);
     } else {
-      // Nếu slug giống nhau -> chỉ cập nhật variant, ảnh, và giá, KHÔNG tải lại trang
-      window.history.replaceState(null, "", `?sku=${variant.sku}`);
-      setSelectedVariant(variant);
-      setSelectedImage(finalImageIndex);
+      const targetVariant = variants.find(
+        (v) => v.color === variant.color && v[keyField] === userSelectedKey
+      );
+      const finalVariant = targetVariant || variant;
+      const baseSlug = fullSlug.split("-").slice(0, -1).join("-");
+      const newUrl = `/${categorySlug}/${baseSlug}-${finalVariant[keyField]
+        .toLowerCase()
+        .replace(/\s+/g, "")}?sku=${finalVariant.sku}`;
+      window.history.replaceState(null, "", newUrl);
+      updateVariantUI(finalVariant);
     }
   };
 
-  // Add to cart with real API
+  const updateVariantUI = (variant) => {
+    const currentImageUrl = selectedVariant?.images?.[selectedImage];
+    const newImageIndex = variant.images?.indexOf(currentImageUrl);
+    const finalImageIndex = newImageIndex >= 0 ? newImageIndex : 0;
+    setSelectedVariant(variant);
+    setSelectedImage(finalImageIndex);
+  };
+
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
-
     const result = await addToCart(selectedVariant._id, 1);
     if (result.success) {
       alert("Đã thêm vào giỏ hàng!");
@@ -172,21 +187,34 @@ const ProductDetailPage = () => {
     return grouped;
   };
 
-const getVariantKeyOptions = () => {
+  const getVariantKeyOptions = () => {
     if (!product || !selectedVariant) return [];
     const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
     const filtered = variants.filter((v) => v.color === selectedVariant.color);
     return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
-      // Chuyển đổi storage thành số để sắp xếp đúng (256GB, 512GB, 1TB)
       const parseStorage = (str) => {
         const num = parseInt(str);
-        if (str.includes('TB')) return num * 1000; // 1TB = 1000GB
-        return num; // GB
+        if (str.includes("TB")) return num * 1000;
+        return num;
       };
       const aNum = parseStorage(a) || 0;
       const bNum = parseStorage(b) || 0;
       return aNum - bNum;
     });
+  };
+
+  const nextImage = () => {
+    if (!selectedVariant?.images) return;
+    setSelectedImage((prev) =>
+      prev < selectedVariant.images.length - 1 ? prev + 1 : 0
+    );
+  };
+
+  const prevImage = () => {
+    if (!selectedVariant?.images) return;
+    setSelectedImage((prev) =>
+      prev > 0 ? prev - 1 : selectedVariant.images.length - 1
+    );
   };
 
   if (isLoading) {
@@ -216,92 +244,139 @@ const getVariantKeyOptions = () => {
   const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
 
   return (
-    <div ref={topRef} className="bg-white min-h-screen">
+    <div ref={topRef} className="bg-gray-50 min-h-screen">
       {/* Breadcrumb */}
-      <div className="bg-gray-50 border-b">
+      <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
-          <div className="text-sm text-gray-600">
+          <div className="flex items-center text-sm text-gray-600">
             <span className="hover:text-red-600 cursor-pointer">Trang chủ</span>
-            <span className="mx-2">›</span>
+            <ChevronRight className="w-4 h-4 mx-1" />
             <span className="hover:text-red-600 cursor-pointer">
               {categoryInfo.model}
             </span>
-            <span className="mx-2">›</span>
+            <ChevronRight className="w-4 h-4 mx-1" />
             <span className="text-gray-900">{product.name}</span>
           </div>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* LEFT: Image Gallery */}
-          <div className="space-y-4">
-            <div className="relative bg-white border-2 border-gray-200 rounded-2xl overflow-hidden aspect-square">
-              <img
-                src={images[selectedImage] || "/placeholder.png"}
-                alt={product.name}
-                className="w-full h-full object-contain p-8"
-              />
-              {discount > 0 && (
-                <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-lg font-bold text-sm">
-                  Giảm {discount}%
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEFT: Image Gallery - 5 cols */}
+          <div className="lg:col-span-5">
+            <div className="bg-white rounded-lg overflow-hidden sticky top-4">
+              {/* Free Ship Badge */}
+              <div className="bg-red-600 text-white text-center py-2 text-sm font-semibold flex items-center justify-center gap-2">
+                <Package2 className="w-4 h-4" />
+                Free Ship toàn quốc
+              </div>
+
+              {/* Main Image */}
+              <div className="relative aspect-square bg-white">
+                <img
+                  src={images[selectedImage] || "/placeholder.png"}
+                  alt={product.name}
+                  className="w-full h-full object-contain p-8"
+                />
+
+                {/* Navigation Arrows */}
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
+                    >
+                      <ChevronLeft className="w-6 h-6 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
+                    >
+                      <ChevronRight className="w-6 h-6 text-gray-700" />
+                    </button>
+                  </>
+                )}
+
+                {/* Image Counter */}
+                {images.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
+                    {selectedImage + 1}/{images.length}
+                  </div>
+                )}
+              </div>
+
+              {/* Thumbnail Navigation */}
+              <div className="p-4 border-t bg-gray-50">
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                  {/* Nổi bật button */}
+                  <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-red-500 transition-all bg-white">
+                    <Star className="w-5 h-5 text-gray-600" />
+                    <span className="text-xs text-gray-600 mt-1">Nổi bật</span>
+                  </button>
+
+                  {/* Video button if available */}
+                  <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-red-500 transition-all bg-white">
+                    <Play className="w-5 h-5 text-gray-600" />
+                    <span className="text-xs text-gray-600 mt-1">Video</span>
+                  </button>
+
+                  {/* Image thumbnails */}
+                  {images.slice(0, 6).map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedImage(idx)}
+                      className={`flex-shrink-0 w-16 h-16 border-2 rounded-lg overflow-hidden transition-all ${
+                        selectedImage === idx
+                          ? "border-red-600 ring-2 ring-red-200"
+                          : "border-gray-300 hover:border-gray-400"
+                      }`}
+                    >
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full h-full object-contain p-1"
+                      />
+                    </button>
+                  ))}
+
+                  {/* More images indicator */}
+                  {images.length > 6 && (
+                    <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white hover:border-red-500 transition-all">
+                      <span className="text-sm font-semibold text-gray-600">
+                        +{images.length - 6}
+                      </span>
+                    </button>
+                  )}
                 </div>
-              )}
-              <div className="absolute top-4 right-4 bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-semibold">
-                Free ship toàn quốc
               </div>
             </div>
-
-            {images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {images.map((img, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedImage(idx)}
-                    className={`flex-shrink-0 w-20 h-20 border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${
-                      selectedImage === idx
-                        ? "border-red-600 ring-2 ring-red-200"
-                        : "border-gray-200 hover:border-gray-400"
-                    }`}
-                  >
-                    <img
-                      src={img}
-                      alt=""
-                      className="w-full h-full object-contain p-1"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* RIGHT: Product Info */}
-          <div className="space-y-5">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                {product.name}
-              </h1>
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Star
-                      key={i}
-                      className="w-4 h-4 fill-yellow-400 text-yellow-400"
-                    />
-                  ))}
+          {/* RIGHT: Product Info - 7 cols */}
+          <div className="lg:col-span-6">
+            <div className="bg-white rounded-lg p-6">
+              {/* Product Title & Meta */}
+              <div className="mb-4">
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                  {product.name}
+                </h1>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span className="font-semibold">
+                      {product.averageRating || 4.8}
+                    </span>
+                    <span className="text-gray-600">
+                      {product.totalReviews || 20} đánh giá
+                    </span>
+                  </div>
                 </div>
-                <span className="text-gray-600">
-                  ({product.reviews?.length || 0} đánh giá)
-                </span>
               </div>
-            </div>
 
-            {/* Variant Selection */}
-            <div className="space-y-4">
-              {/* Storage / Variant Key */}
-              <div>
-                <h3 className="font-semibold text-sm mb-2">
-                  {keyField === "storage" ? "Dung lượng:" : "Phiên bản:"}
+              {/* Storage Selection */}
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold mb-3">
+                  {keyField === "storage" ? "Dung lượng" : "Phiên bản"}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {variantKeyOptions.map((option) => {
@@ -316,9 +391,9 @@ const getVariantKeyOptions = () => {
                     return (
                       <button
                         key={option}
-                        onClick={() => hasStock && handleVariantSelect(variant)}
+                        onClick={() => hasStock && handleVariantSelect(variant, false)}
                         disabled={!hasStock}
-                        className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all ${
+                        className={`relative px-6 py-3 border-2 rounded-lg font-medium transition-all ${
                           isSelected
                             ? "border-red-600 bg-red-50 text-red-600"
                             : hasStock
@@ -327,6 +402,21 @@ const getVariantKeyOptions = () => {
                         }`}
                       >
                         {option}
+                        {isSelected && (
+                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -334,127 +424,192 @@ const getVariantKeyOptions = () => {
               </div>
 
               {/* Color Selection */}
-              <div>
-                <h3 className="font-semibold text-sm mb-2">Màu sắc:</h3>
-                <div className="flex flex-wrap gap-2">
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold mb-3">Màu sắc</h3>
+                <div className="grid grid-cols-2 gap-3">
                   {Object.keys(groupedVariants).map((color) => {
                     const isSelected = selectedVariant.color === color;
                     const hasStock = groupedVariants[color].some(
                       (v) => v.stock > 0
                     );
+                    const preferredVariant = groupedVariants[color].find(
+                      (v) => v[keyField] === userSelectedKey && v.stock > 0
+                    );
                     const availableVariant =
+                      preferredVariant ||
                       groupedVariants[color].find((v) => v.stock > 0) ||
                       groupedVariants[color][0];
+
+                    // Get sample image
+                    const sampleImage = availableVariant?.images?.[0];
 
                     return (
                       <button
                         key={color}
                         onClick={() =>
-                          hasStock && handleVariantSelect(availableVariant)
+                          hasStock && handleVariantSelect(availableVariant, true)
                         }
                         disabled={!hasStock}
-                        className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all ${
+                        className={`relative flex items-center gap-3 p-3 border-2 rounded-lg transition-all ${
                           isSelected
-                            ? "border-red-600 bg-red-50 text-red-600"
+                            ? "border-red-600 bg-red-50"
                             : hasStock
                             ? "border-gray-300 hover:border-red-400"
-                            : "border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
+                            : "border-gray-200 opacity-50 cursor-not-allowed"
                         }`}
                       >
-                        {color}
+                        {/* Color Image */}
+                        <div className="w-12 h-12 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
+                          {sampleImage && (
+                            <img
+                              src={sampleImage}
+                              alt={color}
+                              className="w-full h-full object-contain"
+                            />
+                          )}
+                        </div>
+                        {/* Color Name */}
+                        <span
+                          className={`text-sm font-medium flex-1 text-left ${
+                            isSelected ? "text-red-600" : "text-gray-900"
+                          }`}
+                        >
+                          {color}
+                        </span>
+                        {/* Check Mark */}
+                        {isSelected && (
+                          <div className="w-5 h-5 bg-red-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            </div>
 
-            {/* Price */}
-            <div className="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-5">
-              <div className="flex items-baseline gap-3 mb-2">
-                <span className="text-3xl font-bold text-red-600">
-                  {formatPrice(selectedVariant.price)}
-                </span>
-                {selectedVariant.originalPrice > selectedVariant.price && (
-                  <span className="text-lg text-gray-500 line-through">
-                    {formatPrice(selectedVariant.originalPrice)}
+              {/* Price Section */}
+              <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-5 mb-6 border border-red-100">
+                <div className="flex items-baseline gap-3 mb-3">
+                  <span className="text-3xl font-bold text-red-600">
+                    {formatPrice(selectedVariant.price)}
                   </span>
-                )}
+                  {selectedVariant.originalPrice > selectedVariant.price && (
+                    <>
+                      <span className="text-lg text-gray-500 line-through">
+                        {formatPrice(selectedVariant.originalPrice)}
+                      </span>
+                      <span className="bg-red-600 text-white px-2 py-1 rounded text-sm font-semibold">
+                        -{discount}%
+                      </span>
+                    </>
+                  )}
+                </div>
+
+
               </div>
 
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-red-700">
-                  <Gift className="w-4 h-4" />
-                  <span className="font-medium">
-                    Giảm ngay 500,000đ (đến 31/10)
-                  </span>
+              {/* Promotion Box */}
+              <div className="bg-pink-50 rounded-xl p-4 mb-6 border border-pink-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                    🔥 Khuyến mãi đặc biệt
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-gray-700">
-                  <Check className="w-4 h-4" />
-                  <span>Combo phụ kiện giảm đến 299,000đ</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-700">
-                  <Check className="w-4 h-4" />
-                  <span>Trả góp 0%</span>
-                </div>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-600 mt-1">•</span>
+                    <span>Giảm ngay 2.800.000đ áp dụng đến 06/11</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-600 mt-1">•</span>
+                    <span>AirPods giảm đến 500.000đ khi mua kèm iPhone</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-600 mt-1">•</span>
+                    <span>
+                      Giảm thêm đến 2.5 triệu khi mua kèm SIM FPT FVIP150/F299/F399
+                      6-12 tháng{" "}
+                      <button className="text-blue-600 hover:underline">
+                        Xem chi tiết
+                      </button>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-red-600 mt-1">•</span>
+                    <span>Trả góp 0%</span>
+                  </li>
+                </ul>
               </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={handleAddToCart}
+                  disabled={cartLoading || selectedVariant.stock === 0}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  {selectedVariant.stock === 0 ? "Hết hàng" : "Mua ngay"}
+                </button>
+              </div>
+
+              {/* Stock Warning */}
+              {selectedVariant.stock > 0 && selectedVariant.stock <= 5 && (
+                <div className="bg-orange-50 border-l-4 border-orange-500 p-3 rounded mb-4">
+                  <p className="text-sm text-orange-700 font-medium">
+                    ⚠️ Chỉ còn {selectedVariant.stock} sản phẩm!
+                  </p>
+                </div>
+              )}
+
+       
             </div>
-
-            {/* Add to Cart */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleAddToCart}
-                disabled={cartLoading || selectedVariant.stock === 0}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-xl text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <ShoppingCart className="w-5 h-5" />
-                {selectedVariant.stock === 0 ? "Hết hàng" : "Mua ngay"}
-              </button>
-            </div>
-
-            {/* Stock Warning */}
-            {selectedVariant.stock > 0 && selectedVariant.stock <= 5 && (
-              <div className="bg-orange-50 border-l-4 border-orange-500 p-3 rounded">
-                <p className="text-sm text-orange-700 font-medium">
-                  Chỉ còn {selectedVariant.stock} sản phẩm!
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Tabs Section */}
-        <div className="mt-12">
-          <div className="flex border-b-2 border-gray-200">
+        <div className="mt-8 bg-white rounded-lg overflow-hidden">
+          <div className="flex border-b">
             <button
               onClick={() => setActiveTab("info")}
-              className={`px-6 py-3 font-semibold transition-all relative ${
+              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
                 activeTab === "info"
-                  ? "text-red-600"
-                  : "text-gray-600 hover:text-gray-900"
+                  ? "text-red-600 bg-red-50"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
               }`}
             >
               Thông số kỹ thuật
               {activeTab === "info" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
               )}
             </button>
             <button
               onClick={() => setActiveTab("warranty")}
-              className={`px-6 py-3 font-semibold transition-all relative ${
+              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
                 activeTab === "warranty"
-                  ? "text-red-600"
-                  : "text-gray-600 hover:text-gray-900"
+                  ? "text-red-600 bg-red-50"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
               }`}
             >
-              Bảo hành & Dịch vụ
+              Chính sách & Bảo hành
               {activeTab === "warranty" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
               )}
             </button>
           </div>
 
-          <div className="py-6">
+          <div className="p-6">
             {activeTab === "info" && (
               <SpecificationsTab specifications={product.specifications} />
             )}
