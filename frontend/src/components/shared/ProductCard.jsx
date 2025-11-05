@@ -1,7 +1,5 @@
-// ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-// ✅ FIXED: Use variant.slug instead of generating slug
-// ============================================
+
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -24,17 +22,33 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// Variant key field per category
+// ============================================================================
+// ÁNH XẠ: category (UI hiển thị) → productType (Backend API)
+// ============================================================================
+const CATEGORY_TO_TYPE_MAP = {
+  iPhone: "iPhone",
+  iPad: "iPad",
+  Mac: "Mac",
+  AirPods: "AirPods",
+  AppleWatch: "AppleWatch",
+  Accessories: "Accessory", // ← Accessories (UI) → Accessory (Backend)
+};
+
+// ============================================================================
+// Trường key hiển thị variant theo từng loại sản phẩm
+// ============================================================================
 const VARIANT_KEY_FIELD = {
-  iPhone: "storage",
-  iPad: "storage",
-  Mac: "storage",
-  AirPods: "variantName",
+  iPhone: "storage", // iPhone: 128GB, 256GB...
+  iPad: "storage", // iPad: 128GB, 256GB...
+  Mac: "storage", // Mac: 512GB, 1TB...
+  AirPods: "variantName", // AirPods: Gen 2, Gen 3...
   AppleWatch: "variantName",
   Accessories: "variantName",
 };
 
-// Helper component for Star Rating
+// ============================================================================
+// COMPONENT CON: Hiển thị sao đánh giá
+// ============================================================================
 const StarRating = ({ rating, reviewCount = 0 }) => {
   const roundedRating = Math.round(rating);
   const totalReviewsText = `(${reviewCount || 0} đánh giá)`;
@@ -55,29 +69,37 @@ const StarRating = ({ rating, reviewCount = 0 }) => {
     </div>
   );
 };
-
+// ============================================================================
+// COMPONENT CHÍNH: ProductCard
+// ============================================================================
 const ProductCard = ({
-  product,
-  isTopNew = false,
-  isTopSeller = false,
-  onEdit,
-  onDelete,
+  product, // Dữ liệu sản phẩm từ parent
+  isTopNew = false, // Badge "Mới"
+  isTopSeller = false, // Badge "Bán chạy"
+  onEdit, // Callback sửa sản phẩm (Admin)
+  onDelete, // Callback xóa sản phẩm (Admin)
 }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
 
-  const [isAdding, setIsAdding] = useState(false);
-  const [selectedVariant, setSelectedVariant] = useState(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isVariantReady, setIsVariantReady] = useState(false);
+  // ==========================================================================
+  // STATE
+  // ==========================================================================
+  const [isAdding, setIsAdding] = useState(false); // Loading nút thêm giỏ
+  const [selectedVariant, setSelectedVariant] = useState(null); // Variant đang chọn
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false); // Dialog xóa
+  const [isVariantReady, setIsVariantReady] = useState(false); // Sẵn sàng navigate
 
+  // Kiểm tra quyền Admin/Kho
   const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
 
-  // Ensure variants is always an array
+  // Đảm bảo variants luôn là array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
 
-  // === 1. Chọn variant mặc định ===
+  // ==========================================================================
+  // 1. TỰ ĐỘNG CHỌN VARIANT MẶC ĐỊNH (Ưu tiên stock > 0 + slug)
+  // ==========================================================================
   useEffect(() => {
     if (!safeVariants.length) {
       setSelectedVariant(null);
@@ -85,28 +107,18 @@ const ProductCard = ({
       return;
     }
 
-    // ✅ Ưu tiên: stock > 0 + có sku + có slug
     let variant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
-    if (!variant) variant = safeVariants.find((v) => v.sku && v.slug); // có sku + slug dù hết hàng
-    if (!variant) variant = safeVariants.find((v) => v.sku); // chỉ có sku (sẽ dùng baseSlug)
-    if (!variant) variant = safeVariants[0]; // fallback
+    if (!variant) variant = safeVariants.find((v) => v.sku && v.slug);
+    if (!variant) variant = safeVariants.find((v) => v.sku);
+    if (!variant) variant = safeVariants[0];
 
     setSelectedVariant(variant);
-    // ✅ Sẵn sàng nếu có (SKU + slug) HOẶC (SKU + baseSlug)
     setIsVariantReady(!!(variant?.sku && (variant?.slug || product.baseSlug)));
-
-    // DEBUG LOG
-    console.log("ProductCard DEBUG:", {
-      name: product.name,
-      baseSlug: product.baseSlug,
-      variantsCount: safeVariants.length,
-      selectedSKU: variant?.sku,
-      selectedSlug: variant?.slug,
-      hasBaseSlug: !!product.baseSlug,
-      isReady: !!(variant?.sku && (variant?.slug || product.baseSlug)),
-    });
   }, [product.variants, product.baseSlug, product.name, safeVariants]);
 
+  // ==========================================================================
+  // 2. DỮ LIỆU HIỂN THỊ HIỆN TẠI
+  // ==========================================================================
   const current = selectedVariant || {};
   const displayPrice = current.price || product.price || 0;
   const displayOriginalPrice =
@@ -114,108 +126,124 @@ const ProductCard = ({
   const rating = product.averageRating || 0;
   const reviewCount = product.reviewCount || 0;
 
-  // === 2. Ảnh hiển thị ===
   const displayImage =
     current?.images?.[0] ||
     (Array.isArray(product.images) ? product.images[0] : null) ||
     product.image ||
     "/placeholder.png";
 
-  // === 3. % GIẢM GIÁ ===
   const discountPercent =
     displayOriginalPrice > displayPrice
       ? Math.round(
           ((displayOriginalPrice - displayPrice) / displayOriginalPrice) * 100
         )
       : 0;
-
-  // === 4. BADGE GÓC TRÊN BÊN PHẢI ===
+  // ==========================================================================
+  // 3. BADGE GÓC PHẢI (Mới/Bán chạy)
+  // ==========================================================================
   const getRightBadge = () => {
-    if (isTopNew) {
+    if (isTopNew)
       return {
         text: "Mới",
         color: "bg-green-500 hover:bg-green-500 text-white",
       };
-    }
-    if (isTopSeller) {
+    if (isTopSeller)
       return {
         text: "Bán chạy",
         color: "bg-green-500 hover:bg-green-500 text-white",
       };
-    }
     return null;
   };
   const rightBadge = getRightBadge();
 
-  // === 5. Installment TEXT ===
   const installmentText =
     product.installmentBadge &&
     product.installmentBadge.toLowerCase() !== "none"
       ? product.installmentBadge
       : null;
 
-  // === 6. Danh sách variant key options ===
+  // ==========================================================================
+  // 4. DANH SÁCH NÚT CHỌN VARIANT (128GB, 256GB, 1TB...)
+  // ==========================================================================
   const keyField = VARIANT_KEY_FIELD[product.category] || "variantName";
+
+  // Hàm chuẩn hóa dung lượng: chuyển TB → GB để so sánh đúng
+  const normalizeStorage = (value) => {
+    if (!value) return 0;
+    const str = String(value).trim().toUpperCase();
+    const num = parseInt(str);
+    if (isNaN(num)) return 0;
+    return str.includes("TB") ? num * 1024 : num; // 1TB = 1024GB
+  };
+
   const variantKeyOptions = Array.from(
     new Set(
-      safeVariants
-        .filter((v) => v && v[keyField])
-        .map((v) => v[keyField])
-        .sort((a, b) => {
-          const aNum = parseInt(a) || 0;
-          const bNum = parseInt(b) || 0;
-          return aNum - bNum;
-        })
+      safeVariants.filter((v) => v && v[keyField]).map((v) => v[keyField])
     )
-  );
+  )
+    // SẮP XẾP ĐÚNG: 128GB → 256GB → 512GB → 1TB → 2TB
+    .sort((a, b) => normalizeStorage(a) - normalizeStorage(b));
 
-  // === 7. Tổng stock ===
   const totalStock = safeVariants.reduce((sum, v) => sum + (v?.stock || 0), 0);
 
-  // === 8. Chọn variant key ===
+  // ==========================================================================
+  // 5. EVENT HANDLERS
+  // ==========================================================================
   const handleVariantKeyClick = (e, keyValue) => {
     e.stopPropagation();
     let variant = safeVariants.find(
       (v) => v[keyField] === keyValue && v.stock > 0 && v.slug
     );
-    if (!variant) {
+    if (!variant)
       variant = safeVariants.find((v) => v[keyField] === keyValue && v.slug);
-    }
     if (variant) {
       setSelectedVariant(variant);
       setIsVariantReady(!!(variant.sku && variant.slug));
     }
   };
 
-  // === 9. Thêm vào giỏ hàng ===
   const handleAddToCart = async (e) => {
     e.stopPropagation();
+    e.preventDefault();
+
     if (!isAuthenticated || user?.role !== "CUSTOMER") {
       navigate("/login");
       return;
     }
 
-    if (!selectedVariant || selectedVariant.stock <= 0) {
+    if (!selectedVariant) {
+      toast.error("Vui lòng chọn phiên bản");
+      return;
+    }
+    if (selectedVariant.stock <= 0) {
       toast.error("Sản phẩm tạm hết hàng");
       return;
     }
 
     setIsAdding(true);
     try {
-      const result = await addToCart(selectedVariant._id, 1);
-      if (result.success) {
+      const productType =
+        CATEGORY_TO_TYPE_MAP[product.category] || product.category;
+
+      const result = await addToCart({
+        variantId: selectedVariant._id,
+        productType,
+        quantity: 1,
+      });
+
+      if (result?.success) {
         toast.success("Đã thêm vào giỏ hàng", {
           description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
         });
       }
-    } catch {
+    } catch (error) {
+      console.error("Add to cart error:", error);
       toast.error("Không thể thêm vào giỏ hàng");
     } finally {
       setIsAdding(false);
     }
   };
 
-  // === 10. Admin actions ===
   const handleEditClick = (e) => {
     e.stopPropagation();
     onEdit?.(product);
@@ -231,9 +259,7 @@ const ProductCard = ({
     setShowDeleteDialog(false);
   };
 
-  // === 11. Navigate - Hỗ trợ cả baseSlug và variant slug ===
   const handleCardClick = () => {
-
     const categoryPath = {
       iPhone: "dien-thoai",
       iPad: "may-tinh-bang",
@@ -248,31 +274,21 @@ const ProductCard = ({
       return;
     }
 
-    // ✅ Ưu tiên: Dùng variant.slug nếu có
     if (selectedVariant?.sku && selectedVariant?.slug) {
       const url = `/${categoryPath}/${selectedVariant.slug}?sku=${selectedVariant.sku}`;
-      console.log("✅ Navigating to variant slug:", url);
       navigate(url);
       return;
     }
 
-    // ✅ Fallback: Dùng baseSlug (sẽ redirect đến variant đầu tiên)
     if (product.baseSlug) {
       const url = `/${categoryPath}/${product.baseSlug}`;
-      console.log("✅ Navigating to baseSlug (will redirect):", url);
       navigate(url);
       return;
     }
 
-    // ❌ Không có slug nào
-    console.warn("Cannot navigate: no slug available", {
-      product,
-      selectedVariant,
-    });
     toast.error("Không thể xem chi tiết sản phẩm");
   };
 
-  // === HELPER: getVariantLabel ===
   const getVariantLabel = (variant) => {
     if (!variant) return "";
     const cat = product?.category;
@@ -283,6 +299,9 @@ const ProductCard = ({
     return variant.variantName || variant.storage || "";
   };
 
+  // ==========================================================================
+  // 8. RENDER UI
+  // ==========================================================================
   return (
     <>
       <Card
@@ -290,15 +309,14 @@ const ProductCard = ({
         onClick={isVariantReady ? handleCardClick : undefined}
         style={{ cursor: isVariantReady ? "pointer" : "default" }}
       >
-        {/* LOADING KHI CHƯA CÓ SKU/SLUG */}
         {!isVariantReady && (
           <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-50">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
           </div>
         )}
 
-        {/* === DEBUG UI: BASE SLUG + VARIANT SLUG + SKU === */}
-        {process.env.NODE_ENV === "development" && (
+        {/* DEBUG UI: CHỈ ADMIN + DEV MODE */}
+        {isAdmin && process.env.NODE_ENV === "development" && (
           <div className="absolute top-12 left-3 z-50 bg-black/90 text-white text-[10px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px]">
             <div className="truncate">
               Base:{" "}
@@ -321,7 +339,6 @@ const ProductCard = ({
           </div>
         )}
 
-        {/* === ADMIN: Sửa / Xóa === */}
         {isAdmin && (
           <>
             <div className="absolute bottom-3 right-12 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -347,7 +364,6 @@ const ProductCard = ({
           </>
         )}
 
-        {/* === Badge GIẢM GIÁ === */}
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
             <Badge className="bg-red-600 hover:bg-red-600 text-white font-bold text-xs px-2 py-1 rounded-md shadow-md">
@@ -356,7 +372,6 @@ const ProductCard = ({
           </div>
         )}
 
-        {/* === Badge TRẠNG THÁI === */}
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
             <Badge
@@ -367,7 +382,6 @@ const ProductCard = ({
           </div>
         )}
 
-        {/* === Ảnh sản phẩm === */}
         <div className="relative aspect-[3/4] bg-white overflow-hidden p-6 pt-10">
           <img
             src={displayImage}
@@ -375,7 +389,6 @@ const ProductCard = ({
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
           />
 
-          {/* === Nút thêm giỏ hàng === */}
           {!isAdmin &&
             isAuthenticated &&
             user?.role === "CUSTOMER" &&
@@ -392,39 +405,50 @@ const ProductCard = ({
             )}
         </div>
 
-        {/* === Thông tin sản phẩm === */}
-        <div className="px-4 space-y-1 bg-white">
-          <h3 className="font-bold text-lg line-clamp-2 text-gray-900 leading-tight">
-            {product.name}
-          </h3>
+        {/* =====================================================
+             THÔNG TIN SẢN PHẨM - LUÔN CÂN BẰNG
+             ==================================================== */}
+        <div className="px-4 bg-white">
+          <h3 className="font-bold text-lg product-title">{product.name}</h3>
 
-          {installmentText && (
-            <Badge
-              variant="outline"
-              className="bg-gray-200 text-gray-700 font-medium text-xs px-2 py-0.5 rounded-md border-0"
-            >
-              {installmentText}
-            </Badge>
-          )}
-
-          <div className="space-y-0.5 pt-1">
-            {displayOriginalPrice > displayPrice && (
-              <p className="text-sm text-gray-500 line-through">
-                {formatPrice(displayOriginalPrice)}
-              </p>
+          {/* BADGE TRẢ GÓP: LUÔN CHIẾM 1 DÒNG */}
+          <div className="min-h-[1.5rem] mt-1 flex items-center">
+            {installmentText && (
+              <Badge
+                variant="outline"
+                className="bg-gray-200 text-gray-700 font-medium text-xs px-2 py-0.5 rounded-md border-0"
+              >
+                {installmentText}
+              </Badge>
             )}
+          </div>
+
+          {/* GIÁ: LUÔN CHIẾM 2 DÒNG */}
+          <div className="mt-1">
+            {/* Dòng 1: Giá gốc - luôn chiếm chỗ */}
+            <div className="min-h-[1.25rem] flex items-center">
+              {displayOriginalPrice > displayPrice ? (
+                <p className="text-sm text-gray-500 line-through">
+                  {formatPrice(displayOriginalPrice)}
+                </p>
+              ) : (
+                <span className="invisible text-sm select-none">—</span>
+              )}
+            </div>
+
+            {/* Dòng 2: Giá hiện tại */}
             <p className="text-2xl font-bold text-red-600">
               {formatPrice(displayPrice)}
             </p>
           </div>
 
-          <div className="pt-2">
+          <div className="mt-3">
             <StarRating rating={rating} reviewCount={reviewCount} />
             <div className="mt-2 border-b border-gray-200"></div>
           </div>
 
           {variantKeyOptions.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-3">
+            <div className="flex flex-wrap gap-1 mt-3">
               {variantKeyOptions.map((keyValue) => (
                 <button
                   key={keyValue}
@@ -442,17 +466,16 @@ const ProductCard = ({
           )}
 
           {totalStock === 0 && (
-            <p className="text-xs text-red-600 font-medium pt-2">Hết hàng</p>
+            <p className="text-xs text-red-600 font-medium mt-2">Hết hàng</p>
           )}
           {totalStock > 0 && totalStock <= 5 && (
-            <p className="text-xs text-orange-600 font-medium pt-2">
+            <p className="text-xs text-orange-600 font-medium mt-2">
               Chỉ còn {totalStock} sản phẩm!
             </p>
           )}
         </div>
       </Card>
 
-      {/* === Dialog xác nhận xóa === */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -476,6 +499,20 @@ const ProductCard = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* CSS: Tên sản phẩm luôn 2 dòng */}
+      <style jsx>{`
+        .product-title {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          line-height: 1.4rem;
+          max-height: 2.8rem;
+          min-height: 2.8rem;
+          text-overflow: ellipsis;
+        }
+      `}</style>
     </>
   );
 };

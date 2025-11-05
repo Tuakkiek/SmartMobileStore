@@ -62,16 +62,12 @@ const ProductDetailPage = () => {
   const [activeTab, setActiveTab] = useState("info");
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
-
   const hasHandledDefaultVariant = useRef(false);
 
   // Scroll to top on mount
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
-    if (topRef.current) {
-      topRef.current.scrollIntoView({ behavior: "instant", block: "start" });
-    }
-  }, [fullSlug, sku]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [fullSlug]);
 
   // Fetch product data from real API
   useEffect(() => {
@@ -90,7 +86,6 @@ const ProductDetailPage = () => {
         const response = await categoryInfo.api.get(fullSlug, {
           params: sku ? { sku } : {},
         });
-
         const data = response.data.data;
         const fetchedProduct = data.product || data;
         const fetchedVariants = data.variants || fetchedProduct.variants || [];
@@ -119,13 +114,28 @@ const ProductDetailPage = () => {
     fetchProductData();
   }, [fullSlug, sku, categoryInfo]);
 
-  // Update URL when variant changes
+  // Update URL and UI when variant changes
   const handleVariantSelect = (variant) => {
-    if (!variant || !variant.slug) return;
-    const newUrl = `/${categorySlug}/${variant.slug}?sku=${variant.sku}`;
-    navigate(newUrl, { replace: true });
-    setSelectedVariant(variant);
-    setSelectedImage(0);
+    if (!variant) return;
+
+    const currentSlug = fullSlug; // slug hiện tại trong URL
+    const isSameSlug = variant.slug === currentSlug;
+
+    // Giữ lại ảnh hiện đang xem nếu tồn tại trong variant mới
+    const currentImageUrl = images[selectedImage];
+    const newImageIndex = variant.images?.indexOf(currentImageUrl);
+    const finalImageIndex = newImageIndex >= 0 ? newImageIndex : 0;
+
+    // Nếu slug khác -> điều hướng trang (tức sản phẩm khác hoàn toàn)
+    if (!isSameSlug) {
+      const newUrl = `/${categorySlug}/${variant.slug}?sku=${variant.sku}`;
+      navigate(newUrl, { replace: true });
+    } else {
+      // Nếu slug giống nhau -> chỉ cập nhật variant, ảnh, và giá, KHÔNG tải lại trang
+      window.history.replaceState(null, "", `?sku=${variant.sku}`);
+      setSelectedVariant(variant);
+      setSelectedImage(finalImageIndex);
+    }
   };
 
   // Add to cart with real API
@@ -162,13 +172,19 @@ const ProductDetailPage = () => {
     return grouped;
   };
 
-  const getVariantKeyOptions = () => {
+const getVariantKeyOptions = () => {
     if (!product || !selectedVariant) return [];
     const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
     const filtered = variants.filter((v) => v.color === selectedVariant.color);
     return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
-      const aNum = parseInt(a) || 0;
-      const bNum = parseInt(b) || 0;
+      // Chuyển đổi storage thành số để sắp xếp đúng (256GB, 512GB, 1TB)
+      const parseStorage = (str) => {
+        const num = parseInt(str);
+        if (str.includes('TB')) return num * 1000; // 1TB = 1000GB
+        return num; // GB
+      };
+      const aNum = parseStorage(a) || 0;
+      const bNum = parseStorage(b) || 0;
       return aNum - bNum;
     });
   };
@@ -296,6 +312,7 @@ const ProductDetailPage = () => {
                     );
                     const isSelected = selectedVariant[keyField] === option;
                     const hasStock = variant?.stock > 0;
+
                     return (
                       <button
                         key={option}
@@ -328,6 +345,7 @@ const ProductDetailPage = () => {
                     const availableVariant =
                       groupedVariants[color].find((v) => v.stock > 0) ||
                       groupedVariants[color][0];
+
                     return (
                       <button
                         key={color}
@@ -363,6 +381,7 @@ const ProductDetailPage = () => {
                   </span>
                 )}
               </div>
+
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-red-700">
                   <Gift className="w-4 h-4" />

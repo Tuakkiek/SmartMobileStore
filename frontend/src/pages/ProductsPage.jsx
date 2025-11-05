@@ -1,16 +1,6 @@
-// ============================================
-// FILE: frontend/src/pages/ProductsPage.jsx
-// ✅ UPDATED: Use category APIs instead of productAPI
-// ============================================
-
-import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import ProductCard from "../components/shared/ProductCard";
-import { Loading } from "@/components/shared/Loading";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { SlidersHorizontal, ChevronDown, Package } from "lucide-react";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -19,340 +9,352 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
-
-const CATEGORIES = [
-  "iPhone",
-  "iPad",
-  "Mac",
-  "AppleWatch",
-  "AirPods",
-  "Accessories",
-];
+import ProductCard from "@/components/shared/ProductCard"; // IMPORTED
 
 const API_MAP = {
   iPhone: iPhoneAPI,
   iPad: iPadAPI,
   Mac: macAPI,
-  AppleWatch: appleWatchAPI,
   AirPods: airPodsAPI,
+  AppleWatch: appleWatchAPI,
   Accessories: accessoryAPI,
 };
 
-const ProductsPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState({
-    category: searchParams.get("category") || "",
-    status: "",
-    minPrice: "",
-    maxPrice: "",
-    sort: "createdAt",
-    inStock: false,
-  });
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 12,
-    totalPages: 1,
-    total: 0,
-  });
-  const [showFilters, setShowFilters] = useState(false);
+const FILTER_OPTIONS = {
+  storage: ["128 GB", "256 GB", "512 GB", "1 TB", "2 TB"],
+  ram: ["8 GB", "12 GB", "16 GB", "24 GB", "32 GB"],
+  screenSize: ["Dưới 6 inch", "6 - 6.5 inch", "Trên 6.5 inch"],
+  refreshRate: ["60 Hz", "90 Hz", "120 Hz"],
+};
 
-  // ✅ Fetch products from category APIs
-  const fetchProducts = async () => {
-    setIsLoading(true);
+const ProductsPage = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const categoryParam = searchParams.get("category") || "iPhone";
+  const modelParam = searchParams.get("model") || "";
+
+  const category =
+    categoryParam === "AppleWatch"
+      ? "AppleWatch"
+      : categoryParam === "Accessories"
+      ? "Accessories"
+      : categoryParam;
+  const api = API_MAP[category] || iPhoneAPI;
+
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const limit = 12;
+  const [filters, setFilters] = useState({
+    storage: [],
+    ram: [],
+    screenSize: [],
+    refreshRate: [],
+  });
+
+  const [expandedSections, setExpandedSections] = useState({
+    storage: true,
+    ram: true,
+    screenSize: true,
+    refreshRate: true,
+  });
+
+  // Sync filters from URL
+  useEffect(() => {
+    const storage = searchParams.get("storage")?.split(",") || [];
+    const ram = searchParams.get("ram")?.split(",") || [];
+    const screenSize = searchParams.get("screenSize")?.split(",") || [];
+    const refreshRate = searchParams.get("refreshRate")?.split(",") || [];
+
+    setFilters({ storage, ram, screenSize, refreshRate });
+  }, [searchParams]);
+
+  // Update URL
+  const updateURL = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    Object.keys(filters).forEach((key) => {
+      if (filters[key].length > 0) params.set(key, filters[key].join(","));
+      else params.delete(key);
+    });
+    params.set("page", page);
+    navigate(`?${params.toString()}`, { replace: true });
+  }, [filters, page, searchParams, navigate]);
+
+  // Fetch products
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const params = {
-        page: pagination.page,
-        limit: pagination.limit,
-        search: searchTerm,
-        status: filters.status || undefined,
-        minPrice: filters.minPrice || undefined,
-        maxPrice: filters.maxPrice || undefined,
-        sort: filters.sort,
-        inStock: filters.inStock,
+        limit,
+        page,
+        model: modelParam || undefined,
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([_, v]) => v.length > 0)
+        ),
       };
 
-      let allProducts = [];
-      let totalCount = 0;
+      const response = await api.get(modelParam || "", { params });
+      const data = response.data?.data;
 
-      if (filters.category) {
-        // Fetch from specific category
-        const api = API_MAP[filters.category];
-        if (api) {
-          const response = await api.getAll(params);
-          const data = response.data.data;
-          allProducts = data.products || [];
-          totalCount = data.total || allProducts.length;
-        }
-      } else {
-        // Fetch from all categories
-        const responses = await Promise.all(
-          CATEGORIES.map((cat) =>
-            API_MAP[cat]
-              .getAll({ ...params, limit: 3 })
-              .catch(() => ({ data: { data: { products: [] } } }))
-          )
-        );
-
-        allProducts = responses
-          .flatMap((r) => r.data.data.products || [])
-          .slice(0, pagination.limit);
-        totalCount = allProducts.length;
-      }
-
-      // Add category info and format prices
-      const formattedProducts = allProducts.map((product) => ({
-        ...product,
-        price: product.price || 0,
-        originalPrice: product.originalPrice || 0,
-        hasVariants: (product.variants?.length || 0) > 0,
-      }));
-
-      setProducts(formattedProducts);
-      setPagination({
-        ...pagination,
-        totalPages: Math.ceil(totalCount / pagination.limit) || 1,
-        total: totalCount,
-      });
-    } catch (error) {
-      console.error("Error fetching products:", error);
+      setProducts(data?.products || []);
+      setTotal(data?.total || data?.products?.length || 0);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError("Không thể tải sản phẩm.");
       setProducts([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [api, modelParam, filters, page, limit]);
 
   useEffect(() => {
     fetchProducts();
-  }, [pagination.page, filters, searchTerm]);
-
+  }, [fetchProducts]);
   useEffect(() => {
-    const category = searchParams.get("category");
-    if (category && category !== filters.category) {
-      setFilters({ ...filters, category });
-    }
-  }, [searchParams]);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [categoryParam, modelParam, page]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setPagination({ ...pagination, page: 1 });
+  // Handlers
+  const handleFilterToggle = (type, value) => {
+    setFilters((prev) => {
+      const newFilters = {
+        ...prev,
+        [type]: prev[type].includes(value)
+          ? prev[type].filter((v) => v !== value)
+          : [...prev[type], value],
+      };
+      const params = new URLSearchParams(searchParams);
+      Object.keys(newFilters).forEach((key) => {
+        if (newFilters[key].length > 0)
+          params.set(key, newFilters[key].join(","));
+        else params.delete(key);
+      });
+      params.set("page", 1);
+      navigate(`?${params.toString()}`, { replace: true });
+      return newFilters;
+    });
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
-    setPagination({ ...pagination, page: 1 });
-
-    if (key === "category") {
-      if (value) {
-        searchParams.set("category", value);
-      } else {
-        searchParams.delete("category");
-      }
-      setSearchParams(searchParams);
-    }
+  const toggleSection = (section) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
   const clearFilters = () => {
-    setFilters({
-      category: "",
-      status: "",
-      minPrice: "",
-      maxPrice: "",
-      sort: "createdAt",
-      inStock: false,
-    });
-    setSearchTerm("");
-    searchParams.delete("category");
-    setSearchParams(searchParams);
-    setPagination({ ...pagination, page: 1 });
+    setFilters({ storage: [], ram: [], screenSize: [], refreshRate: [] });
+    setPage(1);
   };
 
-  const activeFiltersCount = [
-    filters.category,
-    filters.status,
-    filters.minPrice,
-    filters.maxPrice,
-    filters.inStock,
-  ].filter(Boolean).length;
+  const activeFiltersCount = Object.values(filters).reduce(
+    (a, b) => a + b.length,
+    0
+  );
+  const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Sản phẩm</h1>
-        <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="flex flex-col md:flex-row gap-4">
-            <form onSubmit={handleSearch} className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="Tìm kiếm sản phẩm..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </form>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="relative"
-              >
-                <SlidersHorizontal className="w-4 h-4 mr-2" />
-                Bộ lọc
-                {activeFiltersCount > 0 && (
-                  <Badge className="ml-2 px-1.5 py-0.5 text-xs">
-                    {activeFiltersCount}
-                  </Badge>
-                )}
-              </Button>
-
-              <select
-                className="px-4 py-2 border rounded-md"
-                value={filters.sort}
-                onChange={(e) => handleFilterChange("sort", e.target.value)}
-              >
-                <option value="createdAt">Mới nhất</option>
-                <option value="price-asc">Giá tăng dần</option>
-                <option value="price-desc">Giá giảm dần</option>
-                <option value="rating">Đánh giá cao</option>
-                <option value="name">Tên A-Z</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Active Filters */}
-          {activeFiltersCount > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Đang lọc:</span>
-              {filters.category && (
-                <Badge variant="secondary" className="gap-1">
-                  Danh mục: {filters.category}
-                  <button
-                    onClick={() => handleFilterChange("category", "")}
-                    className="ml-1 hover:bg-gray-300 rounded-full"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="text-xs"
-              >
-                Xóa tất cả
-              </Button>
-            </div>
-          )}
-
-          {/* Advanced Filters */}
-          {showFilters && (
-            <div className="border rounded-lg p-4 space-y-4 bg-gray-50">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Danh mục</label>
-                  <select
-                    className="w-full px-3 py-2 border rounded-md"
-                    value={filters.category}
-                    onChange={(e) =>
-                      handleFilterChange("category", e.target.value)
-                    }
-                  >
-                    <option value="">Tất cả danh mục</option>
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="inStock"
-                  checked={filters.inStock}
-                  onChange={(e) =>
-                    handleFilterChange("inStock", e.target.checked)
-                  }
-                  className="w-4 h-4"
-                />
-                <label
-                  htmlFor="inStock"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Chỉ hiển thị sản phẩm còn hàng
-                </label>
-              </div>
-            </div>
-          )}
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {modelParam ? `${category} ${modelParam} Series` : category}
+          </h1>
         </div>
 
-        <div className="mt-4 text-sm text-muted-foreground">
-          Tìm thấy {pagination.total} sản phẩm
-          {filters.category && ` trong danh mục ${filters.category}`}
+        <div className="flex gap-6">
+          {/* Sidebar */}
+          <aside className="hidden lg:block w-64 flex-shrink-0">
+            <div className="bg-white rounded-lg shadow-sm p-4 sticky top-4">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b">
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4" /> Bộ lọc
+                </h2>
+                {activeFiltersCount > 0 && (
+                  <button
+                    onClick={clearFilters}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Xóa {activeFiltersCount}
+                  </button>
+                )}
+              </div>
+
+              {Object.entries(FILTER_OPTIONS).map(([key, options]) => (
+                <div key={key} className="mb-4">
+                  <button
+                    onClick={() => toggleSection(key)}
+                    className="flex items-center justify-between w-full mb-3"
+                  >
+                    <span className="font-medium text-sm">
+                      {key === "storage"
+                        ? "ROM"
+                        : key === "ram"
+                        ? "RAM"
+                        : key === "screenSize"
+                        ? "Màn hình"
+                        : "Tần số quét"}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${
+                        expandedSections[key] ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {expandedSections[key] && (
+                    <div className="space-y-2 pl-1">
+                      {options.map((opt) => (
+                        <label
+                          key={opt}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filters[key].includes(opt)}
+                            onChange={() => handleFilterToggle(key, opt)}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {key !== "refreshRate" && (
+                    <div className="border-t my-4"></div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* Main */}
+          <main className="flex-1 min-w-0">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Tìm thấy <span className="font-semibold">{total}</span> kết quả
+              </p>
+              <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm">
+                <SlidersHorizontal className="w-4 h-4" /> Bộ lọc
+                {activeFiltersCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Loading */}
+            {loading && (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                {[...Array(8)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-2xl shadow-sm p-4 animate-pulse"
+                  >
+                    <div className="aspect-[3/4] bg-gray-200 rounded-xl mb-4"></div>
+                    <div className="h-6 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Error */}
+            {error && !loading && (
+              <div className="text-center py-12 text-red-600">
+                <p>{error}</p>
+                <button
+                  onClick={fetchProducts}
+                  className="mt-2 text-blue-600 underline"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
+            {/* Products Grid – DÙNG ProductCard */}
+            {!loading && !error && products.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                {products.map((product) => {
+                  const isTopSeller = product.isTopSeller || false;
+                  const isTopNew = product.isTopNew || false;
+
+                  return (
+                    <ProductCard
+                      key={product._id}
+                      product={product}
+                      isTopSeller={isTopSeller}
+                      isTopNew={isTopNew}
+                      // Admin callbacks (nếu cần)
+                      // onEdit={() => handleEdit(product)}
+                      // onDelete={() => handleDelete(product._id)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Empty */}
+            {!loading && !error && products.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p>Không tìm thấy sản phẩm.</p>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-8 flex justify-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Trước
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const p = i + 1;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={`px-3 py-1 rounded ${
+                          page === p
+                            ? "bg-blue-600 text-white"
+                            : "bg-white border border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                  {totalPages > 5 && (
+                    <>
+                      <span className="px-2">...</span>
+                      <button
+                        onClick={() => setPage(totalPages)}
+                        className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Sau
+                </button>
+              </div>
+            )}
+          </main>
         </div>
       </div>
-
-      {/* Products Grid */}
-      {isLoading ? (
-        <Loading />
-      ) : products.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground text-lg">
-            Không tìm thấy sản phẩm nào
-          </p>
-          <Button variant="outline" onClick={clearFilters} className="mt-4">
-            Xóa bộ lọc
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-            {products.map((product) => (
-              <ProductCard
-                key={product._id}
-                product={product}
-                showVariantsBadge={product.hasVariants}
-              />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="flex justify-center gap-2">
-              <Button
-                variant="outline"
-                disabled={pagination.page === 1}
-                onClick={() =>
-                  setPagination({ ...pagination, page: pagination.page - 1 })
-                }
-              >
-                Trước
-              </Button>
-              <div className="flex items-center px-4">
-                Trang {pagination.page} / {pagination.totalPages}
-              </div>
-              <Button
-                variant="outline"
-                disabled={pagination.page === pagination.totalPages}
-                onClick={() =>
-                  setPagination({ ...pagination, page: pagination.page + 1 })
-                }
-              >
-                Sau
-              </Button>
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 };

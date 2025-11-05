@@ -14,7 +14,7 @@ const PromoStrip = () => {
     },
     {
       icon: Tag,
-      text: "Samsung mua 1 tặng 1",
+      text: "Iphone mua 1 tặng 1",
       bgColor: "bg-orange-50",
       iconColor: "text-orange-500",
     },

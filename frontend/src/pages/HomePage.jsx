@@ -1,6 +1,7 @@
 // ============================================
 // FILE: src/pages/HomePage.jsx
 // Trang chủ theo phong cách FPT Shop
+// CẬP NHẬT: Hiển thị 4 sản phẩm/hàng trên mobile
 // ============================================
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -110,7 +111,7 @@ const CategoryNav = ({ onCategoryClick, productCounts }) => {
 };
 
 // ============================================
-// NEW ARRIVALS SECTION
+// NEW ARRIVALS SECTION - CẬP NHẬT GRID
 // ============================================
 const NewArrivalsSection = ({
   products,
@@ -138,7 +139,8 @@ const NewArrivalsSection = ({
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
+        {/* CẬP NHẬT: grid-cols-4 cho mobile với padding tối ưu */}
+        <div className="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
@@ -163,7 +165,7 @@ const NewArrivalsSection = ({
 };
 
 // ============================================
-// CATEGORY SECTION
+// CATEGORY SECTION - CẬP NHẬT GRID
 // ============================================
 const CategorySection = ({
   category,
@@ -200,7 +202,8 @@ const CategorySection = ({
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 lg:gap-4">
+        {/* CẬP NHẬT: grid-cols-4 cho mobile với padding tối ưu */}
+        <div className="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
@@ -361,7 +364,10 @@ const HomePage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Banner với Secondary Banners */}
-      <HeroSection currentSlide={currentSlide} />
+      <HeroSection
+        currentSlide={currentSlide}
+        onSlideChange={setCurrentSlide}
+      />
 
       {/* Promo Strip */}
       <PromoStrip />
