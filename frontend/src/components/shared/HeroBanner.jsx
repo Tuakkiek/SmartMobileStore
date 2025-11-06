@@ -92,21 +92,21 @@ const HeroBannerCarousel = ({ onSlideChange }) => {
       alt: "iPhone 17 Pro Max",
       height: 580,
       ctaText: "Tìm hiểu thêm",
-      ctaLink: "/products/iphone-17-pro-max",
+      ctaLink: "/dien-thoai/iphone-17-pro-256gb?sku=00000279",
     },
     {
       imageSrc: "/ipAir.png",
       alt: "iPhone Air",
       height: 580,
       ctaText: "Khám phá ngay",
-      ctaLink: "/products/iphone-air",
+      ctaLink: "/dien-thoai/iphone-air-256gb?sku=00000425",
     },
     {
       imageSrc: "/ip17.png",
       alt: "iPhone 17",
       height: 580,
       ctaText: "Xem chi tiết",
-      ctaLink: "/products/iphone-17",
+      ctaLink: "/dien-thoai/iphone-17-256gb?sku=00000300",
     },
   ];
 

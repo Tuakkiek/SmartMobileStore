@@ -265,11 +265,7 @@ const ProductDetailPage = () => {
           {/* LEFT: Image Gallery - 5 cols */}
           <div className="lg:col-span-5">
             <div className="bg-white rounded-lg overflow-hidden sticky top-4">
-              {/* Free Ship Badge */}
-              <div className="bg-red-600 text-white text-center py-2 text-sm font-semibold flex items-center justify-center gap-2">
-                <Package2 className="w-4 h-4" />
-                Free Ship toàn quốc
-              </div>
+
 
               {/* Main Image */}
               <div className="relative aspect-square bg-white">

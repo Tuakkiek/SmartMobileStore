@@ -10,19 +10,16 @@ const SecondaryBanners = () => {
   const banners = [
     {
       imageSrc: "/ip16e.png",
-      alt: "iPhone 16e",
       link: "/products?category=Accessories",
       height: "220px",
     },
     {
       imageSrc: "/cpuA19.png",
-      alt: "Apple Watch",
       link: "/products?category=AppleWatch",
       height: "220px",
     },
     {
-      imageSrc: "/ip17pm.png",
-      alt: "AirPods Pro",
+      imageSrc: "/macpro14.png",
       link: "/products?category=AirPods",
       height: "220px",
     },
