@@ -1,9 +1,10 @@
 // ============================================
 // FILE: backend/src/controllers/orderController.js
-// ✅ COMPLETE: Order management with multi-model support
+// ✅ COMPLETE: Order management with multi-model support + Promotion Code
 // ============================================
 
 import mongoose from "mongoose";
+import axios from "axios";
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
@@ -75,14 +76,13 @@ export const createOrder = async (req, res) => {
       paymentMethod,
       note,
       useRewardPoints = false,
+      promotionCode,
     } = req.body;
 
     // Lấy giỏ hàng
-    const cart = await Cart.findOne({ customerId: req.user._id }).session(
-      session
-    );
+    const cart = await Cart.findOne({ customerId: req.user._id }).session(session);
 
-    if (!cart || cart.items.length === 0) {
+    if (!cart || cart.items.length, cart.items.length === 0) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -104,9 +104,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      const variant = await models.Variant.findById(item.variantId).session(
-        session
-      );
+      const variant = await models.Variant.findById(item.variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
         return res.status(404).json({
@@ -115,9 +113,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      const product = await models.Product.findById(variant.productId).session(
-        session
-      );
+      const product = await models.Product.findById(variant.productId).session(session);
       if (!product) {
         await session.abortTransaction();
         return res.status(404).json({
@@ -143,7 +139,8 @@ export const createOrder = async (req, res) => {
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
 
-      const itemTotal = variant.price * item.quantity;
+      // ✅ KHÔNG TRỪ DISCOUNT TỪ ITEM
+      const itemTotal = variant.price * item.quantity; // Giá gốc x số lượng
       subtotal += itemTotal;
 
       orderItems.push({
@@ -156,24 +153,57 @@ export const createOrder = async (req, res) => {
         variantStorage: variant.storage,
         variantName: variant.variantName,
         quantity: item.quantity,
-        price: variant.price,
+        price: variant.price, // Giá bán hiện tại
+        originalPrice: variant.originalPrice, // Giá niêm yết (hiển thị gạch ngang)
         total: itemTotal,
         images: variant.images || [],
       });
     }
 
-    // Tính toán tổng tiền
-    const shippingFee = subtotal >= 5000000 ? 0 : 50000;
-    let total = subtotal + shippingFee;
+    // ✅ XỬ LÝ PROMOTION CODE
+    let promotionDiscount = 0;
+    let appliedPromotion = null;
 
-    // Xử lý reward points (nếu có)
+    if (promotionCode) {
+      try {
+        const promoResponse = await axios.post(
+          `${process.env.API_URL}/promotions/apply`,
+          {
+            code: promotionCode,
+            totalAmount: subtotal,
+          },
+          {
+            headers: {
+              Authorization: req.headers.authorization,
+            },
+          }
+        );
+
+        if (promoResponse.data.success) {
+          promotionDiscount = promoResponse.data.data.discountAmount;
+          appliedPromotion = {
+            code: promotionCode,
+            discountAmount: promotionDiscount,
+          };
+        }
+      } catch (promoError) {
+        console.log("Promotion code invalid:", promoError.message);
+        // Không throw lỗi, chỉ bỏ qua
+      }
+    }
+
+    // Tính phí vận chuyển
+    const shippingFee = subtotal >= 5000000 ? 0 : 50000;
+
+    // Tổng tạm tính
+    let total = subtotal + shippingFee - promotionDiscount;
+
+    // Xử lý reward points
     let pointsUsed = 0;
     if (useRewardPoints && req.user.rewardPoints > 0) {
       const maxPoints = Math.min(req.user.rewardPoints, Math.floor(total / 10));
       pointsUsed = maxPoints;
       total -= pointsUsed;
-
-      // Trừ điểm
       req.user.rewardPoints -= pointsUsed;
       await req.user.save({ session });
     }
@@ -189,6 +219,8 @@ export const createOrder = async (req, res) => {
           note,
           subtotal,
           shippingFee,
+          promotionDiscount,     // ✅ THÊM
+          appliedPromotion,      // ✅ THÊM
           pointsUsed,
           total,
           status: "PENDING",
@@ -272,7 +304,6 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    // Kiểm tra quyền
     if (
       order.customerId._id.toString() !== req.user._id.toString() &&
       !["ADMIN", "ORDER_MANAGER"].includes(req.user.role)
@@ -314,7 +345,6 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    // Kiểm tra quyền
     if (order.customerId.toString() !== req.user._id.toString()) {
       await session.abortTransaction();
       return res.status(403).json({
@@ -323,7 +353,6 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    // Chỉ được hủy khi đơn hàng đang PENDING
     if (order.status !== "PENDING") {
       await session.abortTransaction();
       return res.status(400).json({
@@ -336,33 +365,23 @@ export const cancelOrder = async (req, res) => {
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
-        const variant = await models.Variant.findById(item.variantId).session(
-          session
-        );
+        const variant = await models.Variant.findById(item.variantId).session(session);
         if (variant) {
           variant.stock += item.quantity;
           await variant.save({ session });
         }
 
-        const product = await models.Product.findById(item.productId).session(
-          session
-        );
+        const product = await models.Product.findById(item.productId).session(session);
         if (product) {
-          product.salesCount = Math.max(
-            0,
-            (product.salesCount || 0) - item.quantity
-          );
+          product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
           await product.save({ session });
         }
       }
     }
 
-    // Hoàn lại reward points (nếu có)
+    // Hoàn lại reward points
     if (order.pointsUsed > 0) {
-      const user = await mongoose
-        .model("User")
-        .findById(order.customerId)
-        .session(session);
+      const user = await mongoose.model("User").findById(order.customerId).session(session);
       if (user) {
         user.rewardPoints += order.pointsUsed;
         await user.save({ session });
@@ -398,14 +417,7 @@ export const cancelOrder = async (req, res) => {
 // ============================================
 export const getAllOrders = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      status,
-      search,
-      startDate,
-      endDate,
-    } = req.query;
+    const { page = 1, limit = 20, status, search, startDate, endDate } = req.query;
     const query = {};
 
     if (status) query.status = status;
@@ -464,7 +476,6 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Validate status transition
     const validTransitions = {
       PENDING: ["CONFIRMED", "CANCELLED"],
       CONFIRMED: ["SHIPPING", "CANCELLED"],
@@ -483,7 +494,6 @@ export const updateOrderStatus = async (req, res) => {
 
     order.status = status;
 
-    // Cập nhật timestamps
     if (status === "CONFIRMED") order.confirmedAt = new Date();
     if (status === "SHIPPING") order.shippingAt = new Date();
     if (status === "DELIVERED") order.deliveredAt = new Date();

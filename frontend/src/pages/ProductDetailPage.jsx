@@ -128,9 +128,9 @@ const ProductDetailPage = () => {
       const newUrl = `/${categorySlug}/${fullSlug
         .split("-")
         .slice(0, -1)
-        .join("-")}-${variant[keyField].toLowerCase().replace(/\s+/g, "")}?sku=${
-        variant.sku
-      }`;
+        .join("-")}-${variant[keyField]
+        .toLowerCase()
+        .replace(/\s+/g, "")}?sku=${variant.sku}`;
       window.history.replaceState(null, "", newUrl);
       updateVariantUI(variant);
     } else {
@@ -265,8 +265,6 @@ const ProductDetailPage = () => {
           {/* LEFT: Image Gallery - 5 cols */}
           <div className="lg:col-span-5">
             <div className="bg-white rounded-lg overflow-hidden sticky top-4">
-
-
               {/* Main Image */}
               <div className="relative aspect-square bg-white">
                 <img
@@ -360,10 +358,10 @@ const ProductDetailPage = () => {
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                     <span className="font-semibold">
-                      {product.averageRating }
+                      {product.averageRating}
                     </span>
                     <span className="text-gray-600">
-                      {product.totalReviews } đánh giá
+                      {product.totalReviews} đánh giá
                     </span>
                   </div>
                 </div>
@@ -387,7 +385,9 @@ const ProductDetailPage = () => {
                     return (
                       <button
                         key={option}
-                        onClick={() => hasStock && handleVariantSelect(variant, false)}
+                        onClick={() =>
+                          hasStock && handleVariantSelect(variant, false)
+                        }
                         disabled={!hasStock}
                         className={`relative px-6 py-3 border-2 rounded-lg font-medium transition-all ${
                           isSelected
@@ -443,7 +443,8 @@ const ProductDetailPage = () => {
                       <button
                         key={color}
                         onClick={() =>
-                          hasStock && handleVariantSelect(availableVariant, true)
+                          hasStock &&
+                          handleVariantSelect(availableVariant, true)
                         }
                         disabled={!hasStock}
                         className={`relative flex items-center gap-3 p-3 border-2 rounded-lg transition-all ${
@@ -511,8 +512,6 @@ const ProductDetailPage = () => {
                     </>
                   )}
                 </div>
-
-
               </div>
 
               {/* Promotion Box */}
@@ -534,8 +533,8 @@ const ProductDetailPage = () => {
                   <li className="flex items-start gap-2">
                     <span className="text-red-600 mt-1">•</span>
                     <span>
-                      Giảm thêm đến 2.5 triệu khi mua kèm SIM FPT FVIP150/F299/F399
-                      6-12 tháng{" "}
+                      Giảm thêm đến 2.5 triệu khi mua kèm SIM FPT
+                      FVIP150/F299/F399 6-12 tháng{" "}
                       <button className="text-blue-600 hover:underline">
                         Xem chi tiết
                       </button>
@@ -553,9 +552,20 @@ const ProductDetailPage = () => {
                 <button
                   onClick={handleAddToCart}
                   disabled={cartLoading || selectedVariant.stock === 0}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
                 >
                   <ShoppingCart className="w-5 h-5" />
+                  {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleAddToCart();
+                    setTimeout(() => navigate("/checkout"), 500);
+                  }}
+                  disabled={cartLoading || selectedVariant.stock === 0}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                >
                   {selectedVariant.stock === 0 ? "Hết hàng" : "Mua ngay"}
                 </button>
               </div>
@@ -568,8 +578,6 @@ const ProductDetailPage = () => {
                   </p>
                 </div>
               )}
-
-       
             </div>
           </div>
         </div>

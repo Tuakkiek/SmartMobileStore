@@ -1,92 +1,102 @@
 // models/Order.js
 import mongoose from "mongoose";
 
-const orderItemSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Product",
-    required: true,
+const orderItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
+    },
+    productName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    specifications: {
+      type: Object,
+      default: {},
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
   },
-  productName: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  specifications: {
-    type: Object,
-    default: {},
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  discount: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 100,
-  },
-}, { _id: false });
+  { _id: false }
+);
 
-const addressSchema = new mongoose.Schema({
-  fullName: {
-    type: String,
-    required: true,
-    trim: true,
+const addressSchema = new mongoose.Schema(
+  {
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    phoneNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    province: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    district: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    commune: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    detailAddress: {
+      type: String,
+      required: true,
+      trim: true,
+    },
   },
-  phoneNumber: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  province: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  district: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  commune: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  detailAddress: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-}, { _id: false });
+  { _id: false }
+);
 
-const statusHistorySchema = new mongoose.Schema({
-  status: {
-    type: String,
-    enum: ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "CANCELLED"],
-    required: true,
+const statusHistorySchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: [
+        "PENDING",
+        "CONFIRMED",
+        "PROCESSING",
+        "SHIPPING",
+        "DELIVERED",
+        "CANCELLED",
+      ],
+      required: true,
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    note: {
+      type: String,
+      trim: true,
+    },
   },
-  updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  note: {
-    type: String,
-    trim: true,
-  },
-}, { _id: false });
+  { _id: false }
+);
 
 const orderSchema = new mongoose.Schema(
   {
@@ -104,7 +114,7 @@ const orderSchema = new mongoose.Schema(
     items: {
       type: [orderItemSchema],
       validate: {
-        validator: function(items) {
+        validator: function (items) {
           return items && items.length > 0;
         },
         message: "Order must have at least one item",
@@ -121,7 +131,14 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "CANCELLED"],
+      enum: [
+        "PENDING",
+        "CONFIRMED",
+        "PROCESSING",
+        "SHIPPING",
+        "DELIVERED",
+        "CANCELLED",
+      ],
       default: "PENDING",
     },
     paymentMethod: {
@@ -142,6 +159,15 @@ const orderSchema = new mongoose.Schema(
       type: [statusHistorySchema],
       default: [],
     },
+    promotionDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    appliedPromotion: {
+      code: { type: String },
+      discountAmount: { type: Number },
+    },
   },
   {
     timestamps: true,
@@ -156,12 +182,15 @@ orderSchema.pre("validate", async function (next) {
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const day = date.getDate().toString().padStart(2, "0");
-    
+
     // Tìm đơn hàng cuối cùng trong ngày
-    const lastOrder = await mongoose.model("Order").findOne({
-      orderNumber: new RegExp(`^ORD${year}${month}${day}`),
-    }).sort({ orderNumber: -1 });
-    
+    const lastOrder = await mongoose
+      .model("Order")
+      .findOne({
+        orderNumber: new RegExp(`^ORD${year}${month}${day}`),
+      })
+      .sort({ orderNumber: -1 });
+
     let sequence = 1;
     if (lastOrder && lastOrder.orderNumber) {
       const lastSequence = parseInt(lastOrder.orderNumber.slice(-4));
@@ -169,10 +198,12 @@ orderSchema.pre("validate", async function (next) {
         sequence = lastSequence + 1;
       }
     }
-    
-    this.orderNumber = `ORD${year}${month}${day}${sequence.toString().padStart(4, "0")}`;
+
+    this.orderNumber = `ORD${year}${month}${day}${sequence
+      .toString()
+      .padStart(4, "0")}`;
   }
-  
+
   next();
 });
 
@@ -193,13 +224,13 @@ orderSchema.pre("save", function (next) {
 orderSchema.methods.updateStatus = async function (status, userId, note) {
   console.log("Updating status to:", status, "current status:", this.status);
   this.status = status;
-  
+
   this.addStatusHistory(status, userId, note);
-  
+
   if (status === "DELIVERED" && this.paymentMethod === "COD") {
     this.paymentStatus = "PAID";
   }
-  
+
   const saved = await this.save();
   console.log("Saved status:", saved.status);
   return saved;
@@ -209,14 +240,14 @@ orderSchema.methods.cancel = async function (userId, note) {
   if (this.status === "DELIVERED") {
     throw new Error("Cannot cancel delivered order");
   }
-  
+
   if (this.status === "CANCELLED") {
     throw new Error("Order is already cancelled");
   }
-  
+
   this.status = "CANCELLED";
   this.addStatusHistory("CANCELLED", userId, note || "Order cancelled");
-  
+
   return this.save();
 };
 
@@ -224,7 +255,7 @@ orderSchema.methods.cancel = async function (userId, note) {
 orderSchema.methods.calculateTotal = function () {
   return this.items.reduce((total, item) => {
     const priceAfterDiscount = item.price * (1 - item.discount / 100);
-    return total + (priceAfterDiscount * item.quantity);
+    return total + priceAfterDiscount * item.quantity;
   }, 0);
 };
 

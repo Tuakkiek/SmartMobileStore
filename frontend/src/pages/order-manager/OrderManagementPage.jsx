@@ -120,9 +120,9 @@ const OrdersPage = () => {
   const getNextStatus = (currentStatus) => {
     const statusFlow = {
       PENDING: "CONFIRMED",
-      CONFIRMED: "PROCESSING",
-      PROCESSING: "SHIPPING",
+      CONFIRMED: "SHIPPING",
       SHIPPING: "DELIVERED",
+      DELIVERED: "COMPLETED",
     };
     return statusFlow[currentStatus] || currentStatus;
   };
@@ -153,9 +153,9 @@ const OrdersPage = () => {
     const icons = {
       PENDING: Clock,
       CONFIRMED: CheckCircle,
-      PROCESSING: Package,
       SHIPPING: Truck,
       DELIVERED: CheckCircle,
+      COMPLETED: CheckCircle,
       CANCELLED: XCircle,
     };
     return icons[status] || Clock;
@@ -166,10 +166,12 @@ const OrdersPage = () => {
       total: orders.length,
       pending: orders.filter((o) => o.status === "PENDING").length,
       processing: orders.filter(
-        (o) => o.status === "CONFIRMED" || o.status === "PROCESSING"
+        (o) => o.status === "CONFIRMED" || o.status === "SHIPPING"
       ).length,
       shipping: orders.filter((o) => o.status === "SHIPPING").length,
-      delivered: orders.filter((o) => o.status === "DELIVERED").length,
+      delivered: orders.filter((o) =>
+        ["DELIVERED", "COMPLETED"].includes(o.status)
+      ).length,
     };
     return stats;
   };
@@ -260,9 +262,9 @@ const OrdersPage = () => {
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
                 <SelectItem value="PENDING">Chờ xử lý</SelectItem>
                 <SelectItem value="CONFIRMED">Đã xác nhận</SelectItem>
-                <SelectItem value="PROCESSING">Đang xử lý</SelectItem>
                 <SelectItem value="SHIPPING">Đang giao</SelectItem>
                 <SelectItem value="DELIVERED">Đã giao</SelectItem>
+                <SelectItem value="COMPLETED">Hoàn thành</SelectItem>
                 <SelectItem value="CANCELLED">Đã hủy</SelectItem>
               </SelectContent>
             </Select>
@@ -346,7 +348,7 @@ const OrdersPage = () => {
                   <div className="flex flex-col items-end gap-3">
                     <div className="text-right">
                       <p className="text-2xl font-bold text-primary">
-                        {formatPrice(order.totalAmount)}
+                        {formatPrice(order.total)}
                       </p>
                       <Badge
                         variant={
@@ -369,6 +371,7 @@ const OrdersPage = () => {
                         Chi tiết
                       </Button>
                       {order.status !== "DELIVERED" &&
+                        order.status !== "COMPLETED" &&
                         order.status !== "CANCELLED" && (
                           <Button
                             size="sm"
@@ -495,9 +498,9 @@ const OrdersPage = () => {
                         className="flex items-center gap-4 pb-4 border-b last:border-0"
                       >
                         <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                          {item.productId?.images?.[0] ? (
+                          {item.images?.[0] ? (
                             <img
-                              src={item.productId.images[0]}
+                              src={item.images[0]}
                               alt={item.productName}
                               className="w-full h-full object-cover rounded"
                             />
@@ -508,32 +511,83 @@ const OrdersPage = () => {
                         <div className="flex-1">
                           <h4 className="font-semibold">{item.productName}</h4>
                           <p className="text-sm text-muted-foreground">
+                            {item.variantColor && `${item.variantColor} • `}
+                            {item.variantStorage && `${item.variantStorage} • `}
                             {formatPrice(item.price)} x {item.quantity}
                           </p>
-                          {item.discount > 0 && (
-                            <Badge variant="destructive" className="mt-1">
-                              -{item.discount}%
-                            </Badge>
+                          {item.originalPrice > item.price && (
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatPrice(item.originalPrice)}
+                            </p>
                           )}
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">
-                            {formatPrice(
-                              item.price *
-                                item.quantity *
-                                (1 - item.discount / 100)
-                            )}
+                            {formatPrice(item.total)}
                           </p>
                         </div>
                       </div>
                     ))}
                   </div>
 
+                  {/* Applied Promotion */}
+                  {selectedOrder.appliedPromotion && (
+                    <Card className="bg-green-50 border-green-200 mt-6">
+                      <CardHeader>
+                        <CardTitle className="text-base text-green-700">
+                          Mã giảm giá đã áp dụng
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="font-semibold">Mã:</span>
+                            <span className="font-mono">
+                              {selectedOrder.appliedPromotion.code}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-semibold">Giảm giá:</span>
+                            <span className="text-green-600 font-bold">
+                              -
+                              {formatPrice(
+                                selectedOrder.appliedPromotion.discountAmount
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Order Summary */}
                   <div className="mt-4 pt-4 border-t space-y-2">
-                    <div className="flex justify-between text-base">
+                    <div className="flex justify-between text-sm">
+                      <span>Tạm tính:</span>
+                      <span>{formatPrice(selectedOrder.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Phí vận chuyển:</span>
+                      <span>{formatPrice(selectedOrder.shippingFee)}</span>
+                    </div>
+                    {selectedOrder.promotionDiscount > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>Giảm giá:</span>
+                        <span>
+                          -{formatPrice(selectedOrder.promotionDiscount)}
+                        </span>
+                      </div>
+                    )}
+                    {selectedOrder.pointsUsed > 0 && (
+                      <div className="flex justify-between text-sm text-blue-600">
+                        <span>Điểm tích lũy:</span>
+                        <span>-{formatPrice(selectedOrder.pointsUsed)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base font-bold pt-2 border-t">
                       <span>Tổng cộng:</span>
-                      <span className="font-bold text-xl text-primary">
-                        {formatPrice(selectedOrder.totalAmount)}
+                      <span className="text-xl text-red-600">
+                        {formatPrice(selectedOrder.total)}
                       </span>
                     </div>
                   </div>
@@ -585,13 +639,13 @@ const OrdersPage = () => {
               </Card>
 
               {/* Notes */}
-              {selectedOrder.notes && (
+              {selectedOrder.note && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Ghi chú</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm">{selectedOrder.notes}</p>
+                    <p className="text-sm">{selectedOrder.note}</p>
                   </CardContent>
                 </Card>
               )}
@@ -644,9 +698,9 @@ const OrdersPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CONFIRMED">Đã xác nhận</SelectItem>
-                  <SelectItem value="PROCESSING">Đang xử lý</SelectItem>
                   <SelectItem value="SHIPPING">Đang giao hàng</SelectItem>
                   <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
+                  <SelectItem value="COMPLETED">Hoàn thành</SelectItem>
                   <SelectItem value="CANCELLED">Hủy đơn</SelectItem>
                 </SelectContent>
               </Select>
