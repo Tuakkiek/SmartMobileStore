@@ -81,7 +81,6 @@ promotionSchema.methods.incrementUsage = async function () {
 /* ========================================
    INDEXES (tối ưu query)
    ======================================== */
-promotionSchema.index({ code: 1 }); // Tìm nhanh theo code
 promotionSchema.index({ startDate: 1, endDate: 1 }); // Query mã active
 promotionSchema.index({ createdBy: 1 }); // Admin xem mã của mình
 
