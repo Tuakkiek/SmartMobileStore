@@ -1,6 +1,8 @@
 // ============================================
 // FILE: src/pages/customer/OrderDetailPage.jsx
+// COMPLETE: Full variant info + promotion + accurate total
 // ============================================
+
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,7 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loading } from "@/components/shared/Loading";
 import { ArrowLeft, MapPin, CreditCard, Package } from "lucide-react";
 import { orderAPI } from "@/lib/api";
-import { formatPrice, formatDate, getStatusColor, getStatusText } from "@/lib/utils";
+import {
+  formatPrice,
+  formatDate,
+  getStatusColor,
+  getStatusText,
+} from "@/lib/utils";
 
 const OrderDetailPage = () => {
   const { id } = useParams();
@@ -34,12 +41,12 @@ const OrderDetailPage = () => {
   };
 
   const handleCancelOrder = async () => {
-    if (!confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) return;
+    if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) return;
 
     setIsCancelling(true);
     try {
       await orderAPI.cancel(id);
-      fetchOrder();
+      await fetchOrder();
     } catch (error) {
       alert(error.response?.data?.message || "Hủy đơn hàng thất bại");
     } finally {
@@ -55,6 +62,9 @@ const OrderDetailPage = () => {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <p>Không tìm thấy đơn hàng</p>
+        <Button onClick={() => navigate("/orders")} className="mt-4">
+          Quay lại danh sách
+        </Button>
       </div>
     );
   }
@@ -99,30 +109,61 @@ const OrderDetailPage = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {order.items.map((item) => (
-                <div key={item.productId._id} className="flex gap-4 pb-4 border-b last:border-0">
+                <div
+                  key={item.variantId || item._id}
+                  className="flex gap-4 pb-4 border-b last:border-0"
+                >
                   <img
-                    src={item.productId?.images?.[0] || "/placeholder.png"}
+                    src={item.images?.[0] || "/placeholder.png"}
                     alt={item.productName}
                     className="w-20 h-20 object-cover rounded"
                   />
                   <div className="flex-1">
                     <h4 className="font-medium mb-1">{item.productName}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {item.specifications?.color && `Màu: ${item.specifications.color}`}
-                      {item.specifications?.storage && ` - ${item.specifications.storage}`}
-                    </p>
+
+                    {/* VARIANT INFO */}
+                    <div className="flex gap-2 text-sm text-muted-foreground mb-1">
+                      {item.variantColor && (
+                        <span>Màu: {item.variantColor}</span>
+                      )}
+                      {item.variantStorage && (
+                        <span>• {item.variantStorage}</span>
+                      )}
+                      {item.variantConnectivity && (
+                        <span>• {item.variantConnectivity}</span>
+                      )}
+                      {item.variantName && <span>• {item.variantName}</span>}
+                    </div>
+
                     <p className="text-sm mt-1">Số lượng: {item.quantity}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-medium">{formatPrice(item.price)}</p>
-                    {item.discount > 0 && (
+                    {item.originalPrice > item.price && (
                       <p className="text-sm text-muted-foreground line-through">
-                        {formatPrice(item.price / (1 - item.discount / 100))}
+                        {formatPrice(item.originalPrice)}
                       </p>
                     )}
                   </div>
                 </div>
               ))}
+
+              {/* PROMOTION BOX NẾU CÓ */}
+              {order.appliedPromotion && (
+                <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-green-700">
+                        Mã giảm giá: {order.appliedPromotion.code}
+                      </p>
+                      <p className="text-sm text-green-600">
+                        Giảm:{" "}
+                        {formatPrice(order.appliedPromotion.discountAmount)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -135,13 +176,17 @@ const OrderDetailPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium mb-1">{order.shippingAddress.fullName}</p>
+              <p className="font-medium mb-1">
+                {order.shippingAddress.fullName}
+              </p>
               <p className="text-sm text-muted-foreground mb-1">
                 {order.shippingAddress.phoneNumber}
               </p>
               <p className="text-sm text-muted-foreground">
-                {order.shippingAddress.detailAddress}, {order.shippingAddress.commune},{" "}
-                {order.shippingAddress.district}, {order.shippingAddress.province}
+                {order.shippingAddress.detailAddress},{" "}
+                {order.shippingAddress.commune},{" "}
+                {order.shippingAddress.district},{" "}
+                {order.shippingAddress.province}
               </p>
             </CardContent>
           </Card>
@@ -175,9 +220,11 @@ const OrderDetailPage = () => {
                 {order.statusHistory?.map((history, index) => (
                   <div key={index} className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${
-                        index === 0 ? "bg-primary" : "bg-muted"
-                      }`} />
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          index === 0 ? "bg-primary" : "bg-muted"
+                        }`}
+                      />
                       {index < order.statusHistory.length - 1 && (
                         <div className="w-0.5 h-full bg-muted mt-1" />
                       )}
@@ -207,20 +254,31 @@ const OrderDetailPage = () => {
               <CardTitle>Tổng quan đơn hàng</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Tổng tiền chi tiết */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tạm tính</span>
-                  <span>{formatPrice(order.totalAmount)}</span>
+                  <span>{formatPrice(order.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Phí vận chuyển</span>
-                  <span className="text-green-600">Miễn phí</span>
+                  <span className="text-green-600">
+                    {order.shippingFee === 0
+                      ? "Miễn phí"
+                      : formatPrice(order.shippingFee)}
+                  </span>
                 </div>
+                {order.promotionDiscount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Giảm giá</span>
+                    <span>-{formatPrice(order.promotionDiscount)}</span>
+                  </div>
+                )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
                     <span className="text-primary">
-                      {formatPrice(order.totalAmount)}
+                      {formatPrice(order.total)}
                     </span>
                   </div>
                 </div>
@@ -237,10 +295,10 @@ const OrderDetailPage = () => {
                 </Button>
               )}
 
-              {order.notes && (
+              {order.note && (
                 <div className="border-t pt-4">
                   <h4 className="font-medium mb-2">Ghi chú</h4>
-                  <p className="text-sm text-muted-foreground">{order.notes}</p>
+                  <p className="text-sm text-muted-foreground">{order.note}</p>
                 </div>
               )}
             </CardContent>

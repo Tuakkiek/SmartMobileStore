@@ -1,5 +1,8 @@
+// ============================================
 // FILE: src/store/cartStore.js
-// ✅ VARIANTS SUPPORT: addToCart(variantId, quantity)
+// FIXED: Thiếu variantId hoặc productType
+// ============================================
+
 import { create } from "zustand";
 import { cartAPI } from "@/lib/api";
 
@@ -19,12 +22,28 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // ✅ UPDATED: addToCart nhận variantId thay vì productId
-  addToCart: async (variantId, quantity = 1) => {
+  // FIXED: addToCart - BẮT BUỘC variantId + productType
+  addToCart: async (variantId, quantity = 1, productType) => {
+    // VALIDATE TRƯỚC KHI GỌI API
+    if (!variantId || !productType) {
+      const message = "Thiếu variantId hoặc productType";
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
+
+    if (!["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"].includes(productType)) {
+      const message = "productType không hợp lệ";
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
+
     set({ isLoading: true, error: null });
     try {
-      // ✅ GỬI { variantId, quantity }
-      const response = await cartAPI.addToCart({ variantId, quantity });
+      const response = await cartAPI.addToCart({
+        variantId,
+        quantity,
+        productType, // ĐẢM BẢO GỬI
+      });
       set({ cart: response.data.data, isLoading: false });
       return { success: true, message: response.data.message };
     } catch (error) {
@@ -34,8 +53,11 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // ✅ UPDATED: updateCartItem nhận variantId
   updateCartItem: async (variantId, quantity) => {
+    if (!variantId || quantity < 1) {
+      return { success: false };
+    }
+
     set({ isLoading: true, error: null });
     try {
       const response = await cartAPI.updateItem({ variantId, quantity });
@@ -48,8 +70,11 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // ✅ UPDATED: removeFromCart nhận variantId
   removeFromCart: async (variantId) => {
+    if (!variantId) {
+      return { success: false };
+    }
+
     set({ isLoading: true, error: null });
     try {
       const response = await cartAPI.removeItem(variantId);
@@ -62,7 +87,6 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // Clear cart
   clearCart: async () => {
     set({ isLoading: true, error: null });
     try {
@@ -76,30 +100,22 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // ✅ UPDATED: getTotal - DÙNG variant.price
   getTotal: () => {
     const { cart } = get();
-    if (!cart || !cart.items) return 0;
-    
-    return cart.items.reduce((total, item) => {
-      return total + (item.price * item.quantity);
-    }, 0);
+    if (!cart || !Array.isArray(cart.items)) return 0;
+    return cart.items.reduce((total, item) => total + (item.price * item.quantity), 0);
   },
 
-  // Get item count
   getItemCount: () => {
     const { cart } = get();
-    if (!cart || !cart.items) return 0;
-    
+    if (!cart || !Array.isArray(cart.items)) return 0;
     return cart.items.reduce((count, item) => count + item.quantity, 0);
   },
 
-  // Get item by variantId
   getItemByVariant: (variantId) => {
     const { cart } = get();
-    return cart.items.find(item => item.variantId === variantId);
+    return cart?.items?.find(item => item.variantId === variantId);
   },
 
-  // Clear error
   clearError: () => set({ error: null }),
 }));

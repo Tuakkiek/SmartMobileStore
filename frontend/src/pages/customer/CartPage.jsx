@@ -1,6 +1,8 @@
 // ============================================
 // FILE: src/pages/customer/CartPage.jsx
+// COMPLETE: Hiển thị đầy đủ variant info + discount badge
 // ============================================
+
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,18 +14,20 @@ import { formatPrice } from "@/lib/utils";
 
 const CartPage = () => {
   const navigate = useNavigate();
-  const { cart, isLoading, getCart, updateCartItem, removeFromCart, getTotal } = useCartStore();
+  const { cart, isLoading, getCart, updateCartItem, removeFromCart, getTotal } =
+    useCartStore();
 
   useEffect(() => {
     getCart();
-  }, []);
+  }, [getCart]);
 
-  const handleUpdateQuantity = async (productId, newQuantity) => {
-    await updateCartItem(productId, newQuantity);
+  const handleUpdateQuantity = async (variantId, newQuantity) => {
+    if (newQuantity < 1) return;
+    await updateCartItem(variantId, newQuantity);
   };
 
-  const handleRemove = async (productId) => {
-    await removeFromCart(productId);
+  const handleRemove = async (variantId) => {
+    await removeFromCart(variantId);
   };
 
   if (isLoading && !cart) {
@@ -55,23 +59,58 @@ const CartPage = () => {
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-4">
             {items.map((item) => (
-              <Card key={item.productId._id}>
+              <Card key={item.variantId}>
                 <CardContent className="p-4">
                   <div className="flex gap-4">
+                    {/* Image */}
                     <img
-                      src={item.productId?.images?.[0] || "/placeholder.png"}
-                      alt={item.productId?.name}
+                      src={item.images?.[0] || "/placeholder.png"}
+                      alt={item.productName}
                       className="w-24 h-24 object-cover rounded-md"
                     />
 
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1">
-                        {item.productId?.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {formatPrice(item.price)}
-                      </p>
+                      {/* Product Name */}
+                      <h3 className="font-semibold mb-1">{item.productName}</h3>
 
+                      {/* VARIANT INFO */}
+                      <div className="flex gap-3 text-sm text-muted-foreground mb-2">
+                        {item.variantColor && (
+                          <span>Màu: {item.variantColor}</span>
+                        )}
+                        {item.variantStorage && (
+                          <span>• {item.variantStorage}</span>
+                        )}
+                        {item.variantConnectivity && (
+                          <span>• {item.variantConnectivity}</span>
+                        )}
+                        {item.variantName && <span>• {item.variantName}</span>}
+                      </div>
+
+                      {/* PRICE WITH DISCOUNT BADGE */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg font-semibold text-red-600">
+                          {formatPrice(item.price)}
+                        </span>
+                        {item.originalPrice > item.price && (
+                          <>
+                            <span className="text-sm text-muted-foreground line-through">
+                              {formatPrice(item.originalPrice)}
+                            </span>
+                            <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded">
+                              -
+                              {Math.round(
+                                ((item.originalPrice - item.price) /
+                                  item.originalPrice) *
+                                  100
+                              )}
+                              %
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Quantity Controls + Total + Remove */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center border rounded-md">
                           <Button
@@ -79,24 +118,40 @@ const CartPage = () => {
                             size="icon"
                             onClick={() =>
                               handleUpdateQuantity(
-                                item.productId._id,
+                                item.variantId,
+                                item.quantity - 1
+                              )
+                            }
+                            disabled={item.quantity <= 1}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="px-4 min-w-[40px] text-center">
+                            {item.quantity}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              handleUpdateQuantity(
+                                item.variantId,
                                 item.quantity + 1
                               )
                             }
-                            disabled={item.quantity >= item.productId?.quantity}
+                            disabled={item.quantity >= item.stock}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
                         </div>
 
                         <div className="flex items-center gap-4">
-                          <span className="font-semibold">
+                          <span className="font-semibold text-lg">
                             {formatPrice(item.price * item.quantity)}
                           </span>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleRemove(item.productId._id)}
+                            onClick={() => handleRemove(item.variantId)}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -121,8 +176,12 @@ const CartPage = () => {
                     <span>{formatPrice(total)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Phí vận chuyển</span>
-                    <span className="text-green-600">Miễn phí</span>
+                    <span className="text-muted-foreground">
+                      Phí vận chuyển
+                    </span>
+                    <span className="text-green-600">
+                      {total >= 5000000 ? "Miễn phí" : "50.000đ"}
+                    </span>
                   </div>
                   <div className="border-t pt-2">
                     <div className="flex justify-between text-lg font-semibold">

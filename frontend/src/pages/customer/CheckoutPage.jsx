@@ -1,6 +1,8 @@
 // ============================================
 // FILE: src/pages/customer/CheckoutPage.jsx
+// COMPLETE: Checkout with promotion code, accurate calculation & UX
 // ============================================
+
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,7 +14,7 @@ import { Loading } from "@/components/shared/Loading";
 import { useCartStore } from "@/store/cartStore";
 import { orderAPI, promotionAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
-import { toast } from "sonner"; // hoặc react-hot-toast nếu dùng
+import { toast } from "sonner";
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -42,10 +44,11 @@ const CheckoutPage = () => {
     getCart();
   }, [getCart]);
 
-  // Tính toán subtotal từ giỏ hàng
-  const subtotal = cart.items.reduce((sum, item) => {
-    return sum + item.price * item.quantity;
-  }, 0);
+  // Tính toán subtotal từ PRICE, không trừ discount
+  const subtotal =
+    cart?.items?.reduce((sum, item) => {
+      return sum + item.price * item.quantity;
+    }, 0) || 0;
 
   // Phí vận chuyển
   const shippingFee = subtotal >= 5000000 ? 0 : 50000;
@@ -93,6 +96,7 @@ const CheckoutPage = () => {
     setAppliedPromotion(null);
     setPromotionCode("");
     setPromotionError("");
+    toast.info("Đã xóa mã giảm giá");
   };
 
   // Xử lý đặt hàng
@@ -130,13 +134,15 @@ const CheckoutPage = () => {
         },
         paymentMethod: formData.paymentMethod,
         note: formData.note,
-        promotionCode: appliedPromotion?.code || undefined, // Gửi mã nếu có
+        promotionCode: appliedPromotion?.code || undefined, // GỬI MÃ NẾU CÓ
       };
 
       const response = await orderAPI.create(orderData);
+      toast.success("Đặt hàng thành công!");
       navigate(`/orders/${response.data.data.order._id}`);
     } catch (error) {
       setError(error.response?.data?.message || "Đặt hàng thất bại");
+      toast.error("Đặt hàng thất bại");
     } finally {
       setIsLoading(false);
     }
@@ -243,8 +249,8 @@ const CheckoutPage = () => {
                   <textarea
                     id="note"
                     name="note"
-                    className="w-full min-h-[100px] px-3 py-2 border rounded-md"
-                    placeholder="Ghi chú cho đơn hàng..."
+                    className="w-full min-h-[100px] px-3 py-2 border rounded-md resize-none"
+                    placeholder="Ghi chú cho đơn hàng (ví dụ: giao giờ hành chính)..."
                     value={formData.note}
                     onChange={handleChange}
                   />
@@ -257,14 +263,14 @@ const CheckoutPage = () => {
                 <CardTitle>Phương thức thanh toán</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <label className="flex items-center space-x-3 cursor-pointer">
+                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="COD"
                     checked={formData.paymentMethod === "COD"}
                     onChange={handleChange}
-                    className="w-4 h-4"
+                    className="w-4 h-4 text-primary"
                   />
                   <div>
                     <p className="font-medium">
@@ -276,14 +282,14 @@ const CheckoutPage = () => {
                   </div>
                 </label>
 
-                <label className="flex items-center space-x-3 cursor-pointer">
+                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="BANK_TRANSFER"
                     checked={formData.paymentMethod === "BANK_TRANSFER"}
                     onChange={handleChange}
-                    className="w-4 h-4"
+                    className="w-4 h-4 text-primary"
                   />
                   <div>
                     <p className="font-medium">Chuyển khoản ngân hàng</p>
@@ -303,22 +309,32 @@ const CheckoutPage = () => {
                 <CardTitle>Đơn hàng</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-64 overflow-y-auto">
                   {cart.items.map((item) => (
                     <div
-                      key={item.variantId || item.productId._id}
-                      className="flex gap-3"
+                      key={item.variantId}
+                      className="flex gap-3 items-center"
                     >
                       <img
                         src={item.images?.[0] || "/placeholder.png"}
                         alt={item.productName}
-                        className="w-16 h-16 object-cover rounded"
+                        className="w-14 h-14 object-cover rounded"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
                           {item.productName}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
+                          {[
+                            item.variantColor,
+                            item.variantStorage,
+                            item.variantConnectivity,
+                            item.variantName,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
                           SL: {item.quantity}
                         </p>
                       </div>
@@ -344,22 +360,29 @@ const CheckoutPage = () => {
                             setPromotionCode(e.target.value.toUpperCase());
                             setPromotionError("");
                           }}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleApplyPromotion()
+                          }
                           disabled={isApplyingPromo}
+                          className="uppercase"
                         />
                         <Button
                           onClick={handleApplyPromotion}
                           disabled={isApplyingPromo || !promotionCode.trim()}
                           variant="outline"
+                          className="whitespace-nowrap"
                         >
                           {isApplyingPromo ? "Đang áp dụng..." : "Áp dụng"}
                         </Button>
                       </div>
                       {promotionError && (
-                        <p className="text-sm text-red-600">{promotionError}</p>
+                        <p className="text-sm text-red-600 animate-fade-in">
+                          {promotionError}
+                        </p>
                       )}
                     </div>
                   ) : (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between animate-fade-in">
                       <div>
                         <p className="text-sm font-semibold text-green-700">
                           Mã: {appliedPromotion.code}
@@ -372,7 +395,7 @@ const CheckoutPage = () => {
                         variant="ghost"
                         size="sm"
                         onClick={handleRemovePromotion}
-                        className="text-red-600 hover:text-red-700"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         Xóa
                       </Button>
@@ -395,14 +418,14 @@ const CheckoutPage = () => {
                     </span>
                   </div>
                   {appliedPromotion && (
-                    <div className="flex justify-between text-green-600">
+                    <div className="flex justify-between text-green-600 font-medium">
                       <span>Giảm giá:</span>
                       <span>
                         -{formatPrice(appliedPromotion.discountAmount)}
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between pt-2 border-t font-bold text-lg">
+                  <div className="flex justify-between pt-3 border-t font-bold text-lg">
                     <span>Tổng cộng:</span>
                     <span className="text-red-600">
                       {formatPrice(finalTotal)}

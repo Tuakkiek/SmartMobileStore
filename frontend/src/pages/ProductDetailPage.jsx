@@ -156,15 +156,21 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async () => {
-    if (!selectedVariant) return;
-    const result = await addToCart(selectedVariant._id, 1);
+    if (!selectedVariant || !product) return;
+
+    // ✅ GỬI ĐẦY ĐỦ: variantId, quantity, productType
+    const result = await addToCart(
+      selectedVariant._id, // variantId
+      1, // quantity
+      product.category // productType (iPhone, iPad, Mac...)
+    );
+
     if (result.success) {
       alert("Đã thêm vào giỏ hàng!");
     } else {
       alert(result.message || "Thêm vào giỏ thất bại");
     }
   };
-
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN").format(price) + "đ";
   };
@@ -549,6 +555,7 @@ const ProductDetailPage = () => {
 
               {/* Action Buttons */}
               <div className="flex gap-3 mb-4">
+                {/* ✅ NÚT THÊM VÀO GIỎ HÀNG */}
                 <button
                   onClick={handleAddToCart}
                   disabled={cartLoading || selectedVariant.stock === 0}
@@ -558,6 +565,7 @@ const ProductDetailPage = () => {
                   {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
                 </button>
 
+                {/* ✅ NÚT MUA NGAY */}
                 <button
                   onClick={() => {
                     handleAddToCart();

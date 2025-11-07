@@ -1,21 +1,53 @@
-// models/Order.js
+// ============================================
+// FILE: backend/src/models/Order.js
+// ✅ COMPLETE: Order model with detailed variant information
+// ============================================
+
 import mongoose from "mongoose";
 
+// Schema cho item trong đơn hàng
 const orderItemSchema = new mongoose.Schema(
   {
     productId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
       required: true,
+    },
+    variantId: {
+      // ✅ THÊM: Liên kết với Variant
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    productType: {
+      // ✅ THÊM: Loại sản phẩm
+      type: String,
+      required: true,
+      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
     },
     productName: {
       type: String,
       required: true,
       trim: true,
     },
-    specifications: {
-      type: Object,
-      default: {},
+    variantSku: {
+      // ✅ THÊM: Mã SKU của variant
+      type: String,
+      required: true,
+    },
+    variantColor: {
+      // ✅ THÊM: Màu sắc
+      type: String,
+    },
+    variantStorage: {
+      // ✅ THÊM: Dung lượng (iPhone, iPad) hoặc tên biến thể (AirPods)
+      type: String,
+    },
+    variantConnectivity: {
+      // ✅ THÊM: Kết nối (cho iPad)
+      type: String,
+    },
+    variantName: {
+      // ✅ THÊM: Tên biến thể (AirPods, AppleWatch)
+      type: String,
     },
     quantity: {
       type: Number,
@@ -27,10 +59,23 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    originalPrice: {
+      // ✅ THÊM: Giá niêm yết (hiển thị gạch ngang)
+      type: Number,
+      min: 0,
+    },
+    total: {
+      // ✅ THÊM: Tổng giá item (price * quantity)
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    images: [String], // ✅ THÊM: Hình ảnh của variant
   },
   { _id: false }
 );
 
+// Schema cho địa chỉ giao hàng
 const addressSchema = new mongoose.Schema(
   {
     fullName: {
@@ -67,6 +112,7 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Schema cho lịch sử trạng thái
 const statusHistorySchema = new mongoose.Schema(
   {
     status: {
@@ -98,13 +144,13 @@ const statusHistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Schema chính cho đơn hàng
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: {
       type: String,
       unique: true,
       trim: true,
-      // BỎ required: true - sẽ tự động generate
     },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -176,14 +222,12 @@ const orderSchema = new mongoose.Schema(
 
 // Generate unique order number TRƯỚC KHI validate
 orderSchema.pre("validate", async function (next) {
-  // Chỉ generate nếu đang tạo mới VÀ chưa có orderNumber
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const day = date.getDate().toString().padStart(2, "0");
 
-    // Tìm đơn hàng cuối cùng trong ngày
     const lastOrder = await mongoose
       .model("Order")
       .findOne({
@@ -222,7 +266,6 @@ orderSchema.pre("save", function (next) {
 
 // Method to update order status
 orderSchema.methods.updateStatus = async function (status, userId, note) {
-  console.log("Updating status to:", status, "current status:", this.status);
   this.status = status;
 
   this.addStatusHistory(status, userId, note);
@@ -231,10 +274,9 @@ orderSchema.methods.updateStatus = async function (status, userId, note) {
     this.paymentStatus = "PAID";
   }
 
-  const saved = await this.save();
-  console.log("Saved status:", saved.status);
-  return saved;
+  return await this.save();
 };
+
 // Method to cancel order
 orderSchema.methods.cancel = async function (userId, note) {
   if (this.status === "DELIVERED") {
@@ -249,14 +291,6 @@ orderSchema.methods.cancel = async function (userId, note) {
   this.addStatusHistory("CANCELLED", userId, note || "Order cancelled");
 
   return this.save();
-};
-
-// Method to calculate total
-orderSchema.methods.calculateTotal = function () {
-  return this.items.reduce((total, item) => {
-    const priceAfterDiscount = item.price * (1 - item.discount / 100);
-    return total + priceAfterDiscount * item.quantity;
-  }, 0);
 };
 
 // Method to add status history

@@ -27,42 +27,6 @@ const getModelsByType = (productType) => {
   return models[productType] || null;
 };
 
-// Helper: Tìm variant theo ID
-const findVariantById = async (variantId, productType) => {
-  const models = getModelsByType(productType);
-  if (!models) return null;
-
-  try {
-    const variant = await models.Variant.findById(variantId);
-    return variant;
-  } catch (error) {
-    console.error(`Error finding variant ${variantId}:`, error);
-    return null;
-  }
-};
-
-// Helper: Cập nhật stock và salesCount
-const updateProductStats = async (variantId, productType, quantity) => {
-  const models = getModelsByType(productType);
-  if (!models) return;
-
-  try {
-    const variant = await models.Variant.findById(variantId);
-    if (variant) {
-      variant.stock -= quantity;
-      await variant.save();
-
-      const product = await models.Product.findById(variant.productId);
-      if (product) {
-        product.salesCount = (product.salesCount || 0) + quantity;
-        await product.save();
-      }
-    }
-  } catch (error) {
-    console.error("Error updating product stats:", error);
-  }
-};
-
 // ============================================
 // CREATE ORDER (Checkout from cart)
 // ============================================
@@ -80,9 +44,11 @@ export const createOrder = async (req, res) => {
     } = req.body;
 
     // Lấy giỏ hàng
-    const cart = await Cart.findOne({ customerId: req.user._id }).session(session);
+    const cart = await Cart.findOne({ customerId: req.user._id }).session(
+      session
+    );
 
-    if (!cart || cart.items.length, cart.items.length === 0) {
+    if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -90,7 +56,7 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // Validate và populate cart items
+    // === THAY THẾ TOÀN BỘ PHẦN VALIDATE & POPULATE CART ITEMS ===
     const orderItems = [];
     let subtotal = 0;
 
@@ -104,7 +70,9 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      const variant = await models.Variant.findById(item.variantId).session(session);
+      const variant = await models.Variant.findById(item.variantId).session(
+        session
+      );
       if (!variant) {
         await session.abortTransaction();
         return res.status(404).json({
@@ -113,7 +81,9 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      const product = await models.Product.findById(variant.productId).session(session);
+      const product = await models.Product.findById(variant.productId).session(
+        session
+      );
       if (!product) {
         await session.abortTransaction();
         return res.status(404).json({
@@ -127,7 +97,9 @@ export const createOrder = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: `${product.name} (${variant.color}) chỉ còn ${variant.stock} sản phẩm`,
+          message: `${product.name} (${
+            variant.color || variant.variantName
+          }) chỉ còn ${variant.stock} sản phẩm`,
         });
       }
 
@@ -139,8 +111,8 @@ export const createOrder = async (req, res) => {
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
 
-      // ✅ KHÔNG TRỪ DISCOUNT TỪ ITEM
-      const itemTotal = variant.price * item.quantity; // Giá gốc x số lượng
+      // Tính tiền theo giá bán (price), không dùng originalPrice
+      const itemTotal = variant.price * item.quantity;
       subtotal += itemTotal;
 
       orderItems.push({
@@ -150,17 +122,19 @@ export const createOrder = async (req, res) => {
         productName: product.name,
         variantSku: variant.sku,
         variantColor: variant.color,
-        variantStorage: variant.storage,
-        variantName: variant.variantName,
+        variantStorage: variant.storage || variant.variantName, // Hỗ trợ iPhone & AirPods
+        variantConnectivity: variant.connectivity, // Hỗ trợ iPad
+        variantName: variant.variantName, // AirPods, AppleWatch
         quantity: item.quantity,
-        price: variant.price, // Giá bán hiện tại
-        originalPrice: variant.originalPrice, // Giá niêm yết (hiển thị gạch ngang)
+        price: variant.price, // Giá bán thực tế
+        originalPrice: variant.originalPrice, // Giá gạch ngang
         total: itemTotal,
         images: variant.images || [],
       });
     }
+    // ===========================================================
 
-    // ✅ XỬ LÝ PROMOTION CODE
+    // XỬ LÝ PROMOTION CODE
     let promotionDiscount = 0;
     let appliedPromotion = null;
 
@@ -188,7 +162,7 @@ export const createOrder = async (req, res) => {
         }
       } catch (promoError) {
         console.log("Promotion code invalid:", promoError.message);
-        // Không throw lỗi, chỉ bỏ qua
+        // Không dừng flow, chỉ bỏ qua
       }
     }
 
@@ -219,8 +193,8 @@ export const createOrder = async (req, res) => {
           note,
           subtotal,
           shippingFee,
-          promotionDiscount,     // ✅ THÊM
-          appliedPromotion,      // ✅ THÊM
+          promotionDiscount,
+          appliedPromotion,
           pointsUsed,
           total,
           status: "PENDING",
@@ -365,15 +339,22 @@ export const cancelOrder = async (req, res) => {
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
-        const variant = await models.Variant.findById(item.variantId).session(session);
+        const variant = await models.Variant.findById(item.variantId).session(
+          session
+        );
         if (variant) {
           variant.stock += item.quantity;
           await variant.save({ session });
         }
 
-        const product = await models.Product.findById(item.productId).session(session);
+        const product = await models.Product.findById(item.productId).session(
+          session
+        );
         if (product) {
-          product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
+          product.salesCount = Math.max(
+            0,
+            (product.salesCount || 0) - item.quantity
+          );
           await product.save({ session });
         }
       }
@@ -381,7 +362,10 @@ export const cancelOrder = async (req, res) => {
 
     // Hoàn lại reward points
     if (order.pointsUsed > 0) {
-      const user = await mongoose.model("User").findById(order.customerId).session(session);
+      const user = await mongoose
+        .model("User")
+        .findById(order.customerId)
+        .session(session);
       if (user) {
         user.rewardPoints += order.pointsUsed;
         await user.save({ session });
@@ -417,7 +401,14 @@ export const cancelOrder = async (req, res) => {
 // ============================================
 export const getAllOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, search, startDate, endDate } = req.query;
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      search,
+      startDate,
+      endDate,
+    } = req.query;
     const query = {};
 
     if (status) query.status = status;
@@ -429,7 +420,7 @@ export const getAllOrders = async (req, res) => {
 
     if (search) {
       query.$or = [
-        { _id: search },
+        { _id: { $regex: search, $options: "i" } },
         { "shippingAddress.fullName": { $regex: search, $options: "i" } },
         { "shippingAddress.phoneNumber": { $regex: search, $options: "i" } },
       ];
