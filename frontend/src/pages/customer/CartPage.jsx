@@ -1,21 +1,48 @@
 // ============================================
 // FILE: src/pages/customer/CartPage.jsx
-// COMPLETE: Hiển thị đầy đủ variant info + discount badge
+// COMPLETE: Hiển thị đầy đủ variant info + discount badge + ĐỔI PHIÊN BẢN TRONG GIỎ HÀNG
 // ============================================
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Loading } from "@/components/shared/Loading";
 import { Trash2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { formatPrice } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 
 const CartPage = () => {
   const navigate = useNavigate();
-  const { cart, isLoading, getCart, updateCartItem, removeFromCart, getTotal } =
-    useCartStore();
+  const {
+    cart,
+    isLoading,
+    getCart,
+    updateCartItem,
+    removeFromCart,
+    addToCart,
+    getTotal,
+  } = useCartStore();
+
+  // State cho modal chọn phiên bản
+  const [editingItem, setEditingItem] = useState(null);
+  const [showVariantDialog, setShowVariantDialog] = useState(false);
+  const [availableVariants, setAvailableVariants] = useState([]);
 
   useEffect(() => {
     getCart();
@@ -23,21 +50,73 @@ const CartPage = () => {
 
   const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
-
-    // ✅ Pass the item's _id (or variantId as fallback)
     const itemId = item._id || item.variantId;
-    console.log("Updating quantity:", { itemId, newQuantity });
-
     await updateCartItem(itemId, newQuantity);
+    await getCart();
   };
 
   const handleRemove = async (item) => {
-    // ✅ Pass the item's _id (or variantId as fallback)
     const itemId = item._id || item.variantId;
-    console.log("Removing item:", { itemId });
-
     await removeFromCart(itemId);
+    await getCart();
   };
+
+  // Hàm lấy danh sách các phiên bản có sẵn của sản phẩm
+  const fetchAvailableVariants = async (item) => {
+    try {
+      const apiMap = {
+        iPhone: iPhoneAPI,
+        iPad: iPadAPI,
+        Mac: macAPI,
+        AirPods: airPodsAPI,
+        AppleWatch: appleWatchAPI,
+        Accessory: accessoryAPI,
+      };
+
+      const api = apiMap[item.productType];
+      if (!api) {
+        toast.error("Không hỗ trợ loại sản phẩm này");
+        return;
+      }
+
+      const response = await api.getById(item.productId);
+      const product = response.data.data.product;
+
+      setAvailableVariants(product.variants || []);
+      setEditingItem(item);
+      setShowVariantDialog(true);
+    } catch (error) {
+      console.error("Lỗi khi tải phiên bản:", error);
+      toast.error("Không thể tải thông tin sản phẩm");
+    }
+  };
+
+  // Hàm đổi phiên bản sản phẩm
+  const handleChangeVariant = async (newVariantId) => {
+    if (!editingItem) return;
+
+    try {
+      // Xóa sản phẩm cũ
+      await removeFromCart(editingItem._id || editingItem.variantId);
+      // Thêm phiên bản mới
+      await addToCart(
+        newVariantId,
+        editingItem.quantity,
+        editingItem.productType
+      );
+      // Cập nhật lại giỏ hàng
+      await getCart();
+
+      setShowVariantDialog(false);
+      setEditingItem(null);
+      setAvailableVariants([]);
+      toast.success("Đã thay đổi phiên bản sản phẩm");
+    } catch (error) {
+      console.error("Lỗi khi đổi phiên bản:", error);
+      toast.error("Không thể thay đổi phiên bản");
+    }
+  };
+
   if (isLoading && !cart) {
     return <Loading />;
   }
@@ -118,17 +197,14 @@ const CartPage = () => {
                         )}
                       </div>
 
-                      {/* Quantity Controls + Total + Remove */}
-                      <div className="flex items-center justify-between">
+                      {/* Quantity Controls + Total + Actions */}
+                      <div className="flex items-center justify-between mt-4">
                         <div className="flex items-center border rounded-md">
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() =>
-                              handleUpdateQuantity(
-                                item.variantId,
-                                item.quantity - 1
-                              )
+                              handleUpdateQuantity(item, item.quantity - 1)
                             }
                             disabled={item.quantity <= 1}
                           >
@@ -141,10 +217,7 @@ const CartPage = () => {
                             variant="ghost"
                             size="icon"
                             onClick={() =>
-                              handleUpdateQuantity(
-                                item.variantId,
-                                item.quantity + 1
-                              )
+                              handleUpdateQuantity(item, item.quantity + 1)
                             }
                             disabled={item.quantity >= item.stock}
                           >
@@ -152,17 +225,30 @@ const CartPage = () => {
                           </Button>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
                           <span className="font-semibold text-lg">
                             {formatPrice(item.price * item.quantity)}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemove(item.variantId)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+
+                          <div className="flex gap-1">
+                            {/* Nút đổi phiên bản */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => fetchAvailableVariants(item)}
+                              className="text-xs"
+                            >
+                              Đổi phiên bản
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemove(item)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -219,6 +305,50 @@ const CartPage = () => {
           </div>
         </div>
       )}
+
+      {/* Dialog chọn phiên bản */}
+      <Dialog open={showVariantDialog} onOpenChange={setShowVariantDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chọn phiên bản mới</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {availableVariants.length > 0 ? (
+              availableVariants.map((variant) => (
+                <div
+                  key={variant._id}
+                  className="border rounded-lg p-4 cursor-pointer hover:border-primary transition-colors"
+                  onClick={() => handleChangeVariant(variant._id)}
+                >
+                  <div className="flex gap-4">
+                    <img
+                      src={variant.images?.[0] || "/placeholder.png"}
+                      alt={variant.color}
+                      className="w-16 h-16 object-cover rounded"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium">{variant.color}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {variant.storage || variant.variantName || "Tiêu chuẩn"}
+                      </p>
+                      <p className="font-semibold text-primary">
+                        {formatPrice(variant.price)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Còn: {variant.stock} sản phẩm
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground">
+                Không có phiên bản nào khả dụng
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

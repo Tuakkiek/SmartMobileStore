@@ -278,7 +278,7 @@ const OrderDetailPage = () => {
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
                     <span className="text-primary">
-                      {formatPrice(order.total)}
+                      {formatPrice(order.totalAmount)}
                     </span>
                   </div>
                 </div>

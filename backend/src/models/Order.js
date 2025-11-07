@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// ✅ COMPLETE: Order model with detailed variant information
+// COMPLETE: Order model with detailed variant info + FIXED totalAmount + ADDED missing fields
 // ============================================
 
 import mongoose from "mongoose";
@@ -13,12 +13,10 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
     },
     variantId: {
-      // ✅ THÊM: Liên kết với Variant
       type: mongoose.Schema.Types.ObjectId,
       required: true,
     },
     productType: {
-      // ✅ THÊM: Loại sản phẩm
       type: String,
       required: true,
       enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
@@ -29,26 +27,13 @@ const orderItemSchema = new mongoose.Schema(
       trim: true,
     },
     variantSku: {
-      // ✅ THÊM: Mã SKU của variant
       type: String,
       required: true,
     },
-    variantColor: {
-      // ✅ THÊM: Màu sắc
-      type: String,
-    },
-    variantStorage: {
-      // ✅ THÊM: Dung lượng (iPhone, iPad) hoặc tên biến thể (AirPods)
-      type: String,
-    },
-    variantConnectivity: {
-      // ✅ THÊM: Kết nối (cho iPad)
-      type: String,
-    },
-    variantName: {
-      // ✅ THÊM: Tên biến thể (AirPods, AppleWatch)
-      type: String,
-    },
+    variantColor: { type: String },
+    variantStorage: { type: String },
+    variantConnectivity: { type: String },
+    variantName: { type: String },
     quantity: {
       type: Number,
       required: true,
@@ -60,59 +45,33 @@ const orderItemSchema = new mongoose.Schema(
       min: 0,
     },
     originalPrice: {
-      // ✅ THÊM: Giá niêm yết (hiển thị gạch ngang)
       type: Number,
       min: 0,
     },
     total: {
-      // ✅ THÊM: Tổng giá item (price * quantity)
       type: Number,
       required: true,
       min: 0,
     },
-    images: [String], // ✅ THÊM: Hình ảnh của variant
+    images: [String],
   },
   { _id: false }
 );
 
-// Schema cho địa chỉ giao hàng
+// Schema địa chỉ giao hàng
 const addressSchema = new mongoose.Schema(
   {
-    fullName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    phoneNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    province: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    district: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    commune: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    detailAddress: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    fullName: { type: String, required: true, trim: true },
+    phoneNumber: { type: String, required: true, trim: true },
+    province: { type: String, required: true, trim: true },
+    district: { type: String, required: true, trim: true },
+    commune: { type: String, required: true, trim: true },
+    detailAddress: { type: String, required: true, trim: true },
   },
   { _id: false }
 );
 
-// Schema cho lịch sử trạng thái
+// Schema lịch sử trạng thái
 const statusHistorySchema = new mongoose.Schema(
   {
     status: {
@@ -136,10 +95,7 @@ const statusHistorySchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
-    note: {
-      type: String,
-      trim: true,
-    },
+    note: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -160,9 +116,7 @@ const orderSchema = new mongoose.Schema(
     items: {
       type: [orderItemSchema],
       validate: {
-        validator: function (items) {
-          return items && items.length > 0;
-        },
+        validator: (items) => items && items.length > 0,
         message: "Order must have at least one item",
       },
     },
@@ -170,11 +124,30 @@ const orderSchema = new mongoose.Schema(
       type: addressSchema,
       required: true,
     },
+
+    // ĐÃ SỬA: Dùng totalAmount thay vì total
     totalAmount: {
       type: Number,
       required: true,
       min: 0,
     },
+
+    // CÁC TRƯỜNG MỚI ĐÃ BỔ SUNG
+    subtotal: {
+      type: Number,
+      min: 0,
+    },
+    shippingFee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    pointsUsed: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     status: {
       type: String,
       enum: [
@@ -197,10 +170,7 @@ const orderSchema = new mongoose.Schema(
       enum: ["UNPAID", "PAID"],
       default: "UNPAID",
     },
-    notes: {
-      type: String,
-      trim: true,
-    },
+    notes: { type: String, trim: true },
     statusHistory: {
       type: [statusHistorySchema],
       default: [],
@@ -220,38 +190,33 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-// Generate unique order number TRƯỚC KHI validate
+// Tạo mã đơn hàng tự động
 orderSchema.pre("validate", async function (next) {
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const day = date.getDate().toString().padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
     const lastOrder = await mongoose
       .model("Order")
-      .findOne({
-        orderNumber: new RegExp(`^ORD${year}${month}${day}`),
-      })
+      .findOne({ orderNumber: new RegExp(`^ORD${year}${month}${day}`) })
       .sort({ orderNumber: -1 });
 
     let sequence = 1;
-    if (lastOrder && lastOrder.orderNumber) {
-      const lastSequence = parseInt(lastOrder.orderNumber.slice(-4));
-      if (!isNaN(lastSequence)) {
-        sequence = lastSequence + 1;
-      }
+    if (lastOrder?.orderNumber) {
+      const lastSeq = parseInt(lastOrder.orderNumber.slice(-4));
+      if (!isNaN(lastSeq)) sequence = lastSeq + 1;
     }
 
     this.orderNumber = `ORD${year}${month}${day}${sequence
       .toString()
       .padStart(4, "0")}`;
   }
-
   next();
 });
 
-// Add initial status to history when creating order
+// Thêm trạng thái ban đầu vào lịch sử
 orderSchema.pre("save", function (next) {
   if (this.isNew && this.statusHistory.length === 0) {
     this.statusHistory.push({
@@ -264,10 +229,9 @@ orderSchema.pre("save", function (next) {
   next();
 });
 
-// Method to update order status
+// Cập nhật trạng thái
 orderSchema.methods.updateStatus = async function (status, userId, note) {
   this.status = status;
-
   this.addStatusHistory(status, userId, note);
 
   if (status === "DELIVERED" && this.paymentMethod === "COD") {
@@ -277,23 +241,21 @@ orderSchema.methods.updateStatus = async function (status, userId, note) {
   return await this.save();
 };
 
-// Method to cancel order
+// Hủy đơn hàng
 orderSchema.methods.cancel = async function (userId, note) {
   if (this.status === "DELIVERED") {
     throw new Error("Cannot cancel delivered order");
   }
-
   if (this.status === "CANCELLED") {
     throw new Error("Order is already cancelled");
   }
 
   this.status = "CANCELLED";
   this.addStatusHistory("CANCELLED", userId, note || "Order cancelled");
-
   return this.save();
 };
 
-// Method to add status history
+// Thêm lịch sử trạng thái
 orderSchema.methods.addStatusHistory = function (status, userId, note) {
   this.statusHistory.push({
     status,
@@ -303,12 +265,12 @@ orderSchema.methods.addStatusHistory = function (status, userId, note) {
   });
 };
 
-// Method to track order
+// Theo dõi đơn hàng
 orderSchema.methods.trackOrder = function () {
   return this.statusHistory.sort((a, b) => a.updatedAt - b.updatedAt);
 };
 
-// Index for search optimization
+// Tối ưu tìm kiếm
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 

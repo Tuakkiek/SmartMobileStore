@@ -28,7 +28,7 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// CREATE ORDER (Checkout from cart)
+// CREATE ORDER (Checkout from cart) - WITH DEBUG LOG
 // ============================================
 export const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -56,41 +56,74 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // === THAY THẾ TOÀN BỘ PHẦN VALIDATE & POPULATE CART ITEMS ===
+    // DEBUG LOG: In chi tiết từng item trong giỏ hàng
+    console.log("=== DEBUG CART ITEMS ===");
+    cart.items.forEach((item, index) => {
+      console.log(`Item ${index + 1}:`, {
+        productId: item.productId?.toString() || "MISSING",
+        variantId: item.variantId?.toString() || "MISSING",
+        productType: item.productType,
+        quantity: item.quantity,
+        hasProductId: !!item.productId,
+        hasVariantId: !!item.variantId,
+      });
+    });
+    console.log("Total items in cart:", cart.items.length);
+    console.log("========================\n");
+
+    // === VALIDATE & POPULATE CART ITEMS ===
     const orderItems = [];
     let subtotal = 0;
 
     for (const item of cart.items) {
-      const models = getModelsByType(item.productType);
+      const productId = item.productId;
+      const variantId = item.variantId;
+      const productType = item.productType;
+
+      console.log("Processing cart item:", {
+        productId: productId?.toString(),
+        variantId: variantId?.toString(),
+        productType,
+      });
+
+      const models = getModelsByType(productType);
       if (!models) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: `Loại sản phẩm không hợp lệ: ${item.productType}`,
+          message: `Loại sản phẩm không hợp lệ: ${productType}`,
         });
       }
 
-      const variant = await models.Variant.findById(item.variantId).session(
-        session
-      );
+      // Tìm variant
+      const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy biến thể: ${item.variantId}`,
+          message: `Không tìm thấy biến thể sản phẩm (ID: ${variantId})`,
         });
       }
 
-      const product = await models.Product.findById(variant.productId).session(
+      // Tìm product - ưu tiên productId từ cart, fallback sang variant.productId
+      const actualProductId = productId || variant.productId;
+      console.log("Looking for product with ID:", actualProductId?.toString());
+
+      const product = await models.Product.findById(actualProductId).session(
         session
       );
       if (!product) {
         await session.abortTransaction();
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy sản phẩm`,
+          message: `Không tìm thấy sản phẩm (ID: ${actualProductId})`,
         });
       }
+
+      console.log("Found product:", {
+        id: product._id?.toString(),
+        name: product.name,
+      });
 
       // Kiểm tra tồn kho
       if (variant.stock < item.quantity) {
@@ -98,8 +131,17 @@ export const createOrder = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: `${product.name} (${
-            variant.color || variant.variantName
+            variant.color || variant.variantName || "N/A"
           }) chỉ còn ${variant.stock} sản phẩm`,
+        });
+      }
+
+      // Kiểm tra trạng thái sản phẩm
+      if (product.status !== "AVAILABLE") {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `${product.name} hiện không còn bán`,
         });
       }
 
@@ -111,7 +153,7 @@ export const createOrder = async (req, res) => {
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
 
-      // Tính tiền theo giá bán (price), không dùng originalPrice
+      // Tính tiền
       const itemTotal = variant.price * item.quantity;
       subtotal += itemTotal;
 
@@ -122,17 +164,18 @@ export const createOrder = async (req, res) => {
         productName: product.name,
         variantSku: variant.sku,
         variantColor: variant.color,
-        variantStorage: variant.storage || variant.variantName, // Hỗ trợ iPhone & AirPods
-        variantConnectivity: variant.connectivity, // Hỗ trợ iPad
-        variantName: variant.variantName, // AirPods, AppleWatch
+        variantStorage: variant.storage || variant.variantName,
+        variantConnectivity: variant.connectivity,
+        variantName: variant.variantName,
+        variantCpuGpu: variant.cpuGpu,
+        variantRam: variant.ram,
         quantity: item.quantity,
-        price: variant.price, // Giá bán thực tế
-        originalPrice: variant.originalPrice, // Giá gạch ngang
+        price: variant.price,
+        originalPrice: variant.originalPrice,
         total: itemTotal,
         images: variant.images || [],
       });
     }
-    // ===========================================================
 
     // XỬ LÝ PROMOTION CODE
     let promotionDiscount = 0;
@@ -161,8 +204,7 @@ export const createOrder = async (req, res) => {
           };
         }
       } catch (promoError) {
-        console.log("Promotion code invalid:", promoError.message);
-        // Không dừng flow, chỉ bỏ qua
+        console.log("Promotion code invalid or API error:", promoError.message);
       }
     }
 
@@ -196,7 +238,7 @@ export const createOrder = async (req, res) => {
           promotionDiscount,
           appliedPromotion,
           pointsUsed,
-          total,
+          totalAmount: total,
           status: "PENDING",
         },
       ],
@@ -208,6 +250,8 @@ export const createOrder = async (req, res) => {
     await cart.save({ session });
 
     await session.commitTransaction();
+
+    console.log("Order created successfully:", order[0]._id);
 
     res.status(201).json({
       success: true,

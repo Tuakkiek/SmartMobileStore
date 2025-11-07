@@ -348,7 +348,7 @@ const OrdersPage = () => {
                   <div className="flex flex-col items-end gap-3">
                     <div className="text-right">
                       <p className="text-2xl font-bold text-primary">
-                        {formatPrice(order.total)}
+                        {formatPrice(order.totalAmount)}
                       </p>
                       <Badge
                         variant={
