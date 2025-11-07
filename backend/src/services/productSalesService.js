@@ -3,12 +3,12 @@
 // ✅ Service tự động cập nhật salesCount
 // ============================================
 
-import IPhone, { IPhoneVariant } from '../models/IPhone.js';
-import IPad, { IPadVariant } from '../models/IPad.js';
-import Mac, { MacVariant } from '../models/Mac.js';
-import AirPods, { AirPodsVariant } from '../models/AirPods.js';
-import AppleWatch, { AppleWatchVariant } from '../models/AppleWatch.js';
-import Accessory, { AccessoryVariant } from '../models/Accessory.js';
+import IPhone, { IPhoneVariant } from "../models/IPhone.js";
+import IPad, { IPadVariant } from "../models/IPad.js";
+import Mac, { MacVariant } from "../models/Mac.js";
+import AirPods, { AirPodsVariant } from "../models/AirPods.js";
+import AppleWatch, { AppleWatchVariant } from "../models/AppleWatch.js";
+import Accessory, { AccessoryVariant } from "../models/Accessory.js";
 
 // ============================================
 // CATEGORY MODELS MAPPING
@@ -28,7 +28,10 @@ const modelMap = {
 async function findProductByVariantId(variantId) {
   for (const [category, models] of Object.entries(modelMap)) {
     try {
-      const variant = await models.variant.findById(variantId).select('productId');
+      const variant = await models.variant
+        .findById(variantId)
+        .select("productId")
+        .lean();
       if (variant) {
         const product = await models.main.findById(variant.productId);
         return { product, category };
@@ -46,14 +49,19 @@ async function findProductByVariantId(variantId) {
 async function findProductById(productId, category) {
   const models = modelMap[category];
   if (!models) return null;
-  
+
   return await models.main.findById(productId);
 }
 
 // ============================================
 // CẬP NHẬT SALES COUNT CHO SẢN PHẨM
 // ============================================
-export async function updateProductSalesCount(productId, variantId, quantity, category = null) {
+export async function updateProductSalesCount(
+  productId,
+  variantId,
+  quantity,
+  category = null
+) {
   try {
     let product;
     let foundCategory = category;
@@ -67,7 +75,7 @@ export async function updateProductSalesCount(productId, variantId, quantity, ca
       }
       product = result.product;
       foundCategory = result.category;
-    } 
+    }
     // Nếu không có variantId, dùng productId + category
     else if (productId && foundCategory) {
       product = await findProductById(productId, foundCategory);
@@ -82,11 +90,13 @@ export async function updateProductSalesCount(productId, variantId, quantity, ca
     product.salesCount = (product.salesCount || 0) + quantity;
     await product.save();
 
-    console.log(`✅ Updated salesCount for ${foundCategory} - ${product.name}: +${quantity} = ${product.salesCount}`);
-    
+    console.log(
+      `✅ Updated salesCount for ${foundCategory} - ${product.name}: +${quantity} = ${product.salesCount}`
+    );
+
     return product;
   } catch (error) {
-    console.error('❌ Error updating salesCount:', error);
+    console.error("❌ Error updating salesCount:", error);
     throw error;
   }
 }
@@ -96,7 +106,7 @@ export async function updateProductSalesCount(productId, variantId, quantity, ca
 // ============================================
 export async function processOrderSales(order) {
   if (!order || !order.items || order.items.length === 0) {
-    console.warn('⚠️ No items in order');
+    console.warn("⚠️ No items in order");
     return;
   }
 
@@ -114,19 +124,29 @@ export async function processOrderSales(order) {
       let foundVariant = null;
 
       for (const [category, models] of Object.entries(modelMap)) {
-        const product = await models.main.findById(productId).populate('variants');
-        
+        const product = await models.main
+          .findById(productId)
+          .populate("variants");
+
         if (product) {
           foundCategory = category;
-          
+
           // Tìm variant phù hợp dựa trên specifications
           if (product.variants && product.variants.length > 0) {
             foundVariant = product.variants[0]; // Default
 
             if (item.specifications) {
-              const matchedVariant = product.variants.find(v => {
-                if (item.specifications.color && v.color !== item.specifications.color) return false;
-                if (item.specifications.storage && v.storage !== item.specifications.storage) return false;
+              const matchedVariant = product.variants.find((v) => {
+                if (
+                  item.specifications.color &&
+                  v.color !== item.specifications.color
+                )
+                  return false;
+                if (
+                  item.specifications.storage &&
+                  v.storage !== item.specifications.storage
+                )
+                  return false;
                 return true;
               });
               if (matchedVariant) foundVariant = matchedVariant;
@@ -155,7 +175,7 @@ export async function processOrderSales(order) {
           category: foundCategory,
           name: updatedProduct.name,
           quantity,
-          totalSales: updatedProduct.salesCount
+          totalSales: updatedProduct.salesCount,
         });
         console.log(`  ✅ ${updatedProduct.name}: +${quantity} sales`);
       }
@@ -178,11 +198,11 @@ export async function getTopSellingProducts(category, limit = 10) {
   }
 
   return await models.main
-    .find({ status: 'AVAILABLE' })
+    .find({ status: "AVAILABLE" })
     .sort({ salesCount: -1 })
     .limit(limit)
-    .select('name model salesCount averageRating variants')
-    .populate('variants', 'price images')
+    .select("name model salesCount averageRating variants")
+    .populate("variants", "price images")
     .lean();
 }
 
@@ -194,16 +214,14 @@ export async function getAllTopSellingProducts(limit = 10) {
 
   for (const [category, models] of Object.entries(modelMap)) {
     const products = await models.main
-      .find({ status: 'AVAILABLE' })
+      .find({ status: "AVAILABLE" })
       .sort({ salesCount: -1 })
       .limit(limit)
-      .select('name model salesCount averageRating variants')
-      .populate('variants', 'price images')
+      .select("name model salesCount averageRating variants")
+      .populate("variants", "price images")
       .lean();
 
-    allProducts.push(
-      ...products.map(p => ({ ...p, category }))
-    );
+    allProducts.push(...products.map((p) => ({ ...p, category })));
   }
 
   // Sắp xếp và lấy top
@@ -234,10 +252,10 @@ export async function resetSalesCount(category = null) {
 // SYNC SALESCOUNT TỪ SALESANALYTICS (NẾU CẦN)
 // ============================================
 export async function syncSalesCountFromAnalytics() {
-  const SalesAnalytics = (await import('../models/SalesAnalytics.js')).default;
-  
+  const SalesAnalytics = (await import("../models/SalesAnalytics.js")).default;
+
   const analytics = await SalesAnalytics.find().lean();
-  
+
   for (const data of analytics) {
     try {
       await updateProductSalesCount(
@@ -250,8 +268,8 @@ export async function syncSalesCountFromAnalytics() {
       console.error(`Failed to sync ${data.productId}:`, error.message);
     }
   }
-  
-  console.log('✅ Sales count synced from analytics');
+
+  console.log("✅ Sales count synced from analytics");
 }
 
 export default {

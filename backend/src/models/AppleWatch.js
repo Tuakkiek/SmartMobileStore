@@ -1,27 +1,34 @@
 // ================================================
 // FILE: backend/src/models/AppleWatch.js
-// ✅ REFACTORED: Kế thừa từ BaseProduct
+// ✅ REFACTORED: Extends base schema (no discriminator)
 // ================================================
 
 import mongoose from "mongoose";
-import { BaseProduct, BaseVariant } from "./BaseProduct.js";
+import { createBaseProductSchema, createBaseVariantSchema } from "./BaseProduct.js";
 
 // ===============================
 // APPLE WATCH VARIANT SCHEMA
 // ===============================
-const appleWatchVariantSchema = new mongoose.Schema({
+const appleWatchVariantSchema = createBaseVariantSchema();
+
+appleWatchVariantSchema.add({
   variantName: { type: String, required: true, trim: true },
 });
 
-export const AppleWatchVariant = BaseVariant.discriminator(
+appleWatchVariantSchema.index({ salesCount: -1 });
+
+export const AppleWatchVariant = mongoose.model(
   "AppleWatchVariant",
-  appleWatchVariantSchema
+  appleWatchVariantSchema,
+  "applewatchvariants"
 );
 
 // ===============================
 // APPLE WATCH PRODUCT SCHEMA
 // ===============================
-const appleWatchSpecificSchema = new mongoose.Schema({
+const appleWatchSchema = createBaseProductSchema();
+
+appleWatchSchema.add({
   specifications: {
     screenSize: { type: String, required: true, trim: true },
     cpu: { type: String, required: true, trim: true },
@@ -33,12 +40,11 @@ const appleWatchSpecificSchema = new mongoose.Schema({
     colors: [{ type: String, trim: true }],
     additional: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
+  variantModel: { type: String, default: "AppleWatchVariant" },
 });
 
-const AppleWatch = BaseProduct.discriminator(
-  "AppleWatch",
-  appleWatchSpecificSchema
-);
-AppleWatch.schema.path("category").default("Apple Watch");
+appleWatchSchema.path("category").default("Apple Watch");
+
+const AppleWatch = mongoose.model("AppleWatch", appleWatchSchema, "applewatches");
 
 export default AppleWatch;

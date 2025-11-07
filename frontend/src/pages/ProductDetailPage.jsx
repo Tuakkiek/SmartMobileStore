@@ -23,12 +23,20 @@ import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
 
 const CATEGORY_MAP = {
-  "dien-thoai": { model: "iPhone", api: iPhoneAPI },
-  "may-tinh-bang": { model: "iPad", api: iPadAPI },
-  macbook: { model: "Mac", api: macAPI },
-  "tai-nghe": { model: "AirPods", api: airPodsAPI },
-  "apple-watch": { model: "AppleWatch", api: appleWatchAPI },
-  "phu-kien": { model: "Accessories", api: accessoryAPI },
+  "dien-thoai": { model: "iPhone", api: iPhoneAPI, category: "iPhone" },
+  "may-tinh-bang": { model: "iPad", api: iPadAPI, category: "iPad" },
+  macbook: { model: "Mac", api: macAPI, category: "Mac" },
+  "tai-nghe": { model: "AirPods", api: airPodsAPI, category: "AirPods" },
+  "apple-watch": {
+    model: "AppleWatch",
+    api: appleWatchAPI,
+    category: "AppleWatch",
+  },
+  "phu-kien": {
+    model: "Accessories",
+    api: accessoryAPI,
+    category: "Accessories",
+  },
 };
 
 const VARIANT_KEY_FIELD = {
@@ -156,13 +164,38 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async () => {
-    if (!selectedVariant || !product) return;
+    if (!selectedVariant || !product) {
+      console.error("❌ Missing product or variant");
+      return;
+    }
+
+    // ✅ DEBUG: Log để kiểm tra dữ liệu
+    console.log("🛒 Adding to cart:", {
+      variantId: selectedVariant._id,
+      productCategory: product.category,
+      categoryInfo: categoryInfo,
+    });
+
+    // ✅ LẤY CATEGORY TỪ CATEGORY_MAP (chắc chắn đúng)
+    const productType = categoryInfo?.category || categoryInfo?.model || product.category;
+
+    if (!productType) {
+      alert("Lỗi: Không xác định được loại sản phẩm");
+      console.error("❌ productType is undefined", { product, categoryInfo });
+      return;
+    }
+
+    if (!selectedVariant._id) {
+      alert("Lỗi: Không xác định được variant ID");
+      console.error("❌ variantId is undefined", selectedVariant);
+      return;
+    }
 
     // ✅ GỬI ĐẦY ĐỦ: variantId, quantity, productType
     const result = await addToCart(
       selectedVariant._id, // variantId
       1, // quantity
-      product.category // productType (iPhone, iPad, Mac...)
+      productType // productType từ categoryInfo.model
     );
 
     if (result.success) {

@@ -22,32 +22,76 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  // FIXED: addToCart - BẮT BUỘC variantId + productType
+  // FIXED: addToCart - BẮT BUỘC variantId + productType + LOGGING + VALID TYPES
   addToCart: async (variantId, quantity = 1, productType) => {
-    // VALIDATE TRƯỚC KHI GỌI API
-    if (!variantId || !productType) {
-      const message = "Thiếu variantId hoặc productType";
+    // ENHANCED VALIDATION
+    console.log("cartStore.addToCart called with:", {
+      variantId,
+      quantity,
+      productType,
+      types: {
+        variantId: typeof variantId,
+        quantity: typeof quantity,
+        productType: typeof productType,
+      },
+    });
+
+    if (!variantId) {
+      const message = "Thiếu variantId";
+      console.error("variantId is missing:", variantId);
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
-    if (!["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"].includes(productType)) {
-      const message = "productType không hợp lệ";
+    if (!productType) {
+      const message = "Thiếu productType";
+      console.error("productType is missing:", productType);
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
+
+    // VALIDATE productType (note: backend might use different names)
+    const validTypes = [
+      "iPhone",
+      "iPad",
+      "Mac",
+      "AirPods",
+      "AppleWatch",
+      "Accessories",
+    ];
+    if (!validTypes.includes(productType)) {
+      const message = `productType không hợp lệ: ${productType}`;
+      console.error(
+        "Invalid productType:",
+        productType,
+        "Valid types:",
+        validTypes
+      );
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
     set({ isLoading: true, error: null });
     try {
+      console.log("Sending to API:", {
+        variantId,
+        quantity,
+        productType,
+      });
+
       const response = await cartAPI.addToCart({
         variantId,
         quantity,
-        productType, // ĐẢM BẢO GỬI
+        productType,
       });
+
+      console.log("Cart API response:", response.data);
       set({ cart: response.data.data, isLoading: false });
       return { success: true, message: response.data.message };
     } catch (error) {
-      const message = error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
+      console.error("Cart API error:", error.response?.data || error);
+      const message =
+        error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
@@ -64,7 +108,8 @@ export const useCartStore = create((set, get) => ({
       set({ cart: response.data.data, isLoading: false });
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || "Cập nhật giỏ hàng thất bại";
+      const message =
+        error.response?.data?.message || "Cập nhật giỏ hàng thất bại";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
@@ -103,7 +148,10 @@ export const useCartStore = create((set, get) => ({
   getTotal: () => {
     const { cart } = get();
     if (!cart || !Array.isArray(cart.items)) return 0;
-    return cart.items.reduce((total, item) => total + (item.price * item.quantity), 0);
+    return cart.items.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
   },
 
   getItemCount: () => {
@@ -114,7 +162,7 @@ export const useCartStore = create((set, get) => ({
 
   getItemByVariant: (variantId) => {
     const { cart } = get();
-    return cart?.items?.find(item => item.variantId === variantId);
+    return cart?.items?.find((item) => item.variantId === variantId);
   },
 
   clearError: () => set({ error: null }),

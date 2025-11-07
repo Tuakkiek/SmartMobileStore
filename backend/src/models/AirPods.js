@@ -1,27 +1,37 @@
 // ================================================
 // FILE: backend/src/models/AirPods.js
-// ✅ REFACTORED: Kế thừa từ BaseProduct
+// ✅ REFACTORED: Extends base schema (no discriminator)
 // ================================================
 
 import mongoose from "mongoose";
-import { BaseProduct, BaseVariant } from "./BaseProduct.js";
+import {
+  createBaseProductSchema,
+  createBaseVariantSchema,
+} from "./BaseProduct.js";
 
 // ===============================
 // AIRPODS VARIANT SCHEMA
 // ===============================
-const airPodsVariantSchema = new mongoose.Schema({
+const airPodsVariantSchema = createBaseVariantSchema();
+
+airPodsVariantSchema.add({
   variantName: { type: String, required: true, trim: true },
 });
 
-export const AirPodsVariant = BaseVariant.discriminator(
+airPodsVariantSchema.index({ salesCount: -1 });
+
+export const AirPodsVariant = mongoose.model(
   "AirPodsVariant",
-  airPodsVariantSchema
+  airPodsVariantSchema,
+  "airpodsvariants"
 );
 
 // ===============================
 // AIRPODS PRODUCT SCHEMA
 // ===============================
-const airPodsSpecificSchema = new mongoose.Schema({
+const airPodsSchema = createBaseProductSchema();
+
+airPodsSchema.add({
   specifications: {
     chip: { type: String, required: true, trim: true },
     batteryLife: { type: String, required: true, trim: true },
@@ -30,9 +40,11 @@ const airPodsSpecificSchema = new mongoose.Schema({
     colors: [{ type: String, trim: true }],
     additional: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
+  variantModel: { type: String, default: "AirPodsVariant" },
 });
 
-const AirPods = BaseProduct.discriminator("AirPods", airPodsSpecificSchema);
-AirPods.schema.path("category").default("AirPods");
+airPodsSchema.path("category").default("AirPods");
+
+const AirPods = mongoose.model("AirPods", airPodsSchema, "airpods");
 
 export default AirPods;

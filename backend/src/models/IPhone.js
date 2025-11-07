@@ -1,28 +1,40 @@
 // ================================================
 // FILE: backend/src/models/IPhone.js
-// ✅ REFACTORED: Kế thừa từ BaseProduct
+// ✅ REFACTORED: Extends base schema (no discriminator)
 // ================================================
 
 import mongoose from "mongoose";
-import { BaseProduct, BaseVariant } from "./BaseProduct.js";
+import {
+  createBaseProductSchema,
+  createBaseVariantSchema,
+} from "./BaseProduct.js";
 
 // ===============================
-// IPHONE VARIANT SCHEMA - Kế thừa BaseVariant
+// IPHONE VARIANT SCHEMA
 // ===============================
-const iPhoneVariantSchema = new mongoose.Schema({
-  storage: { type: String, required: true, trim: true }, // Riêng cho iPhone
+const iPhoneVariantSchema = createBaseVariantSchema();
+
+// Add iPhone-specific variant fields
+iPhoneVariantSchema.add({
+  storage: { type: String, required: true, trim: true },
 });
 
-// Create discriminator
-export const IPhoneVariant = BaseVariant.discriminator(
+// Add index for iPhone variants
+iPhoneVariantSchema.index({ salesCount: -1 });
+
+export const IPhoneVariant = mongoose.model(
   "IPhoneVariant",
-  iPhoneVariantSchema
+  iPhoneVariantSchema,
+  "iphonevariants" // Explicit collection name
 );
 
 // ===============================
-// IPHONE PRODUCT SCHEMA - Kế thừa BaseProduct
+// IPHONE PRODUCT SCHEMA
 // ===============================
-const iPhoneSpecificSchema = new mongoose.Schema({
+const iPhoneSchema = createBaseProductSchema();
+
+// Override specifications for iPhone
+iPhoneSchema.add({
   specifications: {
     chip: { type: String, required: true, trim: true },
     ram: { type: String, required: true, trim: true },
@@ -36,13 +48,15 @@ const iPhoneSpecificSchema = new mongoose.Schema({
     colors: [{ type: String, trim: true }],
     additional: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
+  // Set default variantModel for refPath
+  variantModel: { type: String, default: "IPhoneVariant" },
 });
 
-// Create discriminator với default category
-const IPhone = BaseProduct.discriminator("IPhone", iPhoneSpecificSchema);
-
 // Override category default
-IPhone.schema.path("category").default("iPhone");
+iPhoneSchema.path("category").default("iPhone");
+
+// Create model with explicit collection name
+const IPhone = mongoose.model("IPhone", iPhoneSchema, "iphones");
 
 // ===============================
 // EXPORT

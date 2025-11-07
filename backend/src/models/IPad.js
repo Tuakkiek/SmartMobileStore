@@ -1,15 +1,17 @@
 // ================================================
 // FILE: backend/src/models/IPad.js
-// ✅ REFACTORED: Kế thừa từ BaseProduct
+// ✅ REFACTORED: Extends base schema (no discriminator)
 // ================================================
 
 import mongoose from "mongoose";
-import { BaseProduct, BaseVariant } from "./BaseProduct.js";
+import { createBaseProductSchema, createBaseVariantSchema } from "./BaseProduct.js";
 
 // ===============================
 // IPAD VARIANT SCHEMA
 // ===============================
-const iPadVariantSchema = new mongoose.Schema({
+const iPadVariantSchema = createBaseVariantSchema();
+
+iPadVariantSchema.add({
   storage: { type: String, required: true, trim: true },
   connectivity: { 
     type: String, 
@@ -18,15 +20,20 @@ const iPadVariantSchema = new mongoose.Schema({
   },
 });
 
-export const IPadVariant = BaseVariant.discriminator(
+iPadVariantSchema.index({ salesCount: -1 });
+
+export const IPadVariant = mongoose.model(
   "IPadVariant",
-  iPadVariantSchema
+  iPadVariantSchema,
+  "ipadvariants"
 );
 
 // ===============================
 // IPAD PRODUCT SCHEMA
 // ===============================
-const iPadSpecificSchema = new mongoose.Schema({
+const iPadSchema = createBaseProductSchema();
+
+iPadSchema.add({
   specifications: {
     chip: { type: String, trim: true },
     ram: { type: String, trim: true },
@@ -40,9 +47,11 @@ const iPadSpecificSchema = new mongoose.Schema({
     colors: [{ type: String, trim: true }],
     additional: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
+  variantModel: { type: String, default: "IPadVariant" },
 });
 
-const IPad = BaseProduct.discriminator("IPad", iPadSpecificSchema);
-IPad.schema.path("category").default("iPad");
+iPadSchema.path("category").default("iPad");
+
+const IPad = mongoose.model("IPad", iPadSchema, "ipads");
 
 export default IPad;
