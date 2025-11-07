@@ -21,15 +21,23 @@ const CartPage = () => {
     getCart();
   }, [getCart]);
 
-  const handleUpdateQuantity = async (variantId, newQuantity) => {
+  const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
-    await updateCartItem(variantId, newQuantity);
+
+    // ✅ Pass the item's _id (or variantId as fallback)
+    const itemId = item._id || item.variantId;
+    console.log("Updating quantity:", { itemId, newQuantity });
+
+    await updateCartItem(itemId, newQuantity);
   };
 
-  const handleRemove = async (variantId) => {
-    await removeFromCart(variantId);
-  };
+  const handleRemove = async (item) => {
+    // ✅ Pass the item's _id (or variantId as fallback)
+    const itemId = item._id || item.variantId;
+    console.log("Removing item:", { itemId });
 
+    await removeFromCart(itemId);
+  };
   if (isLoading && !cart) {
     return <Loading />;
   }

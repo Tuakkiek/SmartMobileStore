@@ -150,13 +150,20 @@ export const authAPI = {
 };
 
 // ============================================
-// CART API
+// CART API - ĐÃ SỬA
 // ============================================
 export const cartAPI = {
   getCart: () => api.get("/cart"),
+
+  // ✅ POST /cart (không phải /cart/add)
   addToCart: (data) => api.post("/cart", data),
+
+  // ✅ PUT /cart (không phải /cart/update)
   updateItem: (data) => api.put("/cart", data),
-  removeItem: (variantId) => api.delete(`/cart/${variantId}`),
+
+  // ✅ DELETE /cart/:itemId (sử dụng _id của item trong giỏ hàng)
+  removeItem: (itemId) => api.delete(`/cart/${itemId}`),
+
   clearCart: () => api.delete("/cart"),
 };
 

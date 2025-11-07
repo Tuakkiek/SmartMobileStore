@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
+import AddToCartModal from "@/components/product/AddToCartModal";
 
 const CATEGORY_MAP = {
   "dien-thoai": { model: "iPhone", api: iPhoneAPI, category: "iPhone" },
@@ -68,6 +69,7 @@ const ProductDetailPage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
   const [userSelectedKey, setUserSelectedKey] = useState(null);
+  const [showAddToCartModal, setShowAddToCartModal] = useState(false);
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
 
@@ -169,15 +171,14 @@ const ProductDetailPage = () => {
       return;
     }
 
-    // ✅ DEBUG: Log để kiểm tra dữ liệu
     console.log("🛒 Adding to cart:", {
       variantId: selectedVariant._id,
       productCategory: product.category,
       categoryInfo: categoryInfo,
     });
 
-    // ✅ LẤY CATEGORY TỪ CATEGORY_MAP (chắc chắn đúng)
-    const productType = categoryInfo?.category || categoryInfo?.model || product.category;
+    const productType =
+      categoryInfo?.category || categoryInfo?.model || product.category;
 
     if (!productType) {
       alert("Lỗi: Không xác định được loại sản phẩm");
@@ -191,15 +192,11 @@ const ProductDetailPage = () => {
       return;
     }
 
-    // ✅ GỬI ĐẦY ĐỦ: variantId, quantity, productType
-    const result = await addToCart(
-      selectedVariant._id, // variantId
-      1, // quantity
-      productType // productType từ categoryInfo.model
-    );
+    const result = await addToCart(selectedVariant._id, 1, productType);
 
     if (result.success) {
-      alert("Đã thêm vào giỏ hàng!");
+      // ✅ THAY alert BẰNG MODAL
+      setShowAddToCartModal(true);
     } else {
       alert(result.message || "Thêm vào giỏ thất bại");
     }
@@ -662,6 +659,12 @@ const ProductDetailPage = () => {
           </div>
         </div>
       </div>
+      <AddToCartModal
+        isOpen={showAddToCartModal}
+        onClose={() => setShowAddToCartModal(false)}
+        product={product}
+        variant={selectedVariant}
+      />
     </div>
   );
 };
