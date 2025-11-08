@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/orderController.js
-// ✅ COMPLETE: Order management with multi-model support + Promotion Code
+// ✅ FIXED: Handle missing productId in cart items
 // ============================================
 
 import mongoose from "mongoose";
@@ -28,7 +28,7 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// CREATE ORDER (Checkout from cart) - WITH DEBUG LOG
+// CREATE ORDER - ✅ FIXED
 // ============================================
 export const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -56,32 +56,20 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // DEBUG LOG: In chi tiết từng item trong giỏ hàng
-    console.log("=== DEBUG CART ITEMS ===");
-    cart.items.forEach((item, index) => {
-      console.log(`Item ${index + 1}:`, {
-        productId: item.productId?.toString() || "MISSING",
-        variantId: item.variantId?.toString() || "MISSING",
-        productType: item.productType,
-        quantity: item.quantity,
-        hasProductId: !!item.productId,
-        hasVariantId: !!item.variantId,
-      });
-    });
-    console.log("Total items in cart:", cart.items.length);
-    console.log("========================\n");
+    console.log("=== CREATING ORDER ===");
+    console.log("Cart items count:", cart.items.length);
 
     // === VALIDATE & POPULATE CART ITEMS ===
     const orderItems = [];
     let subtotal = 0;
 
     for (const item of cart.items) {
-      const productId = item.productId;
       const variantId = item.variantId;
       const productType = item.productType;
 
-      console.log("Processing cart item:", {
-        productId: productId?.toString(),
+      console.log("\n--- Processing cart item ---");
+      console.log("Cart item:", {
+        productId: item.productId?.toString(),
         variantId: variantId?.toString(),
         productType,
       });
@@ -95,23 +83,38 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Tìm variant
+      // ✅ STEP 1: Find variant first
       const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy biến thể sản phẩm (ID: ${variantId})`,
+          message: `Không tìm thấy biến thể sản phẩm (Variant ID: ${variantId})`,
         });
       }
 
-      // Tìm product - ưu tiên productId từ cart, fallback sang variant.productId
-      const actualProductId = productId || variant.productId;
-      console.log("Looking for product with ID:", actualProductId?.toString());
+      console.log("Found variant:", {
+        _id: variant._id?.toString(),
+        productId: variant.productId?.toString(),
+        sku: variant.sku,
+      });
 
+      // ✅ STEP 2: Get productId from variant (NOT from cart item)
+      const actualProductId = variant.productId;
+
+      if (!actualProductId) {
+        await session.abortTransaction();
+        return res.status(500).json({
+          success: false,
+          message: `Biến thể ${variant.sku} không có productId hợp lệ`,
+        });
+      }
+
+      // ✅ STEP 3: Find product using productId from variant
       const product = await models.Product.findById(actualProductId).session(
         session
       );
+
       if (!product) {
         await session.abortTransaction();
         return res.status(404).json({
@@ -121,8 +124,9 @@ export const createOrder = async (req, res) => {
       }
 
       console.log("Found product:", {
-        id: product._id?.toString(),
+        _id: product._id?.toString(),
         name: product.name,
+        status: product.status,
       });
 
       // Kiểm tra tồn kho
@@ -145,11 +149,11 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Giảm stock
+      // ✅ Giảm stock
       variant.stock -= item.quantity;
       await variant.save({ session });
 
-      // Tăng salesCount
+      // ✅ Tăng salesCount
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
 
@@ -157,8 +161,9 @@ export const createOrder = async (req, res) => {
       const itemTotal = variant.price * item.quantity;
       subtotal += itemTotal;
 
+      // ✅ Create order item with correct productId
       orderItems.push({
-        productId: product._id,
+        productId: product._id, // ✅ Use product._id from database
         variantId: variant._id,
         productType: item.productType,
         productName: product.name,
@@ -175,7 +180,13 @@ export const createOrder = async (req, res) => {
         total: itemTotal,
         images: variant.images || [],
       });
+
+      console.log("✅ Item processed successfully");
     }
+
+    console.log("\n=== ORDER ITEMS SUMMARY ===");
+    console.log("Total items:", orderItems.length);
+    console.log("Subtotal:", subtotal);
 
     // XỬ LÝ PROMOTION CODE
     let promotionDiscount = 0;
@@ -202,9 +213,13 @@ export const createOrder = async (req, res) => {
             code: promotionCode,
             discountAmount: promotionDiscount,
           };
+          console.log("✅ Promotion applied:", promotionDiscount);
         }
       } catch (promoError) {
-        console.log("Promotion code invalid or API error:", promoError.message);
+        console.log(
+          "⚠️ Promotion code invalid or API error:",
+          promoError.message
+        );
       }
     }
 
@@ -224,7 +239,14 @@ export const createOrder = async (req, res) => {
       await req.user.save({ session });
     }
 
-    // Tạo đơn hàng
+    console.log("\n=== FINAL CALCULATIONS ===");
+    console.log("Subtotal:", subtotal);
+    console.log("Shipping Fee:", shippingFee);
+    console.log("Promotion Discount:", promotionDiscount);
+    console.log("Points Used:", pointsUsed);
+    console.log("Total Amount:", total);
+
+    // ✅ Tạo đơn hàng
     const order = await Order.create(
       [
         {
@@ -251,7 +273,7 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("Order created successfully:", order[0]._id);
+    console.log("\n✅ ORDER CREATED SUCCESSFULLY:", order[0]._id);
 
     res.status(201).json({
       success: true,
@@ -260,7 +282,10 @@ export const createOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("Create order error:", error);
+    console.error("\n❌ CREATE ORDER ERROR:", {
+      message: error.message,
+      stack: error.stack,
+    });
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi khi tạo đơn hàng",
