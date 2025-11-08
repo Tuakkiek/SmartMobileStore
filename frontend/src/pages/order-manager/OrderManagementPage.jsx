@@ -98,6 +98,7 @@ const OrdersPage = () => {
   const handleViewDetail = async (orderId) => {
     try {
       const response = await orderAPI.getById(orderId);
+      console.log("Order detail from API:", response.data.data.order);
       setSelectedOrder(response.data.data.order);
       setShowDetailDialog(true);
     } catch (error) {
@@ -587,7 +588,7 @@ const OrdersPage = () => {
                     <div className="flex justify-between text-base font-bold pt-2 border-t">
                       <span>Tổng cộng:</span>
                       <span className="text-xl text-red-600">
-                        {formatPrice(selectedOrder.total)}
+                        {formatPrice(selectedOrder.totalAmount)}
                       </span>
                     </div>
                   </div>
