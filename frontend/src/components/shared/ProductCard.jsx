@@ -1,6 +1,5 @@
 // FILE: frontend/src/components/shared/ProductCard.jsx
 
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -155,7 +154,6 @@ const ProductCard = ({
     return null;
   };
   const rightBadge = getRightBadge();
-
   const installmentText =
     product.installmentBadge &&
     product.installmentBadge.toLowerCase() !== "none"
@@ -225,11 +223,12 @@ const ProductCard = ({
       const productType =
         CATEGORY_TO_TYPE_MAP[product.category] || product.category;
 
-      const result = await addToCart({
-        variantId: selectedVariant._id,
-        productType,
-        quantity: 1,
-      });
+      // ĐÃ SỬA: Gọi addToCart với 3 tham số riêng
+      const result = await addToCart(
+        selectedVariant._id, // variantId
+        1, // quantity
+        productType // productType
+      );
 
       if (result?.success) {
         toast.success("Đã thêm vào giỏ hàng", {

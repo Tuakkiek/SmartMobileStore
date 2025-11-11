@@ -280,11 +280,11 @@ const OrdersPage = () => {
                 <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="CONFIRMED">Chờ lấy hàng</SelectItem>
-                <SelectItem value="SHIPPING">Đang giao hàng</SelectItem>
-                <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
-                <SelectItem value="RETURNED">Trả hàng</SelectItem>
-                <SelectItem value="CANCELLED">Hủy đơn</SelectItem>
+                {getAllowedNextStatuses(selectedOrder?.status).map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {getStatusText(status)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -452,23 +452,80 @@ const OrdersPage = () => {
             </DialogDescription>
           </DialogHeader>
           {selectedOrder && (
-            <Select
-              value={statusUpdate.status}
-              onValueChange={(value) =>
-                setStatusUpdate({ ...statusUpdate, status: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Chọn trạng thái mới" />
-              </SelectTrigger>
-              <SelectContent>
-                {getAllowedNextStatuses(selectedOrder.status).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {getStatusText(status)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-6">
+              {/* THÊM PHẦN NÀY - Danh sách sản phẩm trong đơn */}
+              <div>
+                <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
+                <div className="space-y-3">
+                  {selectedOrder.items?.map((item, idx) => (
+                    <div key={idx} className="flex gap-4 p-4 border rounded-lg">
+                      <img
+                        src={item.images?.[0] || "/placeholder.png"}
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium">{item.productName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {[
+                            item.variantColor,
+                            item.variantStorage,
+                            item.variantConnectivity,
+                            item.variantName,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </p>
+                        <p className="text-sm">
+                          SL: {item.quantity} × {formatPrice(item.price)}
+                        </p>
+                      </div>
+                      <p className="font-semibold">
+                        {formatPrice(item.price * item.quantity)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Địa chỉ giao hàng */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h3 className="font-semibold mb-2">Địa chỉ giao hàng</h3>
+                <p>
+                  {selectedOrder.shippingAddress?.fullName} -{" "}
+                  {selectedOrder.shippingAddress?.phoneNumber}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedOrder.shippingAddress?.detailAddress},{" "}
+                  {selectedOrder.shippingAddress?.commune},
+                  {selectedOrder.shippingAddress?.district},{" "}
+                  {selectedOrder.shippingAddress?.province}
+                </p>
+              </div>
+
+              {/* Tóm tắt đơn hàng */}
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between">
+                  <span>Tạm tính:</span>
+                  <span>{formatPrice(selectedOrder.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Phí ship:</span>
+                  <span>{formatPrice(selectedOrder.shippingFee)}</span>
+                </div>
+                {selectedOrder.promotionDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Giảm giá:</span>
+                    <span>-{formatPrice(selectedOrder.promotionDiscount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Tổng:</span>
+                  <span className="text-primary">
+                    {formatPrice(selectedOrder.totalAmount)}
+                  </span>
+                </div>
+              </div>
+            </div>
           )}
           <DialogFooter>
             <Button
@@ -494,15 +551,17 @@ const OrdersPage = () => {
           <div className="space-y-4">
             {error && <ErrorMessage message={error} />}
 
-            <div className="space-y-2">
-              <Label>Trạng thái hiện tại</Label>
-              <div>
-                <Badge className={getStatusColor(selectedOrder?.status)}>
-                  {getStatusText(selectedOrder?.status)}
-                </Badge>
-              </div>
+            {/* === TRẠNG THÁI HIỆN TẠI (ĐÃ SỬA) === */}
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground mb-1">
+                Trạng thái hiện tại
+              </p>
+              <Badge className={getStatusColor(selectedOrder?.status)}>
+                {getStatusText(selectedOrder?.status)}
+              </Badge>
             </div>
 
+            {/* === CHỌN TRẠNG THÁI MỚI === */}
             <div className="space-y-2">
               <Label htmlFor="status">Trạng thái mới *</Label>
               <Select
@@ -515,11 +574,13 @@ const OrdersPage = () => {
                   <SelectValue placeholder="Chọn trạng thái" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CONFIRMED">Đã xác nhận</SelectItem>
-                  <SelectItem value="SHIPPING">Đang giao hàng</SelectItem>
-                  <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
-                  <SelectItem value="COMPLETED">Hoàn thành</SelectItem>
-                  <SelectItem value="CANCELLED">Hủy đơn</SelectItem>
+                  {getAllowedNextStatuses(selectedOrder?.status).map(
+                    (status) => (
+                      <SelectItem key={status} value={status}>
+                        {getStatusText(status)}
+                      </SelectItem>
+                    )
+                  )}
                 </SelectContent>
               </Select>
             </div>
