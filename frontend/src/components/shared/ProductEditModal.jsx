@@ -1,11 +1,11 @@
 // frontend/src/components/shared/ProductEditModal.jsx
 
 import React, { useState, useEffect, useCallback } from "react";
+
 // UI Components
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import {
   Select,
   SelectContent,
@@ -21,20 +21,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-// Spec Forms
-import IPhoneSpecsForm from "@/components/shared/specs/IPhoneSpecsForm";
-import IPadSpecsForm from "@/components/shared/specs/IPadSpecsForm";
-import MacSpecsForm from "@/components/shared/specs/MacSpecsForm";
+
+// Unified Forms (MỚI)
+import UnifiedSpecsForm from "@/components/shared/specs/UnifiedSpecsForm";
+import UnifiedVariantsForm from "@/components/shared/variants/UnifiedVariantsForm";
+
+// Spec Forms (Chỉ giữ lại cho AirPods, AppleWatch, Accessories)
 import AirPodsSpecsForm from "@/components/shared/specs/AirPodsSpecsForm";
 import AppleWatchSpecsForm from "@/components/shared/specs/AppleWatchSpecsForm";
 import AccessoriesSpecsForm from "@/components/shared/specs/AccessoriesSpecsForm";
-// Variant Forms
-import IPhoneVariantsForm from "@/components/shared/variants/IPhoneVariantsForm";
-import IPadVariantsForm from "@/components/shared/variants/IPadVariantsForm";
-import MacVariantsForm from "@/components/shared/variants/MacVariantsForm";
+
+// Variant Forms (Chỉ giữ lại cho AirPods, AppleWatch, Accessories)
 import AirPodsVariantsForm from "@/components/shared/variants/AirPodsVariantsForm";
 import AppleWatchVariantsForm from "@/components/shared/variants/AppleWatchVariantsForm";
 import AccessoriesVariantsForm from "@/components/shared/variants/AccessoriesVariantsForm";
+
 // Constants & Hooks
 import { INSTALLMENT_BADGE_OPTIONS } from "@/lib/productConstants";
 import { useProductForm } from "@/hooks/products/useProductForm";
@@ -99,13 +100,13 @@ const ProductEditModal = ({
     onSave
   );
 
-  // Gắn formData vào handleSubmit để nó có thể được gọi trong form
+  // Gắn formData vào handleSubmit
   const handleSubmit = useCallback(
     (e) => submitAPI(e, formData),
     [submitAPI, formData]
   );
 
-  // Logic render Form Thông số
+  // === RENDER SPECS FORM (CẬP NHẬT) ===
   const renderSpecsForm = useCallback(() => {
     if (!formData) return null;
 
@@ -126,13 +127,13 @@ const ProductEditModal = ({
       onRemove: removeCustomSpec,
     };
 
+    // DÙNG UNIFIED FORM CHO iPhone/iPad/Mac
+    if (["iPhone", "iPad", "Mac"].includes(effectiveCategory)) {
+      return <UnifiedSpecsForm category={effectiveCategory} {...props} />;
+    }
+
+    // GIỮ NGUYÊN FORM RIÊNG CHO CÁC LOẠI KHÁC
     switch (effectiveCategory) {
-      case "iPhone":
-        return <IPhoneSpecsForm {...props} />;
-      case "iPad":
-        return <IPadSpecsForm {...props} />;
-      case "Mac":
-        return <MacSpecsForm {...props} />;
       case "AirPods":
         return <AirPodsSpecsForm {...props} />;
       case "AppleWatch":
@@ -154,7 +155,7 @@ const ProductEditModal = ({
     removeCustomSpec,
   ]);
 
-  // Logic render Form Biến thể
+  // === RENDER VARIANTS FORM (CẬP NHẬT) ===
   const renderVariantsForm = useCallback(() => {
     if (!formData) return null;
 
@@ -172,13 +173,13 @@ const ProductEditModal = ({
       model: formData.model,
     };
 
+    // DÙNG UNIFIED FORM CHO iPhone/iPad/Mac
+    if (["iPhone", "iPad", "Mac"].includes(effectiveCategory)) {
+      return <UnifiedVariantsForm category={effectiveCategory} {...props} />;
+    }
+
+    // GIỮ NGUYÊN FORM RIÊNG CHO CÁC LOẠI KHÁC
     switch (effectiveCategory) {
-      case "iPhone":
-        return <IPhoneVariantsForm {...props} />;
-      case "iPad":
-        return <IPadVariantsForm {...props} />;
-      case "Mac":
-        return <MacVariantsForm {...props} />;
       case "AirPods":
         return <AirPodsVariantsForm {...props} />;
       case "AppleWatch":
@@ -202,7 +203,7 @@ const ProductEditModal = ({
     removeVariantOption,
   ]);
 
-  // RENDER LOADING STATE
+  // === RENDER LOADING STATE ===
   if (!formData || !effectiveCategory) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,7 +225,7 @@ const ProductEditModal = ({
     );
   }
 
-  // RENDER MAIN MODAL
+  // === RENDER MAIN MODAL ===
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -256,7 +257,6 @@ const ProductEditModal = ({
               {/* TAB CƠ BẢN */}
               <TabsContent value="basic" className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* ... (Các trường Basic Form giữ nguyên) */}
                   <div className="space-y-2">
                     <Label>
                       Tên sản phẩm <span className="text-red-500">*</span>
