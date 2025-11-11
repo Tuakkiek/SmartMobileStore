@@ -1,8 +1,4 @@
-// ============================================
-// FILE: src/pages/customer/OrderDetailPage.jsx
-// COMPLETE: Full variant info + promotion + accurate total
-// ============================================
-
+// src/pages/customer/OrderDetailPage.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -18,6 +14,9 @@ import {
   getStatusText,
 } from "@/lib/utils";
 
+// Placeholder nếu ảnh lỗi
+const PlaceholderImg = "https://via.placeholder.com/80?text=No+Image";
+
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -30,6 +29,7 @@ const OrderDetailPage = () => {
   }, [id]);
 
   const fetchOrder = async () => {
+    setIsLoading(true);
     try {
       const response = await orderAPI.getById(id);
       setOrder(response.data.data.order);
@@ -54,10 +54,7 @@ const OrderDetailPage = () => {
     }
   };
 
-  if (isLoading) {
-    return <Loading />;
-  }
-
+  if (isLoading) return <Loading />;
   if (!order) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -69,13 +66,28 @@ const OrderDetailPage = () => {
     );
   }
 
+  // Helper: Lấy URL ảnh đầy đủ
+  const getImageUrl = (path) => {
+    if (!path) return PlaceholderImg;
+    // Nếu backend trả full URL → dùng luôn
+    if (path.startsWith("http")) return path;
+    // Nếu là đường dẫn tương đối → thêm base URL
+    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  };
+
+  // Helper: Tạo nhãn biến thể
+  const getVariantLabel = (item) => {
+    const parts = [];
+    if (item.variantColor) parts.push(item.variantColor);
+    if (item.variantStorage) parts.push(item.variantStorage);
+    if (item.variantName) parts.push(item.variantName);
+    if (item.variantConnectivity) parts.push(item.variantConnectivity);
+    return parts.length > 0 ? parts.join(" • ") : null;
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <Button
-        variant="ghost"
-        onClick={() => navigate("/orders")}
-        className="mb-6"
-      >
+      <Button variant="ghost" onClick={() => navigate("/orders")} className="mb-6">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Quay lại
       </Button>
@@ -88,9 +100,7 @@ const OrderDetailPage = () => {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="mb-2">
-                    Đơn hàng #{order.orderNumber}
-                  </CardTitle>
+                  <CardTitle className="mb-2">Đơn hàng #{order.orderNumber}</CardTitle>
                   <p className="text-sm text-muted-foreground">
                     Đặt ngày {formatDate(order.createdAt)}
                   </p>
@@ -108,38 +118,56 @@ const OrderDetailPage = () => {
               <CardTitle>Sản phẩm</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {order.items.map((item) => (
-                <div
-                  key={item.variantId || item._id}
-                  className="flex gap-4 pb-4 border-b last:border-0"
-                >
-                  <img
-                    src={
-                      item.images?.[0]
-                        ? `${import.meta.env.VITE_API_URL}${item.images[0]}` // nếu backend trả đường dẫn tương đối
-                        : PlaceholderImg
-                    }
-                    alt={item.productName}
-                    className="w-20 h-20 object-cover rounded bg-gray-100"
-                    onError={(e) => {
-                      e.target.src = PlaceholderImg; // fallback nếu URL lỗi
-                    }}
-                  />
-                  {/* ... phần còn lại */}
-                </div>
-              ))}
+              {order.items.map((item, idx) => {
+                const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : PlaceholderImg;
+                const variantLabel = getVariantLabel(item);
 
-              {/* PROMOTION BOX NẾU CÓ */}
+                return (
+                  <div
+                    key={item._id || idx}
+                    className="flex gap-4 pb-4 border-b last:border-0"
+                  >
+                    <img
+                      src={imageUrl}
+                      alt={item.productName}
+                      className="w-20 h-20 object-cover rounded bg-gray-100"
+                      onError={(e) => {
+                        e.target.src = PlaceholderImg;
+                      }}
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium">{item.productName}</p>
+                      {variantLabel && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {variantLabel}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        SL: {item.quantity} x {formatPrice(item.price)}
+                      </p>
+                      {item.originalPrice > item.price && (
+                        <p className="text-xs text-muted-foreground line-through">
+                          {formatPrice(item.originalPrice)} mỗi
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">{formatPrice(item.total || item.price * item.quantity)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* PROMOTION BOX */}
               {order.appliedPromotion && (
-                <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-green-700">
-                        Mã giảm giá: {order.appliedPromotion.code}
+                        Mã: {order.appliedPromotion.code}
                       </p>
                       <p className="text-sm text-green-600">
-                        Giảm:{" "}
-                        {formatPrice(order.appliedPromotion.discountAmount)}
+                        Giảm: {formatPrice(order.appliedPromotion.discountAmount)}
                       </p>
                     </div>
                   </div>
@@ -157,17 +185,13 @@ const OrderDetailPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium mb-1">
-                {order.shippingAddress.fullName}
-              </p>
+              <p className="font-medium mb-1">{order.shippingAddress.fullName}</p>
               <p className="text-sm text-muted-foreground mb-1">
                 {order.shippingAddress.phoneNumber}
               </p>
               <p className="text-sm text-muted-foreground">
-                {order.shippingAddress.detailAddress},{" "}
-                {order.shippingAddress.commune},{" "}
-                {order.shippingAddress.district},{" "}
-                {order.shippingAddress.province}
+                {order.shippingAddress.detailAddress}, {order.shippingAddress.commune},{" "}
+                {order.shippingAddress.district}, {order.shippingAddress.province}
               </p>
             </CardContent>
           </Card>
@@ -181,51 +205,50 @@ const OrderDetailPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p>{getStatusText(order.paymentMethod)}</p>
-              <Badge className={`mt-2 ${getStatusColor(order.paymentStatus)}`}>
-                {getStatusText(order.paymentStatus)}
-              </Badge>
+              <p>{order.paymentMethod === "COD" ? "Thanh toán khi nhận hàng" : "Chuyển khoản"}</p>
             </CardContent>
           </Card>
 
           {/* Order Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Package className="w-5 h-5 mr-2" />
-                Lịch sử đơn hàng
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {order.statusHistory?.map((history, index) => (
-                  <div key={index} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          index === 0 ? "bg-primary" : "bg-muted"
-                        }`}
-                      />
-                      {index < order.statusHistory.length - 1 && (
-                        <div className="w-0.5 h-full bg-muted mt-1" />
-                      )}
+          {order.statusHistory?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Package className="w-5 h-5 mr-2" />
+                  Lịch sử đơn hàng
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {order.statusHistory.map((history, index) => (
+                    <div key={index} className="flex gap-4">
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`w-3 h-3 rounded-full ${
+                            index === order.statusHistory.length - 1 ? "bg-primary" : "bg-muted"
+                          }`}
+                        />
+                        {index < order.statusHistory.length - 1 && (
+                          <div className="w-0.5 h-full bg-muted mt-1" />
+                        )}
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <Badge className={getStatusColor(history.status)}>
+                          {getStatusText(history.status)}
+                        </Badge>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {formatDate(history.updatedAt)}
+                        </p>
+                        {history.note && (
+                          <p className="text-sm mt-1">{history.note}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 pb-4">
-                      <Badge className={getStatusColor(history.status)}>
-                        {getStatusText(history.status)}
-                      </Badge>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {formatDate(history.updatedAt)}
-                      </p>
-                      {history.note && (
-                        <p className="text-sm mt-1">{history.note}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -235,7 +258,6 @@ const OrderDetailPage = () => {
               <CardTitle>Tổng quan đơn hàng</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Tổng tiền chi tiết */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tạm tính</span>
@@ -243,10 +265,8 @@ const OrderDetailPage = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Phí vận chuyển</span>
-                  <span className="text-green-600">
-                    {order.shippingFee === 0
-                      ? "Miễn phí"
-                      : formatPrice(order.shippingFee)}
+                  <span className={order.shippingFee === 0 ? "text-green-600" : ""}>
+                    {order.shippingFee === 0 ? "Miễn phí" : formatPrice(order.shippingFee)}
                   </span>
                 </div>
                 {order.promotionDiscount > 0 && (
@@ -255,12 +275,16 @@ const OrderDetailPage = () => {
                     <span>-{formatPrice(order.promotionDiscount)}</span>
                   </div>
                 )}
+                {order.pointsUsed > 0 && (
+                  <div className="flex justify-between text-sm text-blue-600">
+                    <span>Điểm thưởng</span>
+                    <span>-{formatPrice(order.pointsUsed)}</span>
+                  </div>
+                )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
-                    <span className="text-primary">
-                      {formatPrice(order.totalAmount)}
-                    </span>
+                    <span className="text-primary">{formatPrice(order.totalAmount)}</span>
                   </div>
                 </div>
               </div>

@@ -34,9 +34,9 @@ const CATEGORY_MAP = {
     category: "AppleWatch",
   },
   "phu-kien": {
-    model: "Accessories",
+    model: "Accessory",
     api: accessoryAPI,
-    category: "Accessories",
+    category: "Accessory",
   },
 };
 

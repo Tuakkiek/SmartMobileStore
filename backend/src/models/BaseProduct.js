@@ -99,7 +99,7 @@ export const createBaseProductSchema = () => {
         type: String,
         required: true,
         trim: true,
-        enum: ["iPhone", "iPad", "Mac", "AirPods", "Apple Watch"],
+        enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"],
       },
       
       status: {

@@ -1,5 +1,6 @@
 // ============================================
 // FILE: src/pages/customer/OrdersPage.jsx
+// FIXED: Hiển thị đúng ảnh & thông tin biến thể như CheckoutPage
 // ============================================
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -94,21 +95,39 @@ const OrdersPage = () => {
                 </div>
 
                 <div className="space-y-3 mb-4">
-                  {order.items.slice(0, 2).map((item) => (
-                    <div key={item.productId._id} className="flex gap-3">
-                      <img
-                        src={item.productId?.images?.[0] || "/placeholder.png"}
-                        alt={item.productName}
-                        className="w-16 h-16 object-cover rounded"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          SL: {item.quantity} x {formatPrice(item.price)}
-                        </p>
+                  {order.items.slice(0, 2).map((item, idx) => {
+                    // DÙNG DỮ LIỆU ĐÃ LƯU TRONG createOrder
+                    const image = item.images?.[0] || "/placeholder.png";
+                    const variantLabel = [
+                      item.variantColor,
+                      item.variantStorage || item.variantName,
+                      item.variantConnectivity,
+                    ].filter(Boolean).join(" • ");
+
+                    return (
+                      <div
+                        key={`${order._id}-${idx}`}
+                        className="flex gap-3"
+                      >
+                        <img
+                          src={image}
+                          alt={item.productName}
+                          className="w-16 h-16 object-cover rounded"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{item.productName}</p>
+                          {variantLabel && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {variantLabel}
+                            </p>
+                          )}
+                          <p className="text-sm text-muted-foreground">
+                            SL: {item.quantity} x {formatPrice(item.price)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {order.items.length > 2 && (
                     <p className="text-sm text-muted-foreground">
                       Và {order.items.length - 2} sản phẩm khác...

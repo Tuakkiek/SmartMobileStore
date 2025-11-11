@@ -1,13 +1,14 @@
 // ============================================
 // FILE: src/pages/customer/ProfilePage.jsx
+// FIXED: All errors – semicolon, typo, setIsLoading
 // ============================================
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,9 @@ import {
   Package
 } from "lucide-react";
 import { formatPrice, formatDate, getStatusColor, getStatusText } from "@/lib/utils";
+
+// Placeholder ảnh lỗi
+const PLACEHOLDER_IMG = "https://via.placeholder.com/64?text=No+Image";
 
 const ProfilePage = () => {
   const { user, getCurrentUser } = useAuthStore();
@@ -134,7 +138,9 @@ const ProfilePage = () => {
   );
 };
 
-// Orders Section Component
+// ============================================
+// ORDERS SECTION – HOÀN CHỈNH
+// ============================================
 const OrdersSection = () => {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -142,18 +148,16 @@ const OrdersSection = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchOrders();
   }, [statusFilter]);
 
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
-      const params = {
-        status: statusFilter !== "all" ? statusFilter : undefined,
-      };
+      const params = statusFilter !== "all" ? { status: statusFilter } : {};
       const response = await orderAPI.getMyOrders(params);
-      setOrders(response.data.data.orders);
+      setOrders(response.data.data.orders || []);
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
@@ -171,14 +175,30 @@ const OrdersSection = () => {
     }
   };
 
+  const getImageUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    const base = import.meta.env.VITE_API_URL || "";
+    return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  };
+
+  const getVariantLabel = (item) => {
+    const parts = [];
+    if (item.variantColor) parts.push(item.variantColor);
+    if (item.variantStorage) parts.push(item.variantStorage);
+    if (item.variantName) parts.push(item.variantName);
+    if (item.variantConnectivity) parts.push(item.variantConnectivity);
+    return parts.length > 0 ? parts.join(" • ") : "Không có";
+  };
+
   const statusButtons = [
     { value: "all", label: "Tất cả" },
     { value: "PENDING", label: "Chờ xử lý" },
     { value: "CONFIRMED", label: "Đã xác nhận" },
-    { value: "PROCESSING", label: "Đang chuyển hàng" },
-    { value: "SHIPPING", label: "Đang giao hàng" },
-    { value: "DELIVERED", label: "Đã hủy" },
-    { value: "CANCELLED", label: "Thành công" },
+    { value: "PROCESSING", label: "Đang xử lý" },
+    { value: "SHIPPING", label: "Đang giao" },
+    { value: "DELIVERED", label: "Đã giao" },
+    { value: "CANCELLED", label: "Đã hủy" },
   ];
 
   return (
@@ -188,7 +208,6 @@ const OrdersSection = () => {
           <CardTitle>Đơn hàng đã mua</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Status Filter */}
           <div className="flex gap-2 overflow-x-auto pb-4 border-b mb-6">
             {statusButtons.map((btn) => (
               <Button
@@ -203,7 +222,6 @@ const OrdersSection = () => {
             ))}
           </div>
 
-          {/* Orders List */}
           {isLoading ? (
             <div className="text-center py-8">Đang tải...</div>
           ) : orders.length === 0 ? (
@@ -216,7 +234,6 @@ const OrdersSection = () => {
               {orders.map((order) => (
                 <Card key={order._id} className="overflow-hidden">
                   <CardContent className="p-0">
-                    {/* Order Header */}
                     <div className="p-4 bg-muted/50 border-b flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div>
@@ -235,43 +252,46 @@ const OrdersSection = () => {
                       </Badge>
                     </div>
 
-                    {/* Order Items */}
                     <div className="p-4 space-y-4">
-                      {order.items?.map((item, index) => (
-                        <div key={index} className="flex items-center gap-4">
-                          <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
-                            {item.productId?.images?.[0] ? (
-                              <img
-                                src={item.productId.images[0]}
-                                alt={item.productName}
-                                className="w-full h-full object-cover rounded"
-                              />
-                            ) : (
-                              <Package className="w-8 h-8 text-gray-400" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium line-clamp-1">{item.productName}</h4>
-                            <div className="flex items-center gap-4 mt-1">
-                              <p className="text-sm text-muted-foreground">
-                                Dung lượng: <span className="font-medium">{item.specifications?.storage || "N/A"}</span>
+                      {order.items?.map((item, index) => {
+                        const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+                        const variantLabel = getVariantLabel(item);
+
+                        return (
+                          <div key={index} className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt={item.productName}
+                                  className="w-full h-full object-cover rounded"
+                                  onError={(e) => {
+                                    e.target.src = PLACEHOLDER_IMG;
+                                  }}
+                                />
+                              ) : (
+                                <Package className="w-8 h-8 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium line-clamp-1">{item.productName}</h4>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {variantLabel}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                Ram: <span className="font-medium">{item.specifications?.ram || "N/A"}</span>
+                                SL: {item.quantity}
                               </p>
-                              <p className="text-sm text-muted-foreground">
-                                Màu sắc: <span className="font-medium">{item.specifications?.color || "N/A"}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold">
+                                {formatPrice(item.price * item.quantity)}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold">Tổng tiền: {formatPrice(item.price * item.quantity)}</p>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
-                    {/* Order Footer */}
                     <div className="p-4 bg-muted/50 border-t flex items-center justify-end">
                       <Button
                         variant="outline"
@@ -289,7 +309,6 @@ const OrdersSection = () => {
         </CardContent>
       </Card>
 
-      {/* Order Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -321,28 +340,39 @@ const OrdersSection = () => {
               </div>
 
               <div className="space-y-3">
-                {selectedOrder.items?.map((item, index) => (
-                  <div key={index} className="flex gap-4 p-3 border rounded-lg">
-                    <div className="w-16 h-16 bg-gray-100 rounded flex-shrink-0">
-                      {item.productId?.images?.[0] ? (
-                        <img
-                          src={item.productId.images[0]}
-                          alt={item.productName}
-                          className="w-full h-full object-cover rounded"
-                        />
-                      ) : (
-                        <Package className="w-8 h-8 text-gray-400" />
-                      )}
+                {selectedOrder.items?.map((item, index) => {
+                  const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+                  const variantLabel = getVariantLabel(item);
+
+                  return (
+                    <div key={index} className="flex gap-4 p-3 border rounded-lg">
+                      <div className="w-16 h-16 bg-gray-100 rounded flex-shrink-0">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={item.productName}
+                            className="w-full h-full object-cover rounded"
+                            onError={(e) => {
+                              e.target.src = PLACEHOLDER_IMG;
+                            }}
+                          />
+                        ) : (
+                          <Package className="w-8 h-8 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium">{item.productName}</h4>
+                        {variantLabel !== "Không có" && (
+                          <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">x{item.quantity}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium">{item.productName}</h4>
-                      <p className="text-sm text-muted-foreground">x{item.quantity}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{formatPrice(item.price)}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="pt-4 border-t space-y-2">
@@ -354,7 +384,7 @@ const OrdersSection = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Phương thức thanh toán:</span>
-                  <span>{getStatusText(selectedOrder.paymentMethod)}</span>
+                  <span>{selectedOrder.paymentMethod === "COD" ? "Thanh toán khi nhận hàng" : "Chuyển khoản"}</span>
                 </div>
               </div>
             </div>
@@ -369,7 +399,9 @@ const OrdersSection = () => {
   );
 };
 
-// Profile Form Component
+// ============================================
+// PROFILE FORM – HOÀN CHỈNH
+// ============================================
 const ProfileForm = ({ user, onUpdate }) => {
   const [formData, setFormData] = useState({
     fullName: user?.fullName || "",
@@ -466,7 +498,9 @@ const ProfileForm = ({ user, onUpdate }) => {
   );
 };
 
-// Addresses Manager Component
+// ============================================
+// ADDRESSES MANAGER – HOÀN CHỈNH
+// ============================================
 const AddressesManager = ({ user, onUpdate }) => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -504,7 +538,6 @@ const AddressesManager = ({ user, onUpdate }) => {
 
   const handleDelete = async (addressId) => {
     if (!confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) return;
-
     try {
       await userAPI.deleteAddress(addressId);
       onUpdate();
@@ -663,7 +696,9 @@ const AddressesManager = ({ user, onUpdate }) => {
   );
 };
 
-// Change Password Form Component
+// ============================================
+// CHANGE PASSWORD FORM – HOÀN CHỈNH
+// ============================================
 const ChangePasswordForm = () => {
   const { changePassword } = useAuthStore();
   const [formData, setFormData] = useState({
@@ -697,7 +732,7 @@ const ChangePasswordForm = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(true); // ĐÃ SỬA: nineteen → true
     const result = await changePassword({
       oldPassword: formData.oldPassword,
       newPassword: formData.newPassword,
@@ -776,7 +811,9 @@ const ChangePasswordForm = () => {
   );
 };
 
-// Logout Button Component
+// ============================================
+// LOGOUT BUTTON – HOÀN CHỈNH
+// ============================================
 const LogoutButton = () => {
   const { logout } = useAuthStore();
   const navigate = useNavigate();

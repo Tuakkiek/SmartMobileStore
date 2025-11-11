@@ -135,7 +135,12 @@ const CheckoutPage = () => {
         paymentMethod: formData.paymentMethod,
         note: formData.note,
         promotionCode: appliedPromotion?.code || undefined, // GỬI MÃ NẾU CÓ
-      };
+        items: cart.items.map((item) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+        productType: item.productType,
+      })),
+    };
 
       const response = await orderAPI.create(orderData);
       toast.success("Đặt hàng thành công!");

@@ -291,9 +291,8 @@ export const createOrder = async (req, res) => {
     session.endSession();
   }
 };
-
 // ============================================
-// GET MY ORDERS
+// GET MY ORDERS – ĐÃ SỬA: TRẢ VỀ ĐỦ TRƯỜNG CẦN THIẾT
 // ============================================
 export const getMyOrders = async (req, res) => {
   try {
@@ -301,8 +300,22 @@ export const getMyOrders = async (req, res) => {
     const query = { customerId: req.user._id };
     if (status) query.status = status;
 
+    // CHỌN CÁC TRƯỜNG CẦN THIẾT TRONG items
     const orders = await Order.find(query)
-      .populate("customerId", "fullName phoneNumber")
+      .select(`
+        orderNumber
+        createdAt
+        status
+        totalAmount
+        items.productName
+        items.quantity
+        items.price
+        items.images
+        items.variantColor
+        items.variantStorage
+        items.variantName
+        items.variantConnectivity
+      `)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -332,10 +345,16 @@ export const getMyOrders = async (req, res) => {
 // ============================================
 export const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id).populate(
-      "customerId",
-      "fullName phoneNumber email"
-    );
+    const order = await Order.findById(req.params.id)
+      .select(
+        "orderNumber createdAt status totalAmount shippingAddress paymentMethod note " +
+        "subtotal shippingFee promotionDiscount appliedPromotion pointsUsed " +
+        "items.productName items.quantity items.price items.images " +
+        "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
+        "items.variantSku items.originalPrice items.total " +
+        "statusHistory"
+      )
+      .populate("customerId", "fullName phoneNumber email");
 
     if (!order) {
       return res.status(404).json({
