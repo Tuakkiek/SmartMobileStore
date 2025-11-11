@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/orderController.js
-// ✅ FIXED: Handle missing productId in cart items
+// FIXED: Handle missing productId in cart items + ADDED RETURNED status
 // ============================================
 
 import mongoose from "mongoose";
@@ -28,7 +28,7 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// CREATE ORDER - ✅ FIXED
+// CREATE ORDER - FIXED
 // ============================================
 export const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -83,7 +83,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // ✅ STEP 1: Find variant first
+      // STEP 1: Find variant first
       const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
@@ -99,7 +99,7 @@ export const createOrder = async (req, res) => {
         sku: variant.sku,
       });
 
-      // ✅ STEP 2: Get productId from variant (NOT from cart item)
+      // STEP 2: Get productId from variant (NOT from cart item)
       const actualProductId = variant.productId;
 
       if (!actualProductId) {
@@ -110,7 +110,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // ✅ STEP 3: Find product using productId from variant
+      // STEP 3: Find product using productId from variant
       const product = await models.Product.findById(actualProductId).session(
         session
       );
@@ -149,11 +149,11 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // ✅ Giảm stock
+      // Giảm stock
       variant.stock -= item.quantity;
       await variant.save({ session });
 
-      // ✅ Tăng salesCount
+      // Tăng salesCount
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
 
@@ -161,9 +161,9 @@ export const createOrder = async (req, res) => {
       const itemTotal = variant.price * item.quantity;
       subtotal += itemTotal;
 
-      // ✅ Create order item with correct productId
+      // Create order item with correct productId
       orderItems.push({
-        productId: product._id, // ✅ Use product._id from database
+        productId: product._id, // Use product._id from database
         variantId: variant._id,
         productType: item.productType,
         productName: product.name,
@@ -181,7 +181,7 @@ export const createOrder = async (req, res) => {
         images: variant.images || [],
       });
 
-      console.log("✅ Item processed successfully");
+      console.log("Item processed successfully");
     }
 
     console.log("\n=== ORDER ITEMS SUMMARY ===");
@@ -213,13 +213,10 @@ export const createOrder = async (req, res) => {
             code: promotionCode,
             discountAmount: promotionDiscount,
           };
-          console.log("✅ Promotion applied:", promotionDiscount);
+          console.log("Promotion applied:", promotionDiscount);
         }
       } catch (promoError) {
-        console.log(
-          "⚠️ Promotion code invalid or API error:",
-          promoError.message
-        );
+        console.log("Promotion code invalid or API error:", promoError.message);
       }
     }
 
@@ -246,7 +243,7 @@ export const createOrder = async (req, res) => {
     console.log("Points Used:", pointsUsed);
     console.log("Total Amount:", total);
 
-    // ✅ Tạo đơn hàng
+    // Tạo đơn hàng
     const order = await Order.create(
       [
         {
@@ -273,7 +270,7 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("\n✅ ORDER CREATED SUCCESSFULLY:", order[0]._id);
+    console.log("\nORDER CREATED SUCCESSFULLY:", order[0]._id);
 
     res.status(201).json({
       success: true,
@@ -282,7 +279,7 @@ export const createOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("\n❌ CREATE ORDER ERROR:", {
+    console.error("\nCREATE ORDER ERROR:", {
       message: error.message,
       stack: error.stack,
     });
@@ -525,58 +522,116 @@ export const getAllOrders = async (req, res) => {
 // UPDATE ORDER STATUS (Admin/Order Manager)
 // ============================================
 export const updateOrderStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const order = await Order.findById(req.params.id);
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
+  try {
+    const { status, note } = req.body;
+    const adminId = req.user._id;
+
+    const order = await Order.findById(req.params.id).session(session);
     if (!order) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy đơn hàng",
       });
     }
 
+    // === 1. XÁC THỰC CHUYỂN TRẠNG THÁI ===
     const validTransitions = {
       PENDING: ["CONFIRMED", "CANCELLED"],
       CONFIRMED: ["SHIPPING", "CANCELLED"],
-      SHIPPING: ["DELIVERED", "CANCELLED"],
-      DELIVERED: ["COMPLETED"],
+      SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
+      DELIVERED: ["RETURNED"],
+      RETURNED: [],
       CANCELLED: [],
-      COMPLETED: [],
     };
 
     if (!validTransitions[order.status].includes(status)) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không thể chuyển từ ${order.status} sang ${status}`,
+        message: `Không thể chuyển từ "${getStatusText(
+          order.status
+        )}" sang "${getStatusText(status)}"`,
       });
     }
 
-    order.status = status;
+    // === 2. HOÀN KHO KHI HỦY/TRẢ HÀNG ===
+    if (
+      ["CANCELLED", "RETURNED"].includes(status) &&
+      !["CANCELLED", "RETURNED"].includes(order.status)
+    ) {
+      for (const item of order.items) {
+        const models = getModelsByType(item.productType);
+        if (models) {
+          const variant = await models.Variant.findById(item.variantId).session(
+            session
+          );
+          if (variant) {
+            variant.stock += item.quantity;
+            await variant.save({ session });
+          }
 
-    if (status === "CONFIRMED") order.confirmedAt = new Date();
-    if (status === "SHIPPING") order.shippingAt = new Date();
-    if (status === "DELIVERED") order.deliveredAt = new Date();
-    if (status === "COMPLETED") order.completedAt = new Date();
-    if (status === "CANCELLED") {
-      order.cancelledAt = new Date();
-      order.cancelReason = req.body.cancelReason || "Admin hủy đơn";
+          const product = await models.Product.findById(item.productId).session(
+            session
+          );
+          if (product) {
+            product.salesCount = Math.max(
+              0,
+              (product.salesCount || 0) - item.quantity
+            );
+            await product.save({ session });
+          }
+        }
+      }
     }
 
-    await order.save();
+    // === 3. CẬP NHẬT THỜI GIAN ===
+    const now = new Date();
+    if (status === "CONFIRMED") order.confirmedAt = now;
+    if (status === "SHIPPING") order.shippingAt = now;
+    if (status === "DELIVERED") order.deliveredAt = now;
+    if (status === "RETURNED") order.returnedAt = now;
+    if (status === "CANCELLED") order.cancelledAt = now;
+
+    // === 4. CẬP NHẬT TRẠNG THÁI + LỊCH SỬ ===
+    order.status = status;
+    order.statusHistory.push({
+      status,
+      updatedBy: adminId,
+      updatedAt: now,
+      note: note || getDefaultNote(order.status, status),
+    });
+
+    await order.save({ session });
+    await session.commitTransaction();
 
     res.json({
       success: true,
-      message: "Cập nhật trạng thái đơn hàng thành công",
+      message: "Cập nhật trạng thái thành công",
       data: { order },
     });
   } catch (error) {
+    await session.abortTransaction();
     console.error("Update order status error:", error);
-    res.status(400).json({
+    res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Lỗi server",
     });
+  } finally {
+    session.endSession();
   }
+};
+
+// Helper: Ghi chú mặc định
+const getDefaultNote = (from, to) => {
+  const notes = {
+    CANCELLED: "Đơn hàng bị hủy bởi admin",
+    RETURNED: "Khách hàng trả hàng",
+  };
+  return notes[to] || "";
 };
 
 // ============================================
@@ -599,15 +654,15 @@ export const getOrderStatistics = async (req, res) => {
         $group: {
           _id: "$status",
           count: { $sum: 1 },
-          totalAmount: { $sum: "$total" },
+          totalAmount: { $sum: "$totalAmount" }, // ĐÃ SỬA: dùng totalAmount
         },
       },
     ]);
 
     const totalOrders = await Order.countDocuments(dateFilter);
     const totalRevenue = await Order.aggregate([
-      { $match: { ...dateFilter, status: "COMPLETED" } },
-      { $group: { _id: null, total: { $sum: "$total" } } },
+      { $match: { ...dateFilter, status: "DELIVERED" } }, // hoặc RETURNED nếu cần
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
     ]);
 
     res.json({

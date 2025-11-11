@@ -60,6 +60,26 @@ const OrdersPage = () => {
     totalPages: 1,
     total: 0,
   });
+  const getAllowedNextStatuses = (currentStatus) => {
+    const flow = {
+      PENDING: ["CONFIRMED", "CANCELLED"],
+      CONFIRMED: ["SHIPPING", "CANCELLED"],
+      SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
+      DELIVERED: ["RETURNED"],
+      RETURNED: [],
+      CANCELLED: [],
+    };
+    return flow[currentStatus] || [];
+  };
+  const statusButtons = [
+    { value: "all", label: "Tất cả" },
+    { value: "PENDING", label: "Chờ xác nhận" },
+    { value: "CONFIRMED", label: "Chờ lấy hàng" },
+    { value: "SHIPPING", label: "Đang giao hàng" },
+    { value: "DELIVERED", label: "Đã giao hàng" },
+    { value: "RETURNED", label: "Trả hàng" },
+    { value: "CANCELLED", label: "Đã hủy" },
+  ];
 
   const [statusUpdate, setStatusUpdate] = useState({
     status: "",
@@ -111,22 +131,22 @@ const OrdersPage = () => {
   const handleOpenStatusDialog = (order) => {
     setSelectedOrder(order);
     setStatusUpdate({
-      status: getNextStatus(order.status),
+      status: "", // để trống, bắt chọn
       note: "",
     });
     setError("");
     setShowStatusDialog(true);
   };
 
-  const getNextStatus = (currentStatus) => {
-    const statusFlow = {
-      PENDING: "CONFIRMED",
-      CONFIRMED: "SHIPPING",
-      SHIPPING: "DELIVERED",
-      DELIVERED: "COMPLETED",
-    };
-    return statusFlow[currentStatus] || currentStatus;
-  };
+  // const getNextStatus = (currentStatus) => {
+  //   const statusFlow = {
+  //     PENDING: "CONFIRMED",
+  //     CONFIRMED: "SHIPPING",
+  //     SHIPPING: "DELIVERED",
+  //     // DELIVERED: "RETURNED", // ✅ HOẶC BỎ DÒNG NÀY
+  //   };
+  //   return statusFlow[currentStatus] || currentStatus;
+  // };
 
   const handleUpdateStatus = async () => {
     if (!statusUpdate.status) {
@@ -156,7 +176,7 @@ const OrdersPage = () => {
       CONFIRMED: CheckCircle,
       SHIPPING: Truck,
       DELIVERED: CheckCircle,
-      COMPLETED: CheckCircle,
+      RETURNED: XCircle, // THÊM MỚI (hoặc chọn icon khác như RotateCcw)
       CANCELLED: XCircle,
     };
     return icons[status] || Clock;
@@ -260,13 +280,11 @@ const OrdersPage = () => {
                 <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                <SelectItem value="PENDING">Chờ xử lý</SelectItem>
-                <SelectItem value="CONFIRMED">Đã xác nhận</SelectItem>
-                <SelectItem value="SHIPPING">Đang giao</SelectItem>
-                <SelectItem value="DELIVERED">Đã giao</SelectItem>
-                <SelectItem value="COMPLETED">Hoàn thành</SelectItem>
-                <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                <SelectItem value="CONFIRMED">Chờ lấy hàng</SelectItem>
+                <SelectItem value="SHIPPING">Đang giao hàng</SelectItem>
+                <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
+                <SelectItem value="RETURNED">Trả hàng</SelectItem>
+                <SelectItem value="CANCELLED">Hủy đơn</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -372,8 +390,9 @@ const OrdersPage = () => {
                         Chi tiết
                       </Button>
                       {order.status !== "DELIVERED" &&
-                        order.status !== "COMPLETED" &&
-                        order.status !== "CANCELLED" && (
+                        order.status !== "RETURNED" &&
+                        order.status !== "CANCELLED" &&
+                        getAllowedNextStatuses(order.status).length > 0 && (
                           <Button
                             size="sm"
                             onClick={() => handleOpenStatusDialog(order)}
@@ -432,227 +451,25 @@ const OrdersPage = () => {
               Mã đơn: #{selectedOrder?.orderNumber}
             </DialogDescription>
           </DialogHeader>
-
           {selectedOrder && (
-            <div className="space-y-6">
-              {/* Status Badge */}
-              <div className="flex items-center gap-3">
-                <Badge
-                  className={`${getStatusColor(
-                    selectedOrder.status
-                  )} text-base px-4 py-2`}
-                >
-                  {getStatusText(selectedOrder.status)}
-                </Badge>
-                <Badge
-                  variant={
-                    selectedOrder.paymentStatus === "PAID"
-                      ? "default"
-                      : "secondary"
-                  }
-                  className="text-base px-4 py-2"
-                >
-                  {getStatusText(selectedOrder.paymentStatus)}
-                </Badge>
-              </div>
-
-              {/* Customer Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Thông tin khách hàng
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-semibold">
-                      {selectedOrder.shippingAddress?.fullName}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
-                    <span>{selectedOrder.shippingAddress?.phoneNumber}</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground mt-1" />
-                    <span>
-                      {selectedOrder.shippingAddress?.detailAddress},{" "}
-                      {selectedOrder.shippingAddress?.commune},{" "}
-                      {selectedOrder.shippingAddress?.district},{" "}
-                      {selectedOrder.shippingAddress?.province}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Order Items */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Sản phẩm</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {selectedOrder.items?.map((item, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-4 pb-4 border-b last:border-0"
-                      >
-                        <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                          {item.images?.[0] ? (
-                            <img
-                              src={item.images[0]}
-                              alt={item.productName}
-                              className="w-full h-full object-cover rounded"
-                            />
-                          ) : (
-                            <Package className="w-8 h-8 text-gray-400" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold">{item.productName}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {item.variantColor && `${item.variantColor} • `}
-                            {item.variantStorage && `${item.variantStorage} • `}
-                            {formatPrice(item.price)} x {item.quantity}
-                          </p>
-                          {item.originalPrice > item.price && (
-                            <p className="text-xs text-muted-foreground line-through">
-                              {formatPrice(item.originalPrice)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">
-                            {formatPrice(item.total)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Applied Promotion */}
-                  {selectedOrder.appliedPromotion && (
-                    <Card className="bg-green-50 border-green-200 mt-6">
-                      <CardHeader>
-                        <CardTitle className="text-base text-green-700">
-                          Mã giảm giá đã áp dụng
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="font-semibold">Mã:</span>
-                            <span className="font-mono">
-                              {selectedOrder.appliedPromotion.code}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="font-semibold">Giảm giá:</span>
-                            <span className="text-green-600 font-bold">
-                              -
-                              {formatPrice(
-                                selectedOrder.appliedPromotion.discountAmount
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Order Summary */}
-                  <div className="mt-4 pt-4 border-t space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Tạm tính:</span>
-                      <span>{formatPrice(selectedOrder.subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Phí vận chuyển:</span>
-                      <span>{formatPrice(selectedOrder.shippingFee)}</span>
-                    </div>
-                    {selectedOrder.promotionDiscount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600">
-                        <span>Giảm giá:</span>
-                        <span>
-                          -{formatPrice(selectedOrder.promotionDiscount)}
-                        </span>
-                      </div>
-                    )}
-                    {selectedOrder.pointsUsed > 0 && (
-                      <div className="flex justify-between text-sm text-blue-600">
-                        <span>Điểm tích lũy:</span>
-                        <span>-{formatPrice(selectedOrder.pointsUsed)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-base font-bold pt-2 border-t">
-                      <span>Tổng cộng:</span>
-                      <span className="text-xl text-red-600">
-                        {formatPrice(selectedOrder.totalAmount)}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Status History */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Lịch sử đơn hàng</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {selectedOrder.statusHistory?.map((history, index) => (
-                      <div key={index} className="flex items-start gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full ${
-                            getStatusColor(history.status).split(" ")[0]
-                          } flex items-center justify-center flex-shrink-0`}
-                        >
-                          {React.createElement(getStatusIcon(history.status), {
-                            className: "w-4 h-4",
-                          })}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge className={getStatusColor(history.status)}>
-                              {getStatusText(history.status)}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {formatDate(history.updatedAt)}
-                            </span>
-                          </div>
-                          {history.note && (
-                            <p className="text-sm text-muted-foreground">
-                              {history.note}
-                            </p>
-                          )}
-                          {history.updatedBy && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Cập nhật bởi: {history.updatedBy.fullName}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Notes */}
-              {selectedOrder.note && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Ghi chú</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">{selectedOrder.note}</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            <Select
+              value={statusUpdate.status}
+              onValueChange={(value) =>
+                setStatusUpdate({ ...statusUpdate, status: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Chọn trạng thái mới" />
+              </SelectTrigger>
+              <SelectContent>
+                {getAllowedNextStatuses(selectedOrder.status).map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {getStatusText(status)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
-
           <DialogFooter>
             <Button
               variant="outline"

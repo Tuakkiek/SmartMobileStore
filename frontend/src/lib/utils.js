@@ -32,43 +32,34 @@ export const formatDate = (date) => {
 };
 
 export const getStatusColor = (status) => {
-  const colors = {
+  const map = {
     PENDING: "bg-yellow-100 text-yellow-800",
     CONFIRMED: "bg-blue-100 text-blue-800",
-    PROCESSING: "bg-purple-100 text-purple-800",
     SHIPPING: "bg-indigo-100 text-indigo-800",
     DELIVERED: "bg-green-100 text-green-800",
-    CANCELLED: "bg-red-100 text-red-800",
-    ACTIVE: "bg-green-100 text-green-800",
-    LOCKED: "bg-red-100 text-red-800",
-    AVAILABLE: "bg-green-100 text-green-800",
-    OUT_OF_STOCK: "bg-orange-100 text-orange-800",
-    DISCONTINUED: "bg-gray-100 text-gray-800",
+    RETURNED: "bg-red-100 text-red-800",
+    CANCELLED: "bg-gray-100 text-gray-800",
+    PAID: "bg-green-100 text-green-800",
+    UNPAID: "bg-red-100 text-red-800",
   };
-  return colors[status] || "bg-gray-100 text-gray-800";
+  return map[status] || "bg-gray-100 text-gray-800";
 };
 
 export const getStatusText = (status) => {
-  const texts = {
-    PENDING: "Chờ xử lý",
-    CONFIRMED: "Đã xác nhận",
-    PROCESSING: "Đang xử lý",
-    SHIPPING: "Đang giao",
-    DELIVERED: "Đã giao",
+  const map = {
+    PENDING: "Chờ xác nhận",
+    CONFIRMED: "Chờ lấy hàng",
+    SHIPPING: "Đang giao hàng",
+    DELIVERED: "Đã giao hàng",
+    RETURNED: "Đã trả hàng",
     CANCELLED: "Đã hủy",
-    ACTIVE: "Hoạt động",
-    LOCKED: "Đã khóa",
-    AVAILABLE: "Còn hàng",
-    OUT_OF_STOCK: "Hết hàng",
-    DISCONTINUED: "Ngừng kinh doanh",
-    UNPAID: "Chưa thanh toán",
     PAID: "Đã thanh toán",
+    UNPAID: "Chưa thanh toán",
     COD: "Thanh toán khi nhận hàng",
     BANK_TRANSFER: "Chuyển khoản",
   };
-  return texts[status] || status;
+  return map[status] || status;
 };
-
 // Function to fetch all products across all categories
 export const fetchAllProducts = async (params = {}) => {
   try {

@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// COMPLETE: Order model with detailed variant info + FIXED totalAmount + ADDED missing fields
+// COMPLETE: Order model with detailed variant info + FIXED totalAmount + ADDED RETURNED status
 // ============================================
 
 import mongoose from "mongoose";
@@ -79,9 +79,9 @@ const statusHistorySchema = new mongoose.Schema(
       enum: [
         "PENDING",
         "CONFIRMED",
-        "PROCESSING",
         "SHIPPING",
         "DELIVERED",
+        "RETURNED", // THÊM MỚI
         "CANCELLED",
       ],
       required: true,
@@ -125,14 +125,14 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ĐÃ SỬA: Dùng totalAmount thay vì total
+    // Dùng totalAmount (đã chuẩn hóa)
     totalAmount: {
       type: Number,
       required: true,
       min: 0,
     },
 
-    // CÁC TRƯỜNG MỚI ĐÃ BỔ SUNG
+    // Các trường tính toán
     subtotal: {
       type: Number,
       min: 0,
@@ -153,13 +153,14 @@ const orderSchema = new mongoose.Schema(
       enum: [
         "PENDING",
         "CONFIRMED",
-        "PROCESSING",
         "SHIPPING",
         "DELIVERED",
+        "RETURNED",
         "CANCELLED",
       ],
       default: "PENDING",
     },
+
     paymentMethod: {
       type: String,
       enum: ["COD", "BANK_TRANSFER"],
