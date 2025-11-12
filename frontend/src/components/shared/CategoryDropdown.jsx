@@ -33,6 +33,16 @@ const ICONS = {
   "Phụ Kiện": Package,
 };
 
+// Map tên danh mục → URL param
+const CATEGORY_PARAM_MAP = {
+  iPhone: "iPhone",
+  iPad: "iPad",
+  Mac: "Mac",
+  AirPods: "AirPods",
+  "Apple Watch": "AppleWatch",
+  "Phụ Kiện": "Accessories",
+};
+
 const CategoryDropdown = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -169,31 +179,19 @@ const CategoryDropdown = () => {
   // ============================================
   // HANDLERS
   // ============================================
-  const handleCategoryHover = (name, idx) => {
-    if (selectedCategory === idx) return;
+  const handleCategoryClick = (name, idx) => {
     setSelectedCategory(idx);
     fetchCategoryData(name);
+
+    // CHUYỂN HƯỚNG NGAY LẬP TỨC đến trang danh mục
+    const param = CATEGORY_PARAM_MAP[name];
+    navigate(`/products?category=${encodeURIComponent(param)}`);
+    setIsOpen(false); // Đóng dropdown
   };
 
   const handleModelClick = (model) => {
-    const catParam =
-      categories[selectedCategory] === "Apple Watch"
-        ? "AppleWatch"
-        : categories[selectedCategory] === "Phụ Kiện"
-        ? "Accessories"
-        : categories[selectedCategory];
+    const catParam = CATEGORY_PARAM_MAP[categories[selectedCategory]];
     navigate(`/products?category=${encodeURIComponent(catParam)}&model=${encodeURIComponent(model)}`);
-    setIsOpen(false);
-  };
-
-  const handleViewAll = () => {
-    const catParam =
-      categories[selectedCategory] === "Apple Watch"
-        ? "AppleWatch"
-        : categories[selectedCategory] === "Phụ Kiện"
-        ? "Accessories"
-        : categories[selectedCategory];
-    navigate(`/products?category=${encodeURIComponent(catParam)}`);
     setIsOpen(false);
   };
 
@@ -222,15 +220,18 @@ const CategoryDropdown = () => {
         >
           <div className="flex h-full">
             {/* Left: Categories */}
-            <div className="w-80 bg-gray-50 p-6 flex flex-col justify-between">
+            <div className="w-80 bg-gray-50 p-6">
               <div className="space-y-1">
                 {categories.map((cat, idx) => {
                   const Icon = ICONS[cat];
                   return (
                     <button
                       key={idx}
-                      onMouseEnter={() => handleCategoryHover(cat, idx)}
-                      onClick={() => handleCategoryHover(cat, idx)}
+                      onClick={() => handleCategoryClick(cat, idx)}
+                      onMouseEnter={() => {
+                        setSelectedCategory(idx);
+                        fetchCategoryData(cat);
+                      }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left font-medium transition-all ${
                         selectedCategory === idx
                           ? "bg-white text-black shadow-sm"
@@ -243,12 +244,6 @@ const CategoryDropdown = () => {
                   );
                 })}
               </div>
-              <button
-                onClick={handleViewAll}
-                className="w-full py-3 bg-green-500 text-white rounded-full font-medium hover:bg-green-600 transition-all flex items-center justify-center gap-2"
-              >
-                Xem tất cả <Menu className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Right: Content */}
@@ -274,7 +269,7 @@ const CategoryDropdown = () => {
                   {/* Gợi ý */}
                   <div className="mb-8">
                     <h3 className="text-xl font-bold flex items-center gap-2 mb-4">
-                      <span className="text-red-500 text-2xl">Gợi ý cho bạn</span> 
+                      Gợi ý cho bạn
                     </h3>
                     <div className="grid grid-cols-4 gap-4">
                       {currentData.allProducts

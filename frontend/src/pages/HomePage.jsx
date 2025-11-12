@@ -34,6 +34,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
 import ProductEditModal from "@/components/shared/ProductEditModal";
+import DealsGridSection from "@/components/shared/DealsGridSection";
 
 // ============================================
 // CATEGORY CONFIG
@@ -372,12 +373,14 @@ const HomePage = () => {
       {/* Promo Strip */}
       <PromoStrip />
 
+
+
       {/* Category Navigation */}
       <CategoryNav
         onCategoryClick={handleViewAll}
         productCounts={productCounts}
       />
-
+      <DealsGridSection />
       {/* New Arrivals */}
       <NewArrivalsSection
         products={newArrivals}
