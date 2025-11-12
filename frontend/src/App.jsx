@@ -1,8 +1,3 @@
-// ============================================
-// FILE: frontend/src/App.jsx
-// ✅ FIXED: Routes để hỗ trợ slug có storage
-// ============================================
-
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
@@ -29,6 +24,7 @@ import EmployeesPage from "@/pages/admin/EmployeesPage";
 import PromotionsPage from "@/pages/admin/PromotionsPage";
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
+import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
@@ -54,15 +50,12 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
-
-          {/* ✅ FIXED: Sử dụng * để match cả slug có storage */}
           <Route path="/dien-thoai/*" element={<ProductDetailPage />} />
           <Route path="/may-tinh-bang/*" element={<ProductDetailPage />} />
           <Route path="/macbook/*" element={<ProductDetailPage />} />
           <Route path="/tai-nghe/*" element={<ProductDetailPage />} />
           <Route path="/apple-watch/*" element={<ProductDetailPage />} />
           <Route path="/phu-kien/*" element={<ProductDetailPage />} />
-
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -122,6 +115,8 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
+          {/* ✅ THÊM TAB SHIPPER CHO ADMIN */}
+          <Route path="/admin/shipping" element={<ShipperDashboard />} />
         </Route>
 
         {/* Warehouse & Order Manager */}
@@ -148,6 +143,17 @@ function App() {
             path="/order-manager/orders"
             element={<OrderManagementPage />}
           />
+        </Route>
+
+        {/* ✅ SHIPPER ROUTES */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["SHIPPER"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/shipper/dashboard" element={<ShipperDashboard />} />
         </Route>
 
         {/* 404 */}

@@ -24,7 +24,7 @@ export const updateProfile = async (req, res) => {
 export const addAddress = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    
+
     // Nếu địa chỉ mới được chọn là mặc định, set tất cả các địa chỉ khác là không mặc định
     if (req.body.isDefault) {
       user.addresses.forEach((addr) => (addr.isDefault = false));
@@ -50,7 +50,9 @@ export const updateAddress = async (req, res) => {
     const address = user.addresses.id(req.params.addressId);
 
     if (!address) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy địa chỉ" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy địa chỉ" });
     }
 
     // Nếu địa chỉ mới được chọn là mặc định, set tất cả các địa chỉ khác là không mặc định
@@ -93,7 +95,7 @@ export const deleteAddress = async (req, res) => {
 export const getAllEmployees = async (req, res) => {
   try {
     const employees = await User.find({
-      role: { $in: ["WAREHOUSE_STAFF", "ORDER_MANAGER", "ADMIN"] },
+      role: { $in: ["WAREHOUSE_STAFF", "ORDER_MANAGER", "SHIPPER", "ADMIN"] },
     }).select("-password");
 
     res.json({ success: true, data: { employees } });
@@ -130,7 +132,9 @@ export const toggleEmployeeStatus = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên" });
     }
 
     // Chuyển đổi trạng thái giữa ACTIVE và LOCKED
@@ -154,7 +158,9 @@ export const deleteEmployee = async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhân viên" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên" });
     }
 
     res.json({ success: true, message: "Xóa nhân viên thành công" });

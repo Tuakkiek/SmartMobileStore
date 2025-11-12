@@ -8,6 +8,7 @@ import {
   Users,
   ShoppingBag,
   Tag,
+  Truck,
   LogOut,
   Menu,
   X,
@@ -38,7 +39,7 @@ const DashboardLayout = () => {
     navigate("/");
   };
 
-  // Navigation items based on role
+  // MENU ITEMS THEO ROLE (CẬP NHẬT)
   const getNavigationItems = () => {
     const items = [];
 
@@ -48,7 +49,8 @@ const DashboardLayout = () => {
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
-        { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" }
+        { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
+        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" } // ADMIN XEM GIAO HÀNG
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
       items.push({
@@ -62,6 +64,12 @@ const DashboardLayout = () => {
         icon: ShoppingBag,
         label: "Quản lý đơn hàng",
       });
+    } else if (user?.role === "SHIPPER") {
+      items.push({
+        path: "/shipper",
+        icon: Truck,
+        label: "Giao hàng", // SHIPPER MENU
+      });
     }
 
     return items;
@@ -74,12 +82,12 @@ const DashboardLayout = () => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static",
+          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:z-auto",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
+          {/* Logo + Close Button (Mobile) */}
           <div className="flex items-center justify-between h-16 px-6 border-b">
             <Link to="/" className="flex items-center space-x-2">
               <span className="font-bold text-xl">Trang chủ</span>
@@ -98,7 +106,7 @@ const DashboardLayout = () => {
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isActive = location.pathname.startsWith(item.path);
 
               return (
                 <Link
@@ -108,7 +116,7 @@ const DashboardLayout = () => {
                     "flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
+                      : "hover:bg-accent hover:text-accent-foreground"
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
@@ -119,7 +127,7 @@ const DashboardLayout = () => {
             })}
           </nav>
 
-          {/* User Info */}
+          {/* User Info + Logout */}
           <div className="border-t p-4">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
@@ -128,40 +136,39 @@ const DashboardLayout = () => {
                   {user?.role === "ADMIN" && "Quản trị viên"}
                   {user?.role === "WAREHOUSE_STAFF" && "Nhân viên kho"}
                   {user?.role === "ORDER_MANAGER" && "Quản lý đơn hàng"}
+                  {user?.role === "SHIPPER" && "Nhân viên giao hàng"}
                 </p>
               </div>
+
+              {/* XÁC NHẬN ĐĂNG XUẤT */}
               <AlertDialog>
-                {/* 1. KÍCH HOẠT: Nút Đăng xuất */}
                 <AlertDialogTrigger asChild>
-                  {/* Nút này sẽ mở Dialog khi được nhấn */}
-                  <Button variant="outline" className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
                     <LogOut className="w-4 h-4" />
-                    Đăng xuất
+                    <span className="hidden sm:inline">Đăng xuất</span>
                   </Button>
                 </AlertDialogTrigger>
 
-                {/* 2. NỘI DUNG POPUP XÁC NHẬN */}
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
                       Bạn có chắc chắn muốn đăng xuất?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      Bạn sẽ cần đăng nhập lại để truy cập các tính năng bảo mật
-                      của tài khoản.
+                      Bạn sẽ cần đăng nhập lại để tiếp tục sử dụng hệ thống.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
-
                   <AlertDialogFooter>
-                    {/* Nút HỦY: Đóng popup mà không làm gì */}
                     <AlertDialogCancel>Hủy</AlertDialogCancel>
-
-                    {/* Nút HÀNH ĐỘNG: Thực hiện đăng xuất */}
                     <AlertDialogAction
                       onClick={handleLogout}
-                      className="bg-red-500 hover:bg-red-600"
+                      className="bg-red-600 hover:bg-red-700"
                     >
-                      Xác nhận Đăng xuất
+                      Đăng xuất
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -171,7 +178,7 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Overlay */}
+      {/* Overlay (Mobile) */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -182,7 +189,7 @@ const DashboardLayout = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden h-16 border-b flex items-center px-4">
+        <header className="lg:hidden h-16 border-b flex items-center px-4 bg-card">
           <Button
             variant="ghost"
             size="icon"

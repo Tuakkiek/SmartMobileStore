@@ -32,14 +32,16 @@ const EmployeesPage = () => {
   const fetchEmployees = async () => {
     try {
       const response = await userAPI.getAllEmployees();
-      console.log('API response:', response); // Debug
-      // Kiểm tra xem response.data.data.employees có phải là mảng không
-      const data = Array.isArray(response.data.data.employees) ? response.data.data.employees : [];
+      const data = Array.isArray(response.data.data.employees)
+        ? response.data.data.employees
+        : [];
       setEmployees(data);
     } catch (error) {
       console.error("Error fetching employees:", error);
-      setError(error.response?.data?.message || "Lấy danh sách nhân viên thất bại");
-      setEmployees([]); // Đặt lại mảng rỗng nếu có lỗi
+      setError(
+        error.response?.data?.message || "Lấy danh sách nhân viên thất bại"
+      );
+      setEmployees([]);
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +97,17 @@ const EmployeesPage = () => {
     } catch (error) {
       alert(error.response?.data?.message || "Xóa nhân viên thất bại");
     }
+  };
+
+  // ✅ THÊM HÀM LẤY TÊN VAI TRÒ TIẾNG VIỆT
+  const getRoleLabel = (role) => {
+    const roleMap = {
+      WAREHOUSE_STAFF: "Nhân viên kho",
+      ORDER_MANAGER: "Quản lý đơn hàng",
+      SHIPPER: "Nhân viên giao hàng",
+      ADMIN: "Quản trị viên",
+    };
+    return roleMap[role] || role;
   };
 
   if (isLoading) {
@@ -204,6 +217,8 @@ const EmployeesPage = () => {
                   >
                     <option value="WAREHOUSE_STAFF">Nhân viên kho</option>
                     <option value="ORDER_MANAGER">Quản lý đơn hàng</option>
+                    {/* ✅ THÊM OPTION SHIPPER */}
+                    <option value="SHIPPER">Nhân viên giao hàng</option>
                     <option value="ADMIN">Quản trị viên</option>
                   </select>
                 </div>
@@ -220,7 +235,9 @@ const EmployeesPage = () => {
       {/* Employees List */}
       {error && <ErrorMessage message={error} />}
       {employees.length === 0 ? (
-        <p className="text-center text-muted-foreground">Không có nhân viên nào.</p>
+        <p className="text-center text-muted-foreground">
+          Không có nhân viên nào.
+        </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {employees.map((employee) => (
@@ -234,10 +251,9 @@ const EmployeesPage = () => {
                     <p className="text-sm text-muted-foreground mb-2">
                       {employee.phoneNumber}
                     </p>
-                    <Badge>
-                      {employee.role === "WAREHOUSE_STAFF" && "Nhân viên kho"}
-                      {employee.role === "ORDER_MANAGER" && "Quản lý đơn hàng"}
-                      {employee.role === "ADMIN" && "Quản trị viên"}
+                    {/* ✅ SỬ DỤNG HÀM getRoleLabel */}
+                    <Badge variant="outline">
+                      {getRoleLabel(employee.role)}
                     </Badge>
                   </div>
                   <Badge className={getStatusColor(employee.status)}>

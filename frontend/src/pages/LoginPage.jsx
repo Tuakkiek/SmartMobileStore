@@ -41,12 +41,17 @@ const LoginPage = () => {
     if (result.success) {
       const user = useAuthStore.getState().user;
 
-      if (user?.role === "CUSTOMER") navigate("/");
-      else if (user?.role === "ADMIN") navigate("/admin");
-      else if (user?.role === "WAREHOUSE_STAFF")
+      if (user.role === "ADMIN") {
+        navigate("/admin");
+      } else if (user.role === "WAREHOUSE_STAFF") {
         navigate("/warehouse/products");
-      else if (user?.role === "ORDER_MANAGER")
+      } else if (user.role === "ORDER_MANAGER") {
         navigate("/order-manager/orders");
+      } else if (user.role === "SHIPPER") {
+        navigate("/shipper/dashboard");
+      } else {
+        navigate("/");
+      }
     }
   };
 
