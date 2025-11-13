@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/shipper/ShipperDashboard.jsx
-// Trang quản lý giao hàng cho Shipper
+// Trang quản lý giao hàng cho Shipper (ĐÃ SỬA LỖI UI FILTER)
 // ============================================
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -31,6 +31,8 @@ import {
   AlertCircle,
   Camera,
   FileText,
+  Filter, // ✅ Icon Bộ lọc
+  RotateCcw, // ✅ Icon Đặt lại
 } from "lucide-react";
 import { orderAPI } from "@/lib/api";
 import {
@@ -56,15 +58,25 @@ const ShipperDashboard = () => {
   const [returnReason, setReturnReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ✨ FILTERS
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateRange, setDateRange] = useState("today"); // "today", "yesterday", "week", "month", "all", "custom"
+  const [customStartDate, setCustomStartDate] = useState(null);
+  const [customEndDate, setCustomEndDate] = useState(null);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all"); // "all", "COD", "ONLINE"
+  const [districtFilter, setDistrictFilter] = useState("all");
+  const [amountRangeFilter, setAmountRangeFilter] = useState("all"); // "all", "under10m", "10m-20m", "20m-50m", "over50m"
+
   /* ------------------------------------------------------------------ */
   /* 2. FETCH – chỉ gọi 1 lần (hoặc khi refresh) */
   /* ------------------------------------------------------------------ */
   const fetchAllOrders = async () => {
     setIsLoading(true);
     try {
+      // Lấy tất cả đơn hàng không giới hạn theo ngày
       const statusList = ["SHIPPING", "DELIVERED", "RETURNED"];
-      const promises = statusList.map((status) =>
-        orderAPI.getAll({ status, limit: 200 })
+      const promises = statusList.map(
+        (status) => orderAPI.getAll({ status, limit: 1000 }) // Tăng limit lên
       );
       const responses = await Promise.all(promises);
       const all = responses.flatMap((r) => r.data.data.orders || []);
@@ -81,37 +93,122 @@ const ShipperDashboard = () => {
     fetchAllOrders();
   }, []); // chỉ mount 1 lần
 
+  const getDateRange = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (dateRange) {
+      case "today":
+        return { start: today, end: new Date(today.getTime() + 86400000) };
+
+      case "yesterday":
+        const yesterday = new Date(today.getTime() - 86400000);
+        return { start: yesterday, end: today };
+
+      case "week":
+        const weekStart = new Date(today.getTime() - 7 * 86400000);
+        return { start: weekStart, end: new Date(today.getTime() + 86400000) };
+
+      case "month":
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        return { start: monthStart, end: new Date(today.getTime() + 86400000) };
+
+      case "custom":
+        if (customStartDate && customEndDate) {
+          return {
+            start: customStartDate,
+            end: new Date(customEndDate.getTime() + 86400000),
+          };
+        }
+        return { start: today, end: new Date(today.getTime() + 86400000) };
+
+      case "all":
+      default:
+        return null; // Không lọc theo ngày
+    }
+  };
+
+  // Lấy danh sách quận/huyện duy nhất
+  const districts = useMemo(() => {
+    const uniqueDistricts = [
+      ...new Set(
+        rawOrders.map((o) => o.shippingAddress?.district).filter(Boolean)
+      ),
+    ];
+    return uniqueDistricts.sort();
+  }, [rawOrders]);
+
   /* ------------------------------------------------------------------ */
-  /* 3. PHÂN LOẠI ĐƠN HÀNG */
+  /* 3. PHÂN LOẠI ĐƠN HÀNG VÀ ÁP DỤNG FILTERS */
   /* ------------------------------------------------------------------ */
   const { pendingOrders, completedOrders, returnedOrders } = useMemo(() => {
-    const todayStr = new Date().toDateString();
+    const dateRangeObj = getDateRange();
 
-    const pending = rawOrders.filter(
-      (o) =>
-        o.status === "SHIPPING" &&
-        new Date(o.createdAt).toDateString() === todayStr
-    );
-    const completed = rawOrders.filter(
-      (o) =>
-        o.status === "DELIVERED" &&
-        new Date(o.createdAt).toDateString() === todayStr
-    );
-    const returned = rawOrders.filter(
-      (o) =>
-        o.status === "RETURNED" &&
-        new Date(o.createdAt).toDateString() === todayStr
-    );
+    let filtered = rawOrders;
+
+    // Lọc theo khoảng thời gian
+    if (dateRangeObj) {
+      filtered = filtered.filter((o) => {
+        const orderDate = new Date(o.createdAt);
+        return orderDate >= dateRangeObj.start && orderDate < dateRangeObj.end;
+      });
+    }
+
+    // Lọc theo phương thức thanh toán
+    if (paymentMethodFilter !== "all") {
+      filtered = filtered.filter(
+        (o) => o.paymentMethod === paymentMethodFilter
+      );
+    }
+
+    // Lọc theo quận/huyện
+    if (districtFilter !== "all") {
+      filtered = filtered.filter(
+        (o) => o.shippingAddress?.district === districtFilter
+      );
+    }
+
+    // Lọc theo khoảng giá
+    if (amountRangeFilter !== "all") {
+      filtered = filtered.filter((o) => {
+        const amount = o.totalAmount;
+        switch (amountRangeFilter) {
+          case "under10m":
+            return amount < 10000000;
+          case "10m-20m":
+            return amount >= 10000000 && amount < 20000000;
+          case "20m-50m":
+            return amount >= 20000000 && amount < 50000000;
+          case "over50m":
+            return amount >= 50000000;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Phân loại theo trạng thái
+    const pending = filtered.filter((o) => o.status === "SHIPPING");
+    const completed = filtered.filter((o) => o.status === "DELIVERED");
+    const returned = filtered.filter((o) => o.status === "RETURNED");
 
     return {
       pendingOrders: pending,
       completedOrders: completed,
       returnedOrders: returned,
     };
-  }, [rawOrders]);
+  }, [
+    rawOrders,
+    dateRange,
+    customStartDate,
+    customEndDate,
+    paymentMethodFilter,
+    districtFilter,
+    amountRangeFilter,
+  ]);
 
   /* ------------------------------------------------------------------ */
-  /* 4. TÍNH TOÁN STATISTICS (luôn dựa trên dữ liệu hôm nay) */
+  /* 4. TÍNH TOÁN STATISTICS (luôn dựa trên dữ liệu đã lọc) */
   /* ------------------------------------------------------------------ */
   const stats = useMemo(() => {
     return {
@@ -142,6 +239,7 @@ const ShipperDashboard = () => {
         o.shippingAddress?.phoneNumber?.includes(q)
     );
   }, [currentOrders, searchQuery]);
+
 
   /* ------------------------------------------------------------------ */
   /* 6. HÀM XỬ LÝ HOÀN THÀNH / TRẢ HÀNG */
@@ -199,6 +297,7 @@ const ShipperDashboard = () => {
   const openGoogleMaps = (addr) => {
     const full = `${addr.detailAddress}, ${addr.commune}, ${addr.district}, ${addr.province}, Vietnam`;
     window.open(
+      // Sửa lỗi cú pháp string interpolation và URL encode
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
         full
       )}`,
@@ -288,16 +387,157 @@ const ShipperDashboard = () => {
         </Card>
       </div>
 
-      {/* Search */}
+      {/* Search & Filter Button - ĐÃ SỬA LỖI: Di chuyển vào trong return */}
       <Card>
         <CardContent className="p-4">
-          <Input
-            placeholder="Tìm kiếm theo mã đơn, tên hoặc số điện thoại..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="flex gap-2">
+            <Input
+              placeholder="Tìm kiếm theo mã đơn, tên hoặc số điện thoại..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1"
+            />
+            <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="w-4 h-4 mr-2" />
+              Bộ lọc
+            </Button>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Advanced Filters - ĐÃ SỬA LỖI: Di chuyển vào trong return */}
+      {showFilters && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center justify-between">
+              <span>Bộ lọc nâng cao</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDateRange("today");
+                  setPaymentMethodFilter("all");
+                  setDistrictFilter("all");
+                  setAmountRangeFilter("all");
+                  setCustomStartDate(null);
+                  setCustomEndDate(null);
+                }}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Đặt lại
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Khoảng thời gian */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Khoảng thời gian</label>
+                <select
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                >
+                  <option value="today">Hôm nay</option>
+                  <option value="yesterday">Hôm qua</option>
+                  <option value="week">7 ngày qua</option>
+                  <option value="month">Tháng này</option>
+                  <option value="custom">Tùy chỉnh</option>
+                  <option value="all">Tất cả</option>
+                </select>
+              </div>
+
+              {/* Custom Date Range */}
+              {dateRange === "custom" && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Từ ngày</label>
+                    <input
+                      type="date"
+                      value={
+                        customStartDate
+                          ? customStartDate.toISOString().split("T")[0]
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setCustomStartDate(
+                          e.target.value ? new Date(e.target.value) : null
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Đến ngày</label>
+                    <input
+                      type="date"
+                      value={
+                        customEndDate
+                          ? customEndDate.toISOString().split("T")[0]
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setCustomEndDate(
+                          e.target.value ? new Date(e.target.value) : null
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Phương thức thanh toán */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Thanh toán</label>
+                <select
+                  value={paymentMethodFilter}
+                  onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="COD">Thu tiền mặt (COD)</option>
+                  <option value="ONLINE">Đã thanh toán online</option>
+                </select>
+              </div>
+
+              {/* Quận/Huyện */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Quận/Huyện</label>
+                <select
+                  value={districtFilter}
+                  onChange={(e) => setDistrictFilter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                >
+                  <option value="all">Tất cả</option>
+                  {districts.map((district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Khoảng giá */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Giá trị đơn hàng</label>
+                <select
+                  value={amountRangeFilter}
+                  onChange={(e) => setAmountRangeFilter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md"
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="under10m">Dưới 10 triệu</option>
+                  <option value="10m-20m">10 - 20 triệu</option>
+                  <option value="20m-50m">20 - 50 triệu</option>
+                  <option value="over50m">Trên 50 triệu</option>
+                </select>
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -567,82 +807,55 @@ const ShipperDashboard = () => {
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {[
-                            item.variantColor,
-                            item.variantStorage,
-                            item.variantConnectivity,
-                            item.variantName,
-                          ]
-                            .filter(Boolean)
-                            .join(" • ")}
+                          {formatPrice(item.price)} x {item.quantity}
                         </p>
-                        <p className="text-sm">SL: {item.quantity}</p>
                       </div>
-                      <p className="font-semibold">
+                      <div className="font-semibold">
                         {formatPrice(item.price * item.quantity)}
-                      </p>
+                      </div>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Tổng tiền:</span>
-                  <span className="text-primary">
-                    {formatPrice(selectedOrder.totalAmount)}
-                  </span>
                 </div>
               </div>
             </div>
           )}
 
           <DialogFooter>
-            <Button onClick={() => setShowDetailDialog(false)}>Đóng</Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowDetailDialog(false)}
+            >
+              Đóng
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Complete Delivery Dialog */}
+      {/* Complete Dialog */}
       <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>✅ Xác nhận giao hàng thành công</DialogTitle>
+            <DialogTitle>Xác nhận giao hàng thành công</DialogTitle>
             <DialogDescription>
-              Đơn hàng: #{selectedOrder?.orderNumber}
+              Vui lòng nhập ghi chú (nếu có) trước khi xác nhận đơn hàng
+              **#{selectedOrder?.orderNumber}** đã được giao thành công.
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4">
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm">
-                <strong>Khách hàng:</strong>{" "}
-                {selectedOrder?.shippingAddress?.fullName}
-              </p>
-              <p className="text-sm">
-                <strong>Tổng tiền:</strong>{" "}
-                {formatPrice(selectedOrder?.totalAmount)}
-              </p>
-              {selectedOrder?.paymentMethod === "COD" && (
-                <p className="text-sm text-red-600 font-bold mt-2">
-                  ⚠️ Nhớ thu tiền mặt: {formatPrice(selectedOrder?.totalAmount)}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ghi chú giao hàng *</label>
-              <textarea
-                value={completionNote}
-                onChange={(e) => setCompletionNote(e.target.value)}
-                placeholder="Ví dụ: Đã giao cho khách tại nhà, thu tiền mặt đầy đủ"
-                className="w-full px-3 py-2 border rounded-md resize-none"
-                rows={3}
-                required
-              />
-            </div>
+            <p className="font-medium">
+              Số tiền cần thu:{" "}
+              <span className="text-red-600 font-bold">
+                {selectedOrder?.paymentMethod === "COD"
+                  ? formatPrice(selectedOrder.totalAmount)
+                  : "0 VNĐ"}
+              </span>
+            </p>
+            <Input
+              placeholder="Ghi chú giao hàng (ví dụ: Đã nhận tiền mặt, Khách hài lòng...)"
+              value={completionNote}
+              onChange={(e) => setCompletionNote(e.target.value)}
+            />
           </div>
-
           <DialogFooter>
             <Button
               variant="outline"
@@ -652,56 +865,31 @@ const ShipperDashboard = () => {
             </Button>
             <Button
               onClick={handleCompleteDelivery}
-              disabled={isSubmitting || !completionNote.trim()}
+              disabled={isSubmitting}
               className="bg-green-600 hover:bg-green-700"
             >
-              {isSubmitting ? "Đang xử lý..." : "Xác nhận đã giao"}
+              {isSubmitting ? "Đang xử lý..." : "Xác nhận Đã giao"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Return Order Dialog */}
+      {/* Return Dialog */}
       <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>❌ Xác nhận trả hàng</DialogTitle>
+            <DialogTitle>Xác nhận trả hàng</DialogTitle>
             <DialogDescription>
-              Đơn hàng: #{selectedOrder?.orderNumber}
+              Vui lòng nhập lý do trả hàng cho đơn hàng
+              **#{selectedOrder?.orderNumber}**. Đơn hàng sẽ chuyển sang trạng
+              thái **RETURNED**.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-900">
-                    Lưu ý khi trả hàng:
-                  </p>
-                  <ul className="text-sm text-red-700 mt-2 space-y-1 list-disc list-inside">
-                    <li>Khách hàng từ chối nhận hàng</li>
-                    <li>Không liên lạc được với khách</li>
-                    <li>Địa chỉ không chính xác</li>
-                    <li>Khách yêu cầu đổi/trả</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Lý do trả hàng *</label>
-              <textarea
-                value={returnReason}
-                onChange={(e) => setReturnReason(e.target.value)}
-                placeholder="Nhập lý do chi tiết..."
-                className="w-full px-3 py-2 border rounded-md resize-none"
-                rows={4}
-                required
-              />
-            </div>
-          </div>
-
+          <Input
+            placeholder="Lý do trả hàng (ví dụ: Khách hàng không nhận, Sai địa chỉ...)"
+            value={returnReason}
+            onChange={(e) => setReturnReason(e.target.value)}
+          />
           <DialogFooter>
             <Button
               variant="outline"
@@ -711,10 +899,10 @@ const ShipperDashboard = () => {
             </Button>
             <Button
               onClick={handleReturnOrder}
-              disabled={isSubmitting || !returnReason.trim()}
+              disabled={isSubmitting}
               variant="destructive"
             >
-              {isSubmitting ? "Đang xử lý..." : "Xác nhận trả hàng"}
+              {isSubmitting ? "Đang xử lý..." : "Xác nhận Trả hàng"}
             </Button>
           </DialogFooter>
         </DialogContent>

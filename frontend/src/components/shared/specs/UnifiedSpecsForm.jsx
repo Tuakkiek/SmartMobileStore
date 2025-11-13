@@ -105,13 +105,6 @@ const UnifiedSpecsForm = ({ category, specs, onChange, onColorChange, onAddColor
         </Button>
       </div>
 
-      {/* ✅ HELPER TEXT */}
-      <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded-lg border border-blue-200">
-        <strong>💡 Gợi ý:</strong>
-        {category === 'iPhone' && ' iPhone cần đầy đủ thông tin camera và công nghệ màn hình'}
-        {category === 'iPad' && ' iPad cần đầy đủ thông tin camera và công nghệ màn hình'}
-        {category === 'Mac' && ' Mac cần GPU và độ phân giải màn hình thay vì camera'}
-      </div>
     </div>
   );
 };

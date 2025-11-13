@@ -280,9 +280,9 @@ const OrdersPage = () => {
                 <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
               <SelectContent>
-                {getAllowedNextStatuses(selectedOrder?.status).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {getStatusText(status)}
+                {statusButtons.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
                   </SelectItem>
                 ))}
               </SelectContent>
