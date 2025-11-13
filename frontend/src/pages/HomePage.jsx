@@ -22,6 +22,7 @@ import PromoStrip from "@/components/shared/PromoStrip";
 import ProductCard from "@/components/shared/ProductCard";
 import IPhoneShowcase from "@/components/shared/iPhoneShowcase";
 import { Loading } from "@/components/shared/Loading";
+
 import {
   iPhoneAPI,
   iPadAPI,
@@ -35,6 +36,7 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
 import ProductEditModal from "@/components/shared/ProductEditModal";
 import DealsGridSection from "@/components/shared/DealsGridSection";
+import MagicDealsSection from "@/components/shared/MagicDealsSection";
 
 // ============================================
 // CATEGORY CONFIG
@@ -372,15 +374,14 @@ const HomePage = () => {
 
       {/* Promo Strip */}
       <PromoStrip />
-
-
-
+     
       {/* Category Navigation */}
       <CategoryNav
         onCategoryClick={handleViewAll}
         productCounts={productCounts}
       />
       <DealsGridSection />
+       <MagicDealsSection />
       {/* New Arrivals */}
       <NewArrivalsSection
         products={newArrivals}
