@@ -1,9 +1,9 @@
 // ============================================
 // FILE: src/pages/customer/CartPage.jsx
-// COMPLETE: Hiển thị đầy đủ variant info + discount badge + ĐỔI PHIÊN BẢN TRONG GIỎ HÀNG
+// UPDATED: Checkbox chọn sản phẩm + Chọn tất cả + Xóa nhiều
 // ============================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,10 +36,11 @@ const CartPage = () => {
     updateCartItem,
     removeFromCart,
     addToCart,
-    getTotal,
+    setSelectedForCheckout,
   } = useCartStore();
 
-  // State cho modal chọn phiên bản
+  // === STATE CHO CHECKBOX ===
+  const [selectedItems, setSelectedItems] = useState(new Set());
   const [editingItem, setEditingItem] = useState(null);
   const [showVariantDialog, setShowVariantDialog] = useState(false);
   const [availableVariants, setAvailableVariants] = useState([]);
@@ -48,20 +49,79 @@ const CartPage = () => {
     getCart();
   }, [getCart]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // === TÍNH TỔNG TIỀN CÁC SẢN PHẨM ĐƯỢC CHỌN ===
+  const selectedTotal = useMemo(() => {
+    if (!cart?.items) return 0;
+    return cart.items
+      .filter((item) => selectedItems.has(item.variantId))
+      .reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [cart?.items, selectedItems]);
+
+  // === CHỌN/TẮT TẤT CẢ ===
+  const handleSelectAll = () => {
+    if (!cart?.items) return;
+    if (selectedItems.size === cart.items.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(cart.items.map((item) => item.variantId)));
+    }
+  };
+
+  // === CHỌN/TẮT MỘT SẢN PHẨM ===
+  const handleSelectItem = (variantId) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(variantId)) {
+      newSelected.delete(variantId);
+    } else {
+      newSelected.add(variantId);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  // === XÓA NHIỀU SẢN PHẨM ĐÃ CHỌN ===
+  const handleBulkRemove = async () => {
+    if (selectedItems.size === 0) {
+      toast.error("Vui lòng chọn ít nhất một sản phẩm để xóa");
+      return;
+    }
+
+    if (!window.confirm(`Xóa ${selectedItems.size} sản phẩm đã chọn?`)) return;
+
+    try {
+      for (const variantId of selectedItems) {
+        await removeFromCart(variantId);
+      }
+      await getCart();
+      setSelectedItems(new Set());
+      toast.success("Đã xóa các sản phẩm đã chọn");
+    } catch (error) {
+      toast.error("Xóa thất bại");
+    }
+  };
+
+  // === CẬP NHẬT SỐ LƯỢNG ===
   const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
-    const itemId = item._id || item.variantId;
-    await updateCartItem(itemId, newQuantity);
+    await updateCartItem(item.variantId, newQuantity);
     await getCart();
   };
 
+  // === XÓA MỘT SẢN PHẨM ===
   const handleRemove = async (item) => {
-    const itemId = item._id || item.variantId;
-    await removeFromCart(itemId);
+    await removeFromCart(item.variantId);
     await getCart();
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      next.delete(item.variantId);
+      return next;
+    });
   };
 
-  // Hàm lấy danh sách các phiên bản có sẵn của sản phẩm
+  // === LẤY DANH SÁCH PHIÊN BẢN ===
   const fetchAvailableVariants = async (item) => {
     try {
       const apiMap = {
@@ -91,20 +151,17 @@ const CartPage = () => {
     }
   };
 
-  // Hàm đổi phiên bản sản phẩm
+  // === ĐỔI PHIÊN BẢN ===
   const handleChangeVariant = async (newVariantId) => {
     if (!editingItem) return;
 
     try {
-      // Xóa sản phẩm cũ
-      await removeFromCart(editingItem._id || editingItem.variantId);
-      // Thêm phiên bản mới
+      await removeFromCart(editingItem.variantId);
       await addToCart(
         newVariantId,
         editingItem.quantity,
         editingItem.productType
       );
-      // Cập nhật lại giỏ hàng
       await getCart();
 
       setShowVariantDialog(false);
@@ -122,7 +179,7 @@ const CartPage = () => {
   }
 
   const items = cart?.items || [];
-  const total = getTotal();
+  const hasItems = items.length > 0;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -142,171 +199,238 @@ const CartPage = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Cart Items */}
-          <div className="lg:col-span-2 space-y-4">
-            {items.map((item) => (
-              <Card key={item.variantId}>
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
-                    {/* Image */}
-                    <img
-                      src={item.images?.[0] || "/placeholder.png"}
-                      alt={item.productName}
-                      className="w-24 h-24 object-cover rounded-md"
-                    />
+        <div className="space-y-6">
+          {/* HEADER: CHỌN TẤT CẢ + XÓA NHIỀU */}
+          <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={hasItems && selectedItems.size === items.length}
+                onChange={handleSelectAll}
+                className="w-5 h-5 rounded border-gray-300"
+              />
+              <span className="font-medium">
+                Chọn tất cả ({selectedItems.size}/{items.length})
+              </span>
+            </div>
+            {selectedItems.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkRemove}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Xóa đã chọn
+              </Button>
+            )}
+          </div>
 
-                    <div className="flex-1">
-                      {/* Product Name */}
-                      <h3 className="font-semibold mb-1">{item.productName}</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* DANH SÁCH SẢN PHẨM */}
+            <div className="lg:col-span-2 space-y-4">
+              {items.map((item) => {
+                const isSelected = selectedItems.has(item.variantId);
 
-                      {/* VARIANT INFO */}
-                      <div className="flex gap-3 text-sm text-muted-foreground mb-2">
-                        {item.variantColor && (
-                          <span>Màu: {item.variantColor}</span>
-                        )}
-                        {item.variantStorage && (
-                          <span>• {item.variantStorage}</span>
-                        )}
-                        {item.variantConnectivity && (
-                          <span>• {item.variantConnectivity}</span>
-                        )}
-                        {item.variantName && <span>• {item.variantName}</span>}
-                      </div>
-
-                      {/* PRICE WITH DISCOUNT BADGE */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-lg font-semibold text-red-600">
-                          {formatPrice(item.price)}
-                        </span>
-                        {item.originalPrice > item.price && (
-                          <>
-                            <span className="text-sm text-muted-foreground line-through">
-                              {formatPrice(item.originalPrice)}
-                            </span>
-                            <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded">
-                              -
-                              {Math.round(
-                                ((item.originalPrice - item.price) /
-                                  item.originalPrice) *
-                                  100
-                              )}
-                              %
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Quantity Controls + Total + Actions */}
-                      <div className="flex items-center justify-between mt-4">
-                        <div className="flex items-center border rounded-md">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              handleUpdateQuantity(item, item.quantity - 1)
-                            }
-                            disabled={item.quantity <= 1}
-                          >
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                          <span className="px-4 min-w-[40px] text-center">
-                            {item.quantity}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              handleUpdateQuantity(item, item.quantity + 1)
-                            }
-                            disabled={item.quantity >= item.stock}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
+                return (
+                  <Card
+                    key={item.variantId}
+                    className={isSelected ? "ring-2 ring-primary" : ""}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex gap-4">
+                        {/* CHECKBOX */}
+                        <div className="flex items-start mt-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectItem(item.variantId)}
+                            className="w-5 h-5 rounded border-gray-300 mt-1"
+                          />
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-lg">
-                            {formatPrice(item.price * item.quantity)}
-                          </span>
+                        {/* IMAGE */}
+                        <img
+                          src={item.images?.[0] || "/placeholder.png"}
+                          alt={item.productName}
+                          className="w-24 h-24 object-cover rounded-md flex-shrink-0"
+                        />
 
-                          <div className="flex gap-1">
-                            {/* Nút đổi phiên bản */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => fetchAvailableVariants(item)}
-                              className="text-xs"
-                            >
-                              Đổi phiên bản
-                            </Button>
+                        <div className="flex-1">
+                          {/* TÊN SẢN PHẨM */}
+                          <h3 className="font-semibold mb-1">
+                            {item.productName}
+                          </h3>
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleRemove(item)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                          {/* VARIANT INFO */}
+                          <div className="flex gap-3 text-sm text-muted-foreground mb-2">
+                            {item.variantColor && (
+                              <span>Màu: {item.variantColor}</span>
+                            )}
+                            {item.variantStorage && (
+                              <span>• {item.variantStorage}</span>
+                            )}
+                            {item.variantConnectivity && (
+                              <span>• {item.variantConnectivity}</span>
+                            )}
+                            {item.variantName && (
+                              <span>• {item.variantName}</span>
+                            )}
+                          </div>
+
+                          {/* GIÁ + KHUYẾN MÃI */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg font-semibold text-red-600">
+                              {formatPrice(item.price)}
+                            </span>
+                            {item.originalPrice > item.price && (
+                              <>
+                                <span className="text-sm text-muted-foreground line-through">
+                                  {formatPrice(item.originalPrice)}
+                                </span>
+                                <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded">
+                                  -
+                                  {Math.round(
+                                    ((item.originalPrice - item.price) /
+                                      item.originalPrice) *
+                                      100
+                                  )}
+                                  %
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* SỐ LƯỢNG + TỔNG + HÀNH ĐỘNG */}
+                          <div className="flex items-center justify-between mt-4">
+                            <div className="flex items-center border rounded-md">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  handleUpdateQuantity(item, item.quantity - 1)
+                                }
+                                disabled={item.quantity <= 1}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <span className="px-4 min-w-[40px] text-center">
+                                {item.quantity}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  handleUpdateQuantity(item, item.quantity + 1)
+                                }
+                                disabled={item.quantity >= item.stock}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-lg">
+                                {formatPrice(item.price * item.quantity)}
+                              </span>
+
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => fetchAvailableVariants(item)}
+                                  className="text-xs"
+                                >
+                                  Đổi phiên bản
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemove(item)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* TÓM TẮT ĐƠN HÀNG */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-20">
+                <CardContent className="p-6 space-y-4">
+                  <h3 className="text-xl font-semibold">Tóm tắt đơn hàng</h3>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Tạm tính ({selectedItems.size} sản phẩm)
+                      </span>
+                      <span>{formatPrice(selectedTotal)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Phí vận chuyển
+                      </span>
+                      <span className="text-green-600">
+                        {selectedTotal >= 5000000 ? "Miễn phí" : "50.000đ"}
+                      </span>
+                    </div>
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between text-lg font-semibold">
+                        <span>Tổng cộng</span>
+                        <span className="text-primary">
+                          {formatPrice(selectedTotal)}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* NÚT THANH TOÁN ĐÃ SỬA – LƯU DANH SÁCH ĐÃ CHỌN */}
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    disabled={selectedItems.size === 0}
+                    onClick={() => {
+                      if (selectedItems.size === 0) {
+                        toast.error(
+                          "Vui lòng chọn ít nhất một sản phẩm để thanh toán"
+                        );
+                        return;
+                      }
+
+                      // LƯU DANH SÁCH ĐÃ CHỌN VÀO STORE
+                      setSelectedForCheckout(selectedItems);
+
+                      // CHUYỂN HƯỚNG
+                      navigate("/checkout");
+                    }}
+                  >
+                    Tiến hành thanh toán
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => navigate("/products")}
+                  >
+                    Tiếp tục mua sắm
+                  </Button>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <Card className="sticky top-20">
-              <CardContent className="p-6 space-y-4">
-                <h3 className="text-xl font-semibold">Tóm tắt đơn hàng</h3>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tạm tính</span>
-                    <span>{formatPrice(total)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Phí vận chuyển
-                    </span>
-                    <span className="text-green-600">
-                      {total >= 5000000 ? "Miễn phí" : "50.000đ"}
-                    </span>
-                  </div>
-                  <div className="border-t pt-2">
-                    <div className="flex justify-between text-lg font-semibold">
-                      <span>Tổng cộng</span>
-                      <span className="text-primary">{formatPrice(total)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={() => navigate("/checkout")}
-                >
-                  Tiến hành thanh toán
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => navigate("/products")}
-                >
-                  Tiếp tục mua sắm
-                </Button>
-              </CardContent>
-            </Card>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Dialog chọn phiên bản */}
+      {/* DIALOG ĐỔI PHIÊN BẢN */}
       <Dialog open={showVariantDialog} onOpenChange={setShowVariantDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>

@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom"; // Thêm useLocation
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
 import { Toaster } from "sonner";
@@ -26,6 +26,18 @@ import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 
+// === COMPONENT CUỘN LÊN ĐẦU KHI ĐỔI TRANG ===
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+};
+
+// === PROTECTED ROUTE ===
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
   if (rehydrating) return <Loading />;
@@ -45,6 +57,9 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* THÊM ĐOẠN NÀY ĐỂ CUỘN LÊN ĐẦU */}
+      <ScrollToTop />
+
       <Routes>
         {/* Public Routes */}
         <Route element={<MainLayout />}>
@@ -115,7 +130,6 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
-          {/* ✅ THÊM TAB SHIPPER CHO ADMIN */}
           <Route path="/admin/shipping" element={<ShipperDashboard />} />
         </Route>
 
@@ -145,7 +159,7 @@ function App() {
           />
         </Route>
 
-        {/* ✅ SHIPPER ROUTES */}
+        {/* SHIPPER ROUTES */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["SHIPPER"]}>
