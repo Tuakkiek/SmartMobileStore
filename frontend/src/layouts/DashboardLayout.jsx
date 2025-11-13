@@ -1,4 +1,4 @@
-// FILE: src/layouts/DashboardLayout.jsx
+// FILE: src/layouts/DashboardLayout.jsx (ĐÃ SỬA LỖI ACTIVE STATE)
 // ============================================
 import React from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
@@ -45,12 +45,15 @@ const DashboardLayout = () => {
 
     if (user?.role === "ADMIN") {
       items.push(
+        // Dashboard là đường dẫn gốc /admin, cần kiểm tra chính xác
         { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
+        // /warehouse/products và /order-manager/orders có thể có các đường dẫn con
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
-        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" } // ADMIN XEM GIAO HÀNG
+        // /admin/shipping là trang giao hàng của ADMIN
+        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" } 
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
       items.push({
@@ -65,6 +68,7 @@ const DashboardLayout = () => {
         label: "Quản lý đơn hàng",
       });
     } else if (user?.role === "SHIPPER") {
+      // /shipper là đường dẫn gốc của Shipper
       items.push({
         path: "/shipper",
         icon: Truck,
@@ -106,8 +110,24 @@ const DashboardLayout = () => {
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname.startsWith(item.path);
+              
+              // ⭐️ LOGIC ĐÃ SỬA: Đảm bảo kiểm tra chính xác cho đường dẫn gốc ⭐️
+              let isActive = false;
 
+              if (item.path === "/admin") {
+                // Dashboard chỉ active khi path là /admin HOẶC /admin/dashboard
+                isActive = location.pathname === "/admin" || location.pathname === "/admin/dashboard";
+              } else if (item.path === "/shipper") {
+                // Shipper Dashboard chỉ active khi path là /shipper
+                 isActive = location.pathname === "/shipper";
+              } 
+              else {
+                // Các mục khác (promotions, products, orders) sử dụng startsWith 
+                // để highlight cho cả trang con (ví dụ: /admin/promotions/create)
+                isActive = location.pathname.startsWith(item.path);
+              }
+              // ⭐️ KẾT THÚC LOGIC ĐÃ SỬA ⭐️
+              
               return (
                 <Link
                   key={item.path}

@@ -37,24 +37,37 @@ const AdminDashboard = () => {
       const totalOrders = ordersRes?.data?.data?.total || 0;
 
       // Fetch all delivered orders for revenue (use high limit to get all)
-      const deliveredRes = await orderAPI.getAll({ status: "DELIVERED", limit: 10000 });
+      const deliveredRes = await orderAPI.getAll({
+        status: "DELIVERED",
+        limit: 10000,
+      });
       const deliveredOrders = deliveredRes?.data?.data?.orders || [];
-      const revenue = deliveredOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+      const revenue = deliveredOrders.reduce(
+        (sum, order) => sum + (order.totalAmount || 0),
+        0
+      );
 
       // Fetch product counts from each category (use limit=1 for paginated APIs to get total without full data)
-      const [iphonesRes, ipadsRes, macsRes, airpodsRes, applewatchesRes, accessoriesRes] = await Promise.all([
+      const [
+        iphonesRes,
+        ipadsRes,
+        macsRes,
+        airpodsRes,
+        applewatchesRes,
+        accessoriesRes,
+      ] = await Promise.all([
         iPhoneAPI.getAll({ limit: 1 }),
         iPadAPI.getAll({ limit: 1 }),
-        macAPI.getAll({}),  // No limit for mac since it ignores pagination and returns all
+        macAPI.getAll({}), // No limit for mac since it ignores pagination and returns all
         airPodsAPI.getAll({ limit: 1 }),
         appleWatchAPI.getAll({ limit: 1 }),
         accessoryAPI.getAll({ limit: 1 }),
       ]);
 
-      const totalProducts = 
+      const totalProducts =
         (iphonesRes?.data?.data?.total || 0) +
         (ipadsRes?.data?.data?.total || 0) +
-        (macsRes?.data?.length || 0) +  // Mac returns array, so use length for total
+        (macsRes?.data?.length || 0) + // Mac returns array, so use length for total
         (airpodsRes?.data?.data?.total || 0) +
         (applewatchesRes?.data?.data?.total || 0) +
         (accessoriesRes?.data?.data?.total || 0);
@@ -131,7 +144,9 @@ const AdminDashboard = () => {
                     </p>
                     <h3 className="text-2xl font-bold">{stat.value}</h3>
                   </div>
-                  <div className={`w-12 h-12 rounded-full ${stat.bg} flex items-center justify-center`}>
+                  <div
+                    className={`w-12 h-12 rounded-full ${stat.bg} flex items-center justify-center`}
+                  >
                     <Icon className={`w-6 h-6 ${stat.color}`} />
                   </div>
                 </div>
@@ -160,8 +175,12 @@ const AdminDashboard = () => {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium">{formatPrice(order.totalAmount)}</p>
-                  <p className="text-sm text-muted-foreground">{order.status}</p>
+                  <p className="font-medium">
+                    {formatPrice(order.totalAmount)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.status}
+                  </p>
                 </div>
               </div>
             ))}
