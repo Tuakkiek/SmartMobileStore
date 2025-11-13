@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/pages/customer/ProfilePage.jsx
-// FIXED: All errors – semicolon, typo, setIsLoading
+// FIXED: Hiển thị 5 đơn + Nút "Xem thêm" + Bỏ PROCESSING
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -32,18 +32,24 @@ import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { useAuthStore } from "@/store/authStore";
 import { useNavigate } from "react-router-dom";
 import { userAPI, orderAPI } from "@/lib/api";
-import { 
-  User, 
-  MapPin, 
-  Lock, 
-  LogOut, 
+import {
+  User,
+  MapPin,
+  Lock,
+  LogOut,
   ShoppingBag,
   Plus,
   Pencil,
   Trash2,
-  Package
+  Package,
+  ChevronDown,
 } from "lucide-react";
-import { formatPrice, formatDate, getStatusColor, getStatusText } from "@/lib/utils";
+import {
+  formatPrice,
+  formatDate,
+  getStatusColor,
+  getStatusText,
+} from "@/lib/utils";
 
 // Placeholder ảnh lỗi
 const PLACEHOLDER_IMG = "https://via.placeholder.com/64?text=No+Image";
@@ -51,6 +57,10 @@ const PLACEHOLDER_IMG = "https://via.placeholder.com/64?text=No+Image";
 const ProfilePage = () => {
   const { user, getCurrentUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState("orders");
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -66,7 +76,9 @@ const ProfilePage = () => {
                   <User className="w-10 h-10 text-primary" />
                 </div>
                 <h3 className="font-semibold text-lg">{user?.fullName}</h3>
-                <p className="text-sm text-muted-foreground">{user?.phoneNumber}</p>
+                <p className="text-sm text-muted-foreground">
+                  {user?.phoneNumber}
+                </p>
               </div>
 
               <nav className="space-y-2">
@@ -79,7 +91,7 @@ const ProfilePage = () => {
                   }`}
                 >
                   <ShoppingBag className="w-5 h-5" />
-                  <span>Đơn hàng đã mua</span>
+                  <span>Đơn hàng của tôi</span>
                 </button>
 
                 <button
@@ -129,8 +141,12 @@ const ProfilePage = () => {
         {/* Main Content */}
         <div className="lg:col-span-3">
           {activeTab === "orders" && <OrdersSection />}
-          {activeTab === "profile" && <ProfileForm user={user} onUpdate={getCurrentUser} />}
-          {activeTab === "addresses" && <AddressesManager user={user} onUpdate={getCurrentUser} />}
+          {activeTab === "profile" && (
+            <ProfileForm user={user} onUpdate={getCurrentUser} />
+          )}
+          {activeTab === "addresses" && (
+            <AddressesManager user={user} onUpdate={getCurrentUser} />
+          )}
           {activeTab === "password" && <ChangePasswordForm />}
         </div>
       </div>
@@ -138,41 +154,83 @@ const ProfilePage = () => {
   );
 };
 
+
 // ============================================
-// ORDERS SECTION – HOÀN CHỈNH
+// ORDERS SECTION – CHUYỂN SANG TRANG CHI TIẾT
 // ============================================
+
 const OrdersSection = () => {
-  const [orders, setOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [orders, setOrders] = useState([]);           // Tất cả đơn đã load
+  const [displayedOrders, setDisplayedOrders] = useState([]); // Đơn hiện trên UI
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);  // Tổng số đơn theo filter
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [statusFilter]);
+  const navigate = useNavigate(); // THÊM ĐỂ CHUYỂN TRANG
+  const pageSize = 5;
 
-  const fetchOrders = async () => {
+  // === LOAD ĐƠN HÀNG ===
+  const loadOrders = async (reset = false) => {
+    if (isLoading) return;
     setIsLoading(true);
+
+    const currentPage = reset ? 1 : page;
+
     try {
-      const params = statusFilter !== "all" ? { status: statusFilter } : {};
-      const response = await orderAPI.getMyOrders(params);
-      setOrders(response.data.data.orders || []);
+      const response = await orderAPI.getMyOrders(
+        currentPage,
+        pageSize,
+        statusFilter === "all" ? "" : statusFilter
+      );
+
+      const newOrders = response.data.data.orders || [];
+      const total = response.data.data.total || 0;
+
+      if (reset) {
+        setTotalOrders(total);
+        setOrders(newOrders);
+        setDisplayedOrders(newOrders);
+        setPage(2);
+        setHasMore(newOrders.length < total);
+      } else {
+        const updatedOrders = [...orders, ...newOrders];
+        setOrders(updatedOrders);
+        setDisplayedOrders(updatedOrders);
+        setPage(prev => prev + 1);
+        setHasMore(updatedOrders.length < total);
+      }
     } catch (error) {
-      console.error("Error fetching orders:", error);
+      console.error("Error loading orders:", error);
     } finally {
       setIsLoading(false);
+      if (reset) setIsInitialLoading(false);
     }
   };
 
-  const handleViewDetail = async (orderId) => {
-    try {
-      const response = await orderAPI.getById(orderId);
-      setSelectedOrder(response.data.data.order);
-      setShowDetailDialog(true);
-    } catch (error) {
-      alert(error.response?.data?.message || "Không thể tải thông tin đơn hàng");
+  // === KHI ĐỔI FILTER → RESET + LOAD LẠI ===
+  useEffect(() => {
+    setOrders([]);
+    setDisplayedOrders([]);
+    setPage(1);
+    setTotalOrders(0);
+    setHasMore(true);
+    setIsInitialLoading(true);
+    loadOrders(true);
+  }, [statusFilter]);
+
+  // === NÚT XEM THÊM ===
+  const handleLoadMore = () => {
+    if (hasMore && !isLoading) {
+      loadOrders(false);
     }
+  };
+
+  // === CHUYỂN TRANG CHI TIẾT (THAY VÌ MỞ DIALOG) ===
+  const handleViewDetail = (orderId) => {
+    navigate(`/orders/${orderId}`);
   };
 
   const getImageUrl = (path) => {
@@ -195,7 +253,6 @@ const OrdersSection = () => {
     { value: "all", label: "Tất cả" },
     { value: "PENDING", label: "Chờ xử lý" },
     { value: "CONFIRMED", label: "Đã xác nhận" },
-    { value: "PROCESSING", label: "Đang xử lý" },
     { value: "SHIPPING", label: "Đang giao" },
     { value: "DELIVERED", label: "Đã giao" },
     { value: "CANCELLED", label: "Đã hủy" },
@@ -208,6 +265,7 @@ const OrdersSection = () => {
           <CardTitle>Đơn hàng đã mua</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* FILTER BUTTONS */}
           <div className="flex gap-2 overflow-x-auto pb-4 border-b mb-6">
             {statusButtons.map((btn) => (
               <Button
@@ -222,186 +280,266 @@ const OrdersSection = () => {
             ))}
           </div>
 
-          {isLoading ? (
-            <div className="text-center py-8">Đang tải...</div>
-          ) : orders.length === 0 ? (
-            <div className="text-center py-8">
-              <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Chưa có đơn hàng nào</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {orders.map((order) => (
-                <Card key={order._id} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-4 bg-muted/50 border-b flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Đơn hàng:</p>
-                          <p className="font-semibold">#{order.orderNumber}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Nhận hàng</p>
-                          <p className="font-medium">
-                            {order.shippingAddress?.fullName} ({order.shippingAddress?.phoneNumber})
-                          </p>
-                        </div>
-                      </div>
-                      <Badge className={getStatusColor(order.status)}>
-                        {getStatusText(order.status)}
-                      </Badge>
-                    </div>
+          <div className="space-y-4 min-h-[400px]">
+            {/* SKELETON */}
+            {isInitialLoading ? (
+              [...Array(5)].map((_, i) => (
+                <OrderSkeleton key={i} />
+              ))
+            ) : displayedOrders.length === 0 ? (
+              <div className="text-center py-16 flex flex-col items-center justify-center">
+                <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Chưa có đơn hàng nào</p>
+              </div>
+            ) : (
+              <>
+                {displayedOrders.map((order) => (
+                  <OrderCard
+                    key={order._id}
+                    order={order}
+                    onViewDetail={handleViewDetail} // TRUYỀN HÀM MỚI
+                    getImageUrl={getImageUrl}
+                    getVariantLabel={getVariantLabel}
+                  />
+                ))}
 
-                    <div className="p-4 space-y-4">
-                      {order.items?.map((item, index) => {
-                        const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
-                        const variantLabel = getVariantLabel(item);
+                {/* NÚT XEM THÊM */}
+                {hasMore && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={handleLoadMore}
+                      disabled={isLoading}
+                      className="flex items-center gap-2"
+                    >
+                      {isLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                          Đang tải...
+                        </>
+                      ) : (
+                        <>
+                          Xem thêm
+                          <ChevronDown className="w-4 h-4" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
 
-                        return (
-                          <div key={index} className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
-                              {imageUrl ? (
-                                <img
-                                  src={imageUrl}
-                                  alt={item.productName}
-                                  className="w-full h-full object-cover rounded"
-                                  onError={(e) => {
-                                    e.target.src = PLACEHOLDER_IMG;
-                                  }}
-                                />
-                              ) : (
-                                <Package className="w-8 h-8 text-gray-400" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium line-clamp-1">{item.productName}</h4>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {variantLabel}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                SL: {item.quantity}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold">
-                                {formatPrice(item.price * item.quantity)}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="p-4 bg-muted/50 border-t flex items-center justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetail(order._id)}
-                      >
-                        Xem chi tiết
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                {/* END OF LIST */}
+                {!hasMore && displayedOrders.length > 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    Đã hiển thị tất cả {displayedOrders.length} đơn hàng
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-            <DialogDescription>Mã đơn: #{selectedOrder?.orderNumber}</DialogDescription>
-          </DialogHeader>
-
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Badge className={getStatusColor(selectedOrder.status)}>
-                  {getStatusText(selectedOrder.status)}
-                </Badge>
-                <p className="text-sm text-muted-foreground">
-                  {formatDate(selectedOrder.createdAt)}
-                </p>
-              </div>
-
-              <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-semibold">Địa chỉ nhận hàng</h4>
-                <p className="text-sm">{selectedOrder.shippingAddress?.fullName}</p>
-                <p className="text-sm">{selectedOrder.shippingAddress?.phoneNumber}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedOrder.shippingAddress?.detailAddress},{" "}
-                  {selectedOrder.shippingAddress?.commune},{" "}
-                  {selectedOrder.shippingAddress?.district},{" "}
-                  {selectedOrder.shippingAddress?.province}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                {selectedOrder.items?.map((item, index) => {
-                  const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
-                  const variantLabel = getVariantLabel(item);
-
-                  return (
-                    <div key={index} className="flex gap-4 p-3 border rounded-lg">
-                      <div className="w-16 h-16 bg-gray-100 rounded flex-shrink-0">
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt={item.productName}
-                            className="w-full h-full object-cover rounded"
-                            onError={(e) => {
-                              e.target.src = PLACEHOLDER_IMG;
-                            }}
-                          />
-                        ) : (
-                          <Package className="w-8 h-8 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-medium">{item.productName}</h4>
-                        {variantLabel !== "Không có" && (
-                          <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
-                        )}
-                        <p className="text-sm text-muted-foreground">x{item.quantity}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="pt-4 border-t space-y-2">
-                <div className="flex justify-between">
-                  <span>Tổng tiền:</span>
-                  <span className="font-bold text-xl text-primary">
-                    {formatPrice(selectedOrder.totalAmount)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Phương thức thanh toán:</span>
-                  <span>{selectedOrder.paymentMethod === "COD" ? "Thanh toán khi nhận hàng" : "Chuyển khoản"}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button onClick={() => setShowDetailDialog(false)}>Đóng</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* BỎ DIALOG CHI TIẾT → DÙNG TRANG RIÊNG */}
     </div>
   );
 };
 
 // ============================================
-// PROFILE FORM – HOÀN CHỈNH
+// SKELETON COMPONENT
 // ============================================
+const OrderSkeleton = () => (
+  <Card className="overflow-hidden">
+    <CardContent className="p-0">
+      <div className="p-4 bg-muted/50 border-b flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-6 bg-muted rounded w-32 animate-pulse"></div>
+          <div className="h-6 bg-muted rounded w-48 animate-pulse"></div>
+        </div>
+        <div className="h-6 bg-muted rounded-full w-24 animate-pulse"></div>
+      </div>
+      <div className="p-4 space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-muted rounded animate-pulse"></div>
+          <div className="flex-1 space-y-2">
+            <div className="h-5 bg-muted rounded w-3/4 animate-pulse"></div>
+            <div className="h-4 bg-muted rounded w-1/2 animate-pulse"></div>
+          </div>
+          <div className="h-6 bg-muted rounded w-20 animate-pulse"></div>
+        </div>
+      </div>
+      <div className="p-4 bg-muted/50 border-t flex justify-end">
+        <div className="h-8 bg-muted rounded w-28 animate-pulse"></div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// ============================================
+// ORDER CARD COMPONENT
+// ============================================
+const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
+  <Card className="overflow-hidden">
+    <CardContent className="p-0">
+      <div className="p-4 bg-muted/50 border-b flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Đơn hàng:</p>
+            <p className="font-semibold">#{order.orderNumber}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Nhận hàng</p>
+            <p className="font-medium">
+              {order.shippingAddress?.fullName} ({order.shippingAddress?.phoneNumber})
+            </p>
+          </div>
+        </div>
+        <Badge className={getStatusColor(order.status)}>
+          {getStatusText(order.status)}
+        </Badge>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {order.items?.map((item, index) => {
+          const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+          const variantLabel = getVariantLabel(item);
+
+          return (
+            <div key={index} className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={item.productName}
+                    className="w-full h-full object-cover rounded"
+                    onError={(e) => { e.target.src = PLACEHOLDER_IMG; }}
+                  />
+                ) : (
+                  <Package className="w-8 h-8 text-gray-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-medium line-clamp-1">{item.productName}</h4>
+                <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
+                <p className="text-sm text-muted-foreground">SL: {item.quantity}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="p-4 bg-muted/50 border-t flex items-center justify-end">
+        <Button variant="outline" size="sm" onClick={() => onViewDetail(order._id)}>
+          Xem chi tiết
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// ============================================
+// ORDER DETAIL DIALOG
+// ============================================
+const OrderDetailDialog = ({ open, onOpenChange, order, getImageUrl, getVariantLabel }) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Chi tiết đơn hàng</DialogTitle>
+        <DialogDescription>
+          Mã đơn: #{order?.orderNumber}
+        </DialogDescription>
+      </DialogHeader>
+      {order && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Badge className={getStatusColor(order.status)}>
+              {getStatusText(order.status)}
+            </Badge>
+            <p className="text-sm text-muted-foreground">
+              {formatDate(order.createdAt)}
+            </p>
+          </div>
+
+          <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
+            <h4 className="font-semibold">Địa chỉ nhận hàng</h4>
+            <p className="text-sm">{order.shippingAddress?.fullName}</p>
+            <p className="text-sm">{order.shippingAddress?.phoneNumber}</p>
+            <p className="text-sm text-muted-foreground">
+              {order.shippingAddress?.detailAddress},{" "}
+              {order.shippingAddress?.commune},{" "}
+              {order.shippingAddress?.district},{" "}
+              {order.shippingAddress?.province}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {order.items?.map((item, index) => {
+              const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+              const variantLabel = getVariantLabel(item);
+
+              return (
+                <div key={index} className="flex gap-4 p-3 border rounded-lg">
+                  <div className="w-16 h-16 bg-gray-100 rounded flex-shrink-0">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={item.productName}
+                        className="w-full h-full object-cover rounded"
+                        onError={(e) => { e.target.src = PLACEHOLDER_IMG; }}
+                      />
+                    ) : (
+                      <Package className="w-8 h-8 text-gray-400" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium">{item.productName}</h4>
+                    {variantLabel !== "Không có" && (
+                      <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground">x{item.quantity}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">
+                      {formatPrice(item.price * item.quantity)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-4 border-t space-y-2">
+            <div className="flex justify-between">
+              <span>Tổng tiền:</span>
+              <span className="font-bold text-xl text-primary">
+                {formatPrice(order.totalAmount)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Phương thức thanh toán:</span>
+              <span>
+                {order.paymentMethod === "COD"
+                  ? "Thanh toán khi nhận hàng"
+                  : "Chuyển khoản"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      <DialogFooter>
+        <Button onClick={() => onOpenChange(false)}>Đóng</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+);
+
+// ============================================
+// CÁC COMPONENT KHÁC (GIỮ NGUYÊN)
+// ============================================
+
 const ProfileForm = ({ user, onUpdate }) => {
   const [formData, setFormData] = useState({
     fullName: user?.fullName || "",
@@ -498,9 +636,6 @@ const ProfileForm = ({ user, onUpdate }) => {
   );
 };
 
-// ============================================
-// ADDRESSES MANAGER – HOÀN CHỈNH
-// ============================================
 const AddressesManager = ({ user, onUpdate }) => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -514,7 +649,8 @@ const AddressesManager = ({ user, onUpdate }) => {
   });
 
   const handleChange = (e) => {
-    const value = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    const value =
+      e.target.type === "checkbox" ? e.target.checked : e.target.value;
     setFormData({
       ...formData,
       [e.target.name]: value,
@@ -584,7 +720,9 @@ const AddressesManager = ({ user, onUpdate }) => {
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-medium">{address.fullName}</p>
-                    <p className="text-sm text-muted-foreground">{address.phoneNumber}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {address.phoneNumber}
+                    </p>
                   </div>
                   {address.isDefault && <Badge>Mặc định</Badge>}
                 </div>
@@ -592,11 +730,19 @@ const AddressesManager = ({ user, onUpdate }) => {
                   {address.detailAddress}, {address.ward}, {address.province}
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(address)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(address)}
+                  >
                     <Pencil className="w-4 h-4 mr-2" />
                     Sửa
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDelete(address._id)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(address._id)}
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Xóa
                   </Button>
@@ -610,7 +756,9 @@ const AddressesManager = ({ user, onUpdate }) => {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingId ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ mới"}</DialogTitle>
+            <DialogTitle>
+              {editingId ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ mới"}
+            </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -696,9 +844,6 @@ const AddressesManager = ({ user, onUpdate }) => {
   );
 };
 
-// ============================================
-// CHANGE PASSWORD FORM – HOÀN CHỈNH
-// ============================================
 const ChangePasswordForm = () => {
   const { changePassword } = useAuthStore();
   const [formData, setFormData] = useState({
@@ -732,7 +877,7 @@ const ChangePasswordForm = () => {
       return;
     }
 
-    setIsLoading(true); // ĐÃ SỬA: nineteen → true
+    setIsLoading(true);
     const result = await changePassword({
       oldPassword: formData.oldPassword,
       newPassword: formData.newPassword,
@@ -811,9 +956,6 @@ const ChangePasswordForm = () => {
   );
 };
 
-// ============================================
-// LOGOUT BUTTON – HOÀN CHỈNH
-// ============================================
 const LogoutButton = () => {
   const { logout } = useAuthStore();
   const navigate = useNavigate();
@@ -842,7 +984,10 @@ const LogoutButton = () => {
 
         <AlertDialogFooter>
           <AlertDialogCancel>Hủy</AlertDialogCancel>
-          <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600">
+          <AlertDialogAction
+            onClick={handleLogout}
+            className="bg-red-500 hover:bg-red-600"
+          >
             Xác nhận Đăng xuất
           </AlertDialogAction>
         </AlertDialogFooter>

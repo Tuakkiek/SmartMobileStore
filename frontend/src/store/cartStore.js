@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/store/cartStore.js
-// ✅ COMPLETE FIX: Handle all edge cases
+// FIXED: Thêm setSelectedForCheckout → thanh toán hoạt động
 // ============================================
 
 import { create } from "zustand";
@@ -10,6 +10,9 @@ export const useCartStore = create((set, get) => ({
   cart: { items: [] },
   isLoading: false,
   error: null,
+
+  // === MỚI: Lưu danh sách variantId được chọn để thanh toán ===
+  selectedForCheckout: new Set(),
 
   // Get cart
   getCart: async () => {
@@ -23,58 +26,58 @@ export const useCartStore = create((set, get) => ({
   },
 
   // Add to cart
-addToCart: async (variantId, quantity = 1, productType) => {
-  console.log("cartStore.addToCart called:", {
-    variantId,
-    quantity,
-    productType,
-    typeOf: {
-      variantId: typeof variantId,
-      productType: typeof productType,
-    },
-  });
+  addToCart: async (variantId, quantity = 1, productType) => {
+    console.log("cartStore.addToCart called:", {
+      variantId,
+      quantity,
+      productType,
+      typeOf: {
+        variantId: typeof variantId,
+        productType: typeof productType,
+      },
+    });
 
-  if (!variantId) {
-    console.error("variantId is missing or invalid:", variantId);
-    const message = "Thiếu variantId";
-    set({ error: message, isLoading: false });
-    return { success: false, message };
-  }
+    if (!variantId) {
+      console.error("variantId is missing or invalid:", variantId);
+      const message = "Thiếu variantId";
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
 
-  if (!productType) {
-    console.error("productType is missing:", productType);
-    const message = "Thiếu productType";
-    set({ error: message, isLoading: false });
-    return { success: false, message };
-  }
+    if (!productType) {
+      console.error("productType is missing:", productType);
+      const message = "Thiếu productType";
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
 
-  const validTypes = ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"];
-  if (!validTypes.includes(productType)) {
-    console.error("Invalid productType:", productType, "Valid:", validTypes);
-    const message = `productType không hợp lệ: ${productType}`;
-    set({ error: message, isLoading: false });
-    return { success: false, message };
-  }
+    const validTypes = ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"];
+    if (!validTypes.includes(productType)) {
+      console.error("Invalid productType:", productType, "Valid:", validTypes);
+      const message = `productType không hợp lệ: ${productType}`;
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
 
-  set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null });
 
-  try {
-    console.log("Sending to cartAPI.addToCart:", { variantId, quantity, productType });
-    const response = await cartAPI.addToCart({ variantId, quantity, productType });
-    console.log("cartAPI response:", response);
+    try {
+      console.log("Sending to cartAPI.addToCart:", { variantId, quantity, productType });
+      const response = await cartAPI.addToCart({ variantId, quantity, productType });
+      console.log("cartAPI response:", response);
 
-    set({ cart: response.data.data, isLoading: false });
-    return { success: true, message: response.data.message };
-  } catch (error) {
-    console.error("cartAPI error:", error.response?.data || error);
-    const message = error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
-    set({ error: message, isLoading: false });
-    return { success: false, message };
-  }
-},
+      set({ cart: response.data.data, isLoading: false });
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      console.error("cartAPI error:", error.response?.data || error);
+      const message = error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
+      set({ error: message, isLoading: false });
+      return { success: false, message };
+    }
+  },
 
   // ============================================
-  // UPDATE CART ITEM - ✅ FIXED
+  // UPDATE CART ITEM - FIXED
   // ============================================
   updateCartItem: async (itemId, quantity) => {
     if (!itemId || quantity < 0) {
@@ -86,7 +89,7 @@ addToCart: async (variantId, quantity = 1, productType) => {
     try {
       const { cart } = get();
 
-      // ✅ Find item by comparing both _id and variantId
+      // Find item by comparing both _id and variantId
       const item = cart.items.find((i) => {
         const itemIdStr = i._id?.toString();
         const variantIdStr = i.variantId?.toString();
@@ -127,7 +130,7 @@ addToCart: async (variantId, quantity = 1, productType) => {
   },
 
   // ============================================
-  // REMOVE FROM CART - ✅ FIXED
+  // REMOVE FROM CART - FIXED
   // ============================================
   removeFromCart: async (itemId) => {
     if (!itemId) {
@@ -139,7 +142,7 @@ addToCart: async (variantId, quantity = 1, productType) => {
     try {
       const { cart } = get();
 
-      // ✅ Find the item first to determine what ID to use
+      // Find the item first to determine what ID to use
       const item = cart.items.find((i) => {
         const itemIdStr = i._id?.toString();
         const variantIdStr = i.variantId?.toString();
@@ -153,7 +156,7 @@ addToCart: async (variantId, quantity = 1, productType) => {
         throw new Error("Không tìm thấy sản phẩm trong giỏ hàng");
       }
 
-      // ✅ Use the actual _id from the item (MongoDB subdocument ID)
+      // Use the actual _id from the item (MongoDB subdocument ID)
       const deleteId = item._id || item.variantId;
 
       console.log("Removing cart item:", {
@@ -214,6 +217,31 @@ addToCart: async (variantId, quantity = 1, productType) => {
       const searchId = variantId?.toString();
       return itemVariantId === searchId;
     });
+  },
+
+  // === MỚI: SET DANH SÁCH ĐÃ CHỌN ===
+  setSelectedForCheckout: (variantIds) => {
+    set({ selectedForCheckout: new Set(variantIds) });
+  },
+
+  // === MỚI: LẤY TỔNG TIỀN CHỈ CÁC SẢN PHẨM ĐƯỢC CHỌN ===
+  getSelectedTotal: () => {
+    const { cart, selectedForCheckout } = get();
+    if (!cart?.items || selectedForCheckout.size === 0) return 0;
+
+    return cart.items
+      .filter((item) => selectedForCheckout.has(item.variantId))
+      .reduce((sum, item) => sum + item.price * item.quantity, 0);
+  },
+
+  // === MỚI: LẤY DANH SÁCH SẢN PHẨM ĐƯỢC CHỌN ===
+  getSelectedItems: () => {
+    const { cart, selectedForCheckout } = get();
+    if (!cart?.items || selectedForCheckout.size === 0) return [];
+
+    return cart.items.filter((item) =>
+      selectedForCheckout.has(item.variantId)
+    );
   },
 
   clearError: () => set({ error: null }),
