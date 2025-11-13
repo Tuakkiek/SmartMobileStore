@@ -100,9 +100,10 @@ const IPadVariantsForm = ({
             {variant.options.map((opt, oIdx) => (
               <div
                 key={oIdx}
-                className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end p-3 border rounded-md"
+                className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end p-3 border rounded-md"
               >
-                <div className="space-y-2">
+                {/* Bộ nhớ trong - Thêm placeholder hợp lý */}
+                <div className="md:col-span-2 space-y-2">
                   <Label>
                     Bộ nhớ trong <span className="text-red-500">*</span>
                   </Label>
@@ -113,7 +114,8 @@ const IPadVariantsForm = ({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Chọn bộ nhớ" />
+                      <SelectValue placeholder="Chọn bộ nhớ" />{" "}
+                      {/* SỬA: Thêm placeholder */}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="128GB">128GB</SelectItem>
@@ -125,7 +127,8 @@ const IPadVariantsForm = ({
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                {/* Kết nối - Chỉ giữ 1 khối, xóa duplicate */}
+                <div className="md:col-span-2 space-y-2">
                   <Label>
                     Kết nối <span className="text-red-500">*</span>
                   </Label>
@@ -145,6 +148,7 @@ const IPadVariantsForm = ({
                   </Select>
                 </div>
 
+                {/* SKU */}
                 <div className="space-y-2">
                   <Label>SKU (Tự động)</Label>
                   <Input
@@ -154,6 +158,7 @@ const IPadVariantsForm = ({
                   />
                 </div>
 
+                {/* Giá gốc */}
                 <div className="space-y-2">
                   <Label>
                     Giá gốc <span className="text-red-500">*</span>
@@ -173,6 +178,7 @@ const IPadVariantsForm = ({
                   />
                 </div>
 
+                {/* Giá bán */}
                 <div className="space-y-2">
                   <Label>
                     Giá bán <span className="text-red-500">*</span>
@@ -204,6 +210,7 @@ const IPadVariantsForm = ({
                     )}
                 </div>
 
+                {/* Số lượng */}
                 <div className="space-y-2">
                   <Label>Số lượng</Label>
                   <Input
