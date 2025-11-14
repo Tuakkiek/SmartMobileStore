@@ -273,7 +273,15 @@ export const processPayment = async (req, res) => {
       });
     }
 
-    // Xử lý thanh toán
+    // ✅ CẬP NHẬT CẢ posInfo VÀ gọi processPayment
+    const changeGiven = Math.max(0, paymentReceived - order.totalAmount);
+
+    // Cập nhật posInfo để in hóa đơn
+    order.posInfo.paymentReceived = paymentReceived;
+    order.posInfo.changeGiven = changeGiven;
+    order.posInfo.cashierName = req.user.fullName; // ✅ Thêm tên kế toán
+
+    // Xử lý thanh toán (method sẽ tự cập nhật paymentInfo)
     await order.processPayment(req.user._id, paymentReceived);
 
     await session.commitTransaction();
@@ -446,14 +454,19 @@ export const issueVATInvoice = async (req, res) => {
 // ============================================
 // LẤY LỊCH SỬ ĐƠN POS (POS Staff xem của mình)
 // ============================================
+// Dòng 369-390
 export const getPOSOrderHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20, startDate, endDate } = req.query;
 
     const query = {
       orderSource: "IN_STORE",
-      "posInfo.staffId": req.user._id,
     };
+
+    // ✅ CHỈ LỌC THEO staffId NẾU KHÔNG PHẢI ADMIN/ACCOUNTANT
+    if (!["ADMIN", "ACCOUNTANT"].includes(req.user.role)) {
+      query["posInfo.staffId"] = req.user._id;
+    }
 
     if (startDate || endDate) {
       query.createdAt = {};
@@ -462,6 +475,7 @@ export const getPOSOrderHistory = async (req, res) => {
     }
 
     const orders = await Order.find(query)
+      .populate("posInfo.staffId", "fullName") // ← THÊM POPULATE
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -485,7 +499,6 @@ export const getPOSOrderHistory = async (req, res) => {
     });
   }
 };
-
 export default {
   createPOSOrder,
   getPendingOrders,

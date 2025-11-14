@@ -84,8 +84,13 @@ const posInfoSchema = new mongoose.Schema(
       required: true,
     },
     staffName: { type: String, trim: true },
+    cashierName: { type: String, trim: true }, // ✅ THÊM - Tên thu ngân (dùng khi in)
     storeLocation: { type: String, trim: true },
     receiptNumber: { type: String, trim: true }, // Số phiếu tạm
+
+    // ✅ THÊM - Thông tin thanh toán nhanh (để in hóa đơn)
+    paymentReceived: { type: Number, min: 0 },
+    changeGiven: { type: Number, min: 0 },
   },
   { _id: false }
 );
