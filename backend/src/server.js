@@ -1,4 +1,3 @@
-// backend/src/server.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -24,8 +23,9 @@ import macRoutes from "./routes/macRoutes.js";
 import airPodsRoutes from "./routes/airPodsRoutes.js";
 import appleWatchRoutes from "./routes/appleWatchRoutes.js";
 import accessoryRoutes from "./routes/accessoryRoutes.js";
-import analyticsRoutes from "./routes/analyticsRoutes.js"; // ✅ THÊM analytics
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
+import posRoutes from "./routes/posRoutes.js"; // ✅ MỚI
 
 dotenv.config();
 
@@ -39,7 +39,7 @@ const app = express();
 // ================================
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173", // Cho phép frontend truy cập
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
   })
 );
@@ -47,7 +47,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Serve static files (nếu có upload ảnh, file,...)
+// Serve static files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ================================
@@ -73,8 +73,9 @@ app.use("/api/macs", macRoutes);
 app.use("/api/airpods", airPodsRoutes);
 app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/accessories", accessoryRoutes);
-app.use("/api/analytics", analyticsRoutes); // ✅ THÊM analytics route
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/sales", salesRoutes);
+app.use("/api/pos", posRoutes); // ✅ MỚI - POS Routes
 
 // ================================
 // 🔹 Health Check Endpoint
@@ -122,6 +123,7 @@ const startServer = () => {
     console.log(
       `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
     );
+    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
     console.log(
       `⏰ Current time: ${new Date().toLocaleString("en-US", {
         timeZone: "Asia/Ho_Chi_Minh",

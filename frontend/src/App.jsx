@@ -1,5 +1,11 @@
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom"; // Thêm useLocation
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom"; // Thêm useLocation
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
 import { Toaster } from "sonner";
@@ -25,6 +31,9 @@ import PromotionsPage from "@/pages/admin/PromotionsPage";
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
+import POSDashboard from "@/pages/pos-staff/POSDashboard";
+import AccountantDashboard from "@/pages/accountant/AccountantDashboard";
+import VATInvoicesPage from "@/pages/accountant/VATInvoicesPage";
 
 // === COMPONENT CUỘN LÊN ĐẦU KHI ĐỔI TRANG ===
 const ScrollToTop = () => {
@@ -156,6 +165,35 @@ function App() {
           <Route
             path="/order-manager/orders"
             element={<OrderManagementPage />}
+          />
+        </Route>
+
+        {/* POS STAFF ROUTES */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["POS_STAFF", "ADMIN"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/pos/dashboard" element={<POSDashboard />} />
+        </Route>
+
+        {/* ACCOUNTANT ROUTES */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["ACCOUNTANT", "ADMIN"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route
+            path="/accountant/dashboard"
+            element={<AccountantDashboard />}
+          />
+          <Route
+            path="/accountant/vat-invoices"
+            element={<VATInvoicesPage />}
           />
         </Route>
 

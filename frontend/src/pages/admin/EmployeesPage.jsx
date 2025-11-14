@@ -217,8 +217,9 @@ const EmployeesPage = () => {
                   >
                     <option value="WAREHOUSE_STAFF">Nhân viên kho</option>
                     <option value="ORDER_MANAGER">Quản lý đơn hàng</option>
-                    {/* ✅ THÊM OPTION SHIPPER */}
                     <option value="SHIPPER">Nhân viên giao hàng</option>
+                    <option value="POS_STAFF">Nhân viên bán hàng</option>
+                    <option value="ACCOUNTANT">Kế toán</option> 
                     <option value="ADMIN">Quản trị viên</option>
                   </select>
                 </div>

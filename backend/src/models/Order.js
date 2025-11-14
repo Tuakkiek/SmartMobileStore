@@ -1,8 +1,4 @@
-// ============================================
-// FILE: backend/src/models/Order.js
-// COMPLETE: Order model with detailed variant info + FIXED totalAmount + ADDED RETURNED status
-// ============================================
-
+// backend/src/models/Order.js - CẬP NHẬT CHO POS
 import mongoose from "mongoose";
 
 // Schema cho item trong đơn hàng
@@ -81,7 +77,7 @@ const statusHistorySchema = new mongoose.Schema(
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
-        "RETURNED", // THÊM MỚI
+        "RETURNED",
         "CANCELLED",
       ],
       required: true,
@@ -100,6 +96,68 @@ const statusHistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+// ✅ MỚI: Schema thông tin POS
+const posInfoSchema = new mongoose.Schema(
+  {
+    cashierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    storeLocation: {
+      type: String,
+      trim: true,
+    },
+    cashierName: {
+      type: String,
+      trim: true,
+    },
+    paymentReceived: {
+      type: Number,
+      min: 0,
+    },
+    changeGiven: {
+      type: Number,
+      min: 0,
+    },
+    receiptNumber: {
+      type: String,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
+// ✅ MỚI: Schema hóa đơn VAT
+const vatInvoiceSchema = new mongoose.Schema(
+  {
+    invoiceNumber: {
+      type: String,
+      trim: true,
+    },
+    companyName: {
+      type: String,
+      trim: true,
+    },
+    taxCode: {
+      type: String,
+      trim: true,
+    },
+    companyAddress: {
+      type: String,
+      trim: true,
+    },
+    issuedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    issuedAt: {
+      type: Date,
+    },
+  },
+  { _id: false }
+);
+
 // Schema chính cho đơn hàng
 const orderSchema = new mongoose.Schema(
   {
@@ -108,6 +166,14 @@ const orderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+
+    // ✅ MỚI: Phân biệt đơn ONLINE vs POS
+    orderType: {
+      type: String,
+      enum: ["ONLINE", "POS"],
+      default: "ONLINE",
+    },
+
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -124,15 +190,11 @@ const orderSchema = new mongoose.Schema(
       type: addressSchema,
       required: true,
     },
-
-    // Dùng totalAmount (đã chuẩn hóa)
     totalAmount: {
       type: Number,
       required: true,
       min: 0,
     },
-
-    // Các trường tính toán
     subtotal: {
       type: Number,
       min: 0,
@@ -147,7 +209,6 @@ const orderSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-
     status: {
       type: String,
       enum: [
@@ -160,10 +221,9 @@ const orderSchema = new mongoose.Schema(
       ],
       default: "PENDING",
     },
-
     paymentMethod: {
       type: String,
-      enum: ["COD", "BANK_TRANSFER"],
+      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD"],
       required: true,
     },
     paymentStatus: {
@@ -185,6 +245,12 @@ const orderSchema = new mongoose.Schema(
       code: { type: String },
       discountAmount: { type: Number },
     },
+
+    // ✅ MỚI: Thông tin POS (chỉ có khi orderType = "POS")
+    posInfo: posInfoSchema,
+
+    // ✅ MỚI: Hóa đơn VAT (nếu khách yêu cầu)
+    vatInvoice: vatInvoiceSchema,
   },
   {
     timestamps: true,
@@ -199,9 +265,12 @@ orderSchema.pre("validate", async function (next) {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
 
+    // ✅ Phân biệt prefix theo orderType
+    const prefix = this.orderType === "POS" ? "POS" : "ORD";
+
     const lastOrder = await mongoose
       .model("Order")
-      .findOne({ orderNumber: new RegExp(`^ORD${year}${month}${day}`) })
+      .findOne({ orderNumber: new RegExp(`^${prefix}${year}${month}${day}`) })
       .sort({ orderNumber: -1 });
 
     let sequence = 1;
@@ -210,7 +279,7 @@ orderSchema.pre("validate", async function (next) {
       if (!isNaN(lastSeq)) sequence = lastSeq + 1;
     }
 
-    this.orderNumber = `ORD${year}${month}${day}${sequence
+    this.orderNumber = `${prefix}${year}${month}${day}${sequence
       .toString()
       .padStart(4, "0")}`;
   }
@@ -224,7 +293,10 @@ orderSchema.pre("save", function (next) {
       status: this.status,
       updatedBy: this.customerId,
       updatedAt: new Date(),
-      note: "Đơn hàng được tạo",
+      note:
+        this.orderType === "POS"
+          ? "Đơn hàng tại cửa hàng"
+          : "Đơn hàng được tạo",
     });
   }
   next();
@@ -274,5 +346,7 @@ orderSchema.methods.trackOrder = function () {
 // Tối ưu tìm kiếm
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ orderType: 1, createdAt: -1 });
+orderSchema.index({ "posInfo.cashierId": 1 });
 
 export default mongoose.model("Order", orderSchema);
