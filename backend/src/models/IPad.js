@@ -20,7 +20,7 @@ iPadVariantSchema.add({
   },
 });
 
-iPadVariantSchema.index({ salesCount: -1 });
+
 
 export const IPadVariant = mongoose.model(
   "IPadVariant",
