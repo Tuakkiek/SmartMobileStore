@@ -36,7 +36,7 @@ const addressSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
-    // ✅ THÊM SHIPPER VÀO ENUM
+    // ✅ THÊM POS_STAFF VÀ ACCOUNTANT
     role: {
       type: String,
       enum: [
@@ -45,6 +45,8 @@ const userSchema = new mongoose.Schema(
         "WAREHOUSE_STAFF",
         "ORDER_MANAGER",
         "SHIPPER",
+        "POS_STAFF", // ✅ NHÂN VIÊN BÁN HÀNG TRỰC TIẾP
+        "ACCOUNTANT", // ✅ KẾ TOÁN
         "ADMIN",
       ],
       default: "USER",
@@ -81,6 +83,12 @@ const userSchema = new mongoose.Schema(
       default: "ACTIVE",
     },
     addresses: [addressSchema],
+
+    // ✅ THÊM: Thông tin nhân viên POS
+    storeLocation: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,

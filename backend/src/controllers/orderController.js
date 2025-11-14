@@ -302,7 +302,8 @@ export const getMyOrders = async (req, res) => {
 
     // CHỌN CÁC TRƯỜNG CẦN THIẾT TRONG items
     const orders = await Order.find(query)
-      .select(`
+      .select(
+        `
         orderNumber
         createdAt
         status
@@ -315,7 +316,8 @@ export const getMyOrders = async (req, res) => {
         items.variantStorage
         items.variantName
         items.variantConnectivity
-      `)
+      `
+      )
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -348,11 +350,11 @@ export const getOrderById = async (req, res) => {
     const order = await Order.findById(req.params.id)
       .select(
         "orderNumber createdAt status totalAmount shippingAddress paymentMethod note " +
-        "subtotal shippingFee promotionDiscount appliedPromotion pointsUsed " +
-        "items.productName items.quantity items.price items.images " +
-        "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
-        "items.variantSku items.originalPrice items.total " +
-        "statusHistory"
+          "subtotal shippingFee promotionDiscount appliedPromotion pointsUsed " +
+          "items.productName items.quantity items.price items.images " +
+          "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
+          "items.variantSku items.originalPrice items.total " +
+          "statusHistory"
       )
       .populate("customerId", "fullName phoneNumber email");
 
@@ -387,7 +389,7 @@ export const getOrderById = async (req, res) => {
 };
 
 // ============================================
-// CANCEL ORDER (Customer)
+// CANCEL ORDER (Customer) - FIXED
 // ============================================
 export const cancelOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -459,7 +461,17 @@ export const cancelOrder = async (req, res) => {
 
     order.status = "CANCELLED";
     order.cancelledAt = new Date();
-    order.cancelReason = req.body.reason || "Khách hàng hủy đơn";
+    // ✅ SỬA: Thêm optional chaining và default value
+    order.cancelReason = req.body?.reason || "Khách hàng hủy đơn";
+
+    // ✅ THÊM: Cập nhật statusHistory
+    order.statusHistory.push({
+      status: "CANCELLED",
+      updatedBy: req.user._id,
+      updatedAt: new Date(),
+      note: req.body?.reason || "Khách hàng hủy đơn",
+    });
+
     await order.save({ session });
 
     await session.commitTransaction();
@@ -480,7 +492,6 @@ export const cancelOrder = async (req, res) => {
     session.endSession();
   }
 };
-
 // ============================================
 // GET ALL ORDERS (Admin/Order Manager)
 // ============================================

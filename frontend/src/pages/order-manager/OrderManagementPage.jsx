@@ -89,6 +89,15 @@ const OrdersPage = () => {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Helper function to get full image URL
+  const getImageUrl = (path) => {
+    if (!path) return "https://via.placeholder.com/64?text=No+Image";
+    if (path.startsWith("http")) return path;
+    return `${import.meta.env.VITE_API_URL}${
+      path.startsWith("/") ? "" : "/"
+    }${path}`;
+  };
+
   useEffect(() => {
     fetchOrders();
   }, [searchTerm, statusFilter, pagination.currentPage]);
@@ -298,108 +307,145 @@ const OrdersPage = () => {
           return (
             <Card key={order._id}>
               <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div
-                      className={`w-12 h-12 rounded-full ${
-                        getStatusColor(order.status).split(" ")[0]
-                      } flex items-center justify-center`}
-                    >
-                      <StatusIcon className="w-6 h-6" />
+                <div className="flex flex-col gap-4">
+                  {/* Header Row */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div
+                        className={`w-12 h-12 rounded-full ${
+                          getStatusColor(order.status).split(" ")[0]
+                        } flex items-center justify-center flex-shrink-0`}
+                      >
+                        <StatusIcon className="w-6 h-6" />
+                      </div>
+
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-semibold text-lg">
+                            #{order.orderNumber}
+                          </h3>
+                          <Badge className={getStatusColor(order.status)}>
+                            {getStatusText(order.status)}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-muted-foreground" />
+                            <span>{order.customerId?.fullName}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-muted-foreground" />
+                            <span>{order.customerId?.phoneNumber}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <span>{formatDate(order.createdAt)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            {order.shippingAddress?.detailAddress},{" "}
+                            {order.shippingAddress?.commune},{" "}
+                            {order.shippingAddress?.district},{" "}
+                            {order.shippingAddress?.province}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-lg">
-                          #{order.orderNumber}
-                        </h3>
-                        <Badge className={getStatusColor(order.status)}>
-                          {getStatusText(order.status)}
+                    <div className="flex flex-col items-end gap-3">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-primary">
+                          {formatPrice(order.totalAmount)}
+                        </p>
+                        <Badge
+                          variant={
+                            order.paymentStatus === "PAID"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {getStatusText(order.paymentStatus)}
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-muted-foreground" />
-                          <span>{order.customerId?.fullName}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Phone className="w-4 h-4 text-muted-foreground" />
-                          <span>{order.customerId?.phoneNumber}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span>{formatDate(order.createdAt)}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {order.shippingAddress?.detailAddress},{" "}
-                          {order.shippingAddress?.commune},{" "}
-                          {order.shippingAddress?.district},{" "}
-                          {order.shippingAddress?.province}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">
-                            Số sản phẩm:{" "}
-                          </span>
-                          <span className="font-semibold">
-                            {order.items?.length}
-                          </span>
-                        </div>
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">
-                            Thanh toán:{" "}
-                          </span>
-                          <span className="font-semibold">
-                            {getStatusText(order.paymentMethod)}
-                          </span>
-                        </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDetail(order._id)}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Chi tiết
+                        </Button>
+                        {order.status !== "DELIVERED" &&
+                          order.status !== "RETURNED" &&
+                          order.status !== "CANCELLED" &&
+                          getAllowedNextStatuses(order.status).length > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenStatusDialog(order)}
+                            >
+                              Cập nhật
+                            </Button>
+                          )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-3">
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-primary">
-                        {formatPrice(order.totalAmount)}
-                      </p>
-                      <Badge
-                        variant={
-                          order.paymentStatus === "PAID"
-                            ? "default"
-                            : "secondary"
-                        }
-                      >
-                        {getStatusText(order.paymentStatus)}
-                      </Badge>
+                  {/* ✅ THÊM PHẦN NÀY - Product Preview */}
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        Sản phẩm ({order.items?.length})
+                      </h4>
+                      <div className="text-sm text-muted-foreground">
+                        PT: {getStatusText(order.paymentMethod)}
+                      </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetail(order._id)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Chi tiết
-                      </Button>
-                      {order.status !== "DELIVERED" &&
-                        order.status !== "RETURNED" &&
-                        order.status !== "CANCELLED" &&
-                        getAllowedNextStatuses(order.status).length > 0 && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleOpenStatusDialog(order)}
-                          >
-                            Cập nhật
-                          </Button>
-                        )}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {order.items?.slice(0, 4).map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex gap-2 p-2 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <img
+                            src={getImageUrl(item.images?.[0])}
+                            alt={item.productName}
+                            className="w-16 h-16 object-cover rounded flex-shrink-0"
+                            onError={(e) => {
+                              e.target.src =
+                                "https://via.placeholder.com/64?text=No+Image";
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium line-clamp-2 mb-1">
+                              {item.productName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              SL: {item.quantity}
+                            </p>
+                            <p className="text-xs font-semibold text-primary">
+                              {formatPrice(item.price)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+
+                      {order.items?.length > 4 && (
+                        <div className="flex items-center justify-center p-2 border rounded-lg bg-muted/30">
+                          <div className="text-center">
+                            <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground" />
+                            <p className="text-xs font-medium">
+                              +{order.items.length - 4} SP
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

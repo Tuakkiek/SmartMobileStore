@@ -1,4 +1,6 @@
-// FILE: src/layouts/DashboardLayout.jsx (ĐÃ SỬA LỖI ACTIVE STATE)
+// ============================================
+// FILE: src/layouts/DashboardLayout.jsx
+// ✅ UPDATED: Thêm menu cho POS_STAFF và ACCOUNTANT
 // ============================================
 import React from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
@@ -12,6 +14,10 @@ import {
   LogOut,
   Menu,
   X,
+  Receipt,
+  FileText,
+  TrendingUp,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -39,21 +45,23 @@ const DashboardLayout = () => {
     navigate("/");
   };
 
-  // MENU ITEMS THEO ROLE (CẬP NHẬT)
+  // ============================================
+  // MENU ITEMS THEO ROLE - ✅ CẬP NHẬT
+  // ============================================
   const getNavigationItems = () => {
     const items = [];
 
     if (user?.role === "ADMIN") {
       items.push(
-        // Dashboard là đường dẫn gốc /admin, cần kiểm tra chính xác
         { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
-        // /warehouse/products và /order-manager/orders có thể có các đường dẫn con
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
-        // /admin/shipping là trang giao hàng của ADMIN
-        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" } 
+        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" },
+        // ✅ MỚI: Admin có thể truy cập POS và Accountant
+        { path: "/pos/dashboard", icon: Receipt, label: "POS - Bán hàng" },
+        { path: "/accountant/dashboard", icon: TrendingUp, label: "Kế toán" }
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
       items.push({
@@ -68,18 +76,62 @@ const DashboardLayout = () => {
         label: "Quản lý đơn hàng",
       });
     } else if (user?.role === "SHIPPER") {
-      // /shipper là đường dẫn gốc của Shipper
       items.push({
-        path: "/shipper",
+        path: "/shipper/dashboard",
         icon: Truck,
-        label: "Giao hàng", // SHIPPER MENU
+        label: "Giao hàng",
       });
+    }
+    // ✅ MỚI: POS_STAFF MENU
+    else if (user?.role === "POS_STAFF") {
+      items.push(
+        {
+          path: "/pos/dashboard",
+          icon: Receipt,
+          label: "Bán hàng",
+        },
+        {
+          path: "/pos/orders",
+          icon: History,
+          label: "Lịch sử đơn hàng",
+        }
+      );
+    }
+    // ✅ MỚI: ACCOUNTANT MENU
+    else if (user?.role === "ACCOUNTANT") {
+      items.push(
+        {
+          path: "/accountant/dashboard",
+          icon: TrendingUp,
+          label: "Doanh thu",
+        },
+        {
+          path: "/accountant/vat-invoices",
+          icon: FileText,
+          label: "Hóa đơn VAT",
+        }
+      );
     }
 
     return items;
   };
 
   const navigationItems = getNavigationItems();
+
+  // ============================================
+  // HIỂN thị tên vai trò tiếng Việt
+  // ============================================
+  const getRoleLabel = (role) => {
+    const roleMap = {
+      ADMIN: "Quản trị viên",
+      WAREHOUSE_STAFF: "Nhân viên kho",
+      ORDER_MANAGER: "Quản lý đơn hàng",
+      SHIPPER: "Nhân viên giao hàng",
+      POS_STAFF: "Nhân viên bán hàng", // ✅ MỚI
+      ACCOUNTANT: "Kế toán", // ✅ MỚI
+    };
+    return roleMap[role] || role;
+  };
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -107,27 +159,32 @@ const DashboardLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
+          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              
-              // ⭐️ LOGIC ĐÃ SỬA: Đảm bảo kiểm tra chính xác cho đường dẫn gốc ⭐️
+
+              // ✅ LOGIC KIỂM TRA ACTIVE
               let isActive = false;
 
               if (item.path === "/admin") {
-                // Dashboard chỉ active khi path là /admin HOẶC /admin/dashboard
-                isActive = location.pathname === "/admin" || location.pathname === "/admin/dashboard";
-              } else if (item.path === "/shipper") {
-                // Shipper Dashboard chỉ active khi path là /shipper
-                 isActive = location.pathname === "/shipper";
-              } 
-              else {
-                // Các mục khác (promotions, products, orders) sử dụng startsWith 
-                // để highlight cho cả trang con (ví dụ: /admin/promotions/create)
+                isActive =
+                  location.pathname === "/admin" ||
+                  location.pathname === "/admin/dashboard";
+              } else if (item.path === "/shipper/dashboard") {
+                isActive =
+                  location.pathname === "/shipper/dashboard" ||
+                  location.pathname === "/shipper";
+              } else if (item.path === "/pos/dashboard") {
+                // POS Dashboard active khi ở /pos/dashboard
+                isActive = location.pathname === "/pos/dashboard";
+              } else if (item.path === "/accountant/dashboard") {
+                // Accountant Dashboard active khi ở /accountant/dashboard
+                isActive = location.pathname === "/accountant/dashboard";
+              } else {
+                // Các trang khác dùng startsWith để highlight cả trang con
                 isActive = location.pathname.startsWith(item.path);
               }
-              // ⭐️ KẾT THÚC LOGIC ĐÃ SỬA ⭐️
-              
+
               return (
                 <Link
                   key={item.path}
@@ -153,10 +210,7 @@ const DashboardLayout = () => {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{user?.fullName}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {user?.role === "ADMIN" && "Quản trị viên"}
-                  {user?.role === "WAREHOUSE_STAFF" && "Nhân viên kho"}
-                  {user?.role === "ORDER_MANAGER" && "Quản lý đơn hàng"}
-                  {user?.role === "SHIPPER" && "Nhân viên giao hàng"}
+                  {getRoleLabel(user?.role)}
                 </p>
               </div>
 

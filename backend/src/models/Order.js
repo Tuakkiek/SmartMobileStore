@@ -1,11 +1,10 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// COMPLETE: Order model with detailed variant info + FIXED totalAmount + ADDED RETURNED status
+// ✅ CẬP NHẬT: Thêm orderSource để phân biệt online/offline
 // ============================================
 
 import mongoose from "mongoose";
 
-// Schema cho item trong đơn hàng
 const orderItemSchema = new mongoose.Schema(
   {
     productId: {
@@ -21,44 +20,23 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
     },
-    productName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    variantSku: {
-      type: String,
-      required: true,
-    },
+    productName: { type: String, required: true, trim: true },
+    variantSku: { type: String, required: true },
     variantColor: { type: String },
     variantStorage: { type: String },
     variantConnectivity: { type: String },
     variantName: { type: String },
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    originalPrice: {
-      type: Number,
-      min: 0,
-    },
-    total: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    variantCpuGpu: { type: String },
+    variantRam: { type: String },
+    quantity: { type: Number, required: true, min: 1 },
+    price: { type: Number, required: true, min: 0 },
+    originalPrice: { type: Number, min: 0 },
+    total: { type: Number, required: true, min: 0 },
     images: [String],
   },
   { _id: false }
 );
 
-// Schema địa chỉ giao hàng
 const addressSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true, trim: true },
@@ -71,17 +49,17 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Schema lịch sử trạng thái
 const statusHistorySchema = new mongoose.Schema(
   {
     status: {
       type: String,
       enum: [
         "PENDING",
+        "PENDING_PAYMENT", // ✅ MỚI: Chờ thanh toán (POS)
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
-        "RETURNED", // THÊM MỚI
+        "RETURNED",
         "CANCELLED",
       ],
       required: true,
@@ -91,28 +69,76 @@ const statusHistorySchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
+    updatedAt: { type: Date, default: Date.now },
     note: { type: String, trim: true },
   },
   { _id: false }
 );
 
-// Schema chính cho đơn hàng
+// ✅ Schema thông tin POS
+const posInfoSchema = new mongoose.Schema(
+  {
+    staffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    staffName: { type: String, trim: true },
+    storeLocation: { type: String, trim: true },
+    receiptNumber: { type: String, trim: true }, // Số phiếu tạm
+  },
+  { _id: false }
+);
+
+// ✅ Schema thanh toán (Kế toán xử lý)
+const paymentInfoSchema = new mongoose.Schema(
+  {
+    processedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    processedAt: { type: Date },
+    paymentReceived: { type: Number, min: 0 },
+    changeGiven: { type: Number, min: 0 },
+    invoiceNumber: { type: String, trim: true }, // Số hóa đơn chính thức
+  },
+  { _id: false }
+);
+
+// ✅ Schema hóa đơn VAT
+const vatInvoiceSchema = new mongoose.Schema(
+  {
+    invoiceNumber: { type: String, trim: true },
+    companyName: { type: String, trim: true },
+    taxCode: { type: String, trim: true },
+    companyAddress: { type: String, trim: true },
+    issuedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    issuedAt: { type: Date },
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
-    orderNumber: {
+    orderNumber: { type: String, unique: true, trim: true },
+
+    // ✅ MỚI: Phân biệt nguồn đơn hàng
+    orderSource: {
       type: String,
-      unique: true,
-      trim: true,
+      enum: ["ONLINE", "IN_STORE"], // ONLINE = Web, IN_STORE = Tại cửa hàng
+      default: "ONLINE",
+      required: true,
     },
+
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
     items: {
       type: [orderItemSchema],
       validate: {
@@ -120,38 +146,19 @@ const orderSchema = new mongoose.Schema(
         message: "Order must have at least one item",
       },
     },
-    shippingAddress: {
-      type: addressSchema,
-      required: true,
-    },
 
-    // Dùng totalAmount (đã chuẩn hóa)
-    totalAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    shippingAddress: { type: addressSchema, required: true },
 
-    // Các trường tính toán
-    subtotal: {
-      type: Number,
-      min: 0,
-    },
-    shippingFee: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    pointsUsed: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    totalAmount: { type: Number, required: true, min: 0 },
+    subtotal: { type: Number, min: 0 },
+    shippingFee: { type: Number, default: 0, min: 0 },
+    pointsUsed: { type: Number, default: 0, min: 0 },
 
     status: {
       type: String,
       enum: [
         "PENDING",
+        "PENDING_PAYMENT", // ✅ Chờ thanh toán (POS chuyển sang Kế toán)
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -163,33 +170,40 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["COD", "BANK_TRANSFER"],
+      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD"],
       required: true,
     },
+
     paymentStatus: {
       type: String,
       enum: ["UNPAID", "PAID"],
       default: "UNPAID",
     },
+
     notes: { type: String, trim: true },
-    statusHistory: {
-      type: [statusHistorySchema],
-      default: [],
-    },
-    promotionDiscount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    statusHistory: { type: [statusHistorySchema], default: [] },
+
+    promotionDiscount: { type: Number, default: 0, min: 0 },
     appliedPromotion: {
       code: { type: String },
       discountAmount: { type: Number },
     },
+
+    // ✅ Thông tin POS (chỉ có khi orderSource = IN_STORE)
+    posInfo: posInfoSchema,
+
+    // ✅ Thông tin thanh toán (Kế toán xử lý)
+    paymentInfo: paymentInfoSchema,
+
+    // ✅ Hóa đơn VAT (nếu khách yêu cầu)
+    vatInvoice: vatInvoiceSchema,
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
+
+// ============================================
+// HOOKS
+// ============================================
 
 // Tạo mã đơn hàng tự động
 orderSchema.pre("validate", async function (next) {
@@ -199,9 +213,12 @@ orderSchema.pre("validate", async function (next) {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
 
+    // ✅ Prefix theo nguồn đơn
+    const prefix = this.orderSource === "IN_STORE" ? "POS" : "ORD";
+
     const lastOrder = await mongoose
       .model("Order")
-      .findOne({ orderNumber: new RegExp(`^ORD${year}${month}${day}`) })
+      .findOne({ orderNumber: new RegExp(`^${prefix}${year}${month}${day}`) })
       .sort({ orderNumber: -1 });
 
     let sequence = 1;
@@ -210,7 +227,7 @@ orderSchema.pre("validate", async function (next) {
       if (!isNaN(lastSeq)) sequence = lastSeq + 1;
     }
 
-    this.orderNumber = `ORD${year}${month}${day}${sequence
+    this.orderNumber = `${prefix}${year}${month}${day}${sequence
       .toString()
       .padStart(4, "0")}`;
   }
@@ -224,16 +241,27 @@ orderSchema.pre("save", function (next) {
       status: this.status,
       updatedBy: this.customerId,
       updatedAt: new Date(),
-      note: "Đơn hàng được tạo",
+      note:
+        this.orderSource === "IN_STORE"
+          ? "Đơn hàng tại cửa hàng - Chờ thanh toán"
+          : "Đơn hàng được tạo",
     });
   }
   next();
 });
 
-// Cập nhật trạng thái
+// ============================================
+// METHODS
+// ============================================
+
 orderSchema.methods.updateStatus = async function (status, userId, note) {
   this.status = status;
-  this.addStatusHistory(status, userId, note);
+  this.statusHistory.push({
+    status,
+    updatedBy: userId,
+    updatedAt: new Date(),
+    note: note || "",
+  });
 
   if (status === "DELIVERED" && this.paymentMethod === "COD") {
     this.paymentStatus = "PAID";
@@ -242,7 +270,6 @@ orderSchema.methods.updateStatus = async function (status, userId, note) {
   return await this.save();
 };
 
-// Hủy đơn hàng
 orderSchema.methods.cancel = async function (userId, note) {
   if (this.status === "DELIVERED") {
     throw new Error("Cannot cancel delivered order");
@@ -252,27 +279,76 @@ orderSchema.methods.cancel = async function (userId, note) {
   }
 
   this.status = "CANCELLED";
-  this.addStatusHistory("CANCELLED", userId, note || "Order cancelled");
+  this.statusHistory.push({
+    status: "CANCELLED",
+    updatedBy: userId,
+    updatedAt: new Date(),
+    note: note || "Order cancelled",
+  });
   return this.save();
 };
 
-// Thêm lịch sử trạng thái
-orderSchema.methods.addStatusHistory = function (status, userId, note) {
+// ✅ MỚI: Xử lý thanh toán (Kế toán)
+orderSchema.methods.processPayment = async function (
+  accountantId,
+  paymentReceived
+) {
+  if (this.status !== "PENDING_PAYMENT") {
+    throw new Error("Order is not in pending payment status");
+  }
+
+  const changeGiven = Math.max(0, paymentReceived - this.totalAmount);
+
+  // Tạo số hóa đơn chính thức
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  const lastInvoice = await mongoose
+    .model("Order")
+    .findOne({
+      "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
+    })
+    .sort({ "paymentInfo.invoiceNumber": -1 });
+
+  let sequence = 1;
+  if (lastInvoice?.paymentInfo?.invoiceNumber) {
+    const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
+    if (!isNaN(lastSeq)) sequence = lastSeq + 1;
+  }
+
+  const invoiceNumber = `INV${year}${month}${sequence
+    .toString()
+    .padStart(6, "0")}`;
+
+  this.paymentInfo = {
+    processedBy: accountantId,
+    processedAt: new Date(),
+    paymentReceived,
+    changeGiven,
+    invoiceNumber,
+  };
+
+  this.paymentStatus = "PAID";
+  this.status = "DELIVERED"; // Đơn tại cửa hàng = giao ngay
+
   this.statusHistory.push({
-    status,
-    updatedBy: userId,
+    status: "DELIVERED",
+    updatedBy: accountantId,
     updatedAt: new Date(),
-    note: note || "",
+    note: `Đã thanh toán - Hóa đơn ${invoiceNumber}`,
   });
+
+  return await this.save();
 };
 
-// Theo dõi đơn hàng
-orderSchema.methods.trackOrder = function () {
-  return this.statusHistory.sort((a, b) => a.updatedAt - b.updatedAt);
-};
-
-// Tối ưu tìm kiếm
+// ============================================
+// INDEXES
+// ============================================
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ orderSource: 1, createdAt: -1 });
+orderSchema.index({ "posInfo.staffId": 1 });
+orderSchema.index({ "paymentInfo.processedBy": 1 });
 
 export default mongoose.model("Order", orderSchema);
