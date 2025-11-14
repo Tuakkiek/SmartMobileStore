@@ -41,16 +41,27 @@ const LoginPage = () => {
     if (result.success) {
       const user = useAuthStore.getState().user;
 
-      if (user.role === "ADMIN") {
-        navigate("/admin");
-      } else if (user.role === "WAREHOUSE_STAFF") {
-        navigate("/warehouse/products");
-      } else if (user.role === "ORDER_MANAGER") {
-        navigate("/order-manager/orders");
-      } else if (user.role === "SHIPPER") {
-        navigate("/shipper/dashboard");
-      } else {
-        navigate("/");
+      switch (user.role) {
+        case "ADMIN":
+          navigate("/admin");
+          break;
+        case "WAREHOUSE_STAFF":
+          navigate("/warehouse/products");
+          break;
+        case "ORDER_MANAGER":
+          navigate("/order-manager/orders");
+          break;
+        case "SHIPPER":
+          navigate("/shipper/dashboard");
+          break;
+        case "POS_STAFF":
+          navigate("/pos/dashboard");
+          break;
+        case "ACCOUNTANT":
+          navigate("/accountant/dashboard");
+          break;
+        default:
+          navigate("/");
       }
     }
   };

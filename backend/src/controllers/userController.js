@@ -95,7 +95,16 @@ export const deleteAddress = async (req, res) => {
 export const getAllEmployees = async (req, res) => {
   try {
     const employees = await User.find({
-      role: { $in: ["WAREHOUSE_STAFF", "ORDER_MANAGER", "SHIPPER", "ADMIN"] },
+      role: {
+        $in: [
+          "WAREHOUSE_STAFF",
+          "ORDER_MANAGER",
+          "SHIPPER",
+          "ADMIN",
+          "POS_STAFF",
+          "ACCOUNTANT",
+        ],
+      },
     }).select("-password");
 
     res.json({ success: true, data: { employees } });
