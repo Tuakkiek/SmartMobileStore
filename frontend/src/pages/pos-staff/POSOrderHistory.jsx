@@ -63,7 +63,7 @@ const POSOrderHistory = () => {
       const token = authStorage ? JSON.parse(authStorage).state.token : null;
 
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/orders`,
+        `${import.meta.env.VITE_API_URL}/pos/orders`, // ← ĐÃ ĐÚNG
         {
           headers: { Authorization: `Bearer ${token}` },
           params: {
@@ -122,98 +122,118 @@ const POSOrderHistory = () => {
   // REPRINT RECEIPT
   // ============================================
   const handleReprintReceipt = (order) => {
+    // ✅ FALLBACK để tránh lỗi khi dữ liệu cũ chưa có field mới
+    const paymentReceived =
+      order.posInfo?.paymentReceived ||
+      order.paymentInfo?.paymentReceived ||
+      order.totalAmount;
+
+    const changeGiven =
+      order.posInfo?.changeGiven || order.paymentInfo?.changeGiven || 0;
+
+    const cashierName =
+      order.posInfo?.cashierName ||
+      order.paymentInfo?.processedBy?.fullName ||
+      order.posInfo?.staffName ||
+      "N/A";
     const printWindow = window.open("", "", "width=300,height=600");
     const receiptHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Hóa đơn #${order.posInfo.receiptNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; width: 80mm; margin: 0; padding: 10px; }
-          h1 { text-align: center; font-size: 18px; margin: 10px 0; }
-          .info { text-align: center; margin-bottom: 10px; font-size: 12px; }
-          hr { border: 1px dashed #000; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          td { padding: 5px 0; }
-          .right { text-align: right; }
-          .bold { font-weight: bold; }
-          .total { font-size: 14px; }
-          .footer { text-align: center; margin-top: 20px; font-size: 11px; }
-          .badge { background: #4CAF50; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; }
-        </style>
-      </head>
-      <body>
-        <h1>APPLE STORE CẦN THƠ</h1>
-        <div class="info">
-          <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ</p>
-          <p>Hotline: 1900.xxxx</p>
-        </div>
-        <hr/>
-        <p><strong>Số phiếu:</strong> ${order.posInfo.receiptNumber}</p>
-        <p><strong>Ngày:</strong> ${new Date(order.createdAt).toLocaleString("vi-VN")}</p>
-        <p><strong>Thu ngân:</strong> ${order.posInfo.cashierName}</p>
-        ${
-          order.shippingAddress?.fullName !== "Mua tại cửa hàng"
-            ? `<p><strong>Khách:</strong> ${order.shippingAddress.fullName}</p>`
-            : ""
-        }
-        ${
-          order.vatInvoice?.invoiceNumber
-            ? `<p><span class="badge">Đã xuất VAT</span></p>`
-            : ""
-        }
-        <hr/>
-        <table>
-          <tbody>
-            ${order.items
-              .map(
-                (item) => `
-              <tr>
-                <td colspan="2">${item.productName}</td>
-              </tr>
-              <tr>
-                <td>${item.variantColor}${item.variantStorage ? " • " + item.variantStorage : ""}</td>
-              </tr>
-              <tr>
-                <td>${item.quantity} x ${formatPrice(item.price)}</td>
-                <td class="right bold">${formatPrice(item.total)}</td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-        </table>
-        <hr/>
-        <table class="total">
-          <tr>
-            <td>Tổng tiền:</td>
-            <td class="right bold">${formatPrice(order.totalAmount)}</td>
-          </tr>
-          <tr>
-            <td>Tiền khách đưa:</td>
-            <td class="right">${formatPrice(order.posInfo.paymentReceived)}</td>
-          </tr>
-          <tr>
-            <td>Tiền thối lại:</td>
-            <td class="right bold">${formatPrice(order.posInfo.changeGiven)}</td>
-          </tr>
-        </table>
-        <hr/>
-        <div class="footer">
-          <p><strong>CHÍNH SÁCH BẢO HÀNH</strong></p>
-          <p>Bảo hành 12 tháng chính hãng Apple</p>
-          <p>Đổi trả trong 30 ngày nếu lỗi NSX</p>
-          <p><em>Bản in lại - ${formatDate(new Date())}</em></p>
-          <p>Cảm ơn quý khách! Hẹn gặp lại!</p>
-        </div>
-      </body>
-      </html>
-    `;
-
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Hóa đơn #${
+        order.posInfo?.receiptNumber || order.orderNumber
+      }</title>
+      <style>
+        body { font-family: Arial, sans-serif; width: 80mm; margin: 0; padding: 10px; }
+        h1 { text-align: center; font-size: 18px; margin: 10px 0; }
+        .info { text-align: center; margin-bottom: 10px; font-size: 12px; }
+        hr { border: 1px dashed #000; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        td { padding: 5px 0; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+        .total { font-size: 14px; }
+        .footer { text-align: center; margin-top: 20px; font-size: 11px; }
+        .badge { background: #4CAF50; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>APPLE STORE CẦN THƠ</h1>
+      <div class="info">
+        <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ</p>
+        <p>Hotline: 1900.xxxx</p>
+      </div>
+      <hr/>
+      <p><strong>Số phiếu:</strong> ${
+        order.posInfo?.receiptNumber || order.orderNumber
+      }</p>
+      <p><strong>Ngày:</strong> ${new Date(order.createdAt).toLocaleString(
+        "vi-VN"
+      )}</p>
+      <p><strong>Thu ngân:</strong> ${cashierName}</p>
+      ${
+        order.shippingAddress?.fullName !== "Mua tại cửa hàng"
+          ? `<p><strong>Khách:</strong> ${order.shippingAddress.fullName}</p>`
+          : ""
+      }
+      ${
+        order.vatInvoice?.invoiceNumber
+          ? `<p><span class="badge">Đã xuất VAT: ${order.vatInvoice.invoiceNumber}</span></p>`
+          : ""
+      }
+      <hr/>
+      <table>
+        <tbody>
+          ${order.items
+            .map(
+              (item) => `
+            <tr>
+              <td colspan="2">${item.productName}</td>
+            </tr>
+            <tr>
+              <td>${item.variantColor}${
+                item.variantStorage ? " • " + item.variantStorage : ""
+              }</td>
+            </tr>
+            <tr>
+              <td>${item.quantity} x ${formatPrice(item.price)}</td>
+              <td class="right bold">${formatPrice(item.total)}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+      <hr/>
+      <table class="total">
+        <tr>
+          <td>Tổng tiền:</td>
+          <td class="right bold">${formatPrice(order.totalAmount)}</td>
+        </tr>
+        <tr>
+          <td>Tiền khách đưa:</td>
+          <td class="right">${formatPrice(paymentReceived)}</td>
+        </tr>
+        <tr>
+          <td>Tiền thối lại:</td>
+          <td class="right bold">${formatPrice(changeGiven)}</td>
+        </tr>
+      </table>
+      <hr/>
+      <div class="footer">
+        <p><strong>CHÍNH SÁCH BẢO HÀNH</strong></p>
+        <p>Bảo hành 12 tháng chính hãng Apple</p>
+        <p>Đổi trả trong 30 ngày nếu lỗi NSX</p>
+        <p><em>Bản in lại - ${formatDate(new Date())}</em></p>
+        <p>Cảm ơn quý khách! Hẹn gặp lại!</p>
+      </div>
+    </body>
+    </html>
+  `;
     printWindow.document.write(receiptHTML);
     printWindow.document.close();
     printWindow.focus();
-
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
@@ -242,9 +262,7 @@ const POSOrderHistory = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
-        <p className="text-muted-foreground">
-          Xem lại các đơn hàng đã xử lý
-        </p>
+        <p className="text-muted-foreground">Xem lại các đơn hàng đã xử lý</p>
       </div>
 
       {/* Statistics */}
@@ -435,9 +453,7 @@ const POSOrderHistory = () => {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-            <DialogDescription>
-              {selectedOrder?.orderNumber}
-            </DialogDescription>
+            <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>
           </DialogHeader>
 
           {selectedOrder && (
@@ -485,10 +501,7 @@ const POSOrderHistory = () => {
                 <h3 className="font-semibold mb-3">Sản phẩm</h3>
                 <div className="space-y-2">
                   {selectedOrder.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex gap-4 p-3 border rounded-lg"
-                    >
+                    <div key={idx} className="flex gap-4 p-3 border rounded-lg">
                       <img
                         src={item.images?.[0] || "/placeholder.png"}
                         alt={item.productName}
