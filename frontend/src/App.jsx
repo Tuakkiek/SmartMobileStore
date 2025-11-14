@@ -1,3 +1,8 @@
+// ============================================
+// FILE: frontend/src/App.jsx
+// ✅ HOÀN CHỈNH: Tất cả routes cho 6 vai trò
+// ============================================
+
 import React, { useEffect } from "react";
 import {
   BrowserRouter,
@@ -5,7 +10,7 @@ import {
   Route,
   Navigate,
   useLocation,
-} from "react-router-dom"; // Thêm useLocation
+} from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
 import { Toaster } from "sonner";
@@ -32,10 +37,13 @@ import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
+import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory"; // ✅ THÊM
 import AccountantDashboard from "@/pages/accountant/AccountantDashboard";
 import VATInvoicesPage from "@/pages/accountant/VATInvoicesPage";
 
-// === COMPONENT CUỘN LÊN ĐẦU KHI ĐỔI TRANG ===
+// ============================================
+// SCROLL TO TOP COMPONENT
+// ============================================
 const ScrollToTop = () => {
   const { pathname } = useLocation();
 
@@ -46,7 +54,9 @@ const ScrollToTop = () => {
   return null;
 };
 
-// === PROTECTED ROUTE ===
+// ============================================
+// PROTECTED ROUTE
+// ============================================
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
   if (rehydrating) return <Loading />;
@@ -56,6 +66,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
+// ============================================
+// MAIN APP
+// ============================================
 function App() {
   const { getCurrentUser } = useAuthStore();
 
@@ -66,11 +79,12 @@ function App() {
 
   return (
     <BrowserRouter>
-      {/* THÊM ĐOẠN NÀY ĐỂ CUỘN LÊN ĐẦU */}
       <ScrollToTop />
 
       <Routes>
-        {/* Public Routes */}
+        {/* ========================================
+            PUBLIC ROUTES
+        ======================================== */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
@@ -84,7 +98,9 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
         </Route>
 
-        {/* Customer Routes */}
+        {/* ========================================
+            CUSTOMER ROUTES
+        ======================================== */}
         <Route element={<MainLayout />}>
           <Route
             path="/cart"
@@ -128,7 +144,9 @@ function App() {
           />
         </Route>
 
-        {/* Admin Routes */}
+        {/* ========================================
+            ADMIN ROUTES
+        ======================================== */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]}>
@@ -142,7 +160,9 @@ function App() {
           <Route path="/admin/shipping" element={<ShipperDashboard />} />
         </Route>
 
-        {/* Warehouse & Order Manager */}
+        {/* ========================================
+            WAREHOUSE STAFF ROUTES
+        ======================================== */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["WAREHOUSE_STAFF", "ADMIN"]}>
@@ -155,6 +175,10 @@ function App() {
             element={<WarehouseProductsPage />}
           />
         </Route>
+
+        {/* ========================================
+            ORDER MANAGER ROUTES
+        ======================================== */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["ORDER_MANAGER", "ADMIN"]}>
@@ -168,7 +192,9 @@ function App() {
           />
         </Route>
 
-        {/* POS STAFF ROUTES */}
+        {/* ========================================
+            POS STAFF ROUTES
+        ======================================== */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["POS_STAFF", "ADMIN"]}>
@@ -177,9 +203,13 @@ function App() {
           }
         >
           <Route path="/pos/dashboard" element={<POSDashboard />} />
+          <Route path="/pos/orders" element={<POSOrderHistory />} />{" "}
+          {/* ✅ THÊM */}
         </Route>
 
-        {/* ACCOUNTANT ROUTES */}
+        {/* ========================================
+            ACCOUNTANT ROUTES
+        ======================================== */}
         <Route
           element={
             <ProtectedRoute allowedRoles={["ACCOUNTANT", "ADMIN"]}>
@@ -197,10 +227,12 @@ function App() {
           />
         </Route>
 
-        {/* SHIPPER ROUTES */}
+        {/* ========================================
+            SHIPPER ROUTES
+        ======================================== */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["SHIPPER"]}>
+            <ProtectedRoute allowedRoles={["SHIPPER", "ADMIN"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
@@ -208,9 +240,12 @@ function App() {
           <Route path="/shipper/dashboard" element={<ShipperDashboard />} />
         </Route>
 
-        {/* 404 */}
+        {/* ========================================
+            404 - NOT FOUND
+        ======================================== */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
       <Toaster position="bottom-right" richColors />
     </BrowserRouter>
   );
