@@ -9,6 +9,7 @@ import {
   Share2,
   Play,
   Package2,
+  Check,
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import {
@@ -21,8 +22,8 @@ import {
 } from "@/lib/api";
 import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
-import AddToCartModal from "@/components/product/AddToCartModal";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const CATEGORY_MAP = {
   "dien-thoai": { model: "iPhone", api: iPhoneAPI, category: "iPhone" },
@@ -70,9 +71,23 @@ const ProductDetailPage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
   const [userSelectedKey, setUserSelectedKey] = useState(null);
-  const [showAddToCartModal, setShowAddToCartModal] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
-  const { addToCart, isLoading: cartLoading } = useCartStore();
+  // SỬA: Destructure thêm cartUpdatedAt để kích hoạt re-render
+  const { addToCart, isLoading: cartLoading, cartUpdatedAt } = useCartStore();
+
+  // TỰ ĐỘNG ẨN DIALOG SAU 3 GIÂY
+  useEffect(() => {
+    if (showSuccessDialog) {
+      const timer = setTimeout(() => {
+        setShowSuccessDialog(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessDialog]);
+
+  // SỬA: Theo dõi cartUpdatedAt để React re-render khi giỏ thay đổi
+  useEffect(() => {}, [cartUpdatedAt]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -167,46 +182,27 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async (redirectToCheckout = false) => {
-    if (!selectedVariant || !product) {
-      console.error("❌ Missing product or variant");
-      return;
-    }
+    if (!selectedVariant || !product) return;
 
-    console.log("🛒 Adding to cart:", {
-      variantId: selectedVariant._id,
-      productCategory: product.category,
-      categoryInfo: categoryInfo,
-    });
-
-    const productType =
-      categoryInfo?.category || categoryInfo?.model || product.category;
-
-    if (!productType) {
-      alert("Lỗi: Không xác định được loại sản phẩm");
-      console.error("❌ productType is undefined", { product, categoryInfo });
-      return;
-    }
-
-    if (!selectedVariant._id) {
-      alert("Lỗi: Không xác định được variant ID");
-      console.error("❌ variantId is undefined", selectedVariant);
+    const productType = categoryInfo?.category || product.category;
+    if (!productType || !selectedVariant._id) {
+      alert("Lỗi hệ thống");
       return;
     }
 
     const result = await addToCart(selectedVariant._id, 1, productType);
 
-    if (result.success) {
+    if (result?.success) {
       if (redirectToCheckout) {
-        // Chuyển sang cart với parameter để auto-select
         navigate(`/cart?select=${selectedVariant._id}`);
       } else {
-        // Hiển thị modal như bình thường
-        setShowAddToCartModal(true);
+        setShowSuccessDialog(true);
       }
     } else {
-      alert(result.message || "Thêm vào giỏ thất bại");
+      alert(result?.message || "Thêm vào giỏ thất bại");
     }
   };
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN").format(price) + "đ";
   };
@@ -478,7 +474,6 @@ const ProductDetailPage = () => {
                       groupedVariants[color].find((v) => v.stock > 0) ||
                       groupedVariants[color][0];
 
-                    // Get sample image
                     const sampleImage = availableVariant?.images?.[0];
 
                     return (
@@ -497,7 +492,6 @@ const ProductDetailPage = () => {
                             : "border-gray-200 opacity-50 cursor-not-allowed"
                         }`}
                       >
-                        {/* Color Image */}
                         <div className="w-12 h-12 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
                           {sampleImage && (
                             <img
@@ -507,7 +501,6 @@ const ProductDetailPage = () => {
                             />
                           )}
                         </div>
-                        {/* Color Name */}
                         <span
                           className={`text-sm font-medium flex-1 text-left ${
                             isSelected ? "text-red-600" : "text-gray-900"
@@ -515,7 +508,6 @@ const ProductDetailPage = () => {
                         >
                           {color}
                         </span>
-                        {/* Check Mark */}
                         {isSelected && (
                           <div className="w-5 h-5 bg-red-600 rounded-full flex items-center justify-center flex-shrink-0">
                             <svg
@@ -560,7 +552,7 @@ const ProductDetailPage = () => {
               <div className="bg-pink-50 rounded-xl p-4 mb-6 border border-pink-200">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                    🔥 Khuyến mãi đặc biệt
+                    Khuyến mãi đặc biệt
                   </div>
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -591,7 +583,6 @@ const ProductDetailPage = () => {
 
               {/* Action Buttons */}
               <div className="flex gap-3 mb-4">
-                {/* ✅ NÚT THÊM VÀO GIỎ HÀNG */}
                 <button
                   onClick={handleAddToCart}
                   disabled={cartLoading || selectedVariant.stock === 0}
@@ -601,9 +592,8 @@ const ProductDetailPage = () => {
                   {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
                 </button>
 
-                {/* ✅ NÚT MUA NGAY */}
                 <button
-                  onClick={() => handleAddToCart(true)} // ← true = redirect + auto-select
+                  onClick={() => handleAddToCart(true)}
                   disabled={cartLoading || selectedVariant.stock === 0}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >
@@ -615,7 +605,7 @@ const ProductDetailPage = () => {
               {selectedVariant.stock > 0 && selectedVariant.stock <= 5 && (
                 <div className="bg-orange-50 border-l-4 border-orange-500 p-3 rounded mb-4">
                   <p className="text-sm text-orange-700 font-medium">
-                    ⚠️ Chỉ còn {selectedVariant.stock} sản phẩm!
+                    Chỉ còn {selectedVariant.stock} sản phẩm!
                   </p>
                 </div>
               )}
@@ -662,12 +652,39 @@ const ProductDetailPage = () => {
           </div>
         </div>
       </div>
-      <AddToCartModal
-        isOpen={showAddToCartModal}
-        onClose={() => setShowAddToCartModal(false)}
-        product={product}
-        variant={selectedVariant}
-      />
+
+      {/* DIALOG THÀNH CÔNG - SỬA Z-INDEX + ANIMATION */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent 
+          className="max-w-sm p-6 z-[9999] data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="relative">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <ShoppingCart className="w-8 h-8 text-white" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-200">
+                <Check className="w-4 h-4 text-green-500" />
+              </div>
+            </div>
+
+            <p className="text-lg font-semibold text-gray-900">
+              Sản phẩm đã được thêm vào giỏ hàng ngay
+            </p>
+
+            <Button
+              onClick={() => {
+                setShowSuccessDialog(false);
+                navigate(`/cart?select=${selectedVariant._id}`);
+              }}
+              className="w-full bg-white hover:bg-gray-50 text-gray-800 font-medium rounded-full border border-gray-300"
+            >
+              Xem giỏ hàng
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

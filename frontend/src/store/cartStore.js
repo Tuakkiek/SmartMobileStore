@@ -1,6 +1,7 @@
 // ============================================
 // FILE: src/store/cartStore.js
 // FIXED: Dùng Array thay Set cho selectedForCheckout → Checkout hoạt động
+// ADDED: cartUpdatedAt để kích hoạt re-render khi giỏ thay đổi → Dialog hiện!
 // ============================================
 
 import { create } from "zustand";
@@ -10,6 +11,7 @@ export const useCartStore = create((set, get) => ({
   cart: { items: [] },
   isLoading: false,
   error: null,
+  cartUpdatedAt: null, // ← THÊM: KÍCH HOẠT RE-RENDER KHI GIỎ THAY ĐỔI
 
   // === DÙNG ARRAY THAY VÌ SET ===
   selectedForCheckout: [], // ← Mảng các variantId được chọn
@@ -19,7 +21,11 @@ export const useCartStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await cartAPI.getCart();
-      set({ cart: response.data.data, isLoading: false });
+      set({ 
+        cart: response.data.data, 
+        isLoading: false,
+        cartUpdatedAt: Date.now() // ← CẬP NHẬT THỜI GIAN
+      });
     } catch (error) {
       set({ error: error.response?.data?.message, isLoading: false });
     }
@@ -66,7 +72,12 @@ export const useCartStore = create((set, get) => ({
       const response = await cartAPI.addToCart({ variantId, quantity, productType });
       console.log("cartAPI response:", response);
 
-      set({ cart: response.data.data, isLoading: false });
+      // ← CẬP NHẬT cartUpdatedAt ĐỂ KÍCH HOẠT RE-RENDER
+      set({ 
+        cart: response.data.data, 
+        isLoading: false,
+        cartUpdatedAt: Date.now() // ← BẮT BUỘC
+      });
       return { success: true, message: response.data.message };
     } catch (error) {
       console.error("cartAPI error:", error.response?.data || error);
@@ -115,7 +126,11 @@ export const useCartStore = create((set, get) => ({
         quantity,
       });
 
-      set({ cart: response.data.data, isLoading: false });
+      set({ 
+        cart: response.data.data, 
+        isLoading: false,
+        cartUpdatedAt: Date.now() // ← CẬP NHẬT KHI CẬP NHẬT GIỎ
+      });
       return { success: true };
     } catch (error) {
       console.error("updateCartItem error:", error);
@@ -164,7 +179,11 @@ export const useCartStore = create((set, get) => ({
       });
 
       const response = await cartAPI.removeItem(deleteId);
-      set({ cart: response.data.data, isLoading: false });
+      set({ 
+        cart: response.data.data, 
+        isLoading: false,
+        cartUpdatedAt: Date.now() // ← CẬP NHẬT KHI XÓA
+      });
       return { success: true };
     } catch (error) {
       console.error("removeFromCart error:", error);
@@ -181,7 +200,11 @@ export const useCartStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await cartAPI.clearCart();
-      set({ cart: { items: [] }, isLoading: false });
+      set({ 
+        cart: { items: [] }, 
+        isLoading: false,
+        cartUpdatedAt: Date.now() // ← CẬP NHẬT KHI XÓA HẾT
+      });
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || "Xóa giỏ hàng thất bại";
@@ -218,7 +241,6 @@ export const useCartStore = create((set, get) => ({
 
   // === SET DANH SÁCH ĐÃ CHỌN – DÙNG ARRAY ===
   setSelectedForCheckout: (variantIds = []) => {
-    // Đảm bảo luôn là mảng
     const ids = Array.isArray(variantIds) ? variantIds : [];
     set({ selectedForCheckout: ids });
   },
