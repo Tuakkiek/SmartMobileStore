@@ -64,33 +64,33 @@ const VATInvoicesPage = () => {
     fetchInvoices();
   }, [filters, pagination.currentPage]);
 
+  // Dòng 71-98 - SỬA HẾT ĐOẠN fetchInvoices
   const fetchInvoices = async () => {
     setIsLoading(true);
     try {
       const authStorage = localStorage.getItem("auth-storage");
       const token = authStorage ? JSON.parse(authStorage).state.token : null;
 
-      const params = {
-        page: pagination.currentPage,
-        limit: 20,
-        startDate: filters.startDate || undefined,
-        endDate: filters.endDate || undefined,
-      };
-
+      // ✅ SỬ DỤNG /orders/all VÀ LỌC THEO orderSource
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/orders`,
+        `${import.meta.env.VITE_API_URL}/orders/all`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          params,
+          params: {
+            page: 1,
+            limit: 1000, // Lấy nhiều để tránh phân trang
+          },
         }
       );
 
-      // Lọc chỉ các đơn có VAT invoice
-      const ordersWithVAT = (response.data.data.orders || []).filter(
-        (order) => order.vatInvoice?.invoiceNumber
+      // ✅ LỌC CHỈ ĐƠN IN_STORE VÀ CÓ VAT INVOICE
+      const allOrders = response.data.data.orders || [];
+      const ordersWithVAT = allOrders.filter(
+        (order) =>
+          order.orderSource === "IN_STORE" && order.vatInvoice?.invoiceNumber
       );
 
-      // Filter by search
+      // Filter by search (giữ nguyên)
       let filtered = ordersWithVAT;
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -104,7 +104,22 @@ const VATInvoicesPage = () => {
         );
       }
 
-      // Sort
+      // Date filter (giữ nguyên)
+      if (filters.startDate) {
+        const start = new Date(filters.startDate);
+        filtered = filtered.filter(
+          (o) => new Date(o.vatInvoice.issuedAt) >= start
+        );
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(
+          (o) => new Date(o.vatInvoice.issuedAt) <= end
+        );
+      }
+
+      // Sort (giữ nguyên)
       filtered.sort((a, b) => {
         const dateA = new Date(a.vatInvoice.issuedAt);
         const dateB = new Date(b.vatInvoice.issuedAt);

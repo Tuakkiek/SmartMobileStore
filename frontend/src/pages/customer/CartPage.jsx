@@ -243,7 +243,7 @@ const CartPage = () => {
                   "data-[state=checked]:text-white"
                 )}
               />
-              <span className="font-medium">
+              <span className="font-medium h-8 items-center flex">
                 Chọn tất cả ({selectedItems.length}/{items.length})
               </span>
             </div>
@@ -274,7 +274,7 @@ const CartPage = () => {
                     <CardContent className="p-4">
                       <div className="flex gap-4">
                         {/* CHECKBOX – DÙNG SHADCN + CN */}
-                        <div className="flex items-start mt-1">
+                        <div className="flex items-start mt-1 mt-14">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() =>

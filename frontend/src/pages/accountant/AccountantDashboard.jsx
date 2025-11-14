@@ -203,6 +203,12 @@ const AccountantDashboard = () => {
   const printInvoice = (order, paymentReceived) => {
     const changeGiven = Math.max(0, paymentReceived - order.totalAmount);
 
+    // ✅ FALLBACK cho cashierName
+    const cashierName =
+      order.posInfo?.cashierName ||
+      order.paymentInfo?.processedBy?.fullName ||
+      order.posInfo?.staffName ||
+      "Kế toán";
     const printWindow = window.open("", "", "width=800,height=600");
     const invoiceHTML = `
       <!DOCTYPE html>
@@ -247,7 +253,11 @@ const AccountantDashboard = () => {
           </div>
           <div class="info-row">
             <span class="info-label">Nhân viên bán:</span>
-            <span>${order.posInfo.staffName}</span>
+            <span>${order.posInfo?.staffName || "N/A"}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Thu ngân:</span>
+            <span>${cashierName}</span>
           </div>
           <div class="info-row">
             <span class="info-label">Khách hàng:</span>

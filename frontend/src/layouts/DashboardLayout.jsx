@@ -59,8 +59,16 @@ const DashboardLayout = () => {
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
         { path: "/admin/shipping", icon: Truck, label: "Giao hàng" },
-        // ✅ MỚI: Admin có thể truy cập POS và Accountant
         { path: "/pos/dashboard", icon: Receipt, label: "POS - Bán hàng" },
+
+        // ✅ THÊM 2 DÒNG NÀY
+        { path: "/pos/orders", icon: History, label: "Lịch sử POS" },
+        {
+          path: "/accountant/vat-invoices",
+          icon: FileText,
+          label: "Hóa đơn VAT",
+        },
+
         { path: "/accountant/dashboard", icon: TrendingUp, label: "Kế toán" }
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
