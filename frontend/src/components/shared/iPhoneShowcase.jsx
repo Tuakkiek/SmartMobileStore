@@ -1,6 +1,3 @@
-// ============================================
-// FILE: src/components/shared/iPhoneShowcase.jsx
-// ============================================
 import React, { useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
@@ -31,14 +28,14 @@ const iPhoneShowcase = () => {
     },
     {
       id: 4,
-      title: " Apple Intelligence ",
+      title: "Apple Intelligence",
       subtitle: "Apple Intelligence sắp có phiên bản tiếng Việt.",
       image: "/img4.png",
       alt: "iOS Apple Intelligence",
     },
     {
       id: 5,
-      title: " Bảo Vệ Môi Trường",
+      title: "Bảo Vệ Môi Trường",
       subtitle: "Được thiết kế vì hành tinh của chúng ta.",
       image: "/img5.png",
       alt: "iPhone Environment",
@@ -94,11 +91,23 @@ const iPhoneShowcase = () => {
             {showcaseItems.map((item) => (
               <div
                 key={item.id}
-                className="flex-shrink-0 w-[320px] md:w-[360px] bg-black rounded-3xl overflow-hidden relative group cursor-pointer hover:scale-105 transition-transform duration-300"
+className="flex-shrink-0 w-[320px] md:w-[360px] bg-black rounded-3xl overflow-hidden relative group cursor-pointer hover:scale-105 transition-transform duration-300 h-[500px]"
               >
-                {/* Content */}
-                <div className="p-8 pb-6 relative z-10">
-                  <p className="text-gray-400 text-sm font-medium mb-2">
+                {/* Background Image - Full card */}
+                <div className="absolute inset-0">
+                  <img
+                    src={item.image}
+                    alt={item.alt}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                {/* Gradient overlay for better text readability */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/30"></div>
+
+                {/* Content - Positioned absolutely over the image */}
+                <div className="absolute top-0 left-0 right-0 p-8 z-10">
+                  <p className="text-gray-300 text-sm font-medium mb-2">
                     {item.title}
                   </p>
                   <h3 className="text-white text-2xl font-semibold mb-1">
@@ -115,19 +124,10 @@ const iPhoneShowcase = () => {
                     </h3>
                   )}
                   {item.description && (
-                    <p className="text-gray-400 text-sm mt-4">
+                    <p className="text-gray-300 text-sm mt-4">
                       {item.description}
                     </p>
                   )}
-                </div>
-
-                {/* Image */}
-                <div className="relative h-[400px] flex items-center justify-center">
-                  <img
-                    src={item.image}
-                    alt={item.alt}
-                    className="w-full h-full object-cover"
-                  />
                 </div>
 
                 {/* Plus Button */}
@@ -145,10 +145,10 @@ const iPhoneShowcase = () => {
 
       {/* Hide scrollbar CSS */}
       <style>{`
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-`}</style>
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </section>
   );
 };
