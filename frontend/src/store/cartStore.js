@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/store/cartStore.js
-// FIXED: Thêm setSelectedForCheckout → thanh toán hoạt động
+// FIXED: Dùng Array thay Set cho selectedForCheckout → Checkout hoạt động
 // ============================================
 
 import { create } from "zustand";
@@ -11,8 +11,8 @@ export const useCartStore = create((set, get) => ({
   isLoading: false,
   error: null,
 
-  // === MỚI: Lưu danh sách variantId được chọn để thanh toán ===
-  selectedForCheckout: new Set(),
+  // === DÙNG ARRAY THAY VÌ SET ===
+  selectedForCheckout: [], // ← Mảng các variantId được chọn
 
   // Get cart
   getCart: async () => {
@@ -89,7 +89,6 @@ export const useCartStore = create((set, get) => ({
     try {
       const { cart } = get();
 
-      // Find item by comparing both _id and variantId
       const item = cart.items.find((i) => {
         const itemIdStr = i._id?.toString();
         const variantIdStr = i.variantId?.toString();
@@ -142,7 +141,6 @@ export const useCartStore = create((set, get) => ({
     try {
       const { cart } = get();
 
-      // Find the item first to determine what ID to use
       const item = cart.items.find((i) => {
         const itemIdStr = i._id?.toString();
         const variantIdStr = i.variantId?.toString();
@@ -156,7 +154,6 @@ export const useCartStore = create((set, get) => ({
         throw new Error("Không tìm thấy sản phẩm trong giỏ hàng");
       }
 
-      // Use the actual _id from the item (MongoDB subdocument ID)
       const deleteId = item._id || item.variantId;
 
       console.log("Removing cart item:", {
@@ -219,28 +216,30 @@ export const useCartStore = create((set, get) => ({
     });
   },
 
-  // === MỚI: SET DANH SÁCH ĐÃ CHỌN ===
-  setSelectedForCheckout: (variantIds) => {
-    set({ selectedForCheckout: new Set(variantIds) });
+  // === SET DANH SÁCH ĐÃ CHỌN – DÙNG ARRAY ===
+  setSelectedForCheckout: (variantIds = []) => {
+    // Đảm bảo luôn là mảng
+    const ids = Array.isArray(variantIds) ? variantIds : [];
+    set({ selectedForCheckout: ids });
   },
 
-  // === MỚI: LẤY TỔNG TIỀN CHỈ CÁC SẢN PHẨM ĐƯỢC CHỌN ===
+  // === LẤY TỔNG TIỀN CHỈ CÁC SẢN PHẨM ĐƯỢC CHỌN ===
   getSelectedTotal: () => {
     const { cart, selectedForCheckout } = get();
-    if (!cart?.items || selectedForCheckout.size === 0) return 0;
+    if (!cart?.items || selectedForCheckout.length === 0) return 0;
 
     return cart.items
-      .filter((item) => selectedForCheckout.has(item.variantId))
+      .filter((item) => selectedForCheckout.includes(item.variantId))
       .reduce((sum, item) => sum + item.price * item.quantity, 0);
   },
 
-  // === MỚI: LẤY DANH SÁCH SẢN PHẨM ĐƯỢC CHỌN ===
+  // === LẤY DANH SÁCH SẢN PHẨM ĐƯỢC CHỌN ===
   getSelectedItems: () => {
     const { cart, selectedForCheckout } = get();
-    if (!cart?.items || selectedForCheckout.size === 0) return [];
+    if (!cart?.items || selectedForCheckout.length === 0) return [];
 
     return cart.items.filter((item) =>
-      selectedForCheckout.has(item.variantId)
+      selectedForCheckout.includes(item.variantId)
     );
   },
 
