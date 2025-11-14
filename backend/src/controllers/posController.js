@@ -1,4 +1,8 @@
-// backend/src/controllers/posController.js
+// ============================================
+// FILE: backend/src/controllers/posController.js
+// ✅ V2: POS tạo đơn → Kế toán xử lý thanh toán
+// ============================================
+
 import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
@@ -8,7 +12,9 @@ import AirPods, { AirPodsVariant } from "../models/AirPods.js";
 import AppleWatch, { AppleWatchVariant } from "../models/AppleWatch.js";
 import Accessory, { AccessoryVariant } from "../models/Accessory.js";
 
-// Helper: Lấy Model và Variant Model
+// ============================================
+// HELPER: Lấy Model theo productType
+// ============================================
 const getModelsByType = (productType) => {
   const models = {
     iPhone: { Product: IPhone, Variant: IPhoneVariant },
@@ -22,21 +28,14 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// TẠO ĐƠN HÀNG POS
+// TẠO ĐƠN HÀNG POS (POS Staff)
 // ============================================
 export const createPOSOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const {
-      items,
-      customerInfo,
-      paymentMethod,
-      paymentReceived,
-      note,
-      storeLocation,
-    } = req.body;
+    const { items, customerInfo, storeLocation, totalAmount } = req.body;
 
     if (!items || items.length === 0) {
       await session.abortTransaction();
@@ -46,7 +45,20 @@ export const createPOSOrder = async (req, res) => {
       });
     }
 
-    // === VALIDATE & POPULATE ITEMS ===
+    if (!customerInfo?.fullName || !customerInfo?.phoneNumber) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin khách hàng",
+      });
+    }
+
+    console.log("=== CREATING POS ORDER ===");
+    console.log("Staff:", req.user.fullName);
+    console.log("Customer:", customerInfo);
+    console.log("Items:", items.length);
+
+    // === VALIDATE & BUILD ORDER ITEMS ===
     const orderItems = [];
     let subtotal = 0;
 
@@ -62,6 +74,7 @@ export const createPOSOrder = async (req, res) => {
         });
       }
 
+      // Find variant
       const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
@@ -71,6 +84,7 @@ export const createPOSOrder = async (req, res) => {
         });
       }
 
+      // Find product
       const product = await models.Product.findById(variant.productId).session(
         session
       );
@@ -82,7 +96,7 @@ export const createPOSOrder = async (req, res) => {
         });
       }
 
-      // Kiểm tra tồn kho
+      // Check stock
       if (variant.stock < quantity) {
         await session.abortTransaction();
         return res.status(400).json({
@@ -91,14 +105,11 @@ export const createPOSOrder = async (req, res) => {
         });
       }
 
-      // Trừ kho
+      // Reduce stock (tạm giữ hàng)
       variant.stock -= quantity;
       await variant.save({ session });
 
-      // Tăng lượt bán
-      product.salesCount = (product.salesCount || 0) + quantity;
-      await product.save({ session });
-
+      // Tính tiền
       const itemTotal = variant.price * quantity;
       subtotal += itemTotal;
 
@@ -109,9 +120,11 @@ export const createPOSOrder = async (req, res) => {
         productName: product.name,
         variantSku: variant.sku,
         variantColor: variant.color,
-        variantStorage: variant.storage || variant.variantName,
-        variantConnectivity: variant.connectivity,
-        variantName: variant.variantName,
+        variantStorage: variant.storage || "",
+        variantConnectivity: variant.connectivity || "",
+        variantName: variant.variantName || "",
+        variantCpuGpu: variant.cpuGpu || "",
+        variantRam: variant.ram || "",
         quantity,
         price: variant.price,
         originalPrice: variant.originalPrice,
@@ -120,42 +133,36 @@ export const createPOSOrder = async (req, res) => {
       });
     }
 
-    // Đơn POS không có phí ship
-    const shippingFee = 0;
-    const totalAmount = subtotal;
+    // Tạo số phiếu tạm
+    const date = new Date();
+    const receiptNumber = `TMP${date.getTime().toString().slice(-8)}`;
 
-    // Tính tiền thối
-    const changeGiven = Math.max(0, paymentReceived - totalAmount);
-
-    // Tạo đơn hàng POS
+    // === TẠO ĐƠN HÀNG ===
     const order = await Order.create(
       [
         {
-          orderType: "POS",
-          customerId: req.user._id,
+          orderSource: "IN_STORE", // ✅ Đánh dấu đơn tại cửa hàng
+          customerId: req.user._id, // Tạm dùng staff ID (hoặc tạo temp customer)
           items: orderItems,
           shippingAddress: {
-            fullName: customerInfo?.fullName || "Mua tại cửa hàng",
-            phoneNumber: customerInfo?.phoneNumber || "N/A",
+            fullName: customerInfo.fullName,
+            phoneNumber: customerInfo.phoneNumber,
             province: storeLocation || "Cần Thơ",
             district: "Ninh Kiều",
             commune: "Xuân Khánh",
-            detailAddress: "Showroom Apple Store",
+            detailAddress: "Mua tại cửa hàng",
           },
-          paymentMethod: paymentMethod || "CASH",
-          paymentStatus: "PAID",
-          status: "DELIVERED",
+          paymentMethod: "CASH",
+          paymentStatus: "UNPAID",
+          status: "PENDING_PAYMENT", // ✅ Chờ kế toán xử lý
           subtotal,
-          shippingFee,
-          totalAmount,
-          note,
+          shippingFee: 0,
+          totalAmount: subtotal,
           posInfo: {
-            cashierId: req.user._id,
+            staffId: req.user._id,
+            staffName: req.user.fullName,
             storeLocation: storeLocation || "Apple Store Cần Thơ",
-            cashierName: req.user.fullName,
-            paymentReceived,
-            changeGiven,
-            receiptNumber: `RC${Date.now()}`,
+            receiptNumber,
           },
         },
       ],
@@ -164,14 +171,16 @@ export const createPOSOrder = async (req, res) => {
 
     await session.commitTransaction();
 
+    console.log("✅ POS Order created:", order[0].orderNumber);
+
     res.status(201).json({
       success: true,
-      message: "Tạo đơn hàng thành công",
+      message: "Tạo đơn thành công. Vui lòng chuyển cho Kế toán xử lý.",
       data: { order: order[0] },
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("CREATE POS ORDER ERROR:", error);
+    console.error("❌ CREATE POS ORDER ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi khi tạo đơn hàng",
@@ -182,26 +191,19 @@ export const createPOSOrder = async (req, res) => {
 };
 
 // ============================================
-// LẤY DANH SÁCH ĐƠN POS
+// LẤY DANH SÁCH ĐƠN CHỜ THANH TOÁN (Kế toán)
 // ============================================
-export const getPOSOrders = async (req, res) => {
+export const getPendingOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 20, startDate, endDate } = req.query;
-    const query = { orderType: "POS" };
+    const { page = 1, limit = 20 } = req.query;
 
-    // Nếu là POS_STAFF, chỉ xem đơn của mình
-    if (req.user.role === "POS_STAFF") {
-      query["posInfo.cashierId"] = req.user._id;
-    }
-
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
-    }
+    const query = {
+      orderSource: "IN_STORE",
+      status: "PENDING_PAYMENT",
+    };
 
     const orders = await Order.find(query)
-      .populate("posInfo.cashierId", "fullName")
+      .populate("posInfo.staffId", "fullName")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -218,7 +220,7 @@ export const getPOSOrders = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("GET POS ORDERS ERROR:", error);
+    console.error("GET PENDING ORDERS ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message,
@@ -227,7 +229,141 @@ export const getPOSOrders = async (req, res) => {
 };
 
 // ============================================
-// XUẤT HÓA ĐƠN VAT (Chỉ Kế toán)
+// XỬ LÝ THANH TOÁN (Kế toán)
+// ============================================
+export const processPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { orderId } = req.params;
+    const { paymentReceived } = req.body;
+
+    if (!paymentReceived || paymentReceived < 0) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Số tiền thanh toán không hợp lệ",
+      });
+    }
+
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    if (order.status !== "PENDING_PAYMENT") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng không ở trạng thái chờ thanh toán",
+      });
+    }
+
+    if (paymentReceived < order.totalAmount) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Số tiền thanh toán không đủ",
+      });
+    }
+
+    // Xử lý thanh toán
+    await order.processPayment(req.user._id, paymentReceived);
+
+    await session.commitTransaction();
+
+    console.log("✅ Payment processed:", order.orderNumber);
+
+    res.json({
+      success: true,
+      message: "Thanh toán thành công",
+      data: { order },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("PROCESS PAYMENT ERROR:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// ============================================
+// HỦY ĐƠN (Kế toán - nếu có vấn đề)
+// ============================================
+export const cancelPendingOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { orderId } = req.params;
+    const { reason } = req.body;
+
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    if (order.status !== "PENDING_PAYMENT") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ có thể hủy đơn đang chờ thanh toán",
+      });
+    }
+
+    // Hoàn lại kho
+    for (const item of order.items) {
+      const models = getModelsByType(item.productType);
+      if (models) {
+        const variant = await models.Variant.findById(item.variantId).session(
+          session
+        );
+        if (variant) {
+          variant.stock += item.quantity;
+          await variant.save({ session });
+        }
+      }
+    }
+
+    // Hủy đơn
+    await order.cancel(req.user._id, reason || "Hủy bởi kế toán");
+
+    await session.commitTransaction();
+
+    res.json({
+      success: true,
+      message: "Đã hủy đơn hàng",
+      data: { order },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("CANCEL ORDER ERROR:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// ============================================
+// XUẤT HÓA ĐƠN VAT (Kế toán)
 // ============================================
 export const issueVATInvoice = async (req, res) => {
   try {
@@ -249,6 +385,13 @@ export const issueVATInvoice = async (req, res) => {
       });
     }
 
+    if (order.paymentStatus !== "PAID") {
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ xuất VAT cho đơn đã thanh toán",
+      });
+    }
+
     if (order.vatInvoice?.invoiceNumber) {
       return res.status(400).json({
         success: false,
@@ -260,7 +403,7 @@ export const issueVATInvoice = async (req, res) => {
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    
+
     const lastInvoice = await Order.findOne({
       "vatInvoice.invoiceNumber": new RegExp(`^VAT${year}${month}`),
     }).sort({ "vatInvoice.invoiceNumber": -1 });
@@ -275,7 +418,6 @@ export const issueVATInvoice = async (req, res) => {
       .toString()
       .padStart(6, "0")}`;
 
-    // Cập nhật hóa đơn VAT
     order.vatInvoice = {
       invoiceNumber,
       companyName,
@@ -302,12 +444,16 @@ export const issueVATInvoice = async (req, res) => {
 };
 
 // ============================================
-// BÁO CÁO DOANH THU POS
+// LẤY LỊCH SỬ ĐƠN POS (POS Staff xem của mình)
 // ============================================
-export const getPOSRevenue = async (req, res) => {
+export const getPOSOrderHistory = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
-    const query = { orderType: "POS", paymentStatus: "PAID" };
+    const { page = 1, limit = 20, startDate, endDate } = req.query;
+
+    const query = {
+      orderSource: "IN_STORE",
+      "posInfo.staffId": req.user._id,
+    };
 
     if (startDate || endDate) {
       query.createdAt = {};
@@ -315,45 +461,24 @@ export const getPOSRevenue = async (req, res) => {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    const revenue = await Order.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$totalAmount" },
-          totalOrders: { $sum: 1 },
-          avgOrderValue: { $avg: "$totalAmount" },
-        },
-      },
-    ]);
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
 
-    // Doanh thu theo nhân viên
-    const staffRevenue = await Order.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: "$posInfo.cashierId",
-          cashierName: { $first: "$posInfo.cashierName" },
-          totalRevenue: { $sum: "$totalAmount" },
-          totalOrders: { $sum: 1 },
-        },
-      },
-      { $sort: { totalRevenue: -1 } },
-    ]);
+    const total = await Order.countDocuments(query);
 
     res.json({
       success: true,
       data: {
-        summary: revenue[0] || {
-          totalRevenue: 0,
-          totalOrders: 0,
-          avgOrderValue: 0,
-        },
-        staffRevenue,
+        orders,
+        totalPages: Math.ceil(total / limit),
+        currentPage: parseInt(page),
+        total,
       },
     });
   } catch (error) {
-    console.error("GET POS REVENUE ERROR:", error);
+    console.error("GET POS ORDER HISTORY ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message,
@@ -363,7 +488,9 @@ export const getPOSRevenue = async (req, res) => {
 
 export default {
   createPOSOrder,
-  getPOSOrders,
+  getPendingOrders,
+  processPayment,
+  cancelPendingOrder,
   issueVATInvoice,
-  getPOSRevenue,
+  getPOSOrderHistory,
 };
