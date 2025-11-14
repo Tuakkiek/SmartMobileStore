@@ -21,7 +21,6 @@ macVariantSchema.add({
 });
 
 
-
 export const MacVariant = mongoose.model(
   "MacVariant",
   macVariantSchema,

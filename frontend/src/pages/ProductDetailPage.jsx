@@ -22,6 +22,7 @@ import {
 import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
 import AddToCartModal from "@/components/product/AddToCartModal";
+import { Button } from "@/components/ui/button";
 
 const CATEGORY_MAP = {
   "dien-thoai": { model: "iPhone", api: iPhoneAPI, category: "iPhone" },
@@ -165,7 +166,7 @@ const ProductDetailPage = () => {
     setSelectedImage(finalImageIndex);
   };
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (redirectToCheckout = false) => {
     if (!selectedVariant || !product) {
       console.error("❌ Missing product or variant");
       return;
@@ -195,8 +196,13 @@ const ProductDetailPage = () => {
     const result = await addToCart(selectedVariant._id, 1, productType);
 
     if (result.success) {
-      // ✅ THAY alert BẰNG MODAL
-      setShowAddToCartModal(true);
+      if (redirectToCheckout) {
+        // Chuyển sang cart với parameter để auto-select
+        navigate(`/cart?select=${selectedVariant._id}`);
+      } else {
+        // Hiển thị modal như bình thường
+        setShowAddToCartModal(true);
+      }
     } else {
       alert(result.message || "Thêm vào giỏ thất bại");
     }
@@ -597,10 +603,7 @@ const ProductDetailPage = () => {
 
                 {/* ✅ NÚT MUA NGAY */}
                 <button
-                  onClick={() => {
-                    handleAddToCart();
-                    setTimeout(() => navigate("/checkout"), 500);
-                  }}
+                  onClick={() => handleAddToCart(true)} // ← true = redirect + auto-select
                   disabled={cartLoading || selectedVariant.stock === 0}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >

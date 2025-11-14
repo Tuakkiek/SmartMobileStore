@@ -1,10 +1,11 @@
 // ============================================
 // FILE: src/pages/customer/CartPage.jsx
-// UPDATED: Dùng Array thay Set + Sửa lỗi .includes + Tối ưu
+// FIXED: Auto-select khi có parameter "select" – KHÔNG CÒN VÒNG LẶP
+// UPDATED: Dùng shadcn/ui Checkbox + cn() → MÀU ĐỎ KHI CHỌN
 // ============================================
 
-import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -16,8 +17,9 @@ import {
 import { Loading } from "@/components/shared/Loading";
 import { Trash2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, cn } from "@/lib/utils"; // ← ĐÃ CÓ cn()
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox"; // ← DÙNG CHECKBOX CHUẨN
 import {
   iPhoneAPI,
   iPadAPI,
@@ -29,6 +31,12 @@ import {
 
 const CartPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Đọc parameter "select" từ URL
+  const searchParams = new URLSearchParams(location.search);
+  const autoSelectVariantId = searchParams.get("select");
+
   const {
     cart,
     isLoading,
@@ -39,21 +47,49 @@ const CartPage = () => {
     setSelectedForCheckout,
   } = useCartStore();
 
-  // DÙNG ARRAY THAY VÌ SET
-  const [selectedItems, setSelectedItems] = useState([]); // ← Mảng variantId
+  const [selectedItems, setSelectedItems] = useState([]); // Mảng variantId
   const [editingItem, setEditingItem] = useState(null);
   const [showVariantDialog, setShowVariantDialog] = useState(false);
   const [availableVariants, setAvailableVariants] = useState([]);
 
+  // Dùng ref để tránh auto-select lại khi refresh hoặc re-render
+  const hasAutoSelected = useRef(false);
+
+  // Load giỏ hàng
   useEffect(() => {
     getCart();
   }, [getCart]);
 
+  // Reset flag khi URL thay đổi (có param mới)
+  useEffect(() => {
+    if (autoSelectVariantId) {
+      hasAutoSelected.current = false;
+    }
+  }, [autoSelectVariantId]);
+
+  // TỰ ĐỘNG CHỌN SẢN PHẨM KHI CÓ PARAMETER "select"
+  useEffect(() => {
+    if (hasAutoSelected.current) return;
+    if (!autoSelectVariantId || !cart?.items || cart.items.length === 0) return;
+
+    const targetItem = cart.items.find(
+      (item) => item.variantId === autoSelectVariantId
+    );
+
+    if (targetItem && !selectedItems.includes(autoSelectVariantId)) {
+      console.log("Auto-selecting item:", autoSelectVariantId);
+      setSelectedItems([autoSelectVariantId]);
+      navigate("/cart", { replace: true });
+      hasAutoSelected.current = true;
+    }
+  }, [autoSelectVariantId, cart?.items, navigate]);
+
+  // Scroll lên đầu
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // === TÍNH TỔNG TIỀN CÁC SẢN PHẨM ĐƯỢC CHỌN ===
+  // Tính tổng tiền
   const selectedTotal = useMemo(() => {
     if (!cart?.items) return 0;
     return cart.items
@@ -61,7 +97,7 @@ const CartPage = () => {
       .reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart?.items, selectedItems]);
 
-  // === CHỌN/TẮT TẤT CẢ ===
+  // Chọn/tắt tất cả
   const handleSelectAll = () => {
     if (!cart?.items) return;
     if (selectedItems.length === cart.items.length) {
@@ -71,7 +107,7 @@ const CartPage = () => {
     }
   };
 
-  // === CHỌN/TẮT MỘT SẢN PHẨM ===
+  // Chọn/tắt một sản phẩm
   const handleSelectItem = (variantId) => {
     setSelectedItems((prev) =>
       prev.includes(variantId)
@@ -80,14 +116,15 @@ const CartPage = () => {
     );
   };
 
-  // === XÓA NHIỀU SẢN PHẨM ĐÃ CHỌN ===
+  // Xóa nhiều sản phẩm
   const handleBulkRemove = async () => {
     if (selectedItems.length === 0) {
       toast.error("Vui lòng chọn ít nhất một sản phẩm để xóa");
       return;
     }
 
-    if (!window.confirm(`Xóa ${selectedItems.length} sản phẩm đã chọn?`)) return;
+    if (!window.confirm(`Xóa ${selectedItems.length} sản phẩm đã chọn?`))
+      return;
 
     try {
       for (const variantId of selectedItems) {
@@ -101,21 +138,21 @@ const CartPage = () => {
     }
   };
 
-  // === CẬP NHẬT SỐ LƯỢNG ===
+  // Cập nhật số lượng
   const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
     await updateCartItem(item.variantId, newQuantity);
     await getCart();
   };
 
-  // === XÓA MỘT SẢN PHẨM ===
+  // Xóa một sản phẩm
   const handleRemove = async (item) => {
     await removeFromCart(item.variantId);
     await getCart();
     setSelectedItems((prev) => prev.filter((id) => id !== item.variantId));
   };
 
-  // === LẤY DANH SÁCH PHIÊN BẢN ===
+  // Lấy danh sách phiên bản
   const fetchAvailableVariants = async (item) => {
     try {
       const apiMap = {
@@ -145,13 +182,17 @@ const CartPage = () => {
     }
   };
 
-  // === ĐỔI PHIÊN BẢN ===
+  // Đổi phiên bản
   const handleChangeVariant = async (newVariantId) => {
     if (!editingItem) return;
 
     try {
       await removeFromCart(editingItem.variantId);
-      await addToCart(newVariantId, editingItem.quantity, editingItem.productType);
+      await addToCart(
+        newVariantId,
+        editingItem.quantity,
+        editingItem.productType
+      );
       await getCart();
 
       setShowVariantDialog(false);
@@ -193,11 +234,14 @@ const CartPage = () => {
           {/* HEADER: CHỌN TẤT CẢ + XÓA NHIỀU */}
           <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg">
             <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={hasItems && selectedItems.length === items.length}
-                onChange={handleSelectAll}
-                className="w-5 h-5 rounded border-gray-300"
+                onCheckedChange={handleSelectAll}
+                className={cn(
+                  "data-[state=checked]:!bg-red-600",
+                  "data-[state=checked]:!border-red-600",
+                  "data-[state=checked]:text-white"
+                )}
               />
               <span className="font-medium">
                 Chọn tất cả ({selectedItems.length}/{items.length})
@@ -229,13 +273,18 @@ const CartPage = () => {
                   >
                     <CardContent className="p-4">
                       <div className="flex gap-4">
-                        {/* CHECKBOX */}
+                        {/* CHECKBOX – DÙNG SHADCN + CN */}
                         <div className="flex items-start mt-1">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={isSelected}
-                            onChange={() => handleSelectItem(item.variantId)}
-                            className="w-5 h-5 rounded border-gray-300 mt-1"
+                            onCheckedChange={() =>
+                              handleSelectItem(item.variantId)
+                            }
+                            className={cn(
+                              "data-[state=checked]:!bg-red-600",
+                              "data-[state=checked]:!border-red-600",
+                              "data-[state=checked]:text-white"
+                            )}
                           />
                         </div>
 
@@ -248,14 +297,24 @@ const CartPage = () => {
 
                         <div className="flex-1">
                           {/* TÊN SẢN PHẨM */}
-                          <h3 className="font-semibold mb-1">{item.productName}</h3>
+                          <h3 className="font-semibold mb-1">
+                            {item.productName}
+                          </h3>
 
                           {/* VARIANT INFO */}
                           <div className="flex gap-3 text-sm text-muted-foreground mb-2">
-                            {item.variantColor && <span>Màu: {item.variantColor}</span>}
-                            {item.variantStorage && <span>• {item.variantStorage}</span>}
-                            {item.variantConnectivity && <span>• {item.variantConnectivity}</span>}
-                            {item.variantName && <span>• {item.variantName}</span>}
+                            {item.variantColor && (
+                              <span>Màu: {item.variantColor}</span>
+                            )}
+                            {item.variantStorage && (
+                              <span>• {item.variantStorage}</span>
+                            )}
+                            {item.variantConnectivity && (
+                              <span>• {item.variantConnectivity}</span>
+                            )}
+                            {item.variantName && (
+                              <span>• {item.variantName}</span>
+                            )}
                           </div>
 
                           {/* GIÁ + KHUYẾN MÃI */}
@@ -271,7 +330,9 @@ const CartPage = () => {
                                 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded">
                                   -
                                   {Math.round(
-                                    ((item.originalPrice - item.price) / item.originalPrice) * 100
+                                    ((item.originalPrice - item.price) /
+                                      item.originalPrice) *
+                                      100
                                   )}
                                   %
                                 </span>
@@ -285,16 +346,22 @@ const CartPage = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
+                                onClick={() =>
+                                  handleUpdateQuantity(item, item.quantity - 1)
+                                }
                                 disabled={item.quantity <= 1}
                               >
                                 <Minus className="h-4 w-4" />
                               </Button>
-                              <span className="px-4 min-w-[40px] text-center">{item.quantity}</span>
+                              <span className="px-4 min-w-[40px] text-center">
+                                {item.quantity}
+                              </span>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
+                                onClick={() =>
+                                  handleUpdateQuantity(item, item.quantity + 1)
+                                }
                                 disabled={item.quantity >= item.stock}
                               >
                                 <Plus className="h-4 w-4" />
@@ -348,7 +415,9 @@ const CartPage = () => {
                       <span>{formatPrice(selectedTotal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Phí vận chuyển</span>
+                      <span className="text-muted-foreground">
+                        Phí vận chuyển
+                      </span>
                       <span className="text-green-600">
                         {selectedTotal >= 5000000 ? "Miễn phí" : "50.000đ"}
                       </span>
@@ -356,25 +425,26 @@ const CartPage = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-semibold">
                         <span>Tổng cộng</span>
-                        <span className="text-primary">{formatPrice(selectedTotal)}</span>
+                        <span className="text-primary">
+                          {formatPrice(selectedTotal)}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* NÚT THANH TOÁN – LƯU DƯỚI DẠNG MẢNG */}
+                  {/* NÚT THANH TOÁN */}
                   <Button
                     className="w-full"
                     size="lg"
                     disabled={selectedItems.length === 0}
                     onClick={() => {
                       if (selectedItems.length === 0) {
-                        toast.error("Vui lòng chọn ít nhất một sản phẩm để thanh toán");
+                        toast.error(
+                          "Vui lòng chọn ít nhất một sản phẩm để thanh toán"
+                        );
                         return;
                       }
-
-                      // LƯU DƯỚI DẠNG MẢNG → AN TOÀN CHO CHECKOUT
                       setSelectedForCheckout(selectedItems);
-
                       navigate("/checkout");
                     }}
                   >
@@ -420,7 +490,9 @@ const CartPage = () => {
                       <p className="text-sm text-muted-foreground">
                         {variant.storage || variant.variantName || "Tiêu chuẩn"}
                       </p>
-                      <p className="font-semibold text-primary">{formatPrice(variant.price)}</p>
+                      <p className="font-semibold text-primary">
+                        {formatPrice(variant.price)}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Còn: {variant.stock} sản phẩm
                       </p>

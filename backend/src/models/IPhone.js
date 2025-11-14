@@ -19,7 +19,6 @@ iPhoneVariantSchema.add({
   storage: { type: String, required: true, trim: true },
 });
 
-// Add index for iPhone variants
 
 
 export const IPhoneVariant = mongoose.model(
