@@ -20,7 +20,7 @@ iPhoneVariantSchema.add({
 });
 
 // Add index for iPhone variants
-iPhoneVariantSchema.index({ salesCount: -1 });
+
 
 export const IPhoneVariant = mongoose.model(
   "IPhoneVariant",

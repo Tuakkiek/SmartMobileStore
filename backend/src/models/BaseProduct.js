@@ -47,7 +47,7 @@ export const createBaseVariantSchema = () => {
   };
 
   // Index for performance
-  schema.index({ salesCount: -1 });
+
 
   return schema;
 };

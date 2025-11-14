@@ -20,7 +20,7 @@ macVariantSchema.add({
   storage: { type: String, required: true, trim: true },
 });
 
-macVariantSchema.index({ salesCount: -1 });
+
 
 export const MacVariant = mongoose.model(
   "MacVariant",
