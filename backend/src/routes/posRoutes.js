@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/routes/posRoutes.js
-// ✅ FIXED: Dùng restrictTo như các route khác
+// ĐÃ SỬA: DÙNG LẠI getOrderById + QUYỀN CHO POS_STAFF
 // ============================================
 
 import express from "express";
@@ -14,57 +14,68 @@ import {
   getPOSOrderHistory,
 } from "../controllers/posController.js";
 
+// ✅ IMPORT getOrderById TỪ ORDER CONTROLLER (TÁI SỬ DỤNG)
+import { getOrderById } from "../controllers/orderController.js";
+
 const router = express.Router();
 
 // ✅ TẤT CẢ ROUTES REQUIRE AUTHENTICATION
 router.use(protect);
 
 // ============================================
-// POS STAFF ROUTES - Dùng restrictTo thay vì restrictPOS
+// POS STAFF ROUTES
 // ============================================
 
-// Tạo đơn hàng POS (POS Staff + Admin)
+// Tạo đơn hàng POS
 router.post("/create-order", restrictTo("POS_STAFF", "ADMIN"), createPOSOrder);
 
-// Lấy lịch sử đơn của mình (POS Staff + Admin)
+// Lấy lịch sử đơn của mình (danh sách)
 router.get("/my-orders", restrictTo("POS_STAFF", "ADMIN"), getPOSOrderHistory);
 
+// ✅ THÊM: LẤY CHI TIẾT ĐƠN HÀNG (DÙNG LẠI TỪ ORDER CONTROLLER)
+router.get(
+  "/orders/:id",
+  restrictTo("POS_STAFF", "ADMIN"),
+  getOrderById // ← TÁI SỬ DỤNG, ĐÃ CÓ KIỂM TRA QUYỀN
+);
+
 // ============================================
-// ACCOUNTANT ROUTES - Dùng restrictTo thay vì restrictAccountant
+// ACCOUNTANT ROUTES
 // ============================================
 
-// Lấy danh sách đơn chờ thanh toán (Kế toán + Admin)
+// Lấy danh sách đơn chờ thanh toán
 router.get(
   "/pending-orders",
   restrictTo("ACCOUNTANT", "ADMIN"),
   getPendingOrders
 );
 
-// Xử lý thanh toán (Kế toán + Admin)
+// Xử lý thanh toán
 router.post(
   "/process-payment/:orderId",
   restrictTo("ACCOUNTANT", "ADMIN"),
   processPayment
 );
 
-// Hủy đơn chờ thanh toán (Kế toán + Admin)
+// Hủy đơn chờ thanh toán
 router.post(
   "/cancel-order/:orderId",
   restrictTo("ACCOUNTANT", "ADMIN"),
   cancelPendingOrder
 );
 
-// Xuất hóa đơn VAT (Kế toán + Admin)
+// Xuất hóa đơn VAT
 router.post(
   "/issue-vat/:orderId",
   restrictTo("ACCOUNTANT", "ADMIN"),
   issueVATInvoice
 );
 
-// ✅ THÊM ROUTE ĐỂ LẤY LỊCH SỬ ĐƠN CHO POS (dùng trong POSOrderHistory)
-router.get(
-  "/orders",
-  restrictTo("POS_STAFF", "ACCOUNTANT", "ADMIN"), // ← Thêm ACCOUNTANT
-  getPOSOrderHistory
-);
+// ✅ TÙY CHỌN: Nếu ACCOUNTANT muốn xem tất cả đơn (không cần thiết)
+// router.get(
+//   "/orders",
+//   restrictTo("POS_STAFF", "ACCOUNTANT", "ADMIN"),
+//   getPOSOrderHistory
+// );
+
 export default router;

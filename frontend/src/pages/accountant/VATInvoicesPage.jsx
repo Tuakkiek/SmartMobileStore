@@ -1,14 +1,15 @@
 // ============================================
-// FILE: frontend/src/pages/accountant/VATInvoicesPage.jsx
-// Trang quản lý danh sách hóa đơn VAT đã xuất
+// FILE: frontend/src/pages/pos-staff/VATInvoicesPage.jsx
+// ✅ V2: Chỉ hiển thị đơn của user hiện tại, Admin thấy tất cả
+// + Bộ lọc nâng cao
 // ============================================
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -23,193 +25,271 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import {
-  FileText,
+  Receipt,
   Search,
   Eye,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  ShoppingBag,
+  FileText,
   Download,
   Filter,
-  Calendar,
-  Building2,
-  Receipt,
+  X,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import axios from "axios";
 
 const VATInvoicesPage = () => {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
+
   // ============================================
-  // STATE MANAGEMENT
+  // STATE
   // ============================================
-  const [invoices, setInvoices] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filters
   const [filters, setFilters] = useState({
     search: "",
     startDate: "",
     endDate: "",
-    sortBy: "newest",
+    status: "",
+    paymentStatus: "",
+    minAmount: "",
+    maxAmount: "",
+    hasVAT: "",
   });
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    total: 0,
+
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    totalRevenue: 0,
+    avgOrderValue: 0,
+    totalVATInvoices: 0,
   });
 
   // ============================================
-  // FETCH INVOICES
+  // FETCH ORDERS
   // ============================================
   useEffect(() => {
-    fetchInvoices();
-  }, [filters, pagination.currentPage]);
+    fetchOrders();
+  }, [filters]);
 
-  // Dòng 71-98 - SỬA HẾT ĐOẠN fetchInvoices
-  const fetchInvoices = async () => {
+  const fetchOrders = async () => {
     setIsLoading(true);
     try {
       const authStorage = localStorage.getItem("auth-storage");
       const token = authStorage ? JSON.parse(authStorage).state.token : null;
 
-      // ✅ SỬ DỤNG /orders/all VÀ LỌC THEO orderSource
+      const params = {
+        ...(filters.startDate && { startDate: filters.startDate }),
+        ...(filters.endDate && { endDate: filters.endDate }),
+      };
+
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/orders/all`,
+        `${import.meta.env.VITE_API_URL}/pos/my-orders`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          params: {
-            page: 1,
-            limit: 1000, // Lấy nhiều để tránh phân trang
-          },
+          params,
         }
       );
 
-      // ✅ LỌC CHỈ ĐƠN IN_STORE VÀ CÓ VAT INVOICE
-      const allOrders = response.data.data.orders || [];
-      const ordersWithVAT = allOrders.filter(
-        (order) =>
-          order.orderSource === "IN_STORE" && order.vatInvoice?.invoiceNumber
-      );
+      let ordersData = response.data.data.orders || [];
 
-      // Filter by search (giữ nguyên)
-      let filtered = ordersWithVAT;
+      // Client-side filtering
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
-        filtered = filtered.filter(
+        ordersData = ordersData.filter(
           (order) =>
-            order.vatInvoice.invoiceNumber
-              .toLowerCase()
+            order.orderNumber?.toLowerCase().includes(searchLower) ||
+            order.posInfo?.receiptNumber?.toLowerCase().includes(searchLower) ||
+            order.shippingAddress?.fullName
+              ?.toLowerCase()
               .includes(searchLower) ||
-            order.vatInvoice.companyName?.toLowerCase().includes(searchLower) ||
-            order.vatInvoice.taxCode?.toLowerCase().includes(searchLower)
+            order.shippingAddress?.phoneNumber?.includes(searchLower)
         );
       }
 
-      // Date filter (giữ nguyên)
-      if (filters.startDate) {
-        const start = new Date(filters.startDate);
-        filtered = filtered.filter(
-          (o) => new Date(o.vatInvoice.issuedAt) >= start
-        );
-      }
-      if (filters.endDate) {
-        const end = new Date(filters.endDate);
-        end.setHours(23, 59, 59, 999);
-        filtered = filtered.filter(
-          (o) => new Date(o.vatInvoice.issuedAt) <= end
+      if (filters.status) {
+        ordersData = ordersData.filter(
+          (order) => order.status === filters.status
         );
       }
 
-      // Sort (giữ nguyên)
-      filtered.sort((a, b) => {
-        const dateA = new Date(a.vatInvoice.issuedAt);
-        const dateB = new Date(b.vatInvoice.issuedAt);
-        return filters.sortBy === "newest" ? dateB - dateA : dateA - dateB;
+      if (filters.paymentStatus) {
+        ordersData = ordersData.filter(
+          (order) => order.paymentStatus === filters.paymentStatus
+        );
+      }
+
+      if (filters.minAmount) {
+        ordersData = ordersData.filter(
+          (order) => order.totalAmount >= parseFloat(filters.minAmount)
+        );
+      }
+
+      if (filters.maxAmount) {
+        ordersData = ordersData.filter(
+          (order) => order.totalAmount <= parseFloat(filters.maxAmount)
+        );
+      }
+
+      if (filters.hasVAT === "yes") {
+        ordersData = ordersData.filter(
+          (order) => order.vatInvoice?.invoiceNumber
+        );
+      } else if (filters.hasVAT === "no") {
+        ordersData = ordersData.filter(
+          (order) => !order.vatInvoice?.invoiceNumber
+        );
+      }
+
+      setOrders(ordersData);
+
+      // Calculate statistics
+      const total = ordersData.length;
+      const revenue = ordersData.reduce(
+        (sum, order) => sum + order.totalAmount,
+        0
+      );
+      const vatCount = ordersData.filter(
+        (o) => o.vatInvoice?.invoiceNumber
+      ).length;
+
+      setStats({
+        totalOrders: total,
+        totalRevenue: revenue,
+        avgOrderValue: total > 0 ? revenue / total : 0,
+        totalVATInvoices: vatCount,
       });
-
-      setInvoices(filtered);
-      setPagination((prev) => ({ ...prev, total: filtered.length }));
     } catch (error) {
-      console.error("Lỗi tải hóa đơn:", error);
-      toast.error("Không thể tải danh sách hóa đơn VAT");
+      console.error("Lỗi tải đơn hàng:", error);
+      toast.error("Không thể tải lịch sử đơn hàng");
     } finally {
       setIsLoading(false);
     }
   };
 
   // ============================================
-  // VIEW INVOICE DETAIL
+  // RESET FILTERS
   // ============================================
-  const handleViewDetail = (order) => {
-    setSelectedInvoice(order);
-    setShowDetailDialog(true);
+  const resetFilters = () => {
+    setFilters({
+      search: "",
+      startDate: "",
+      endDate: "",
+      status: "",
+      paymentStatus: "",
+      minAmount: "",
+      maxAmount: "",
+      hasVAT: "",
+    });
   };
 
   // ============================================
-  // EXPORT INVOICE TO PDF/PRINT
+  // VIEW DETAIL
   // ============================================
-  const handlePrintInvoice = (order) => {
+  const handleViewDetail = async (orderId) => {
+    try {
+      const authStorage = localStorage.getItem("auth-storage");
+      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/pos/orders/${orderId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      console.log("Order detail from API:", response.data.data.order);
+      setSelectedOrder(response.data.data.order);
+      setShowDetailDialog(true);
+    } catch (error) {
+      console.error("Lỗi tải chi tiết:", error);
+      toast.error("Không thể tải thông tin đơn hàng");
+    }
+  };
+
+  // ============================================
+  // PRINT RECEIPT
+  // ============================================
+  const handleReprintReceipt = (order) => {
+    const paymentReceived =
+      order.posInfo?.paymentReceived ||
+      order.paymentInfo?.paymentReceived ||
+      order.totalAmount;
+
+    const changeGiven =
+      order.posInfo?.changeGiven || order.paymentInfo?.changeGiven || 0;
+
+    // ✅ FALLBACK cho cashierName
+    const cashierName =
+      order.posInfo?.cashierName ||
+      order.paymentInfo?.processedBy?.fullName ||
+      order.posInfo?.staffName ||
+      "Kế toán";
+
     const printWindow = window.open("", "", "width=800,height=600");
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Hóa đơn VAT - ${order.vatInvoice.invoiceNumber}</title>
+        <title>Hóa đơn - ${order.orderNumber}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 3px double #000; padding-bottom: 20px; }
-          .header h1 { font-size: 24px; margin-bottom: 10px; text-transform: uppercase; }
-          .header p { font-size: 12px; color: #666; }
-          .invoice-info { display: flex; justify-content: space-between; margin: 30px 0; }
-          .invoice-info div { flex: 1; }
-          .invoice-info h3 { font-size: 14px; margin-bottom: 10px; color: #333; }
-          .invoice-info p { font-size: 12px; margin: 5px 0; }
-          table { width: 100%; border-collapse: collapse; margin: 30px 0; }
-          th { background: #f5f5f5; padding: 12px; text-align: left; border: 1px solid #ddd; font-size: 13px; }
-          td { padding: 10px; border: 1px solid #ddd; font-size: 12px; }
+          body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+          .header h1 { font-size: 24px; margin-bottom: 10px; }
+          .info-section { margin: 20px 0; }
+          .info-row { display: flex; justify-content: space-between; margin: 8px 0; }
+          .info-label { font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th { background: #f5f5f5; padding: 12px; text-align: left; border: 1px solid #ddd; }
+          td { padding: 10px; border: 1px solid #ddd; }
           .text-right { text-align: right; }
-          .total-section { margin-top: 20px; }
-          .total-row { display: flex; justify-content: flex-end; margin: 8px 0; font-size: 13px; }
-          .total-row span:first-child { width: 200px; text-align: right; padding-right: 20px; }
-          .total-row span:last-child { width: 150px; text-align: right; font-weight: bold; }
-          .grand-total { border-top: 2px solid #000; padding-top: 10px; font-size: 16px; }
-          .footer { margin-top: 50px; text-align: center; font-size: 11px; color: #666; }
-          .signature-section { display: flex; justify-content: space-around; margin-top: 60px; text-align: center; }
-          .signature-box { width: 200px; }
-          .signature-box p { margin-bottom: 80px; font-style: italic; font-size: 12px; }
-          .signature-line { border-top: 1px solid #000; padding-top: 5px; font-weight: bold; }
+          .total-section { margin-top: 20px; float: right; width: 300px; }
+          .total-row { display: flex; justify-content: space-between; margin: 8px 0; }
+          .grand-total { border-top: 2px solid #000; padding-top: 10px; font-size: 18px; font-weight: bold; }
+          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
         </style>
       </head>
       <body>
         <!-- Header -->
         <div class="header">
-          <h1>Hóa Đơn Giá Trị Gia Tăng</h1>
+          <h1>HÓA ĐƠN BÁN HÀNG</h1>
           <p>Apple Store Cần Thơ</p>
           <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ | Hotline: 1900.xxxx</p>
-          <p>Mã số thuế: 0123456789</p>
         </div>
 
-        <!-- Invoice Info -->
-        <div class="invoice-info">
-          <div>
-            <h3>Thông tin hóa đơn</h3>
-            <p><strong>Số hóa đơn:</strong> ${
-              order.vatInvoice.invoiceNumber
-            }</p>
-            <p><strong>Ngày xuất:</strong> ${formatDate(
-              order.vatInvoice.issuedAt
-            )}</p>
-            <p><strong>Người xuất:</strong> ${
-              order.vatInvoice.issuedBy ? "Kế toán" : "N/A"
-            }</p>
+        <!-- Order Info -->
+        <div class="info-section">
+          <div class="info-row">
+            <span class="info-label">Số đơn hàng:</span>
+            <span>${order.orderNumber}</span>
           </div>
-          <div>
-            <h3>Thông tin khách hàng</h3>
-            <p><strong>Công ty:</strong> ${order.vatInvoice.companyName}</p>
-            <p><strong>Mã số thuế:</strong> ${order.vatInvoice.taxCode}</p>
-            <p><strong>Địa chỉ:</strong> ${
-              order.vatInvoice.companyAddress || "N/A"
-            }</p>
+          <div class="info-row">
+            <span class="info-label">Ngày:</span>
+            <span>${formatDate(new Date())}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Nhân viên bán:</span>
+            <span>${order.posInfo?.staffName || "N/A"}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Thu ngân:</span>
+            <span>${cashierName}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Khách hàng:</span>
+            <span>${order.shippingAddress.fullName} - ${
+      order.shippingAddress.phoneNumber
+    }</span>
           </div>
         </div>
 
@@ -217,11 +297,11 @@ const VATInvoicesPage = () => {
         <table>
           <thead>
             <tr>
-              <th style="width: 50px;">STT</th>
-              <th>Tên hàng hóa, dịch vụ</th>
-              <th style="width: 80px;" class="text-right">Số lượng</th>
-              <th style="width: 120px;" class="text-right">Đơn giá</th>
-              <th style="width: 120px;" class="text-right">Thành tiền</th>
+              <th>STT</th>
+              <th>Sản phẩm</th>
+              <th class="text-right">SL</th>
+              <th class="text-right">Đơn giá</th>
+              <th class="text-right">Thành tiền</th>
             </tr>
           </thead>
           <tbody>
@@ -229,16 +309,12 @@ const VATInvoicesPage = () => {
               .map(
                 (item, idx) => `
               <tr>
-                <td class="text-right">${idx + 1}</td>
+                <td>${idx + 1}</td>
                 <td>
-                  ${item.productName}
-                  ${
-                    item.variantColor
-                      ? `<br><small style="color: #666;">${item.variantColor}${
-                          item.variantStorage ? " • " + item.variantStorage : ""
-                        }</small>`
-                      : ""
-                  }
+                  ${item.productName}<br>
+                  <small>${item.variantColor}${
+                  item.variantStorage ? " • " + item.variantStorage : ""
+                }</small>
                 </td>
                 <td class="text-right">${item.quantity}</td>
                 <td class="text-right">${formatPrice(item.price)}</td>
@@ -253,39 +329,29 @@ const VATInvoicesPage = () => {
         <!-- Total Section -->
         <div class="total-section">
           <div class="total-row">
-            <span>Tổng tiền chưa VAT:</span>
+            <span>Tạm tính:</span>
+            <span>${formatPrice(order.totalAmount)}</span>
+          </div>
+          <div class="total-row grand-total">
+            <span>Tổng cộng:</span>
             <span>${formatPrice(order.totalAmount)}</span>
           </div>
           <div class="total-row">
-            <span>VAT (10%):</span>
-            <span>${formatPrice(order.totalAmount * 0.1)}</span>
+            <span>Tiền khách đưa:</span>
+            <span>${formatPrice(paymentReceived)}</span>
           </div>
-          <div class="total-row grand-total">
-            <span>Tổng tiền thanh toán:</span>
-            <span>${formatPrice(order.totalAmount * 1.1)}</span>
+          <div class="total-row" style="color: green;">
+            <span>Tiền thối lại:</span>
+            <span>${formatPrice(changeGiven)}</span>
           </div>
         </div>
 
-        <!-- Signature Section -->
-        <div class="signature-section">
-          <div class="signature-box">
-            <p>Người mua hàng</p>
-            <div class="signature-line">(Ký, ghi rõ họ tên)</div>
-          </div>
-          <div class="signature-box">
-            <p>Người bán hàng</p>
-            <div class="signature-line">(Ký, ghi rõ họ tên)</div>
-          </div>
-          <div class="signature-box">
-            <p>Thủ trưởng đơn vị</p>
-            <div class="signature-line">(Ký, đóng dấu)</div>
-          </div>
-        </div>
+        <div style="clear: both;"></div>
 
         <!-- Footer -->
         <div class="footer">
-          <p>Hóa đơn này được in từ hệ thống quản lý Apple Store Cần Thơ</p>
-          <p>Ngày in: ${formatDate(new Date())}</p>
+          <p>Cảm ơn quý khách đã mua hàng!</p>
+          <p>Bảo hành 12 tháng chính hãng Apple | Đổi trả trong 30 ngày</p>
         </div>
       </body>
       </html>
@@ -297,31 +363,9 @@ const VATInvoicesPage = () => {
 
     setTimeout(() => {
       printWindow.print();
+      printWindow.close();
     }, 250);
   };
-
-  // ============================================
-  // STATISTICS
-  // ============================================
-  const getStatistics = () => {
-    const today = new Date();
-    const thisMonth = invoices.filter((order) => {
-      const issueDate = new Date(order.vatInvoice.issuedAt);
-      return (
-        issueDate.getMonth() === today.getMonth() &&
-        issueDate.getFullYear() === today.getFullYear()
-      );
-    });
-
-    return {
-      total: invoices.length,
-      thisMonth: thisMonth.length,
-      totalRevenue: invoices.reduce((sum, o) => sum + o.totalAmount, 0),
-      thisMonthRevenue: thisMonth.reduce((sum, o) => sum + o.totalAmount, 0),
-    };
-  };
-
-  const stats = getStatistics();
 
   // ============================================
   // RENDER
@@ -329,9 +373,19 @@ const VATInvoicesPage = () => {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Quản lý hóa đơn VAT</h1>
-        <p className="text-muted-foreground">Danh sách hóa đơn VAT đã xuất</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
+          <p className="text-muted-foreground">
+            {isAdmin
+              ? "Xem tất cả đơn hàng trong hệ thống"
+              : "Xem các đơn hàng đã xử lý"}
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+          <Filter className="w-4 h-4 mr-2" />
+          {showFilters ? "Ẩn bộ lọc" : "Hiện bộ lọc"}
+        </Button>
       </div>
 
       {/* Statistics */}
@@ -341,26 +395,12 @@ const VATInvoicesPage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">
-                  Tổng số hóa đơn
+                  Tổng đơn hàng
                 </p>
-                <h3 className="text-2xl font-bold">{stats.total}</h3>
+                <h3 className="text-2xl font-bold">{stats.totalOrders}</h3>
               </div>
               <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <FileText className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Tháng này</p>
-                <h3 className="text-2xl font-bold">{stats.thisMonth}</h3>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                <Receipt className="w-6 h-6 text-green-600" />
+                <ShoppingBag className="w-6 h-6 text-blue-600" />
               </div>
             </div>
           </CardContent>
@@ -377,8 +417,8 @@ const VATInvoicesPage = () => {
                   {formatPrice(stats.totalRevenue)}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-purple-600" />
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-green-600" />
               </div>
             </div>
           </CardContent>
@@ -389,129 +429,257 @@ const VATInvoicesPage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">
-                  DT tháng này
+                  Giá trị TB/đơn
                 </p>
                 <h3 className="text-xl font-bold">
-                  {formatPrice(stats.thisMonthRevenue)}
+                  {formatPrice(stats.avgOrderValue)}
                 </h3>
               </div>
+              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">
+                  Hóa đơn VAT
+                </p>
+                <h3 className="text-2xl font-bold">{stats.totalVATInvoices}</h3>
+              </div>
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-orange-600" />
+                <FileText className="w-6 h-6 text-orange-600" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm số HĐ, công ty, MST..."
-                value={filters.search}
-                onChange={(e) =>
-                  setFilters({ ...filters, search: e.target.value })
-                }
-                className="pl-9"
-              />
+      {/* Advanced Filters */}
+      {showFilters && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Bộ lọc nâng cao
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                <X className="w-4 h-4 mr-2" />
+                Xóa bộ lọc
+              </Button>
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label>Tìm kiếm</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Mã đơn, tên, SĐT..."
+                    value={filters.search}
+                    onChange={(e) =>
+                      setFilters({ ...filters, search: e.target.value })
+                    }
+                    className="pl-9"
+                  />
+                </div>
+              </div>
 
-            <div>
-              <Input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  setFilters({ ...filters, startDate: e.target.value })
-                }
-                placeholder="Từ ngày"
-              />
+              <div>
+                <Label>Từ ngày</Label>
+                <Input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) =>
+                    setFilters({ ...filters, startDate: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label>Đến ngày</Label>
+                <Input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) =>
+                    setFilters({ ...filters, endDate: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label>Trạng thái đơn</Label>
+                <Select
+                  value={filters.status}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, status: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="PENDING_PAYMENT">
+                      Chờ thanh toán
+                    </SelectItem>
+                    <SelectItem value="DELIVERED">Đã giao</SelectItem>
+                    <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Thanh toán</Label>
+                <Select
+                  value={filters.paymentStatus}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, paymentStatus: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="PAID">Đã thanh toán</SelectItem>
+                    <SelectItem value="UNPAID">Chưa thanh toán</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Giá trị tối thiểu</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={filters.minAmount}
+                  onChange={(e) =>
+                    setFilters({ ...filters, minAmount: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label>Giá trị tối đa</Label>
+                <Input
+                  type="number"
+                  placeholder="999,999,999"
+                  value={filters.maxAmount}
+                  onChange={(e) =>
+                    setFilters({ ...filters, maxAmount: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label>Hóa đơn VAT</Label>
+                <Select
+                  value={filters.hasVAT}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, hasVAT: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Tất cả</SelectItem>
+                    <SelectItem value="yes">Đã xuất VAT</SelectItem>
+                    <SelectItem value="no">Chưa xuất VAT</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
 
-            <div>
-              <Input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) =>
-                  setFilters({ ...filters, endDate: e.target.value })
-                }
-                placeholder="Đến ngày"
-              />
-            </div>
-
-            <Select
-              value={filters.sortBy}
-              onValueChange={(value) =>
-                setFilters({ ...filters, sortBy: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">Mới nhất</SelectItem>
-                <SelectItem value="oldest">Cũ nhất</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Invoices List */}
+      {/* Orders List */}
       <Card>
         <CardHeader>
-          <CardTitle>Danh sách hóa đơn</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="w-5 h-5" />
+            Danh sách đơn hàng ({orders.length})
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-center py-8">Đang tải...</p>
-          ) : invoices.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">
-              Không có hóa đơn VAT nào
-            </p>
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">Đang tải...</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-8">
+              <Receipt className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">Không có đơn hàng nào</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {invoices.map((order) => (
+              {orders.map((order) => (
                 <div
                   key={order._id}
                   className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <FileText className="w-5 h-5 text-blue-600" />
                       <div>
-                        <p className="font-bold">
-                          {order.vatInvoice.invoiceNumber}
-                        </p>
+                        <p className="font-bold">#{order.orderNumber}</p>
                         <p className="text-sm text-muted-foreground">
-                          Đơn hàng: #{order.orderNumber}
+                          Phiếu: {order.posInfo?.receiptNumber || "N/A"}
                         </p>
                       </div>
+                      {order.vatInvoice?.invoiceNumber && (
+                        <Badge className="bg-green-100 text-green-800">
+                          <FileText className="w-3 h-3 mr-1" />
+                          VAT
+                        </Badge>
+                      )}
+                      <Badge
+                        className={
+                          order.paymentStatus === "PAID"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-orange-100 text-orange-800"
+                        }
+                      >
+                        {order.paymentStatus === "PAID"
+                          ? "Đã thanh toán"
+                          : "Chưa thanh toán"}
+                      </Badge>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                      {isAdmin && (
+                        <div>
+                          <p className="text-muted-foreground">NV bán:</p>
+                          <p className="font-medium">
+                            {order.posInfo?.staffName || "N/A"}
+                          </p>
+                        </div>
+                      )}
                       <div>
-                        <p className="text-muted-foreground">Công ty:</p>
+                        <p className="text-muted-foreground">Khách hàng:</p>
                         <p className="font-medium">
-                          {order.vatInvoice.companyName}
+                          {order.shippingAddress?.fullName || "Khách lẻ"}
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">MST:</p>
+                        <p className="text-muted-foreground">Thời gian:</p>
                         <p className="font-medium">
-                          {order.vatInvoice.taxCode}
+                          {formatDate(order.createdAt)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Ngày xuất:</p>
-                        <p className="font-medium">
-                          {formatDate(order.vatInvoice.issuedAt)}
-                        </p>
+                        <p className="text-muted-foreground">Số lượng:</p>
+                        <p className="font-medium">{order.items.length} SP</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Giá trị:</p>
+                        <p className="text-muted-foreground">Tổng tiền:</p>
                         <p className="font-bold text-primary">
                           {formatPrice(order.totalAmount)}
                         </p>
@@ -523,15 +691,20 @@ const VATInvoicesPage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleViewDetail(order)}
+                      onClick={() => handleViewDetail(order._id)}
                     >
                       <Eye className="w-4 h-4 mr-2" />
                       Chi tiết
                     </Button>
-                    <Button size="sm" onClick={() => handlePrintInvoice(order)}>
-                      <Download className="w-4 h-4 mr-2" />
-                      In HĐ
-                    </Button>
+                    {order.paymentStatus === "PAID" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleReprintReceipt(order)}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        In lại
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -540,64 +713,79 @@ const VATInvoicesPage = () => {
         </CardContent>
       </Card>
 
-      {/* Invoice Detail Dialog */}
+      {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Chi tiết hóa đơn VAT</DialogTitle>
-            <DialogDescription>
-              {selectedInvoice?.vatInvoice.invoiceNumber}
-            </DialogDescription>
+            <DialogTitle>Chi tiết đơn hàng</DialogTitle>
+            <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>
           </DialogHeader>
 
-          {selectedInvoice && (
+          {selectedOrder && (
             <div className="space-y-6">
-              {/* Invoice Info */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
-                  <h3 className="font-semibold mb-2">Thông tin hóa đơn</h3>
+                  <h3 className="font-semibold mb-2">Thông tin đơn hàng</h3>
                   <p className="text-sm">
-                    <strong>Số HĐ:</strong>{" "}
-                    {selectedInvoice.vatInvoice.invoiceNumber}
+                    <strong>Mã đơn:</strong> #{selectedOrder.orderNumber}
                   </p>
                   <p className="text-sm">
-                    <strong>Ngày xuất:</strong>{" "}
-                    {formatDate(selectedInvoice.vatInvoice.issuedAt)}
+                    <strong>Số phiếu:</strong>{" "}
+                    {selectedOrder.posInfo?.receiptNumber || "N/A"}
                   </p>
                   <p className="text-sm">
-                    <strong>Đơn hàng:</strong> #{selectedInvoice.orderNumber}
+                    <strong>Thời gian:</strong>{" "}
+                    {formatDate(selectedOrder.createdAt)}
+                  </p>
+                  {isAdmin && (
+                    <p className="text-sm">
+                      <strong>NV bán:</strong> {selectedOrder.posInfo?.staffName || "N/A"}
+                    </p>
+                  )}
+                  <p className="text-sm">
+                    <strong>Thu ngân:</strong>{" "}
+                    {selectedOrder.posInfo?.cashierName || "N/A"}
                   </p>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2">Thông tin khách hàng</h3>
                   <p className="text-sm">
-                    <strong>Công ty:</strong>{" "}
-                    {selectedInvoice.vatInvoice.companyName}
+                    <strong>Họ tên:</strong>{" "}
+                    {selectedOrder.shippingAddress?.fullName || "Khách lẻ"}
                   </p>
                   <p className="text-sm">
-                    <strong>MST:</strong> {selectedInvoice.vatInvoice.taxCode}
+                    <strong>SĐT:</strong>{" "}
+                    {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
                   </p>
-                  <p className="text-sm">
-                    <strong>Địa chỉ:</strong>{" "}
-                    {selectedInvoice.vatInvoice.companyAddress || "N/A"}
-                  </p>
+                  {selectedOrder.vatInvoice?.invoiceNumber && (
+                    <Badge className="bg-green-100 text-green-800 mt-2">
+                      Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
+                    </Badge>
+                  )}
                 </div>
               </div>
 
-              {/* Products */}
               <div>
                 <h3 className="font-semibold mb-3">Sản phẩm</h3>
                 <div className="space-y-2">
-                  {selectedInvoice.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between p-3 border rounded"
-                    >
-                      <div>
+                  {selectedOrder.items.map((item, idx) => (
+                    <div key={idx} className="flex gap-4 p-3 border rounded-lg">
+                      <img
+                        src={item.images?.[0] || "/placeholder.png"}
+                        alt={item.productName}
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                      <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {item.variantColor}
-                          {item.variantStorage && ` • ${item.variantStorage}`}
+                          {[
+                            item.variantColor,
+                            item.variantStorage,
+                            item.variantConnectivity,
+                            item.variantName,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
                         </p>
                         <p className="text-sm">
                           SL: {item.quantity} × {formatPrice(item.price)}
@@ -609,32 +797,44 @@ const VATInvoicesPage = () => {
                 </div>
               </div>
 
-              {/* Total */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
-                  <span>Tổng tiền chưa VAT:</span>
-                  <span>{formatPrice(selectedInvoice.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>VAT (10%):</span>
-                  <span>{formatPrice(selectedInvoice.totalAmount * 0.1)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
-                  <span>Tổng thanh toán:</span>
-                  <span className="text-primary">
-                    {formatPrice(selectedInvoice.totalAmount * 1.1)}
+                  <span>Tổng tiền:</span>
+                  <span className="font-bold">
+                    {formatPrice(selectedOrder.totalAmount)}
                   </span>
                 </div>
+                {selectedOrder.paymentStatus === "PAID" && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Tiền khách đưa:</span>
+                      <span>
+                        {formatPrice(
+                          selectedOrder.posInfo.paymentReceived ||
+                            selectedOrder.totalAmount
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-green-600">
+                      <span>Tiền thối lại:</span>
+                      <span className="font-bold">
+                        {formatPrice(selectedOrder.posInfo.changeGiven || 0)}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  onClick={() => handlePrintInvoice(selectedInvoice)}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  In hóa đơn
-                </Button>
+                {selectedOrder.paymentStatus === "PAID" && (
+                  <Button
+                    className="flex-1"
+                    onClick={() => handleReprintReceipt(selectedOrder)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    In lại phiếu thu
+                  </Button>
+                )}
               </div>
             </div>
           )}

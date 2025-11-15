@@ -183,7 +183,6 @@ export const createOrder = async (req, res) => {
 
       console.log("Item processed successfully");
     }
-
     console.log("\n=== ORDER ITEMS SUMMARY ===");
     console.log("Total items:", orderItems.length);
     console.log("Subtotal:", subtotal);
@@ -354,7 +353,7 @@ export const getOrderById = async (req, res) => {
           "items.productName items.quantity items.price items.images " +
           "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
           "items.variantSku items.originalPrice items.total " +
-          "statusHistory"
+          "statusHistory posInfo" // ← THÊM posInfo ĐỂ HIỆN THU NGÂN
       )
       .populate("customerId", "fullName phoneNumber email");
 
@@ -365,9 +364,19 @@ export const getOrderById = async (req, res) => {
       });
     }
 
+    // === QUYỀN TRUY CẬP MỞ RỘNG CHO POS_STAFF ===
+    const userId = req.user._id.toString();
+    const isOwner = order.customerId._id.toString() === userId;
+    const isAdmin = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
+    const isPOSStaff = req.user.role === "POS_STAFF";
+
+    // 1. Khách hàng xem đơn của mình
+    // 2. Admin/Order Manager xem tất cả
+    // 3. POS Staff xem đơn do mình tạo
     if (
-      order.customerId._id.toString() !== req.user._id.toString() &&
-      !["ADMIN", "ORDER_MANAGER"].includes(req.user.role)
+      !isOwner &&
+      !isAdmin &&
+      !(isPOSStaff && order.posInfo?.cashierId?.toString() === userId)
     ) {
       return res.status(403).json({
         success: false,
@@ -387,7 +396,6 @@ export const getOrderById = async (req, res) => {
     });
   }
 };
-
 // ============================================
 // CANCEL ORDER (Customer) - FIXED
 // ============================================

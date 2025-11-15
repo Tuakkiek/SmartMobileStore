@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/lib/api.js
-// ✅ FIXED: API .get() methods for slug-based queries
+// FIXED + POS API + Clean & Consistent + NO ERRORS
 // ============================================
 
 import axios from "axios";
@@ -25,7 +25,7 @@ api.interceptors.request.use(
           config.headers.Authorization = `Bearer ${token}`;
         }
       } catch (error) {
-        console.error("❌ Error parsing auth-storage:", error);
+        console.error("Error parsing auth-storage:", error);
       }
     }
     return config;
@@ -50,93 +50,28 @@ api.interceptors.response.use(
 );
 
 // ============================================
-// CATEGORY-SPECIFIC APIs
+// PRODUCT APIs (DRY)
 // ============================================
 
-// iPhone API
-export const iPhoneAPI = {
-  getAll: (params) => api.get("/iphones", { params }),
-  getById: (id) => api.get(`/iphones/${id}`),
-  create: (data) => api.post("/iphones", data),
-  update: (id, data) => api.put(`/iphones/${id}`, data),
-  delete: (id) => api.delete(`/iphones/${id}`),
-  getVariants: (productId) => api.get(`/iphones/${productId}/variants`),
-  // ✅ FIXED: Get by slug with optional SKU query param
+const createProductAPI = (base) => ({
+  getAll: (params) => api.get(`/${base}`, { params }),
+  getById: (id) => api.get(`/${base}/${id}`),
+  create: (data) => api.post(`/${base}`, data),
+  update: (id, data) => api.put(`/${base}/${id}`, data),
+  delete: (id) => api.delete(`/${base}/${id}`),
+  getVariants: (productId) => api.get(`/${base}/${productId}/variants`),
   get: (slug, options = {}) => {
     const { params = {} } = options;
-    return api.get(`/iphones/${slug}`, { params });
+    return api.get(`/${base}/${slug}`, { params });
   },
-};
+});
 
-// iPad API
-export const iPadAPI = {
-  getAll: (params) => api.get("/ipads", { params }),
-  getById: (id) => api.get(`/ipads/${id}`),
-  create: (data) => api.post("/ipads", data),
-  update: (id, data) => api.put(`/ipads/${id}`, data),
-  delete: (id) => api.delete(`/ipads/${id}`),
-  getVariants: (productId) => api.get(`/ipads/${productId}/variants`),
-  get: (slug, options = {}) => {
-    const { params = {} } = options;
-    return api.get(`/ipads/${slug}`, { params });
-  },
-};
-
-// Mac API
-export const macAPI = {
-  getAll: (params) => api.get("/macs", { params }),
-  getById: (id) => api.get(`/macs/${id}`),
-  create: (data) => api.post("/macs", data),
-  update: (id, data) => api.put(`/macs/${id}`, data),
-  delete: (id) => api.delete(`/macs/${id}`),
-  getVariants: (productId) => api.get(`/macs/${productId}/variants`),
-  get: (slug, options = {}) => {
-    const { params = {} } = options;
-    return api.get(`/macs/${slug}`, { params });
-  },
-};
-
-// AirPods API
-export const airPodsAPI = {
-  getAll: (params) => api.get("/airpods", { params }),
-  getById: (id) => api.get(`/airpods/${id}`),
-  create: (data) => api.post("/airpods", data),
-  update: (id, data) => api.put(`/airpods/${id}`, data),
-  delete: (id) => api.delete(`/airpods/${id}`),
-  getVariants: (productId) => api.get(`/airpods/${productId}/variants`),
-  get: (slug, options = {}) => {
-    const { params = {} } = options;
-    return api.get(`/airpods/${slug}`, { params });
-  },
-};
-
-// AppleWatch API
-export const appleWatchAPI = {
-  getAll: (params) => api.get("/applewatches", { params }),
-  getById: (id) => api.get(`/applewatches/${id}`),
-  create: (data) => api.post("/applewatches", data),
-  update: (id, data) => api.put(`/applewatches/${id}`, data),
-  delete: (id) => api.delete(`/applewatches/${id}`),
-  getVariants: (productId) => api.get(`/applewatches/${productId}/variants`),
-  get: (slug, options = {}) => {
-    const { params = {} } = options;
-    return api.get(`/applewatches/${slug}`, { params });
-  },
-};
-
-// Accessory API
-export const accessoryAPI = {
-  getAll: (params) => api.get("/accessories", { params }),
-  getById: (id) => api.get(`/accessories/${id}`),
-  create: (data) => api.post("/accessories", data),
-  update: (id, data) => api.put(`/accessories/${id}`, data),
-  delete: (id) => api.delete(`/accessories/${id}`),
-  getVariants: (productId) => api.get(`/accessories/${productId}/variants`),
-  get: (slug, options = {}) => {
-    const { params = {} } = options;
-    return api.get(`/accessories/${slug}`, { params });
-  },
-};
+export const iPhoneAPI = createProductAPI("iphones");
+export const iPadAPI = createProductAPI("ipads");
+export const macAPI = createProductAPI("macs");
+export const airPodsAPI = createProductAPI("airpods");
+export const appleWatchAPI = createProductAPI("applewatches");
+export const accessoryAPI = createProductAPI("accessories");
 
 // ============================================
 // AUTH API
@@ -150,38 +85,52 @@ export const authAPI = {
 };
 
 // ============================================
-// CART API - ĐÃ SỬA
+// CART API
 // ============================================
 export const cartAPI = {
   getCart: () => api.get("/cart"),
-
-  // ✅ POST /cart (không phải /cart/add)
   addToCart: (data) => api.post("/cart", data),
-
-  // ✅ PUT /cart (không phải /cart/update)
   updateItem: (data) => api.put("/cart", data),
-
-  // ✅ DELETE /cart/:itemId (sử dụng _id của item trong giỏ hàng)
-  removeItem: (itemId) => api.delete(`/cart/${itemId}`),
-
+removeItem: (itemId) => api.delete(`/cart/${itemId}`),
   clearCart: () => api.delete("/cart"),
 };
 
 // ============================================
-// ORDER API
+// ORDER API (dùng params)
 // ============================================
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
-  getMyOrders: (page = 1, limit = 10, status = "") =>
-    api.get(
-      `/orders/my-orders?page=${page}&limit=${limit}${
-        status ? `&status=${status}` : ""
-      }`
-    ),
+  getMyOrders: (params = {}) => api.get("/orders/my-orders", { params }),
   getAll: (params) => api.get("/orders/all", { params }),
   getById: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, data) => api.put(`/orders/${id}/status`, data),
   cancel: (id, data = {}) => api.post(`/orders/${id}/cancel`, data),
+};
+
+// ============================================
+// POS API (ĐÃ SỬA ROUTE ĐÚNG)
+// ============================================
+export const posAPI = {
+  // Lịch sử đơn của nhân viên POS
+  getMyOrders: (params = {}) => api.get("/pos/my-orders", { params }),
+
+  // Chi tiết đơn POS
+  getOrderById: (id) => api.get(`/pos/orders/${id}`),
+
+  // Danh sách đơn chờ thanh toán (kế toán)
+  getPendingOrders: (params = {}) => api.get("/pos/pending-orders", { params }),
+
+  // Thanh toán đơn (kế toán)
+  processPayment: (orderId, data) =>
+    api.post(`/pos/orders/${orderId}/payment`, data),
+
+  // Hủy đơn chờ thanh toán
+  cancelOrder: (orderId, data = {}) =>
+    api.post(`/pos/orders/${orderId}/cancel`, data),
+
+  // Xuất hóa đơn VAT
+  issueVAT: (orderId, data) =>
+    api.post(`/pos/orders/${orderId}/vat`, data),
 };
 
 // ============================================
@@ -198,32 +147,27 @@ export const reviewAPI = {
 // PROMOTION API
 // ============================================
 export const promotionAPI = {
-  // === ADMIN ONLY ===
   getAll: () => api.get("/promotions"),
   create: (data) => api.post("/promotions", data),
   update: (id, data) => api.put(`/promotions/${id}`, data),
   delete: (id) => api.delete(`/promotions/${id}`),
-
-  // === PUBLIC / CUSTOMER ===
   getActive: () => api.get("/promotions/active"),
   apply: (data) => api.post("/promotions/apply", data),
 };
+
 // ============================================
 // USER API
 // ============================================
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
-  updateAddress: (addressId, data) =>
-    api.put(`/users/addresses/${addressId}`, data),
+  updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
   getAllEmployees: () => api.get("/users/employees"),
   createEmployee: (data) => api.post("/users/employees", data),
-  toggleEmployeeStatus: (id) =>
-    api.patch(`/users/employees/${id}/toggle-status`),
+  toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
-
 // ============================================
 // ANALYTICS API
 // ============================================
@@ -289,6 +233,9 @@ export const getTopNewProducts = async () => {
   }
 };
 
+// ============================================
+// EXPORT DEFAULT
+// ============================================
 export default {
   iPhoneAPI,
   iPadAPI,
@@ -299,6 +246,7 @@ export default {
   authAPI,
   cartAPI,
   orderAPI,
+  posAPI,
   reviewAPI,
   promotionAPI,
   userAPI,

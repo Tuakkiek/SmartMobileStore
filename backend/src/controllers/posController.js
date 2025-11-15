@@ -1,6 +1,7 @@
 // ============================================
 // FILE: backend/src/controllers/posController.js
-// ✅ V2: POS tạo đơn → Kế toán xử lý thanh toán
+// V2: POS tạo đơn → Kế toán xử lý thanh toán
+// ĐÃ SỬA: Lỗi không thấy đơn trong lịch sử
 // ============================================
 
 import mongoose from "mongoose";
@@ -54,7 +55,7 @@ export const createPOSOrder = async (req, res) => {
     }
 
     console.log("=== CREATING POS ORDER ===");
-    console.log("Staff:", req.user.fullName);
+    console.log("Staff ID:", req.user._id, "| Name:", req.user.fullName);
     console.log("Customer:", customerInfo);
     console.log("Items:", items.length);
 
@@ -141,8 +142,8 @@ export const createPOSOrder = async (req, res) => {
     const order = await Order.create(
       [
         {
-          orderSource: "IN_STORE", // ✅ Đánh dấu đơn tại cửa hàng
-          customerId: req.user._id, // Tạm dùng staff ID (hoặc tạo temp customer)
+          orderSource: "IN_STORE",
+          customerId: req.user._id,
           items: orderItems,
           shippingAddress: {
             fullName: customerInfo.fullName,
@@ -154,7 +155,7 @@ export const createPOSOrder = async (req, res) => {
           },
           paymentMethod: "CASH",
           paymentStatus: "UNPAID",
-          status: "PENDING_PAYMENT", // ✅ Chờ kế toán xử lý
+          status: "PENDING_PAYMENT",
           subtotal,
           shippingFee: 0,
           totalAmount: subtotal,
@@ -171,7 +172,7 @@ export const createPOSOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("✅ POS Order created:", order[0].orderNumber);
+    console.log("POS Order created:", order[0].orderNumber);
 
     res.status(201).json({
       success: true,
@@ -180,7 +181,7 @@ export const createPOSOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("❌ CREATE POS ORDER ERROR:", error);
+    console.error("CREATE POS ORDER ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi khi tạo đơn hàng",
@@ -273,20 +274,17 @@ export const processPayment = async (req, res) => {
       });
     }
 
-    // ✅ CẬP NHẬT CẢ posInfo VÀ gọi processPayment
     const changeGiven = Math.max(0, paymentReceived - order.totalAmount);
 
-    // Cập nhật posInfo để in hóa đơn
     order.posInfo.paymentReceived = paymentReceived;
     order.posInfo.changeGiven = changeGiven;
-    order.posInfo.cashierName = req.user.fullName; // ✅ Thêm tên kế toán
+    order.posInfo.cashierName = req.user.fullName;
 
-    // Xử lý thanh toán (method sẽ tự cập nhật paymentInfo)
     await order.processPayment(req.user._id, paymentReceived);
 
     await session.commitTransaction();
 
-    console.log("✅ Payment processed:", order.orderNumber);
+    console.log("Payment processed:", order.orderNumber);
 
     res.json({
       success: true,
@@ -306,7 +304,7 @@ export const processPayment = async (req, res) => {
 };
 
 // ============================================
-// HỦY ĐƠN (Kế toán - nếu có vấn đề)
+// HỦY ĐƠN (Kế toán)
 // ============================================
 export const cancelPendingOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -334,7 +332,6 @@ export const cancelPendingOrder = async (req, res) => {
       });
     }
 
-    // Hoàn lại kho
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
@@ -348,7 +345,6 @@ export const cancelPendingOrder = async (req, res) => {
       }
     }
 
-    // Hủy đơn
     await order.cancel(req.user._id, reason || "Hủy bởi kế toán");
 
     await session.commitTransaction();
@@ -407,11 +403,9 @@ export const issueVATInvoice = async (req, res) => {
       });
     }
 
-    // Tạo số hóa đơn VAT
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
-
     const lastInvoice = await Order.findOne({
       "vatInvoice.invoiceNumber": new RegExp(`^VAT${year}${month}`),
     }).sort({ "vatInvoice.invoiceNumber": -1 });
@@ -452,9 +446,9 @@ export const issueVATInvoice = async (req, res) => {
 };
 
 // ============================================
-// LẤY LỊCH SỬ ĐƠN POS (POS Staff xem của mình)
+// LẤY LỊCH SỬ ĐƠN POS (POS Staff / Accountant / Admin)
+// ĐÃ SỬA: Ép kiểu staffId, log query, fix ngày
 // ============================================
-// Dòng 369-390
 export const getPOSOrderHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20, startDate, endDate } = req.query;
@@ -463,42 +457,69 @@ export const getPOSOrderHistory = async (req, res) => {
       orderSource: "IN_STORE",
     };
 
-    // ✅ CHỈ LỌC THEO staffId NẾU KHÔNG PHẢI ADMIN/ACCOUNTANT
-    if (!["ADMIN", "ACCOUNTANT"].includes(req.user.role)) {
-      query["posInfo.staffId"] = req.user._id;
+    // CHỈ LỌC staffId NẾU LÀ POS_STAFF
+    if (req.user.role === "POS_STAFF") {
+      query["posInfo.staffId"] = new mongoose.Types.ObjectId(req.user._id);
     }
 
+    // LỌC THEO NGÀY (00:00 → 23:59:59)
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
     }
 
+    // LOG ĐỂ DEBUG
+    console.log("POS History Query:", JSON.stringify(query, null, 2));
+    console.log("User Role:", req.user.role, "| ID:", req.user._id);
+
     const orders = await Order.find(query)
-      .populate("posInfo.staffId", "fullName") // ← THÊM POPULATE
+      .populate("posInfo.staffId", "fullName")
+      .populate({
+        path: "items.variantId",
+        select: "color storage sku images price",
+      })
+      .populate({
+        path: "items.productId",
+        select: "name",
+      })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
     const total = await Order.countDocuments(query);
 
+    console.log(`Found ${orders.length} orders (Total: ${total})`);
+
     res.json({
       success: true,
       data: {
         orders,
-        totalPages: Math.ceil(total / limit),
-        currentPage: parseInt(page),
-        total,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: parseInt(page),
+        },
       },
     });
   } catch (error) {
     console.error("GET POS ORDER HISTORY ERROR:", error);
-    res.status(400).json({
+    res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Lỗi server khi lấy lịch sử đơn hàng",
     });
   }
 };
+
+// Export
 export default {
   createPOSOrder,
   getPendingOrders,

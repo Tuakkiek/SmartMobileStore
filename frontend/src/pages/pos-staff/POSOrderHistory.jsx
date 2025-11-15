@@ -1,321 +1,177 @@
 // ============================================
 // FILE: frontend/src/pages/pos-staff/POSOrderHistory.jsx
-// Lịch sử đơn hàng POS của nhân viên bán hàng
+// ĐÃ SỬA: LOADING, ERROR HANDLING, POS INFO, KEY, STATUS TEXT
 // ============================================
 
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Receipt,
   Search,
   Eye,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  ShoppingBag,
-  FileText,
-  Download,
+  CheckCircle,
+  Clock,
+  XCircle,
+  Package,
+  User,
+  Phone,
+  MapPin,
+  AlertCircle,
 } from "lucide-react";
-import { formatPrice, formatDate } from "@/lib/utils";
-import axios from "axios";
+import { posAPI } from "@/lib/api";
+import {
+  formatPrice,
+  formatDate,
+  getStatusColor,
+  getStatusText,
+} from "@/lib/utils";
 
 const POSOrderHistory = () => {
-  // ============================================
-  // STATE MANAGEMENT
-  // ============================================
   const [orders, setOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false); // Thêm loading cho dialog
+  const [searchTerm, setSearchTerm] = useState("");
   const [dateFilter, setDateFilter] = useState({
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: new Date().toISOString().split("T")[0],
+    startDate: "",
+    endDate: "",
   });
-  const [stats, setStats] = useState({
-    totalOrders: 0,
-    totalRevenue: 0,
-    avgOrderValue: 0,
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0,
   });
 
-  // ============================================
-  // FETCH ORDERS
-  // ============================================
+  // Helper: Lấy URL ảnh
+  const getImageUrl = (path) => {
+    if (!path) return "https://via.placeholder.com/64?text=No+Image";
+    if (path.startsWith("http")) return path;
+    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  };
+
+  // Load đơn hàng
   useEffect(() => {
     fetchOrders();
-  }, [dateFilter]);
+  }, [searchTerm, dateFilter, pagination.currentPage]);
 
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+      const params = {
+        page: pagination.currentPage,
+        limit: 20,
+        search: searchTerm || undefined,
+        startDate: dateFilter.startDate || undefined,
+        endDate: dateFilter.endDate || undefined,
+      };
 
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/orders`, // ← ĐÃ ĐÚNG
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params: {
-            startDate: dateFilter.startDate,
-            endDate: dateFilter.endDate,
-          },
-        }
-      );
+      const response = await posAPI.getMyOrders(params);
+      const { orders = [], pagination: pag = {} } = response.data.data || {};
 
-      const ordersData = response.data.data.orders || [];
-      setOrders(ordersData);
-
-      // Calculate statistics
-      const total = ordersData.length;
-      const revenue = ordersData.reduce(
-        (sum, order) => sum + order.totalAmount,
-        0
-      );
-      setStats({
-        totalOrders: total,
-        totalRevenue: revenue,
-        avgOrderValue: total > 0 ? revenue / total : 0,
+      setOrders(orders);
+      setPagination({
+        currentPage: pag.currentPage || 1,
+        totalPages: pag.totalPages || 1,
+        total: pag.total || 0,
       });
     } catch (error) {
       console.error("Lỗi tải đơn hàng:", error);
       toast.error("Không thể tải lịch sử đơn hàng");
+      setOrders([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ============================================
-  // VIEW ORDER DETAIL
-  // ============================================
+  // Xem chi tiết – ĐÃ SỬA HOÀN TOÀN
   const handleViewDetail = async (orderId) => {
-    try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+    if (!orderId) {
+      toast.error("Không có ID đơn hàng");
+      return;
+    }
 
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/orders/${orderId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+    setIsLoadingDetail(true);
+    setShowDetailDialog(true);
+
+    try {
+console.log("Đang lấy chi tiết đơn hàng:", orderId);
+      const response = await posAPI.getOrderById(orderId);
+
+      if (!response?.data?.data?.order) {
+        throw new Error("Không tìm thấy đơn hàng");
+      }
 
       setSelectedOrder(response.data.data.order);
-      setShowDetailDialog(true);
     } catch (error) {
-      console.error("Lỗi tải chi tiết:", error);
-      toast.error("Không thể tải thông tin đơn hàng");
+      console.error("Lỗi khi lấy chi tiết:", error);
+      toast.error(
+        error.response?.data?.message || 
+        "Không thể tải chi tiết đơn hàng. Vui lòng thử lại."
+      );
+      setShowDetailDialog(false);
+    } finally {
+      setIsLoadingDetail(false);
     }
   };
 
-  // ============================================
-  // REPRINT RECEIPT
-  // ============================================
-  const handleReprintReceipt = (order) => {
-    // ✅ FALLBACK để tránh lỗi khi dữ liệu cũ chưa có field mới
-    const paymentReceived =
-      order.posInfo?.paymentReceived ||
-      order.paymentInfo?.paymentReceived ||
-      order.totalAmount;
-
-    const changeGiven =
-      order.posInfo?.changeGiven || order.paymentInfo?.changeGiven || 0;
-
-    const cashierName =
-      order.posInfo?.cashierName ||
-      order.paymentInfo?.processedBy?.fullName ||
-      order.posInfo?.staffName ||
-      "N/A";
-    const printWindow = window.open("", "", "width=300,height=600");
-    const receiptHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Hóa đơn #${
-        order.posInfo?.receiptNumber || order.orderNumber
-      }</title>
-      <style>
-        body { font-family: Arial, sans-serif; width: 80mm; margin: 0; padding: 10px; }
-        h1 { text-align: center; font-size: 18px; margin: 10px 0; }
-        .info { text-align: center; margin-bottom: 10px; font-size: 12px; }
-        hr { border: 1px dashed #000; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        td { padding: 5px 0; }
-        .right { text-align: right; }
-        .bold { font-weight: bold; }
-        .total { font-size: 14px; }
-        .footer { text-align: center; margin-top: 20px; font-size: 11px; }
-        .badge { background: #4CAF50; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; }
-      </style>
-    </head>
-    <body>
-      <h1>APPLE STORE CẦN THƠ</h1>
-      <div class="info">
-        <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ</p>
-        <p>Hotline: 1900.xxxx</p>
-      </div>
-      <hr/>
-      <p><strong>Số phiếu:</strong> ${
-        order.posInfo?.receiptNumber || order.orderNumber
-      }</p>
-      <p><strong>Ngày:</strong> ${new Date(order.createdAt).toLocaleString(
-        "vi-VN"
-      )}</p>
-      <p><strong>Thu ngân:</strong> ${cashierName}</p>
-      ${
-        order.shippingAddress?.fullName !== "Mua tại cửa hàng"
-          ? `<p><strong>Khách:</strong> ${order.shippingAddress.fullName}</p>`
-          : ""
-      }
-      ${
-        order.vatInvoice?.invoiceNumber
-          ? `<p><span class="badge">Đã xuất VAT: ${order.vatInvoice.invoiceNumber}</span></p>`
-          : ""
-      }
-      <hr/>
-      <table>
-        <tbody>
-          ${order.items
-            .map(
-              (item) => `
-            <tr>
-              <td colspan="2">${item.productName}</td>
-            </tr>
-            <tr>
-              <td>${item.variantColor}${
-                item.variantStorage ? " • " + item.variantStorage : ""
-              }</td>
-            </tr>
-            <tr>
-              <td>${item.quantity} x ${formatPrice(item.price)}</td>
-              <td class="right bold">${formatPrice(item.total)}</td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      </table>
-      <hr/>
-      <table class="total">
-        <tr>
-          <td>Tổng tiền:</td>
-          <td class="right bold">${formatPrice(order.totalAmount)}</td>
-        </tr>
-        <tr>
-          <td>Tiền khách đưa:</td>
-          <td class="right">${formatPrice(paymentReceived)}</td>
-        </tr>
-        <tr>
-          <td>Tiền thối lại:</td>
-          <td class="right bold">${formatPrice(changeGiven)}</td>
-        </tr>
-      </table>
-      <hr/>
-      <div class="footer">
-        <p><strong>CHÍNH SÁCH BẢO HÀNH</strong></p>
-        <p>Bảo hành 12 tháng chính hãng Apple</p>
-        <p>Đổi trả trong 30 ngày nếu lỗi NSX</p>
-        <p><em>Bản in lại - ${formatDate(new Date())}</em></p>
-        <p>Cảm ơn quý khách! Hẹn gặp lại!</p>
-      </div>
-    </body>
-    </html>
-  `;
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+  // Thống kê
+  const getStats = () => {
+    return {
+      total: orders.length,
+      pending: orders.filter((o) => o.status === "PENDING_PAYMENT").length,
+      paid: orders.filter((o) => o.paymentStatus === "PAID").length,
+      cancelled: orders.filter((o) => o.status === "CANCELLED").length,
+    };
   };
 
-  // ============================================
-  // FILTER ORDERS
-  // ============================================
-  const filteredOrders = orders.filter(
-    (order) =>
-      order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.posInfo?.receiptNumber
-        ?.toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      order.shippingAddress?.fullName
-        ?.toLowerCase()
-        .includes(searchQuery.toLowerCase())
-  );
+  const stats = getStats();
 
-  // ============================================
-  // RENDER
-  // ============================================
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
-        <p className="text-muted-foreground">Xem lại các đơn hàng đã xử lý</p>
+        <p className="text-muted-foreground">
+          Tổng số: {pagination.total} đơn hàng
+        </p>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Tổng đơn hàng
-                </p>
-                <h3 className="text-2xl font-bold">{stats.totalOrders}</h3>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-sm text-muted-foreground">Tổng đơn</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Tổng doanh thu
-                </p>
-                <h3 className="text-2xl font-bold">
-                  {formatPrice(stats.totalRevenue)}
-                </h3>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+            <p className="text-sm text-muted-foreground">Chờ thanh toán</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Giá trị TB/đơn
-                </p>
-                <h3 className="text-2xl font-bold">
-                  {formatPrice(stats.avgOrderValue)}
-                </h3>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-green-600">{stats.paid}</div>
+            <p className="text-sm text-muted-foreground">Đã thanh toán</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-red-600">{stats.cancelled}</div>
+            <p className="text-sm text-muted-foreground">Đã hủy</p>
           </CardContent>
         </Card>
       </div>
@@ -328,234 +184,317 @@ const POSOrderHistory = () => {
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Tìm mã đơn, số phiếu..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPagination((prev) => ({ ...prev, currentPage: 1 }));
+                }}
                 className="pl-9"
               />
             </div>
-
-            <div>
-              <Input
-                type="date"
-                value={dateFilter.startDate}
-                onChange={(e) =>
-                  setDateFilter({ ...dateFilter, startDate: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <Input
-                type="date"
-                value={dateFilter.endDate}
-                onChange={(e) =>
-                  setDateFilter({ ...dateFilter, endDate: e.target.value })
-                }
-              />
-            </div>
+            <Input
+              type="date"
+value={dateFilter.startDate}
+              onChange={(e) => {
+                setDateFilter({ ...dateFilter, startDate: e.target.value });
+                setPagination((prev) => ({ ...prev, currentPage: 1 }));
+              }}
+            />
+            <Input
+              type="date"
+              value={dateFilter.endDate}
+              onChange={(e) => {
+                setDateFilter({ ...dateFilter, endDate: e.target.value });
+                setPagination((prev) => ({ ...prev, currentPage: 1 }));
+              }}
+            />
           </div>
         </CardContent>
       </Card>
 
       {/* Orders List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Receipt className="w-5 h-5" />
-            Danh sách đơn hàng ({filteredOrders.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">Đang tải...</p>
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-8">
-              <Receipt className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Không có đơn hàng nào</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredOrders.map((order) => (
-                <div
-                  key={order._id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div>
-                        <p className="font-bold">#{order.orderNumber}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Phiếu: {order.posInfo.receiptNumber}
-                        </p>
+      <div className="space-y-4">
+        {isLoading ? (
+          <div className="text-center py-8">Đang tải danh sách...</div>
+        ) : orders.length === 0 ? (
+          <div className="text-center py-8">
+            <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground">Không có đơn hàng nào</p>
+          </div>
+        ) : (
+          orders.map((order) => {
+            const isPending = order.status === "PENDING_PAYMENT";
+            const isPaid = order.paymentStatus === "PAID";
+            const StatusIcon = isPending ? Clock : isPaid ? CheckCircle : XCircle;
+
+            const statusColorClass = getStatusColor(order.status || "UNKNOWN");
+            const bgColor = statusColorClass.includes("bg-")
+              ? statusColorClass.split(" ")[0]
+              : "bg-gray-500";
+
+            return (
+              <Card key={order._id}>
+                <CardContent className="p-6">
+                  <div className="flex flex-col gap-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4 flex-1">
+                        <div
+                          className={`w-12 h-12 rounded-full ${bgColor} flex items-center justify-center text-white`}
+                        >
+                          <StatusIcon className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h3 className="font-semibold text-lg">#{order.orderNumber}</h3>
+                            <Badge className={getStatusColor(order.status || "UNKNOWN")}>
+                              {isPending 
+                                ? "Chờ thanh toán" 
+                                : getStatusText(order.paymentStatus || order.status)}
+                            </Badge>
+                            {order.posInfo?.receiptNumber && (
+                              <Badge variant="outline">Phiếu: {order.posInfo.receiptNumber}</Badge>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+<div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-muted-foreground" />
+                              <span>{order.shippingAddress?.fullName || "Khách lẻ"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-muted-foreground" />
+                              <span>{order.shippingAddress?.phoneNumber || "N/A"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-muted-foreground" />
+                              <span>{formatDate(order.createdAt)}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      {order.vatInvoice?.invoiceNumber && (
-                        <Badge className="bg-green-100 text-green-800">
-                          <FileText className="w-3 h-3 mr-1" />
-                          Đã xuất VAT
-                        </Badge>
-                      )}
+
+                      <div className="flex flex-col items-end gap-3">
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-primary">
+                            {formatPrice(order.totalAmount)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDetail(order._id)}
+                          disabled={isLoadingDetail}
+                        >
+                          <Eye className="w-4 h-4 mr-2" /> Chi tiết
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Khách hàng:</p>
-                        <p className="font-medium">
-                          {order.shippingAddress?.fullName || "Khách lẻ"}
-                        </p>
+                    {/* Product Preview */}
+                    <div className="border-t pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          Sản phẩm ({order.items?.length || 0})
+                        </h4>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground">Thời gian:</p>
-                        <p className="font-medium">
-                          {formatDate(order.createdAt)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Số lượng:</p>
-                        <p className="font-medium">{order.items.length} SP</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Tổng tiền:</p>
-                        <p className="font-bold text-primary">
-                          {formatPrice(order.totalAmount)}
-                        </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {order.items?.slice(0, 4).map((item, idx) => (
+                          <div
+                            key={item._id || idx} // Dùng _id nếu có, fallback idx
+                            className="flex gap-2 p-2 border rounded-lg hover:bg-muted/50"
+                          >
+                            <img
+                              src={getImageUrl(item.images?.[0])}
+                              alt={item.productName}
+                              className="w-16 h-16 object-cover rounded"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = "https://via.placeholder.com/64?text=No+Image";
+                              }}
+                            />
+                            <div className="flex-1 min-w-0">
+<p className="text-xs font-medium line-clamp-2 mb-1">
+                                {item.productName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                SL: {item.quantity}
+                              </p>
+                              <p className="text-xs font-semibold text-primary">
+                                {formatPrice(item.price)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {order.items?.length > 4 && (
+                          <div className="flex items-center justify-center p-2 border rounded-lg bg-muted/30">
+                            <div className="text-center">
+                              <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground" />
+                              <p className="text-xs font-medium">
+                                +{order.items.length - 4} SP
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleViewDetail(order._id)}
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Chi tiết
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleReprintReceipt(order)}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      In lại
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <div className="flex justify-center gap-2 mt-6">
+          <Button
+            variant="outline"
+            disabled={pagination.currentPage === 1 || isLoading}
+            onClick={() =>
+              setPagination((prev) => ({ ...prev, currentPage: prev.currentPage - 1 }))
+            }
+          >
+            Trước
+          </Button>
+          <span className="px-4 py-2">
+            Trang {pagination.currentPage} / {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            disabled={pagination.currentPage === pagination.totalPages || isLoading}
+            onClick={() =>
+              setPagination((prev) => ({ ...prev, currentPage: prev.currentPage + 1 }))
+            }
+          >
+            Sau
+          </Button>
+        </div>
+      )}
 
-      {/* Order Detail Dialog */}
+      {/* DETAIL DIALOG – CHẠY ỔN ĐỊNH */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-            <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>
+            <DialogDescription>
+              Mã đơn: #{selectedOrder?.orderNumber}
+            </DialogDescription>
           </DialogHeader>
 
-          {selectedOrder && (
+          {isLoadingDetail ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <AlertCircle className="w-8 h-8 mx-auto mb-2 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Đang tải chi tiết...</p>
+</div>
+            </div>
+          ) : selectedOrder ? (
             <div className="space-y-6">
-              {/* Order Info */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div>
-                  <h3 className="font-semibold mb-2">Thông tin đơn hàng</h3>
-                  <p className="text-sm">
-                    <strong>Mã đơn:</strong> #{selectedOrder.orderNumber}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Số phiếu:</strong>{" "}
-                    {selectedOrder.posInfo.receiptNumber}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Thời gian:</strong>{" "}
-                    {formatDate(selectedOrder.createdAt)}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Thu ngân:</strong>{" "}
-                    {selectedOrder.posInfo.cashierName}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Thông tin khách hàng</h3>
-                  <p className="text-sm">
-                    <strong>Họ tên:</strong>{" "}
-                    {selectedOrder.shippingAddress?.fullName || "Khách lẻ"}
-                  </p>
-                  <p className="text-sm">
-                    <strong>SĐT:</strong>{" "}
-                    {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
-                  </p>
-                  {selectedOrder.vatInvoice?.invoiceNumber && (
-                    <Badge className="bg-green-100 text-green-800 mt-2">
-                      Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* Products */}
+              {/* SẢN PHẨM */}
               <div>
-                <h3 className="font-semibold mb-3">Sản phẩm</h3>
-                <div className="space-y-2">
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="flex gap-4 p-3 border rounded-lg">
+                <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
+                <div className="space-y-3">
+                  {selectedOrder.items?.map((item, idx) => (
+                    <div key={item._id || idx} className="flex gap-4 p-4 border rounded-lg">
                       <img
-                        src={item.images?.[0] || "/placeholder.png"}
+                        src={getImageUrl(item.images?.[0])}
                         alt={item.productName}
                         className="w-20 h-20 object-cover rounded"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = "https://via.placeholder.com/64?text=No+Image";
+                        }}
                       />
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {item.variantColor}
-                          {item.variantStorage && ` • ${item.variantStorage}`}
+                          {[
+                            item.variantColor,
+                            item.variantStorage,
+                            item.variantConnectivity,
+                            item.variantName,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
                         </p>
                         <p className="text-sm">
                           SL: {item.quantity} × {formatPrice(item.price)}
                         </p>
                       </div>
-                      <p className="font-bold">{formatPrice(item.total)}</p>
+                      <p className="font-semibold">
+                        {formatPrice(item.price * item.quantity)}
+                      </p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Payment Summary */}
+              {/* ĐỊA CHỈ GIAO HÀNG */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Địa chỉ giao hàng
+                </h3>
+                <p>
+                  {selectedOrder.shippingAddress?.fullName || "Khách lẻ"} -{" "}
+                  {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedOrder.shippingAddress?.detailAddress
+                    ? `${selectedOrder.shippingAddress.detailAddress}, ${selectedOrder.shippingAddress.commune}, ${selectedOrder.shippingAddress.district}, ${selectedOrder.shippingAddress.province}`
+                    : "Mua tại cửa hàng"}
+                </p>
+              </div>
+
+              {/* TÓM TẮT ĐƠN HÀNG */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
-                  <span>Tổng tiền:</span>
-                  <span className="font-bold">
-                    {formatPrice(selectedOrder.totalAmount)}
-                  </span>
+                  <span>Tạm tính:</span>
+<span>{formatPrice(selectedOrder.subtotal || selectedOrder.totalAmount)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tiền khách đưa:</span>
-                  <span>
-                    {formatPrice(selectedOrder.posInfo.paymentReceived)}
-                  </span>
+                  <span>Phí ship:</span>
+                  <span>{formatPrice(selectedOrder.shippingFee || 0)}</span>
                 </div>
-                <div className="flex justify-between text-green-600">
-                  <span>Tiền thối lại:</span>
-                  <span className="font-bold">
-                    {formatPrice(selectedOrder.posInfo.changeGiven)}
+                {selectedOrder.promotionDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Giảm giá:</span>
+                    <span>-{formatPrice(selectedOrder.promotionDiscount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Tổng:</span>
+                  <span className="text-primary">
+                    {formatPrice(selectedOrder.totalAmount)}
                   </span>
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  onClick={() => handleReprintReceipt(selectedOrder)}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  In lại phiếu thu
-                </Button>
-              </div>
+              {/* POS INFO (nếu có) */}
+              {selectedOrder.posInfo && (
+                <div className="p-4 bg-blue-50 rounded-lg text-sm">
+                  <p><strong>Thu ngân:</strong> {selectedOrder.posInfo.cashierName}</p>
+                  <p><strong>Tiền khách đưa:</strong> {formatPrice(selectedOrder.posInfo.paymentReceived)}</p>
+                  <p><strong>Tiền thối:</strong> {formatPrice(selectedOrder.posInfo.changeGiven || 0)}</p>
+                  {selectedOrder.posInfo.receiptNumber && (
+                    <p><strong>Số phiếu:</strong> {selectedOrder.posInfo.receiptNumber}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              Không có dữ liệu đơn hàng
             </div>
           )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Đóng
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
