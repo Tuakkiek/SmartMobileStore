@@ -1,7 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/posController.js
-// V2: POS tạo đơn → Kế toán xử lý thanh toán
-// ĐÃ SỬA: Lỗi không thấy đơn trong lịch sử
+// ✅ FIXED: Properly track salesCount + stock for POS orders
 // ============================================
 
 import mongoose from "mongoose";
@@ -12,6 +11,9 @@ import Mac, { MacVariant } from "../models/Mac.js";
 import AirPods, { AirPodsVariant } from "../models/AirPods.js";
 import AppleWatch, { AppleWatchVariant } from "../models/AppleWatch.js";
 import Accessory, { AccessoryVariant } from "../models/Accessory.js";
+
+// ✅ IMPORT SALES SERVICE
+import productSalesService from "../services/productSalesService.js";
 
 // ============================================
 // HELPER: Lấy Model theo productType
@@ -29,7 +31,7 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// TẠO ĐƠN HÀNG POS (POS Staff)
+// TẠO ĐƠN HÀNG POS
 // ============================================
 export const createPOSOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -106,9 +108,31 @@ export const createPOSOrder = async (req, res) => {
         });
       }
 
-      // Reduce stock (tạm giữ hàng)
+      // ✅ REDUCE STOCK
       variant.stock -= quantity;
       await variant.save({ session });
+
+      // ✅ INCREMENT SALES COUNT FOR VARIANT
+      if (variant.incrementSales) {
+        await variant.incrementSales(quantity);
+      } else {
+        variant.salesCount = (variant.salesCount || 0) + quantity;
+        await variant.save({ session });
+      }
+
+      // ✅ INCREMENT SALES COUNT FOR PRODUCT
+      if (product.incrementSales) {
+        await product.incrementSales(quantity);
+      } else {
+        product.salesCount = (product.salesCount || 0) + quantity;
+        await product.save({ session });
+      }
+
+      console.log(`✅ Updated stock & sales for ${product.name}:`, {
+        variantStock: variant.stock,
+        variantSales: variant.salesCount,
+        productSales: product.salesCount,
+      });
 
       // Tính tiền
       const itemTotal = variant.price * quantity;
@@ -172,7 +196,8 @@ export const createPOSOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("POS Order created:", order[0].orderNumber);
+    console.log("✅ POS Order created:", order[0].orderNumber);
+    console.log("✅ Stock & salesCount updated for all items");
 
     res.status(201).json({
       success: true,
@@ -284,7 +309,7 @@ export const processPayment = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("Payment processed:", order.orderNumber);
+    console.log("✅ Payment processed:", order.orderNumber);
 
     res.json({
       success: true,
@@ -304,7 +329,7 @@ export const processPayment = async (req, res) => {
 };
 
 // ============================================
-// HỦY ĐƠN (Kế toán)
+// HỦY ĐƠN (Kế toán) - ✅ FIXED: RESTORE STOCK & SALES
 // ============================================
 export const cancelPendingOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -332,6 +357,7 @@ export const cancelPendingOrder = async (req, res) => {
       });
     }
 
+    // ✅ RESTORE STOCK & DECREMENT SALES COUNT
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
@@ -339,8 +365,39 @@ export const cancelPendingOrder = async (req, res) => {
           session
         );
         if (variant) {
+          // Restore stock
           variant.stock += item.quantity;
+
+          // Decrement variant sales
+          variant.salesCount = Math.max(
+            0,
+            (variant.salesCount || 0) - item.quantity
+          );
           await variant.save({ session });
+
+          console.log(
+            `✅ Restored stock & decremented sales for variant ${variant.sku}:`,
+            {
+              stock: variant.stock,
+              salesCount: variant.salesCount,
+            }
+          );
+        }
+
+        // Decrement product sales
+        const product = await models.Product.findById(item.productId).session(
+          session
+        );
+        if (product) {
+          product.salesCount = Math.max(
+            0,
+            (product.salesCount || 0) - item.quantity
+          );
+          await product.save({ session });
+
+          console.log(`✅ Decremented product sales for ${product.name}:`, {
+            salesCount: product.salesCount,
+          });
         }
       }
     }
@@ -349,9 +406,14 @@ export const cancelPendingOrder = async (req, res) => {
 
     await session.commitTransaction();
 
+    console.log(
+      "✅ Order cancelled and stock/sales restored:",
+      order.orderNumber
+    );
+
     res.json({
       success: true,
-      message: "Đã hủy đơn hàng",
+      message: "Đã hủy đơn hàng và khôi phục kho",
       data: { order },
     });
   } catch (error) {
@@ -447,7 +509,6 @@ export const issueVATInvoice = async (req, res) => {
 
 // ============================================
 // LẤY LỊCH SỬ ĐƠN POS (POS Staff / Accountant / Admin)
-// ĐÃ SỬA: Ép kiểu staffId, log query, fix ngày
 // ============================================
 export const getPOSOrderHistory = async (req, res) => {
   try {
@@ -477,7 +538,6 @@ export const getPOSOrderHistory = async (req, res) => {
       }
     }
 
-    // LOG ĐỂ DEBUG
     console.log("POS History Query:", JSON.stringify(query, null, 2));
     console.log("User Role:", req.user.role, "| ID:", req.user._id);
 

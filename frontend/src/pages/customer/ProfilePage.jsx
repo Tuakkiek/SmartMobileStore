@@ -154,23 +154,55 @@ const ProfilePage = () => {
   );
 };
 
-
 // ============================================
 // ORDERS SECTION – CHUYỂN SANG TRANG CHI TIẾT
 // ============================================
 
 const OrdersSection = () => {
-  const [orders, setOrders] = useState([]);           // Tất cả đơn đã load
+  const [orders, setOrders] = useState([]); // Tất cả đơn đã load
   const [displayedOrders, setDisplayedOrders] = useState([]); // Đơn hiện trên UI
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [totalOrders, setTotalOrders] = useState(0);  // Tổng số đơn theo filter
+  const [totalOrders, setTotalOrders] = useState(0); // Tổng số đơn theo filter
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [statusCounts, setStatusCounts] = useState({}); // Số lượng đơn theo trạng thái
 
   const navigate = useNavigate(); // THÊM ĐỂ CHUYỂN TRANG
   const pageSize = 5;
+
+  // === FETCH SỐ LƯỢNG ĐƠN THEO TRẠNG THÁI ===
+  useEffect(() => {
+    const fetchStatusCounts = async () => {
+      const statuses = [
+        "PENDING",
+        "CONFIRMED",
+        "SHIPPING",
+        "DELIVERED",
+        "CANCELLED",
+      ];
+      const counts = { all: 0 };
+
+      try {
+        // Fetch cho "all"
+        const allRes = await orderAPI.getMyOrders({ page: 1, limit: 1 });
+        counts.all = allRes.data.data.total || 0;
+
+        // Fetch cho từng trạng thái
+        for (const status of statuses) {
+          const res = await orderAPI.getMyOrders({ page: 1, limit: 1, status });
+          counts[status] = res.data.data.total || 0;
+        }
+
+        setStatusCounts(counts);
+      } catch (error) {
+        console.error("Error fetching status counts:", error);
+      }
+    };
+
+    fetchStatusCounts();
+  }, []);
 
   // === LOAD ĐƠN HÀNG ===
   const loadOrders = async (reset = false) => {
@@ -180,11 +212,11 @@ const OrdersSection = () => {
     const currentPage = reset ? 1 : page;
 
     try {
-      const response = await orderAPI.getMyOrders(
-        currentPage,
-        pageSize,
-        statusFilter === "all" ? "" : statusFilter
-      );
+      const response = await orderAPI.getMyOrders({
+        page: currentPage,
+        limit: pageSize,
+        status: statusFilter === "all" ? undefined : statusFilter,
+      });
 
       const newOrders = response.data.data.orders || [];
       const total = response.data.data.total || 0;
@@ -199,7 +231,7 @@ const OrdersSection = () => {
         const updatedOrders = [...orders, ...newOrders];
         setOrders(updatedOrders);
         setDisplayedOrders(updatedOrders);
-        setPage(prev => prev + 1);
+        setPage((prev) => prev + 1);
         setHasMore(updatedOrders.length < total);
       }
     } catch (error) {
@@ -268,24 +300,29 @@ const OrdersSection = () => {
           {/* FILTER BUTTONS */}
           <div className="flex gap-2 overflow-x-auto pb-4 border-b mb-6">
             {statusButtons.map((btn) => (
-              <Button
-                key={btn.value}
-                variant={statusFilter === btn.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setStatusFilter(btn.value)}
-                className="whitespace-nowrap"
-              >
-                {btn.label}
-              </Button>
+              <div key={btn.value} className="relative">
+                <Button
+                  variant={statusFilter === btn.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setStatusFilter(btn.value)}
+                  className="whitespace-nowrap flex items-center gap-2"
+                >
+                  {btn.label}
+
+                  {statusCounts[btn.value] > 0 && (
+                    <Badge className="bg-slate-100 text-red-500  font-medium">
+                      {statusCounts[btn.value]}
+                    </Badge>
+                  )}
+                </Button>
+              </div>
             ))}
           </div>
 
           <div className="space-y-4 min-h-[400px]">
             {/* SKELETON */}
             {isInitialLoading ? (
-              [...Array(5)].map((_, i) => (
-                <OrderSkeleton key={i} />
-              ))
+              [...Array(5)].map((_, i) => <OrderSkeleton key={i} />)
             ) : displayedOrders.length === 0 ? (
               <div className="text-center py-16 flex flex-col items-center justify-center">
                 <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -339,8 +376,6 @@ const OrdersSection = () => {
           </div>
         </CardContent>
       </Card>
-
-      {/* BỎ DIALOG CHI TIẾT → DÙNG TRANG RIÊNG */}
     </div>
   );
 };
@@ -390,7 +425,8 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
           <div>
             <p className="text-sm text-muted-foreground">Nhận hàng</p>
             <p className="font-medium">
-              {order.shippingAddress?.fullName} ({order.shippingAddress?.phoneNumber})
+              {order.shippingAddress?.fullName} (
+              {order.shippingAddress?.phoneNumber})
             </p>
           </div>
         </div>
@@ -401,18 +437,25 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
 
       <div className="p-4 space-y-4">
         {order.items?.map((item, index) => {
-          const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+          const imageUrl = item.images?.[0]
+            ? getImageUrl(item.images[0])
+            : null;
           const variantLabel = getVariantLabel(item);
 
           return (
-            <div key={index} className="flex items-center gap-4">
+            <div
+              key={item._id || `${order._id}-${index}`}
+              className="flex items-center gap-4"
+            >
               <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
                 {imageUrl ? (
                   <img
                     src={imageUrl}
                     alt={item.productName}
                     className="w-full h-full object-cover rounded"
-                    onError={(e) => { e.target.src = PLACEHOLDER_IMG; }}
+                    onError={(e) => {
+                      e.target.src = PLACEHOLDER_IMG;
+                    }}
                   />
                 ) : (
                   <Package className="w-8 h-8 text-gray-400" />
@@ -420,11 +463,17 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
               </div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-medium line-clamp-1">{item.productName}</h4>
-                <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
-                <p className="text-sm text-muted-foreground">SL: {item.quantity}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {variantLabel}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  SL: {item.quantity}
+                </p>
               </div>
               <div className="text-right">
-                <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
+                <p className="font-semibold">
+                  {formatPrice(item.price * item.quantity)}
+                </p>
               </div>
             </div>
           );
@@ -432,7 +481,11 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
       </div>
 
       <div className="p-4 bg-muted/50 border-t flex items-center justify-end">
-        <Button variant="outline" size="sm" onClick={() => onViewDetail(order._id)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onViewDetail(order._id)}
+        >
           Xem chi tiết
         </Button>
       </div>
@@ -443,14 +496,18 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
 // ============================================
 // ORDER DETAIL DIALOG
 // ============================================
-const OrderDetailDialog = ({ open, onOpenChange, order, getImageUrl, getVariantLabel }) => (
+const OrderDetailDialog = ({
+  open,
+  onOpenChange,
+  order,
+  getImageUrl,
+  getVariantLabel,
+}) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-        <DialogDescription>
-          Mã đơn: #{order?.orderNumber}
-        </DialogDescription>
+        <DialogDescription>Mã đơn: #{order?.orderNumber}</DialogDescription>
       </DialogHeader>
       {order && (
         <div className="space-y-4">
@@ -477,7 +534,9 @@ const OrderDetailDialog = ({ open, onOpenChange, order, getImageUrl, getVariantL
 
           <div className="space-y-3">
             {order.items?.map((item, index) => {
-              const imageUrl = item.images?.[0] ? getImageUrl(item.images[0]) : null;
+              const imageUrl = item.images?.[0]
+                ? getImageUrl(item.images[0])
+                : null;
               const variantLabel = getVariantLabel(item);
 
               return (
@@ -488,7 +547,9 @@ const OrderDetailDialog = ({ open, onOpenChange, order, getImageUrl, getVariantL
                         src={imageUrl}
                         alt={item.productName}
                         className="w-full h-full object-cover rounded"
-                        onError={(e) => { e.target.src = PLACEHOLDER_IMG; }}
+                        onError={(e) => {
+                          e.target.src = PLACEHOLDER_IMG;
+                        }}
                       />
                     ) : (
                       <Package className="w-8 h-8 text-gray-400" />
@@ -497,9 +558,13 @@ const OrderDetailDialog = ({ open, onOpenChange, order, getImageUrl, getVariantL
                   <div className="flex-1">
                     <h4 className="font-medium">{item.productName}</h4>
                     {variantLabel !== "Không có" && (
-                      <p className="text-xs text-muted-foreground mt-1">{variantLabel}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {variantLabel}
+                      </p>
                     )}
-                    <p className="text-sm text-muted-foreground">x{item.quantity}</p>
+                    <p className="text-sm text-muted-foreground">
+                      x{item.quantity}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold">

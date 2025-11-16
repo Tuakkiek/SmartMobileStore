@@ -153,6 +153,14 @@ export const createOrder = async (req, res) => {
       variant.stock -= item.quantity;
       await variant.save({ session });
 
+      // ✅ INCREMENT VARIANT SALES COUNT
+      if (variant.incrementSales) {
+        await variant.incrementSales(item.quantity);
+      } else {
+        variant.salesCount = (variant.salesCount || 0) + item.quantity;
+        await variant.save({ session });
+      }
+
       // Tăng salesCount
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
@@ -439,6 +447,11 @@ export const cancelOrder = async (req, res) => {
         );
         if (variant) {
           variant.stock += item.quantity;
+          // ✅ DECREMENT VARIANT SALES COUNT
+          variant.salesCount = Math.max(
+            0,
+            (variant.salesCount || 0) - item.quantity
+          );
           await variant.save({ session });
         }
 
@@ -609,6 +622,11 @@ export const updateOrderStatus = async (req, res) => {
           );
           if (variant) {
             variant.stock += item.quantity;
+            // ✅ DECREMENT VARIANT SALES COUNT
+            variant.salesCount = Math.max(
+              0,
+              (variant.salesCount || 0) - item.quantity
+            );
             await variant.save({ session });
           }
 
