@@ -43,7 +43,9 @@ appleWatchSchema.add({
   variantModel: { type: String, default: "AppleWatchVariant" },
 });
 
+appleWatchSchema.path("productType").default("Apple Watch");
 appleWatchSchema.path("category").default("Apple Watch");
+
 
 const AppleWatch = mongoose.model("AppleWatch", appleWatchSchema, "applewatches");
 

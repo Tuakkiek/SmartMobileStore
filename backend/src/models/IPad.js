@@ -50,6 +50,7 @@ iPadSchema.add({
   variantModel: { type: String, default: "IPadVariant" },
 });
 
+iPadSchema.path("productType").default("iPad");
 iPadSchema.path("category").default("iPad");
 
 const IPad = mongoose.model("IPad", iPadSchema, "ipads");

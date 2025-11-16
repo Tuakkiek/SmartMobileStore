@@ -52,6 +52,7 @@ iPhoneSchema.add({
 });
 
 // Override category default
+iPhoneSchema.path("productType").default("iPhone");
 iPhoneSchema.path("category").default("iPhone");
 
 // Create model with explicit collection name

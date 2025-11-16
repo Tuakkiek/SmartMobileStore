@@ -25,7 +25,7 @@ export const createBaseVariantSchema = () => {
       },
       salesCount: { type: Number, default: 0, min: 0 },
     },
-    { 
+    {
       timestamps: true,
       // discriminatorKey removed — each variant type will have its own collection
     }
@@ -46,7 +46,6 @@ export const createBaseVariantSchema = () => {
     return this.salesCount;
   };
 
-
   return schema;
 };
 
@@ -58,7 +57,7 @@ export const createBaseProductSchema = () => {
     {
       name: { type: String, required: true, trim: true },
       model: { type: String, required: true, trim: true },
-      
+
       baseSlug: {
         type: String,
         required: true,
@@ -66,58 +65,65 @@ export const createBaseProductSchema = () => {
         sparse: true,
         trim: true,
       },
-      
+
       slug: { type: String, sparse: true, trim: true },
-      
+
       description: { type: String, trim: true, default: "" },
-      
+
       // Specifications - will be overridden by each product type
       specifications: {
         type: mongoose.Schema.Types.Mixed,
         default: {},
       },
-      
+
       variants: [
-        { type: mongoose.Schema.Types.ObjectId, refPath: 'variantModel' }
+        { type: mongoose.Schema.Types.ObjectId, refPath: "variantModel" },
       ],
-      
+
       // Track which variant model/collection to populate from
       variantModel: { type: String, required: true },
-      
+
       condition: {
         type: String,
         enum: ["NEW", "LIKE_NEW"],
         default: "NEW",
         required: true,
       },
-      
+
       brand: { type: String, default: "Apple", trim: true },
-      
+
+      // ✅ THÊM CÁI NÀY
+      productType: {
+        type: String,
+        required: true,
+        enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
+      },
+
       category: {
         type: String,
         required: true,
         trim: true,
         enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"],
       },
-      
+
       status: {
         type: String,
         enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
         default: "AVAILABLE",
       },
-      
+
       installmentBadge: {
         type: String,
         enum: ["NONE", "Trả góp 0%", "Trả góp 0%, trả trước 0đ"],
         default: "NONE",
       },
-      
+
       createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
       },
-      
+
       averageRating: { type: Number, default: 0, min: 0, max: 5 },
       totalReviews: { type: Number, default: 0, min: 0 },
       salesCount: { type: Number, default: 0, min: 0 },
@@ -149,9 +155,9 @@ export const createBaseProductSchema = () => {
 
   schema.methods.getMinPrice = async function () {
     if (!this.variants || this.variants.length === 0) return 0;
-    
+
     await this.populate("variants");
-    const prices = this.variants.map(v => v.price).filter(p => p > 0);
+    const prices = this.variants.map((v) => v.price).filter((p) => p > 0);
     return prices.length > 0 ? Math.min(...prices) : 0;
   };
 

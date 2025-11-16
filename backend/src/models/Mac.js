@@ -48,6 +48,7 @@ macSchema.add({
   variantModel: { type: String, default: "MacVariant" },
 });
 
+macSchema.path("productType").default("Mac");
 macSchema.path("category").default("Mac");
 
 const Mac = mongoose.model("Mac", macSchema, "macs");

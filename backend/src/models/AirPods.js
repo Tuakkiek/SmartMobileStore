@@ -43,6 +43,7 @@ airPodsSchema.add({
   variantModel: { type: String, default: "AirPodsVariant" },
 });
 
+airPodsSchema.path("productType").default("AirPods");
 airPodsSchema.path("category").default("AirPods");
 
 const AirPods = mongoose.model("AirPods", airPodsSchema, "airpods");
