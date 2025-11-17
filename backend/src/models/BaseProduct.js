@@ -70,6 +70,10 @@ export const createBaseProductSchema = () => {
 
       description: { type: String, trim: true, default: "" },
 
+      // ADD NEW FIELDS
+      featuredImage: { type: String, trim: true, default: "" },
+      videoUrl: { type: String, trim: true, default: "" },
+
       // Specifications - will be overridden by each product type
       specifications: {
         type: mongoose.Schema.Types.Mixed,
