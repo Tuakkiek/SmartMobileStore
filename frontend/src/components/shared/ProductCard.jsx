@@ -1,5 +1,7 @@
+// ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-
+// (Đã viết lại để responsive hoàn toàn)
+// ============================================
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -20,7 +22,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
 // ============================================================================
 // ÁNH XẠ: category (UI hiển thị) → productType (Backend API)
 // ============================================================================
@@ -32,7 +33,6 @@ const CATEGORY_TO_TYPE_MAP = {
   AppleWatch: "AppleWatch",
   Accessories: "Accessory", // ← Accessories (UI) → Accessory (Backend)
 };
-
 // ============================================================================
 // Trường key hiển thị variant theo từng loại sản phẩm
 // ============================================================================
@@ -44,32 +44,35 @@ const VARIANT_KEY_FIELD = {
   AppleWatch: "variantName",
   Accessories: "variantName",
 };
-
 // ============================================================================
-// COMPONENT CON: Hiển thị sao đánh giá
+// COMPONENT CON: Hiển thị sao đánh giá (Đã tối ưu responsive)
 // ============================================================================
 const StarRating = ({ rating, reviewCount = 0 }) => {
   const roundedRating = Math.round(rating);
-  const totalReviewsText = `(${reviewCount || 0} đánh giá)`;
-
+  const totalReviewsText = `(${reviewCount || 0})`;
   return (
-    <div className="flex items-center gap-[1px]">
+    // Đã thêm md:gap-[1px]
+    <div className="flex items-center gap-0">
       {[...Array(5)].map((_, i) => (
         <Star
           key={i}
-          className={`w-3 h-3 ${
+          // Đã thêm md:w-3 md:h-3 (nhỏ hơn trên mobile)
+          className={`w-2 h-2 md:w-3 md:h-3 ${
             i < roundedRating
               ? "fill-yellow-400 text-yellow-400"
               : "text-gray-300"
           }`}
         />
       ))}
-      <span className="text-xs text-gray-500 ml-1">{totalReviewsText}</span>
+      {/* Đã thêm md:text-xs (nhỏ hơn trên mobile) */}
+      <span className="text-[10px] text-gray-500 ml-1 md:text-xs">
+        {totalReviewsText}
+      </span>
     </div>
   );
 };
 // ============================================================================
-// COMPONENT CHÍNH: ProductCard
+// COMPONENT CHÍNH: ProductCard (Đã viết lại)
 // ============================================================================
 const ProductCard = ({
   product, // Dữ liệu sản phẩm từ parent
@@ -81,7 +84,6 @@ const ProductCard = ({
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
-
   // ==========================================================================
   // STATE
   // ==========================================================================
@@ -89,13 +91,10 @@ const ProductCard = ({
   const [selectedVariant, setSelectedVariant] = useState(null); // Variant đang chọn
   const [showDeleteDialog, setShowDeleteDialog] = useState(false); // Dialog xóa
   const [isVariantReady, setIsVariantReady] = useState(false); // Sẵn sàng navigate
-
   // Kiểm tra quyền Admin/Kho
   const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
-
   // Đảm bảo variants luôn là array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
-
   // ==========================================================================
   // 1. TỰ ĐỘNG CHỌN VARIANT MẶC ĐỊNH (Ưu tiên stock > 0 + slug)
   // ==========================================================================
@@ -105,16 +104,13 @@ const ProductCard = ({
       setIsVariantReady(false);
       return;
     }
-
     let variant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
     if (!variant) variant = safeVariants.find((v) => v.sku && v.slug);
     if (!variant) variant = safeVariants.find((v) => v.sku);
     if (!variant) variant = safeVariants[0];
-
     setSelectedVariant(variant);
     setIsVariantReady(!!(variant?.sku && (variant?.slug || product.baseSlug)));
   }, [product.variants, product.baseSlug, product.name, safeVariants]);
-
   // ==========================================================================
   // 2. DỮ LIỆU HIỂN THỊ HIỆN TẠI
   // ==========================================================================
@@ -124,13 +120,11 @@ const ProductCard = ({
     current.originalPrice || product.originalPrice || 0;
   const rating = product.averageRating || 0;
   const reviewCount = product.reviewCount || 0;
-
   const displayImage =
     current?.images?.[0] ||
     (Array.isArray(product.images) ? product.images[0] : null) ||
     product.image ||
     "/placeholder.png";
-
   const discountPercent =
     displayOriginalPrice > displayPrice
       ? Math.round(
@@ -159,12 +153,10 @@ const ProductCard = ({
     product.installmentBadge.toLowerCase() !== "none"
       ? product.installmentBadge
       : null;
-
   // ==========================================================================
   // 4. DANH SÁCH NÚT CHỌN VARIANT (128GB, 256GB, 1TB...)
   // ==========================================================================
   const keyField = VARIANT_KEY_FIELD[product.category] || "variantName";
-
   // Hàm chuẩn hóa dung lượng: chuyển TB → GB để so sánh đúng
   const normalizeStorage = (value) => {
     if (!value) return 0;
@@ -173,7 +165,6 @@ const ProductCard = ({
     if (isNaN(num)) return 0;
     return str.includes("TB") ? num * 1024 : num; // 1TB = 1024GB
   };
-
   const variantKeyOptions = Array.from(
     new Set(
       safeVariants.filter((v) => v && v[keyField]).map((v) => v[keyField])
@@ -181,9 +172,7 @@ const ProductCard = ({
   )
     // SẮP XẾP ĐÚNG: 128GB → 256GB → 512GB → 1TB → 2TB
     .sort((a, b) => normalizeStorage(a) - normalizeStorage(b));
-
   const totalStock = safeVariants.reduce((sum, v) => sum + (v?.stock || 0), 0);
-
   // ==========================================================================
   // 5. EVENT HANDLERS
   // ==========================================================================
@@ -199,16 +188,13 @@ const ProductCard = ({
       setIsVariantReady(!!(variant.sku && variant.slug));
     }
   };
-
   const handleAddToCart = async (e) => {
     e.stopPropagation();
     e.preventDefault();
-
     if (!isAuthenticated || user?.role !== "CUSTOMER") {
       navigate("/login");
       return;
     }
-
     if (!selectedVariant) {
       toast.error("Vui lòng chọn phiên bản");
       return;
@@ -217,19 +203,16 @@ const ProductCard = ({
       toast.error("Sản phẩm tạm hết hàng");
       return;
     }
-
     setIsAdding(true);
     try {
       const productType =
         CATEGORY_TO_TYPE_MAP[product.category] || product.category;
-
       // ĐÃ SỬA: Gọi addToCart với 3 tham số riêng
       const result = await addToCart(
         selectedVariant._id, // variantId
         1, // quantity
         productType // productType
       );
-
       if (result?.success) {
         toast.success("Đã thêm vào giỏ hàng", {
           description: `${product.name} • ${getVariantLabel(selectedVariant)}`,
@@ -242,22 +225,18 @@ const ProductCard = ({
       setIsAdding(false);
     }
   };
-
   const handleEditClick = (e) => {
     e.stopPropagation();
     onEdit?.(product);
   };
-
   const handleDeleteClick = (e) => {
     e.stopPropagation();
     setShowDeleteDialog(true);
   };
-
   const confirmDelete = () => {
     onDelete?.(product._id);
     setShowDeleteDialog(false);
   };
-
   const handleCardClick = () => {
     const categoryPath = {
       iPhone: "dien-thoai",
@@ -267,27 +246,22 @@ const ProductCard = ({
       AirPods: "tai-nghe",
       Accessories: "phu-kien",
     }[product.category];
-
     if (!categoryPath) {
       console.warn("Unknown category:", product.category);
       return;
     }
-
     if (selectedVariant?.sku && selectedVariant?.slug) {
       const url = `/${categoryPath}/${selectedVariant.slug}?sku=${selectedVariant.sku}`;
       navigate(url);
       return;
     }
-
     if (product.baseSlug) {
       const url = `/${categoryPath}/${product.baseSlug}`;
       navigate(url);
       return;
     }
-
     toast.error("Không thể xem chi tiết sản phẩm");
   };
-
   const getVariantLabel = (variant) => {
     if (!variant) return "";
     const cat = product?.category;
@@ -297,14 +271,19 @@ const ProductCard = ({
       return `${variant.cpuGpu} • ${variant.ram} • ${variant.storage}`;
     return variant.variantName || variant.storage || "";
   };
-
   // ==========================================================================
-  // 8. RENDER UI
+  // 8. RENDER UI (ĐÃ SỬA RESPONSIVE)
   // ==========================================================================
   return (
     <>
       <Card
-        className="w-full max-w-[280px] h-[600px] mx-auto overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 bg-white border-0 relative group"
+        // ==========================================
+        // SỬA LỖI TẠI ĐÂY
+        // 1. Bỏ h-[600px] và max-w-[280px]
+        // 2. Thêm flex flex-col để card tự co dãn
+        // 3. Đổi border-0 thành border (cho đẹp hơn)
+        // ==========================================
+        className="w-full h-full flex flex-col overflow-hidden rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 bg-white border relative group"
         onClick={isVariantReady ? handleCardClick : undefined}
         style={{ cursor: isVariantReady ? "pointer" : "default" }}
       >
@@ -313,7 +292,6 @@ const ProductCard = ({
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
           </div>
         )}
-
         {/* DEBUG UI: CHỈ ADMIN + DEV MODE */}
         {isAdmin && process.env.NODE_ENV === "development" && (
           <div className="absolute top-12 left-3 z-50 bg-black/90 text-white text-[10px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px]">
@@ -337,7 +315,6 @@ const ProductCard = ({
             </div>
           </div>
         )}
-
         {isAdmin && (
           <>
             <div className="absolute bottom-3 right-12 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -362,7 +339,6 @@ const ProductCard = ({
             </div>
           </>
         )}
-
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
             <Badge className="bg-red-600 hover:bg-red-600 text-white font-bold text-xs px-2 py-1 rounded-md shadow-md">
@@ -370,7 +346,6 @@ const ProductCard = ({
             </Badge>
           </div>
         )}
-
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
             <Badge
@@ -380,14 +355,17 @@ const ProductCard = ({
             </Badge>
           </div>
         )}
-
-        <div className="relative aspect-[3/4] bg-white overflow-hidden p-6 pt-10">
+        {/* ========================================== */}
+        {/* SỬA LỖI TỶ LỆ ẢNH VÀ PADDING */}
+        {/* Đổi aspect-[3/4] (cao) thành aspect-square (vuông) */}
+        {/* Đổi padding p-6 pt-10 thành p-2 md:p-4 */}
+        {/* ========================================== */}
+        <div className="relative aspect-square bg-white overflow-hidden p-2 md:p-4">
           <img
             src={displayImage}
             alt={product.name}
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
           />
-
           {!isAdmin &&
             isAuthenticated &&
             user?.role === "CUSTOMER" &&
@@ -403,56 +381,63 @@ const ProductCard = ({
               </Button>
             )}
         </div>
-
         {/* =====================================================
-             THÔNG TIN SẢN PHẨM - LUÔN CÂN BẰNG
-             ==================================================== */}
-        <div className="px-4 bg-white">
-          <h3 className="font-bold text-lg product-title">{product.name}</h3>
-
-          {/* BADGE TRẢ GÓP: LUÔN CHIẾM 1 DÒNG */}
+             THÔNG TIN SẢN PHẨM - ĐÃ TỐI ƯU FLEXBOX & RESPONSIVE
+           ==================================================== */}
+        {/* Thêm flex-1 flex flex-col để lấp đầy không gian còn lại */}
+        <div className="p-2 md:p-4 flex-1 flex flex-col">
+          {/* SỬA FONT & HEIGHT (thay thế <style jsx>)
+           1. Đổi text-lg thành text-sm md:text-base
+           2. Thêm line-clamp-2 (cần plugin tailwind)
+           3. Dùng h-10 (2.5rem) để giữ 2 dòng
+          */}
+          <h3 className="text-sm md:text-base font-bold line-clamp-2 overflow-hidden text-ellipsis">
+            {product.name}
+          </h3>
+          {/* BADGE TRẢ GÓP (Giữ nguyên) */}
           <div className="min-h-[1.5rem] mt-1 flex items-center">
             {installmentText && (
               <Badge
                 variant="outline"
-                className="bg-gray-200 text-gray-700 font-medium text-xs px-2 py-0.5 rounded-md border-0"
+                className="bg-gray-200 text-gray-700 font-medium text-[10px] md:text-xs px-2 py-0.5 rounded-md border-0"
               >
                 {installmentText}
               </Badge>
             )}
           </div>
-
-          {/* GIÁ: LUÔN CHIẾM 2 DÒNG */}
+          {/* GIÁ (Sửa cỡ chữ) */}
           <div className="mt-1">
-            {/* Dòng 1: Giá gốc - luôn chiếm chỗ */}
-            <div className="min-h-[1.25rem] flex items-center">
+            <div className="min-h-[1rem] md:min-h-[1.25rem] flex items-center">
               {displayOriginalPrice > displayPrice ? (
-                <p className="text-sm text-gray-500 line-through">
+                <p className="text-xs md:text-sm text-gray-500 line-through">
                   {formatPrice(displayOriginalPrice)}
                 </p>
               ) : (
-                <span className="invisible text-sm select-none">—</span>
+                <span className="invisible text-xs md:text-sm select-none">
+                  —
+                </span>
               )}
             </div>
-
-            {/* Dòng 2: Giá hiện tại */}
-            <p className="text-2xl font-bold text-red-600">
+            {/* SỬA CỠ CHỮ: text-2xl -> text-base md:text-lg */}
+            <p className="text-base md:text-lg font-bold text-red-600">
               {formatPrice(displayPrice)}
             </p>
           </div>
-
-          <div className="mt-3">
+          <div className="mt-2">
             <StarRating rating={rating} reviewCount={reviewCount} />
             <div className="mt-2 border-b border-gray-200"></div>
           </div>
-
+          {/* Thêm flex-grow để đẩy variant và stock xuống đáy card */}
+          <div className="flex-grow" />
+          {/* NÚT VARIANT (Sửa padding/text) */}
           {variantKeyOptions.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-3">
               {variantKeyOptions.map((keyValue) => (
                 <button
                   key={keyValue}
                   onClick={(e) => handleVariantKeyClick(e, keyValue)}
-                  className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                  // Sửa kích thước nút
+                  className={`px-2 py-0.5 text-[10px] md:px-3 md:py-1 md:text-xs font-medium rounded-full border transition-all ${
                     current[keyField] === keyValue
                       ? "bg-red-600 text-white border-red-600"
                       : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
@@ -463,18 +448,20 @@ const ProductCard = ({
               ))}
             </div>
           )}
-
-          {totalStock === 0 && (
-            <p className="text-xs text-red-600 font-medium mt-2">Hết hàng</p>
-          )}
-          {totalStock > 0 && totalStock <= 5 && (
-            <p className="text-xs text-orange-600 font-medium mt-2">
-              Chỉ còn {totalStock} sản phẩm!
-            </p>
-          )}
+          {/* STOCK (Thêm min-height để giữ layout) */}
+          <div className="min-h-[1.25rem] mt-2">
+            {totalStock === 0 && (
+              <p className="text-xs text-red-600 font-medium">Hết hàng</p>
+            )}
+            {totalStock > 0 && totalStock <= 5 && (
+              <p className="text-xs text-orange-600 font-medium">
+                Chỉ còn {totalStock} sản phẩm!
+              </p>
+            )}
+          </div>
         </div>
       </Card>
-
+      {/* ... (AlertDialog giữ nguyên) ... */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -498,22 +485,7 @@ const ProductCard = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* CSS: Tên sản phẩm luôn 2 dòng */}
-      <style jsx>{`
-        .product-title {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          line-height: 1.4rem;
-          max-height: 2.8rem;
-          min-height: 2.8rem;
-          text-overflow: ellipsis;
-        }
-      `}</style>
     </>
   );
 };
-
 export default ProductCard;

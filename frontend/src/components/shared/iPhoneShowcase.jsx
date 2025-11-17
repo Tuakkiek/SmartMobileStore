@@ -1,9 +1,14 @@
-import React, { useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import React from "react";
+import { Plus } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 const iPhoneShowcase = () => {
-  const scrollContainerRef = useRef(null);
-
   const showcaseItems = [
     {
       id: 1,
@@ -42,16 +47,6 @@ const iPhoneShowcase = () => {
     },
   ];
 
-  const scroll = (direction) => {
-    if (scrollContainerRef.current) {
-      const scrollAmount = direction === "left" ? -400 : 400;
-      scrollContainerRef.current.scrollBy({
-        left: scrollAmount,
-        behavior: "smooth",
-      });
-    }
-  };
-
   return (
     <section className="py-16 bg-white">
       <div className="container mx-auto px-4">
@@ -62,93 +57,73 @@ const iPhoneShowcase = () => {
           </h2>
         </div>
 
-        {/* Showcase Cards Container */}
-        <div className="relative">
-          {/* Left Arrow */}
-          <button
-            onClick={() => scroll("left")}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white shadow-lg rounded-full p-3 transition-all duration-300 hover:scale-110"
-            aria-label="Scroll left"
-          >
-            <ChevronLeft className="w-6 h-6 text-gray-800" />
-          </button>
-
-          {/* Right Arrow */}
-          <button
-            onClick={() => scroll("right")}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white shadow-lg rounded-full p-3 transition-all duration-300 hover:scale-110"
-            aria-label="Scroll right"
-          >
-            <ChevronRight className="w-6 h-6 text-gray-800" />
-          </button>
-
-          {/* Scrollable Container */}
-          <div
-            ref={scrollContainerRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
+        {/* Carousel */}
+        <Carousel
+          opts={{
+            align: "start",
+            loop: false,
+          }}
+          className="w-full"
+        >
+          <CarouselContent className="-ml-4">
             {showcaseItems.map((item) => (
-              <div
+              <CarouselItem
                 key={item.id}
-className="flex-shrink-0 w-[320px] md:w-[360px] bg-black rounded-3xl overflow-hidden relative group cursor-pointer hover:scale-105 transition-transform duration-300 h-[500px]"
+                className="pl-4 basis-full sm:basis-1/2 lg:basis-1/3"
               >
-                {/* Background Image - Full card */}
-                <div className="absolute inset-0">
-                  <img
-                    src={item.image}
-                    alt={item.alt}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                <div className="bg-black rounded-3xl overflow-hidden relative group cursor-pointer hover:scale-105 transition-transform duration-300 h-[600px]">
+                  {/* Background Image - Full card */}
+                  <div className="absolute inset-0">
+                    <img
+                      src={item.image}
+                      alt={item.alt}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
 
-                {/* Gradient overlay for better text readability */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/30"></div>
+                  {/* Gradient overlay for better text readability */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/30"></div>
 
-                {/* Content - Positioned absolutely over the image */}
-                <div className="absolute top-0 left-0 right-0 p-8 z-10">
-                  <p className="text-gray-300 text-sm font-medium mb-2">
-                    {item.title}
-                  </p>
-                  <h3 className="text-white text-2xl font-semibold mb-1">
-                    {item.subtitle}
-                  </h3>
-                  {item.subtitle2 && (
-                    <h3 className="text-white text-2xl font-semibold mb-1">
-                      {item.subtitle2}
-                    </h3>
-                  )}
-                  {item.subtitle3 && (
-                    <h3 className="text-white text-2xl font-semibold mb-3">
-                      {item.subtitle3}
-                    </h3>
-                  )}
-                  {item.description && (
-                    <p className="text-gray-300 text-sm mt-4">
-                      {item.description}
+                  {/* Content - Positioned absolutely over the image */}
+                  <div className="absolute top-0 left-0 right-0 p-8 z-10">
+                    <p className="text-gray-300 text-sm font-medium mb-2">
+                      {item.title}
                     </p>
-                  )}
+                    <h3 className="text-white text-2xl font-semibold mb-1">
+                      {item.subtitle}
+                    </h3>
+                    {item.subtitle2 && (
+                      <h3 className="text-white text-2xl font-semibold mb-1">
+                        {item.subtitle2}
+                      </h3>
+                    )}
+                    {item.subtitle3 && (
+                      <h3 className="text-white text-2xl font-semibold mb-3">
+                        {item.subtitle3}
+                      </h3>
+                    )}
+                    {item.description && (
+                      <p className="text-gray-300 text-sm mt-4">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Plus Button */}
+                  <button
+                    className="absolute bottom-6 right-6 bg-white rounded-full p-2 hover:bg-gray-100 transition-all duration-300 shadow-lg z-20"
+                    aria-label={`Learn more about ${item.title}`}
+                  >
+                    <Plus className="w-5 h-5 text-gray-800" />
+                  </button>
                 </div>
-
-                {/* Plus Button */}
-                <button
-                  className="absolute bottom-6 right-6 bg-white rounded-full p-2 hover:bg-gray-100 transition-all duration-300 shadow-lg z-20"
-                  aria-label={`Learn more about ${item.title}`}
-                >
-                  <Plus className="w-5 h-5 text-gray-800" />
-                </button>
-              </div>
+              </CarouselItem>
             ))}
-          </div>
-        </div>
+          </CarouselContent>
+          <CarouselPrevious className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white shadow-lg rounded-full p-3 transition-all duration-300 hover:scale-110" />
+          <CarouselNext className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white shadow-lg rounded-full p-3 transition-all duration-300 hover:scale-110" />
+        </Carousel>
       </div>
-
-      {/* Hide scrollbar CSS */}
-      <style>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
     </section>
   );
 };

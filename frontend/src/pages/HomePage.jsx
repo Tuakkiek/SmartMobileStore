@@ -1,7 +1,7 @@
 // ============================================
 // FILE: src/pages/HomePage.jsx
 // Trang chủ theo phong cách FPT Shop
-// CẬP NHẬT: Hiển thị 4 sản phẩm/hàng trên mobile
+// CẬP NHẬT: Hiển thị 2 sản phẩm/hàng trên mobile để tránh vỡ layout
 // ============================================
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -142,8 +142,8 @@ const NewArrivalsSection = ({
           </Button>
         </div>
 
-        {/* CẬP NHẬT: grid-cols-4 cho mobile với padding tối ưu */}
-        <div className="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-4">
+        {/* CẬP NHẬT: grid-cols-2 cho mobile để tránh vỡ layout */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
@@ -205,8 +205,8 @@ const CategorySection = ({
           </Button>
         </div>
 
-        {/* CẬP NHẬT: grid-cols-4 cho mobile với padding tối ưu */}
-        <div className="grid grid-cols-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-4">
+        {/* CẬP NHẬT: grid-cols-2 cho mobile để tránh vỡ layout */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
@@ -374,14 +374,14 @@ const HomePage = () => {
 
       {/* Promo Strip */}
       <PromoStrip />
-     
+
       {/* Category Navigation */}
       <CategoryNav
         onCategoryClick={handleViewAll}
         productCounts={productCounts}
       />
       <DealsGridSection />
-       <MagicDealsSection />
+      <MagicDealsSection />
       {/* New Arrivals */}
       <NewArrivalsSection
         products={newArrivals}

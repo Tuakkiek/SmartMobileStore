@@ -1,7 +1,10 @@
-// frontend/src/components/shared/CategoryDropdown.jsx
+// ============================================
+// FILE: frontend/src/components/shared/CategoryDropdown.jsx
+// (Đã cập nhật responsive và dùng ảnh)
+// ============================================
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Package, Smartphone, Tablet, Laptop, Headphones, Watch } from "lucide-react";
+import { Menu, Package, X } from "lucide-react"; // Bỏ icon cũ, thêm X
 
 // Giả lập API
 import {
@@ -22,15 +25,35 @@ const API_MAP = {
   "Phụ Kiện": accessoryAPI,
 };
 
-const categories = ["iPhone", "iPad", "Mac", "AirPods", "Apple Watch", "Phụ Kiện"];
+const categories = [
+  "iPhone",
+  "iPad",
+  "Mac",
+  "AirPods",
+  "Apple Watch",
+  "Phụ Kiện",
+];
 
-const ICONS = {
-  iPhone: Smartphone,
-  iPad: Tablet,
-  Mac: Laptop,
-  AirPods: Headphones,
-  "Apple Watch": Watch,
-  "Phụ Kiện": Package,
+// ============================================
+// THAY ĐỔI 1: Dùng ảnh thay cho Icon
+// ============================================
+const CATEGORY_IMAGES = {
+  iPhone: "/iphone_17_pro_bac.png",
+  iPad: "/ipad_air_xanh.png",
+  Mac: "/mac.png",
+  AirPods: "/airpods.png",
+  "Apple Watch": "/applewatch.png",
+  "Phụ Kiện": "/op_ip_17_pro.png",
+};
+
+// Map tên danh mục (logic) → tên (hiển thị)
+const CATEGORY_DISPLAY_MAP = {
+  iPhone: "iPhone",
+  iPad: "iPad",
+  Mac: "Mac",
+  AirPods: "AirPods",
+  "Apple Watch": "Apple Watch",
+  "Phụ Kiện": "Phụ Kiện",
 };
 
 // Map tên danh mục → URL param
@@ -52,7 +75,8 @@ const CategoryDropdown = () => {
   const dropdownRef = useRef(null);
 
   // ============================================
-  // EXTRACT SERIES & GET REPRESENTATIVE IMAGE
+  // LOGIC (Giữ nguyên)
+  // (getSeriesKey, getRepresentativeImage, groupBySeries)
   // ============================================
   const getSeriesKey = (name, category) => {
     const patterns = {
@@ -68,12 +92,15 @@ const CategoryDropdown = () => {
 
     if (category === "iPhone") return `iPhone ${match[1]} Series`;
     if (category === "iPad") {
-      if (name.includes("Pro")) return `iPad Pro ${match[1].replace(/[^\d.]/g, "")}-inch`;
-      if (name.includes("Air")) return `iPad Air (${match[1].replace(/[^\d]/g, "")})`;
+      if (name.includes("Pro"))
+        return `iPad Pro ${match[1].replace(/[^\d.]/g, "")}-inch`;
+      if (name.includes("Air"))
+        return `iPad Air (${match[1].replace(/[^\d]/g, "")})`;
       return `iPad (${match[1].replace(/[^\d]/g, "")})`;
     }
     if (category === "Mac") {
-      if (name.includes("MacBook Pro")) return `MacBook Pro ${name.match(/14|16/)?.[0]}-inch (2023)`;
+      if (name.includes("MacBook Pro"))
+        return `MacBook Pro ${name.match(/14|16/)?.[0]}-inch (2023)`;
       if (name.includes("MacBook Air")) return "MacBook Air (2023)";
       if (name.includes("iMac")) return "iMac 24-inch (2023)";
     }
@@ -83,7 +110,8 @@ const CategoryDropdown = () => {
       return `Apple Watch Series ${match[1].match(/\d+/)?.[0]}`;
     }
     if (category === "AirPods") {
-      if (name.includes("Pro") && name.includes("2nd")) return "AirPods Pro (2nd)";
+      if (name.includes("Pro") && name.includes("2nd"))
+        return "AirPods Pro (2nd)";
       if (name.includes("Pro")) return "AirPods Pro (1st)";
       if (name.includes("Max")) return "AirPods Max";
       return `AirPods (${match[1].replace(/[^\d]/g, "")})`;
@@ -99,20 +127,23 @@ const CategoryDropdown = () => {
         return match.images?.[0] || match.variants?.[0]?.images?.[0] || "";
       }
     }
-    return products[0]?.images?.[0] || products[0]?.variants?.[0]?.images?.[0] || "";
+    return (
+      products[0]?.images?.[0] || products[0]?.variants?.[0]?.images?.[0] || ""
+    );
   };
 
   const groupBySeries = (products, categoryName) => {
     const groups = {};
-
     products.forEach((product) => {
-      const seriesKey = getSeriesKey(product.name || product.model, categoryName);
+      const seriesKey = getSeriesKey(
+        product.name || product.model,
+        categoryName
+      );
       if (!groups[seriesKey]) {
         groups[seriesKey] = { seriesName: seriesKey, products: [], image: "" };
       }
       groups[seriesKey].products.push(product);
     });
-
     return Object.values(groups)
       .map((group) => ({
         ...group,
@@ -132,7 +163,7 @@ const CategoryDropdown = () => {
   };
 
   // ============================================
-  // FETCH DATA
+  // FETCH DATA & EFFECTS (Giữ nguyên)
   // ============================================
   const fetchCategoryData = useCallback(
     async (categoryName) => {
@@ -165,7 +196,7 @@ const CategoryDropdown = () => {
     }
   }, [isOpen, fetchCategoryData, categoryData]);
 
-  // Click outside
+  // Click outside (Giữ nguyên)
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -177,13 +208,23 @@ const CategoryDropdown = () => {
   }, [isOpen]);
 
   // ============================================
-  // HANDLERS
+  // HANDLERS (Giữ nguyên)
   // ============================================
   const handleCategoryClick = (name, idx) => {
     setSelectedCategory(idx);
     fetchCategoryData(name);
+    // Trên Desktop, KHÔNG điều hướng ngay, chỉ hover
+    // Trên Mobile, ta muốn điều hướng
+    const isMobile = window.innerWidth < 768; // md breakpoint
+    if (isMobile) {
+      const param = CATEGORY_PARAM_MAP[name];
+      navigate(`/products?category=${encodeURIComponent(param)}`);
+      setIsOpen(false);
+    }
+  };
 
-    // CHUYỂN HƯỚNG NGAY LẬP TỨC đến trang danh mục
+  // Hàm này dùng cho nút "Xem tất cả" hoặc click category
+  const navigateToCategory = (name) => {
     const param = CATEGORY_PARAM_MAP[name];
     navigate(`/products?category=${encodeURIComponent(param)}`);
     setIsOpen(false); // Đóng dropdown
@@ -191,39 +232,63 @@ const CategoryDropdown = () => {
 
   const handleModelClick = (model) => {
     const catParam = CATEGORY_PARAM_MAP[categories[selectedCategory]];
-    navigate(`/products?category=${encodeURIComponent(catParam)}&model=${encodeURIComponent(model)}`);
+    navigate(
+      `/products?category=${encodeURIComponent(
+        catParam
+      )}&model=${encodeURIComponent(model)}`
+    );
     setIsOpen(false);
   };
 
   const currentData = categoryData[categories[selectedCategory]];
 
   // ============================================
-  // RENDER
+  // RENDER (Đã cập nhật responsive)
   // ============================================
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Trigger */}
+      {/* Trigger Button */}
       <button
-        onMouseEnter={() => setIsOpen(true)}
-        onClick={() => setIsOpen(!isOpen)}
+        onMouseEnter={() => setIsOpen(true)} // Tắt hover trên desktop để mobile dễ dùng
+        //onMouseEnter={() => setIsOpen(!isOpen)}
         className="bg-white text-black rounded-full px-6 py-3 flex items-center gap-2 transition-all duration-300 hover:bg-gray-100 hover:scale-105 shadow-sm font-medium"
       >
         <Menu className="w-5 h-5" />
         Danh mục
       </button>
 
-      {/* Dropdown */}
+      {/* ========================================== */}
+      {/* THAY ĐỔI 2: Panel responsive */}
+      {/* ========================================== */}
       {isOpen && (
         <div
-          className="fixed top-20 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] bg-white rounded-3xl shadow-2xl overflow-hidden z-50 hidden md:block"
-          onMouseLeave={() => setIsOpen(false)}
+          // Mobile: Toàn màn hình, bắt đầu từ top-20 (80px)
+          className="fixed inset-0 top-20 z-50 bg-white/40 backdrop-blur-3xl border border-white/20 overflow-y-auto
+                     md:inset-auto md:top-20 md:left-1/2 md:-translate-x-1/2 md:w-[1200px] md:h-[600px] md:rounded-3xl md:shadow-2xl md:overflow-hidden"
         >
-          <div className="flex h-full">
-            {/* Left: Categories */}
-            <div className="w-80 bg-gray-50 p-6">
-              <div className="space-y-1">
+          {/* Nút X đóng trên Mobile */}
+          <button
+            onClick={() => setIsOpen(false)}
+            className="absolute top-4 right-4 z-10 text-gray-500 hover:text-gray-800 md:hidden"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <div className="flex flex-col h-full md:flex-row">
+            {/* === Left: Categories === */}
+            <div
+              // Mobile: w-full, p-2
+              // Desktop: w-80, p-6
+              className="w-full bg-gray-50 p-2 md:w-80 md:p-6 md:overflow-y-auto"
+            >
+              <div
+                // Mobile: flex-row, cuộn ngang
+                // Desktop: flex-col
+                className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden"
+              >
                 {categories.map((cat, idx) => {
-                  const Icon = ICONS[cat];
+                  const imgSrc = CATEGORY_IMAGES[cat];
+                  const displayName = CATEGORY_DISPLAY_MAP[cat] || cat;
                   return (
                     <button
                       key={idx}
@@ -232,46 +297,66 @@ const CategoryDropdown = () => {
                         setSelectedCategory(idx);
                         fetchCategoryData(cat);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left font-medium transition-all ${
-                        selectedCategory === idx
-                          ? "bg-white text-black shadow-sm"
-                          : "text-gray-600 hover:bg-gray-100"
-                      }`}
+                      // Mobile: flex-col (icon trên, text dưới)
+                      // Desktop: flex-row (icon trái, text phải)
+                      className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl 
+                                  md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
+                                    selectedCategory === idx
+                                      ? "bg-white text-black shadow-sm"
+                                      : "text-gray-600 hover:bg-gray-100"
+                                  }`}
                     >
-                      <Icon className="w-5 h-5" />
-                      {cat}
+                      <img
+                        src={imgSrc}
+                        alt={displayName}
+                        // Mobile: w-10 h-10
+                        // Desktop: w-6 h-6
+                        className="w-14 h-14 md:w-10 md:h-10 object-contain"
+                      />
+                      <span className="text-center text-xs md:text-left md:text-base">
+                        {displayName}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Right: Content */}
-            <div className="flex-1 p-8 overflow-y-auto">
+            {/* === Right: Content === */}
+            <div
+              // Mobile: p-4
+              // Desktop: p-8
+              className="flex-1 p-4 overflow-y-auto md:p-8"
+            >
               {loading ? (
-                <div className="space-y-8">
-                  <div className="grid grid-cols-4 gap-4">
+                // --- Loading State (Responsive) ---
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                     {[...Array(4)].map((_, i) => (
                       <div key={i} className="animate-pulse">
-                        <div className="w-20 h-20 bg-gray-200 rounded-lg mx-auto"></div>
+                        <div className="w-16 h-16 bg-gray-200 rounded-lg mx-auto"></div>
                         <div className="h-3 bg-gray-200 rounded mt-2 w-16 mx-auto"></div>
                       </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
                     {[...Array(4)].map((_, i) => (
-                      <div key={i} className="bg-gray-50 rounded-xl p-4 h-32 animate-pulse"></div>
+                      <div
+                        key={i}
+                        className="bg-gray-50 rounded-xl p-4 h-32 animate-pulse"
+                      ></div>
                     ))}
                   </div>
                 </div>
               ) : currentData ? (
+                // --- Content State (Responsive) ---
                 <>
                   {/* Gợi ý */}
-                  <div className="mb-8">
-                    <h3 className="text-xl font-bold flex items-center gap-2 mb-4">
+                  <div className="mb-6">
+                    <h3 className="text-lg text-black font-bold flex items-center gap-2 mb-4 md:text-xl">
                       Gợi ý cho bạn
                     </h3>
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
                       {currentData.allProducts
                         .sort(() => 0.5 - Math.random())
                         .slice(0, 4)
@@ -279,16 +364,20 @@ const CategoryDropdown = () => {
                           <button
                             key={i}
                             onClick={() => handleModelClick(p.model || p.name)}
-                            className="group text-center"
+                            className="group text-center flex flex-col justify-start"
                           >
-                            <div className="w-20 h-20 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2">
+                            <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
                               <img
-                                src={p.images?.[0] || p.variants?.[0]?.images?.[0] || ""}
+                                src={
+                                  p.images?.[0] ||
+                                  p.variants?.[0]?.images?.[0] ||
+                                  ""
+                                }
                                 alt={p.name}
                                 className="w-full h-full object-contain group-hover:scale-110 transition-transform"
                               />
                             </div>
-                            <p className="text-sm text-gray-700 line-clamp-2 group-hover:text-black">
+                            <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
                               {p.name}
                             </p>
                           </button>
@@ -297,18 +386,18 @@ const CategoryDropdown = () => {
                   </div>
 
                   {/* Series Grid */}
-                  <h3 className="text-lg font-semibold mb-4">
+                  <h3 className="text-base text-black font-semibold mb-4 md:text-lg">
                     Chọn theo dòng {categories[selectedCategory]}
                   </h3>
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
                     {currentData.series.map((series, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleModelClick(series.seriesName)}
-                        className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-lg transition-all text-left group"
+                        className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
                       >
                         <div className="flex gap-3 items-start mb-3">
-                          <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                          <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 md:w-16 md:h-16">
                             {series.image ? (
                               <img
                                 src={series.image}
@@ -317,17 +406,17 @@ const CategoryDropdown = () => {
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                <Package className="w-8 h-8" />
+                                <Package className="w-6 h-6 md:w-8 md:h-8" />
                               </div>
                             )}
                           </div>
                           <div>
-                            <h4 className="font-bold text-base text-gray-900">
+                            <h4 className="font-bold text-sm text-gray-900 md:text-base">
                               {series.seriesName}
                             </h4>
                           </div>
                         </div>
-                        <div className="space-y-1 text-sm text-gray-600">
+                        <div className="space-y-1 text-xs text-gray-600 md:text-sm">
                           {series.products.slice(0, 3).map((p, i) => (
                             <p
                               key={i}

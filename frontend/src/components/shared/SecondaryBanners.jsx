@@ -1,122 +1,104 @@
-// ============================================
-// FILE: src/components/shared/SecondaryBanners.jsx
-// ============================================
 import React, { useState, useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button.jsx";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils"; // Giả định bạn có hàm cn này
+import Autoplay from "embla-carousel-autoplay";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"; // Giả định bạn có các component này
 
 const SecondaryBanners = () => {
+  // 1. Dữ liệu banners
   const banners = [
     {
       imageSrc: "/ip16e.png",
       link: "/products?category=Accessories",
-      height: "220px",
+      alt: "iPhone 16",
     },
     {
       imageSrc: "/cpuA19.png",
       link: "/products?category=AppleWatch",
-      height: "220px",
+      alt: "Apple A19 Pro",
     },
     {
       imageSrc: "/macpro14.png",
       link: "/products?category=AirPods",
-      height: "220px",
+      alt: "MacBook Pro",
+    },
+    {
+      imageSrc: "/banner_phu_ip17pro.png",
+      link: "/products?category=iPhone",
+      alt: "iPhone 17 Pro",
     },
   ];
 
-  const total = banners.length;
+  // 2. State và Cấu hình
+  const [api, setApi] = useState(null);
+  const [current, setCurrent] = useState(0); // Sẽ là 0 hoặc 1
+  const plugin = useRef(
+    Autoplay({
+      delay: 4000,
+      stopOnInteraction: true,
+      stopOnMouseEnter: true,
+    })
+  );
 
-  // clone để tạo vòng lặp mượt
-  const extended = [banners[total - 1], ...banners, banners[0]];
+  // === THAY ĐỔI 1: Định nghĩa số slide cuộn và số trang ===
+  // Đặt hằng số để dễ dàng thay đổi và tính toán
+  const SLIDES_TO_SCROLL = 1;
+  // Tính toán số lượng "trang" (dots) cần hiển thị
+  // Math.ceil đảm bảo rằng ngay cả khi bạn có 5 banner (5/2 = 2.5), nó sẽ làm tròn thành 3 trang.
+  const numPages = Math.ceil(banners.length / SLIDES_TO_SCROLL);
+  // ========================================================
 
-  const [index, setIndex] = useState(1); // bắt đầu ở banner thật đầu tiên
-  const [transitioning, setTransitioning] = useState(true);
-  const intervalRef = useRef(null);
-
-  // Auto slide
+  // 3. Effect và Hàm
   useEffect(() => {
-    startAutoSlide();
-    return stopAutoSlide;
-  }, []);
-
-  const startAutoSlide = () => {
-    stopAutoSlide();
-    intervalRef.current = setInterval(() => {
-      setIndex((prev) => prev + 1);
-      setTransitioning(true);
-    }, 3000);
-  };
-
-  const stopAutoSlide = () => {
-    clearInterval(intervalRef.current);
-  };
-
-  // Reset khi trượt đến clone
-  const handleTransitionEnd = () => {
-    if (index === total + 1) {
-      setTransitioning(false);
-      setIndex(1);
-    } else if (index === 0) {
-      setTransitioning(false);
-      setIndex(total);
+    if (!api) {
+      return;
     }
-  };
+    const onSelect = () => {
+      // api.selectedScrollSnap() trả về index của "trang" (snap)
+      setCurrent(api.selectedScrollSnap());
+    };
+    api.on("select", onSelect);
+    setCurrent(api.selectedScrollSnap());
+    return () => {
+      api.off("select", onSelect);
+    };
+  }, [api]);
 
-  // Khi chuyển index không có transition (reset tức thì)
-  useEffect(() => {
-    if (!transitioning) {
-      const timeout = setTimeout(() => {
-        setTransitioning(true);
-      }, 20);
-      return () => clearTimeout(timeout);
-    }
-  }, [transitioning]);
-
-  const goToNext = () => {
-    setIndex((prev) => prev + 1);
-    setTransitioning(true);
-    restartTimer();
-  };
-
-  const goToPrevious = () => {
-    setIndex((prev) => prev - 1);
-    setTransitioning(true);
-    restartTimer();
-  };
-
-  const goToSlide = (i) => {
-    setIndex(i + 1);
-    setTransitioning(true);
-    restartTimer();
-  };
-
-  const restartTimer = () => {
-    stopAutoSlide();
-    startAutoSlide();
+  const goToSlide = (index) => {
+    // scrollTo(index) sẽ cuộn đến "trang" có index đó
+    api?.scrollTo(index);
   };
 
   return (
-    <div className="w-full flex flex-col items-center -mt-5 mb-4 group/secondary">
-      <div className="relative w-full max-w-5xl px-1 overflow-hidden">
-        <div
-          className={cn(
-            "flex",
-            transitioning ? "transition-transform duration-700 ease-in-out" : ""
-          )}
-          onTransitionEnd={handleTransitionEnd}
-          style={{
-            transform: `translateX(-${index * 50}%)`, // mỗi banner chiếm 50%
-          }}
-        >
-          {extended.map((banner, i) => (
-<div key={i} className="w-1/2 flex-shrink-0 px-2">
+    <div className="relative w-full flex flex-col items-center justify-center -mt-5 mb-4 group/secondary">
+      <Carousel
+        setApi={setApi}
+        plugins={[plugin.current]}
+        opts={{
+          loop: true,
+          slidesToScroll: SLIDES_TO_SCROLL,
+        }}
+        className="relative w-full  px-1" 
+      >
+        <CarouselContent>
+          {banners.map((banner, i) => (
+            <CarouselItem
+              key={i}
+              className="basis-1/2 px-2 flex justify-center" // Căn giữa carousel items
+            >
               <button
-                onClick={() => banner.link && (window.location.href = banner.link)}
+                onClick={() =>
+                  banner.link && (window.location.href = banner.link)
+                }
                 className={cn(
-                  "relative w-full overflow-hidden rounded-2xl group/banner transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+                  "relative w-full overflow-hidden rounded-2xl group/banner transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
+                  "aspect-[21/9]" // Thêm tỷ lệ co dãn
                 )}
-                style={{ height: banner.height }}
               >
                 <img
                   src={banner.imageSrc}
@@ -125,60 +107,45 @@ const SecondaryBanners = () => {
                   onError={(e) => (e.target.style.display = "none")}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/banner:opacity-100 transition-opacity" />
-                <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+                <div className="absolute inset-0 flex items-center justify-center p-2 md:p-4 pointer-events-none">
                   <div className="text-center bg-black/20 group-hover/banner:bg-black/40 rounded-lg p-2 transition-all">
-                    <p className="text-white text-sm font-semibold mb-1">
+                    <p className="text-white text-xs md:text-sm font-semibold mb-1">
                       {banner.alt}
                     </p>
-                    <p className="text-white/80 text-xs">Nhấn để xem</p>
+                    <p className="text-white/80 text-[10px] md:text-xs">
+                      Nhấn để xem
+                    </p>
                   </div>
                 </div>
               </button>
-            </div>
+            </CarouselItem>
           ))}
-        </div>
+        </CarouselContent>
 
-        {/* Nút Trái */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 
-                     bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm 
-                     rounded-full w-10 h-10 opacity-0 group-hover/secondary:opacity-100 
-                     transition-opacity duration-300 z-10"
-          onClick={goToPrevious}
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
+        <CarouselPrevious className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-10 h-10 opacity-0 group-hover/secondary:opacity-100 transition-opacity duration-300 z-10" />
+        <CarouselNext className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-10 h-10 opacity-0 group-hover/secondary:opacity-100 transition-opacity duration-300 z-10" />
+      </Carousel>
 
-        {/* Nút Phải */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 
-                     bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm 
-                     rounded-full w-10 h-10 opacity-0 group-hover/secondary:opacity-100 
-                     transition-opacity duration-300 z-10"
-          onClick={goToNext}
-        >
-          <ChevronRight className="h-5 w-5" />
-        </Button>
-      </div>
-
-      {/* Dots */}
-      <div className="flex gap-2 mt-3">
-        {banners.map((_, i) => (
+      {/* === THAY ĐỔI 2: Logic render Dots === */}
+      <div className="flex gap-2 mt-3 justify-center">
+        {/* Thay vì .map qua 'banners', chúng ta tạo một mảng tạm
+          có độ dài bằng 'numPages' (trong trường hợp này là 2)
+        */}
+        {Array.from({ length: numPages }).map((_, i) => (
           <button
             key={i}
-            onClick={() => goToSlide(i)}
+            onClick={() => goToSlide(i)} // i ở đây sẽ là 0 hoặc 1
             className={cn(
               "w-2 h-2 rounded-full transition-all duration-300",
-              index === i + 1 ? "bg-blue-600 w-6" : "bg-gray-400 hover:bg-gray-600"
+              current === i // So sánh current (0 hoặc 1) với i (0 hoặc 1)
+                ? "bg-slate-900 w-6"
+                : "bg-gray-400 hover:bg-gray-600"
             )}
-            aria-label={`Go to slide ${i + 1}`}
+            aria-label={`Go to page ${i + 1}`}
           />
         ))}
       </div>
+      {/* ======================================= */}
     </div>
   );
 };
