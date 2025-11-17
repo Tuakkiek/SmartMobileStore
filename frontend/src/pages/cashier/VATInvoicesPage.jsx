@@ -45,7 +45,7 @@ import axios from "axios";
 const VATInvoicesPage = () => {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
- 
+
   // ============================================
   // STATE
   // ============================================
@@ -233,7 +233,7 @@ const VATInvoicesPage = () => {
       order.posInfo?.cashierName ||
       order.paymentInfo?.processedBy?.fullName ||
       order.posInfo?.staffName ||
-      "Kế toán";
+      "Thu ngân";
 
     const printWindow = window.open("", "", "width=800,height=600");
     const invoiceHTML = `
@@ -447,7 +447,7 @@ const VATInvoicesPage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">
-                  Hóa đơn VAT
+                  Hóa đơn
                 </p>
                 <h3 className="text-2xl font-bold">{stats.totalVATInvoices}</h3>
               </div>
@@ -579,7 +579,7 @@ const VATInvoicesPage = () => {
               </div>
 
               <div>
-                <Label>Hóa đơn VAT</Label>
+                <Label>Hóa đơn</Label>
                 <Select
                   value={filters.hasVAT}
                   onValueChange={(value) =>
@@ -591,8 +591,8 @@ const VATInvoicesPage = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Tất cả</SelectItem>
-                    <SelectItem value="yes">Đã xuất VAT</SelectItem>
-                    <SelectItem value="no">Chưa xuất VAT</SelectItem>
+                    <SelectItem value="yes">Đã xuất </SelectItem>
+                    <SelectItem value="no">Chưa xuất</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -739,7 +739,8 @@ const VATInvoicesPage = () => {
                   </p>
                   {isAdmin && (
                     <p className="text-sm">
-                      <strong>NV bán:</strong> {selectedOrder.posInfo?.staffName || "N/A"}
+                      <strong>NV bán:</strong>{" "}
+                      {selectedOrder.posInfo?.staffName || "N/A"}
                     </p>
                   )}
                   <p className="text-sm">

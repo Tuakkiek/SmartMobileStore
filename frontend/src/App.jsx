@@ -38,8 +38,8 @@ import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
 import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory"; // ✅ THÊM
-import AccountantDashboard from "@/pages/accountant/AccountantDashboard";
-import VATInvoicesPage from "@/pages/accountant/VATInvoicesPage";
+import CASHIERDashboard from "@/pages/CASHIER/CASHIERDashboard";
+import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
 
 // ============================================
 // SCROLL TO TOP COMPONENT
@@ -208,23 +208,17 @@ function App() {
         </Route>
 
         {/* ========================================
-            ACCOUNTANT ROUTES
+            CASHIER ROUTES
         ======================================== */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["ACCOUNTANT", "ADMIN"]}>
+            <ProtectedRoute allowedRoles={["CASHIER", "ADMIN"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route
-            path="/accountant/dashboard"
-            element={<AccountantDashboard />}
-          />
-          <Route
-            path="/accountant/vat-invoices"
-            element={<VATInvoicesPage />}
-          />
+          <Route path="/CASHIER/dashboard" element={<CASHIERDashboard />} />
+          <Route path="/CASHIER/vat-invoices" element={<VATInvoicesPage />} />
         </Route>
 
         {/* ========================================

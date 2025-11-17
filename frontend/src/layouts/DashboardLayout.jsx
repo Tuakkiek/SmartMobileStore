@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/layouts/DashboardLayout.jsx
-// ✅ UPDATED: Thêm menu cho POS_STAFF và ACCOUNTANT
+// ✅ UPDATED: Thêm menu cho POS_STAFF và CASHIER
 // ============================================
 import React from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
@@ -64,12 +64,12 @@ const DashboardLayout = () => {
         // ✅ THÊM 2 DÒNG NÀY
         { path: "/pos/orders", icon: History, label: "Lịch sử POS" },
         {
-          path: "/accountant/vat-invoices",
+          path: "/CASHIER/vat-invoices",
           icon: FileText,
-          label: "Hóa đơn VAT",
+          label: "Hóa đơn",
         },
 
-        { path: "/accountant/dashboard", icon: TrendingUp, label: "Kế toán" }
+        { path: "/CASHIER/dashboard", icon: TrendingUp, label: "Thu ngân" }
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
       items.push({
@@ -105,18 +105,18 @@ const DashboardLayout = () => {
         }
       );
     }
-    // ✅ MỚI: ACCOUNTANT MENU
-    else if (user?.role === "ACCOUNTANT") {
+    // ✅ MỚI: CASHIER MENU
+    else if (user?.role === "CASHIER") {
       items.push(
         {
-          path: "/accountant/dashboard",
+          path: "/CASHIER/dashboard",
           icon: TrendingUp,
           label: "Doanh thu",
         },
         {
-          path: "/accountant/vat-invoices",
+          path: "/CASHIER/vat-invoices",
           icon: FileText,
-          label: "Hóa đơn VAT",
+          label: "Hóa đơn",
         }
       );
     }
@@ -136,7 +136,7 @@ const DashboardLayout = () => {
       ORDER_MANAGER: "Quản lý đơn hàng",
       SHIPPER: "Nhân viên giao hàng",
       POS_STAFF: "Nhân viên bán hàng", // ✅ MỚI
-      ACCOUNTANT: "Kế toán", // ✅ MỚI
+      CASHIER: "Thu ngân", // ✅ MỚI
     };
     return roleMap[role] || role;
   };
@@ -185,9 +185,9 @@ const DashboardLayout = () => {
               } else if (item.path === "/pos/dashboard") {
                 // POS Dashboard active khi ở /pos/dashboard
                 isActive = location.pathname === "/pos/dashboard";
-              } else if (item.path === "/accountant/dashboard") {
-                // Accountant Dashboard active khi ở /accountant/dashboard
-                isActive = location.pathname === "/accountant/dashboard";
+              } else if (item.path === "/CASHIER/dashboard") {
+                // CASHIER Dashboard active khi ở /CASHIER/dashboard
+                isActive = location.pathname === "/CASHIER/dashboard";
               } else {
                 // Các trang khác dùng startsWith để highlight cả trang con
                 isActive = location.pathname.startsWith(item.path);

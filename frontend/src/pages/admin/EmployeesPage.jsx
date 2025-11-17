@@ -106,7 +106,7 @@ const EmployeesPage = () => {
       ORDER_MANAGER: "Quản lý đơn hàng",
       SHIPPER: "Nhân viên giao hàng",
       POS_STAFF: "Nhân viên bán hàng",
-      ACCOUNTANT: "Kế toán",
+      CASHIER: "Thu ngân",
       ADMIN: "Quản trị viên",
     };
 
@@ -222,7 +222,7 @@ const EmployeesPage = () => {
                     <option value="ORDER_MANAGER">Quản lý đơn hàng</option>
                     <option value="SHIPPER">Nhân viên giao hàng</option>
                     <option value="POS_STAFF">Nhân viên bán hàng</option>
-                    <option value="ACCOUNTANT">Kế toán</option>
+                    <option value="CASHIER">Thu ngân</option>
                     <option value="ADMIN">Quản trị viên</option>
                   </select>
                 </div>

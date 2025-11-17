@@ -57,8 +57,8 @@ const LoginPage = () => {
         case "POS_STAFF":
           navigate("/pos/dashboard");
           break;
-        case "ACCOUNTANT":
-          navigate("/accountant/dashboard");
+        case "CASHIER":
+          navigate("/CASHIER/dashboard");
           break;
         default:
           navigate("/");

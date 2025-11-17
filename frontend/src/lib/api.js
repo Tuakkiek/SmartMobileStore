@@ -91,7 +91,7 @@ export const cartAPI = {
   getCart: () => api.get("/cart"),
   addToCart: (data) => api.post("/cart", data),
   updateItem: (data) => api.put("/cart", data),
-removeItem: (itemId) => api.delete(`/cart/${itemId}`),
+  removeItem: (itemId) => api.delete(`/cart/${itemId}`),
   clearCart: () => api.delete("/cart"),
 };
 
@@ -117,10 +117,10 @@ export const posAPI = {
   // Chi tiết đơn POS
   getOrderById: (id) => api.get(`/pos/orders/${id}`),
 
-  // Danh sách đơn chờ thanh toán (kế toán)
+  // Danh sách đơn chờ thanh toán (Thu ngân)
   getPendingOrders: (params = {}) => api.get("/pos/pending-orders", { params }),
 
-  // Thanh toán đơn (kế toán)
+  // Thanh toán đơn (Thu ngân)
   processPayment: (orderId, data) =>
     api.post(`/pos/orders/${orderId}/payment`, data),
 
@@ -129,8 +129,7 @@ export const posAPI = {
     api.post(`/pos/orders/${orderId}/cancel`, data),
 
   // Xuất hóa đơn VAT
-  issueVAT: (orderId, data) =>
-    api.post(`/pos/orders/${orderId}/vat`, data),
+  issueVAT: (orderId, data) => api.post(`/pos/orders/${orderId}/vat`, data),
 };
 
 // ============================================
@@ -161,11 +160,13 @@ export const promotionAPI = {
 export const userAPI = {
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
-  updateAddress: (addressId, data) => api.put(`/users/addresses/${addressId}`, data),
+  updateAddress: (addressId, data) =>
+    api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
   getAllEmployees: () => api.get("/users/employees"),
   createEmployee: (data) => api.post("/users/employees", data),
-  toggleEmployeeStatus: (id) => api.patch(`/users/employees/${id}/toggle-status`),
+  toggleEmployeeStatus: (id) =>
+    api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
 };
 // ============================================

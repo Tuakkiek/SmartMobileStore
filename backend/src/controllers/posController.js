@@ -201,7 +201,7 @@ export const createPOSOrder = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Tạo đơn thành công. Vui lòng chuyển cho Kế toán xử lý.",
+      message: "Tạo đơn thành công. Vui lòng chuyển cho Thu ngân xử lý.",
       data: { order: order[0] },
     });
   } catch (error) {
@@ -217,7 +217,7 @@ export const createPOSOrder = async (req, res) => {
 };
 
 // ============================================
-// LẤY DANH SÁCH ĐƠN CHỜ THANH TOÁN (Kế toán)
+// LẤY DANH SÁCH ĐƠN CHỜ THANH TOÁN (Thu ngân)
 // ============================================
 export const getPendingOrders = async (req, res) => {
   try {
@@ -255,7 +255,7 @@ export const getPendingOrders = async (req, res) => {
 };
 
 // ============================================
-// XỬ LÝ THANH TOÁN (Kế toán)
+// XỬ LÝ THANH TOÁN (Thu ngân)
 // ============================================
 export const processPayment = async (req, res) => {
   const session = await mongoose.startSession();
@@ -329,7 +329,7 @@ export const processPayment = async (req, res) => {
 };
 
 // ============================================
-// HỦY ĐƠN (Kế toán) - ✅ FIXED: RESTORE STOCK & SALES
+// HỦY ĐƠN (Thu ngân) - ✅ FIXED: RESTORE STOCK & SALES
 // ============================================
 export const cancelPendingOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -402,7 +402,7 @@ export const cancelPendingOrder = async (req, res) => {
       }
     }
 
-    await order.cancel(req.user._id, reason || "Hủy bởi kế toán");
+    await order.cancel(req.user._id, reason || "Hủy bởi Thu ngân");
 
     await session.commitTransaction();
 
@@ -429,7 +429,7 @@ export const cancelPendingOrder = async (req, res) => {
 };
 
 // ============================================
-// XUẤT HÓA ĐƠN VAT (Kế toán)
+// XUẤT HÓA ĐƠN VAT (Thu ngân)
 // ============================================
 export const issueVATInvoice = async (req, res) => {
   try {
@@ -508,7 +508,7 @@ export const issueVATInvoice = async (req, res) => {
 };
 
 // ============================================
-// LẤY LỊCH SỬ ĐƠN POS (POS Staff / Accountant / Admin)
+// LẤY LỊCH SỬ ĐƠN POS (POS Staff / CASHIER / Admin)
 // ============================================
 export const getPOSOrderHistory = async (req, res) => {
   try {

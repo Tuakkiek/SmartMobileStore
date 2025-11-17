@@ -95,7 +95,7 @@ const posInfoSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ Schema thanh toán (Kế toán xử lý)
+// ✅ Schema thanh toán (Thu ngân xử lý)
 const paymentInfoSchema = new mongoose.Schema(
   {
     processedBy: {
@@ -163,7 +163,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: [
         "PENDING",
-        "PENDING_PAYMENT", // ✅ Chờ thanh toán (POS chuyển sang Kế toán)
+        "PENDING_PAYMENT", // ✅ Chờ thanh toán (POS chuyển sang Thu ngân)
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -197,7 +197,7 @@ const orderSchema = new mongoose.Schema(
     // ✅ Thông tin POS (chỉ có khi orderSource = IN_STORE)
     posInfo: posInfoSchema,
 
-    // ✅ Thông tin thanh toán (Kế toán xử lý)
+    // ✅ Thông tin thanh toán (Thu ngân xử lý)
     paymentInfo: paymentInfoSchema,
 
     // ✅ Hóa đơn VAT (nếu khách yêu cầu)
@@ -293,9 +293,9 @@ orderSchema.methods.cancel = async function (userId, note) {
   return this.save();
 };
 
-// ✅ MỚI: Xử lý thanh toán (Kế toán)
+// ✅ MỚI: Xử lý thanh toán (Thu ngân)
 orderSchema.methods.processPayment = async function (
-  accountantId,
+  CASHIERId,
   paymentReceived
 ) {
   if (this.status !== "PENDING_PAYMENT") {
@@ -327,7 +327,7 @@ orderSchema.methods.processPayment = async function (
     .padStart(6, "0")}`;
 
   this.paymentInfo = {
-    processedBy: accountantId,
+    processedBy: CASHIERId,
     processedAt: new Date(),
     paymentReceived,
     changeGiven,
@@ -339,7 +339,7 @@ orderSchema.methods.processPayment = async function (
 
   this.statusHistory.push({
     status: "DELIVERED",
-    updatedBy: accountantId,
+    updatedBy: CASHIERId,
     updatedAt: new Date(),
     note: `Đã thanh toán - Hóa đơn ${invoiceNumber}`,
   });

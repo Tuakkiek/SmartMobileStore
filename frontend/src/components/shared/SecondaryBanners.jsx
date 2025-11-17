@@ -36,7 +36,7 @@ const SecondaryBanners = () => {
 
   // 2. State và Cấu hình
   const [api, setApi] = useState(null);
-  const [current, setCurrent] = useState(0); // Sẽ là 0 hoặc 1
+  const [current, setCurrent] = useState(0);
   const plugin = useRef(
     Autoplay({
       delay: 4000,
@@ -45,13 +45,9 @@ const SecondaryBanners = () => {
     })
   );
 
-  // === THAY ĐỔI 1: Định nghĩa số slide cuộn và số trang ===
-  // Đặt hằng số để dễ dàng thay đổi và tính toán
+  // Logic tính toán số trang (Dots)
   const SLIDES_TO_SCROLL = 1;
-  // Tính toán số lượng "trang" (dots) cần hiển thị
-  // Math.ceil đảm bảo rằng ngay cả khi bạn có 5 banner (5/2 = 2.5), nó sẽ làm tròn thành 3 trang.
   const numPages = Math.ceil(banners.length / SLIDES_TO_SCROLL);
-  // ========================================================
 
   // 3. Effect và Hàm
   useEffect(() => {
@@ -59,7 +55,6 @@ const SecondaryBanners = () => {
       return;
     }
     const onSelect = () => {
-      // api.selectedScrollSnap() trả về index của "trang" (snap)
       setCurrent(api.selectedScrollSnap());
     };
     api.on("select", onSelect);
@@ -70,7 +65,6 @@ const SecondaryBanners = () => {
   }, [api]);
 
   const goToSlide = (index) => {
-    // scrollTo(index) sẽ cuộn đến "trang" có index đó
     api?.scrollTo(index);
   };
 
@@ -83,7 +77,7 @@ const SecondaryBanners = () => {
           loop: true,
           slidesToScroll: SLIDES_TO_SCROLL,
         }}
-        className="relative w-full  px-1" 
+        className="relative w-full  px-1"
       >
         <CarouselContent>
           {banners.map((banner, i) => (
@@ -96,16 +90,19 @@ const SecondaryBanners = () => {
                   banner.link && (window.location.href = banner.link)
                 }
                 className={cn(
-                  "relative w-full overflow-hidden rounded-2xl group/banner transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
+                  // === THAY ĐỔI 1: GỠ BỎ hover:scale-[1.02] ===
+                  "relative w-full overflow-hidden rounded-2xl group/banner transition-all duration-300 hover:shadow-lg",
                   "aspect-[21/9]" // Thêm tỷ lệ co dãn
                 )}
               >
                 <img
                   src={banner.imageSrc}
                   alt={banner.alt}
-                  className="w-full h-full object-cover"
+                  // === THAY ĐỔI 2: THÊM HIỆU ỨNG VÀO <img> ===
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover/banner:scale-[1.02]"
                   onError={(e) => (e.target.style.display = "none")}
                 />
+                {/* --- Các lớp overlay (giữ nguyên) --- */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/banner:opacity-100 transition-opacity" />
                 <div className="absolute inset-0 flex items-center justify-center p-2 md:p-4 pointer-events-none">
                   <div className="text-center bg-black/20 group-hover/banner:bg-black/40 rounded-lg p-2 transition-all">
@@ -126,18 +123,15 @@ const SecondaryBanners = () => {
         <CarouselNext className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white backdrop-blur-sm rounded-full w-10 h-10 opacity-0 group-hover/secondary:opacity-100 transition-opacity duration-300 z-10" />
       </Carousel>
 
-      {/* === THAY ĐỔI 2: Logic render Dots === */}
+      {/* Dots (giữ nguyên) */}
       <div className="flex gap-2 mt-3 justify-center">
-        {/* Thay vì .map qua 'banners', chúng ta tạo một mảng tạm
-          có độ dài bằng 'numPages' (trong trường hợp này là 2)
-        */}
         {Array.from({ length: numPages }).map((_, i) => (
           <button
             key={i}
-            onClick={() => goToSlide(i)} // i ở đây sẽ là 0 hoặc 1
+            onClick={() => goToSlide(i)}
             className={cn(
               "w-2 h-2 rounded-full transition-all duration-300",
-              current === i // So sánh current (0 hoặc 1) với i (0 hoặc 1)
+              current === i
                 ? "bg-slate-900 w-6"
                 : "bg-gray-400 hover:bg-gray-600"
             )}
@@ -145,7 +139,6 @@ const SecondaryBanners = () => {
           />
         ))}
       </div>
-      {/* ======================================= */}
     </div>
   );
 };

@@ -36,7 +36,7 @@ const addressSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
-    // ✅ THÊM POS_STAFF VÀ ACCOUNTANT
+    // ✅ THÊM POS_STAFF VÀ CASHIER
     role: {
       type: String,
       enum: [
@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema(
         "ORDER_MANAGER",
         "SHIPPER",
         "POS_STAFF", // ✅ NHÂN VIÊN BÁN HÀNG TRỰC TIẾP
-        "ACCOUNTANT", // ✅ KẾ TOÁN
+        "CASHIER", // ✅ Thu ngân
         "ADMIN",
       ],
       default: "USER",

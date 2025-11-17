@@ -102,7 +102,7 @@ export const getAllEmployees = async (req, res) => {
           "SHIPPER",
           "ADMIN",
           "POS_STAFF",
-          "ACCOUNTANT",
+          "CASHIER",
         ],
       },
     }).select("-password");

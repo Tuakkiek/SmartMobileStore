@@ -40,41 +40,37 @@ router.get(
 );
 
 // ============================================
-// ACCOUNTANT ROUTES
+// CASHIER ROUTES
 // ============================================
 
 // Lấy danh sách đơn chờ thanh toán
-router.get(
-  "/pending-orders",
-  restrictTo("ACCOUNTANT", "ADMIN"),
-  getPendingOrders
-);
+router.get("/pending-orders", restrictTo("CASHIER", "ADMIN"), getPendingOrders);
 
 // Xử lý thanh toán
 router.post(
   "/process-payment/:orderId",
-  restrictTo("ACCOUNTANT", "ADMIN"),
+  restrictTo("CASHIER", "ADMIN"),
   processPayment
 );
 
 // Hủy đơn chờ thanh toán
 router.post(
   "/cancel-order/:orderId",
-  restrictTo("ACCOUNTANT", "ADMIN"),
+  restrictTo("CASHIER", "ADMIN"),
   cancelPendingOrder
 );
 
 // Xuất hóa đơn VAT
 router.post(
   "/issue-vat/:orderId",
-  restrictTo("ACCOUNTANT", "ADMIN"),
+  restrictTo("CASHIER", "ADMIN"),
   issueVATInvoice
 );
 
-// ✅ TÙY CHỌN: Nếu ACCOUNTANT muốn xem tất cả đơn (không cần thiết)
+// ✅ TÙY CHỌN: Nếu CASHIER muốn xem tất cả đơn (không cần thiết)
 // router.get(
 //   "/orders",
-//   restrictTo("POS_STAFF", "ACCOUNTANT", "ADMIN"),
+//   restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
 //   getPOSOrderHistory
 // );
 

@@ -1,5 +1,5 @@
 // ============================================
-// FILE: frontend/src/pages/accountant/AccountantDashboard.jsx
+// FILE: frontend/src/pages/CASHIER/CASHIERDashboard.jsx
 // ✅ V2: Nhận đơn từ POS → Xử lý thanh toán → In hóa đơn
 // ============================================
 
@@ -31,7 +31,7 @@ import {
 import { formatPrice, formatDate } from "@/lib/utils";
 import axios from "axios";
 
-const AccountantDashboard = () => {
+const CASHIERDashboard = () => {
   // ============================================
   // STATE
   // ============================================
@@ -208,7 +208,7 @@ const AccountantDashboard = () => {
       order.posInfo?.cashierName ||
       order.paymentInfo?.processedBy?.fullName ||
       order.posInfo?.staffName ||
-      "Kế toán";
+      "Thu ngân";
     const printWindow = window.open("", "", "width=800,height=600");
     const invoiceHTML = `
       <!DOCTYPE html>
@@ -669,4 +669,4 @@ const AccountantDashboard = () => {
   );
 };
 
-export default AccountantDashboard;
+export default CASHIERDashboard;

@@ -108,7 +108,8 @@ const processAllData = ({
     .filter((order) => new Date(order.createdAt) >= today)
     .reduce((sum, order) => sum + order.totalAmount, 0);
 
-  const avgOrderValue = deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
+  const avgOrderValue =
+    deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
 
   // Order status
   const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
@@ -122,7 +123,11 @@ const processAllData = ({
   const iPads = Array.isArray(ipadsRes?.data?.data?.products)
     ? ipadsRes.data.data.products
     : [];
-  const macs = Array.isArray(macsRes?.data) ? macsRes.data : [];
+  const macs = Array.isArray(macsRes?.data?.data?.products)
+    ? macsRes.data.data.products
+    : Array.isArray(macsRes?.data)
+    ? macsRes.data
+    : [];
   const airPods = Array.isArray(airpodsRes?.data?.data?.products)
     ? airpodsRes.data.data.products
     : [];
@@ -133,7 +138,14 @@ const processAllData = ({
     ? accessoriesRes.data.data.products
     : [];
 
-  const allProducts = [...iPhones, ...iPads, ...macs, ...airPods, ...watches, ...accessories];
+  const allProducts = [
+    ...iPhones,
+    ...iPads,
+    ...macs,
+    ...airPods,
+    ...watches,
+    ...accessories,
+  ];
   const totalProducts = allProducts.length;
 
   // Stock and inventory
@@ -178,13 +190,17 @@ const processAllData = ({
       name: "iPhone",
       products: iphonesRes?.data?.data?.total || 0,
       stock: iPhones.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: iPhones.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
@@ -192,27 +208,35 @@ const processAllData = ({
       name: "iPad",
       products: ipadsRes?.data?.data?.total || 0,
       stock: iPads.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: iPads.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
     {
       name: "Mac",
-      products: macsRes?.data?.length || 0,
+      products: macsRes?.data?.data?.total || macsRes?.data?.length || 0,
       stock: macs.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: macs.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
@@ -220,13 +244,17 @@ const processAllData = ({
       name: "AirPods",
       products: airpodsRes?.data?.data?.total || 0,
       stock: airPods.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: airPods.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
@@ -234,13 +262,17 @@ const processAllData = ({
       name: "Watch",
       products: applewatchesRes?.data?.data?.total || 0,
       stock: watches.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: watches.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
@@ -248,13 +280,17 @@ const processAllData = ({
       name: "Phụ kiện",
       products: accessoriesRes?.data?.data?.total || 0,
       stock: accessories.reduce(
-        (sum, p) => sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
+        (sum, p) =>
+          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
         0
       ),
       value: accessories.reduce(
         (sum, p) =>
           sum +
-          (p.variants || []).reduce((s, v) => s + (v.price || 0) * (v.stock || 0), 0),
+          (p.variants || []).reduce(
+            (s, v) => s + (v.price || 0) * (v.stock || 0),
+            0
+          ),
         0
       ),
     },
@@ -270,7 +306,10 @@ const processAllData = ({
     return now >= start && now <= end && p.usedCount < p.usageLimit;
   }).length;
 
-  const usedPromotions = promotions.reduce((sum, p) => sum + (p.usedCount || 0), 0);
+  const usedPromotions = promotions.reduce(
+    (sum, p) => sum + (p.usedCount || 0),
+    0
+  );
 
   const topPromotions = [...promotions]
     .sort((a, b) => b.usedCount - a.usedCount)
@@ -333,14 +372,20 @@ const processAllData = ({
   });
 
   const currentRevenue = last30Days.reduce((sum, o) => sum + o.totalAmount, 0);
-  const previousRevenue = previous30Days.reduce((sum, o) => sum + o.totalAmount, 0);
+  const previousRevenue = previous30Days.reduce(
+    (sum, o) => sum + o.totalAmount,
+    0
+  );
 
   const revenueGrowth =
-    previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+    previousRevenue > 0
+      ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
+      : 0;
 
   const orderGrowth =
     previous30Days.length > 0
-      ? ((last30Days.length - previous30Days.length) / previous30Days.length) * 100
+      ? ((last30Days.length - previous30Days.length) / previous30Days.length) *
+        100
       : 0;
 
   // Hourly orders
@@ -362,7 +407,9 @@ const processAllData = ({
     { name: "Đã hủy", value: cancelledOrders, color: "#ef4444" },
     {
       name: "Đang xử lý",
-      value: orders.filter((o) => o.status === "CONFIRMED" || o.status === "SHIPPING").length,
+      value: orders.filter(
+        (o) => o.status === "CONFIRMED" || o.status === "SHIPPING"
+      ).length,
       color: "#3b82f6",
     },
   ];
@@ -440,17 +487,26 @@ const generateRevenueByMonth = (orders) => {
   for (let i = 5; i >= 0; i--) {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
     monthlyData[key] = 0;
     months.push({
       key,
-      name: date.toLocaleDateString("vi-VN", { month: "short", year: "numeric" }),
+      name: date.toLocaleDateString("vi-VN", {
+        month: "short",
+        year: "numeric",
+      }),
     });
   }
 
   orders.forEach((order) => {
     const date = new Date(order.createdAt);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
     if (monthlyData[key] !== undefined) {
       monthlyData[key] += order.totalAmount;
     }
@@ -471,7 +527,10 @@ const generateSalesTrend = (orders) => {
     dailyData[key] = { orders: 0, revenue: 0 };
     days.push({
       key,
-      name: date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+      name: date.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+      }),
     });
   }
 

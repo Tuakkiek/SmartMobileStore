@@ -62,7 +62,7 @@ export const login = async (req, res) => {
       "ORDER_MANAGER",
       "SHIPPER",
       "POS_STAFF",
-      "ACCOUNTANT",
+      "CASHIER",
       "ADMIN",
     ];
 
