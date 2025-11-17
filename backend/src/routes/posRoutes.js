@@ -36,10 +36,10 @@ router.get(
   getPOSOrderHistory
 );
 
-// ✅ THÊM: LẤY CHI TIẾT ĐƠN HÀNG (DÙNG LẠI TỪ ORDER CONTROLLER)
+// LẤY CHI TIẾT ĐƠN HÀNG (DÙNG LẠI TỪ ORDER CONTROLLER)
 router.get(
   "/orders/:id",
-  restrictTo("POS_STAFF", "ADMIN"),
+  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
   getOrderById // ← TÁI SỬ DỤNG, ĐÃ CÓ KIỂM TRA QUYỀN
 );
 
@@ -71,11 +71,11 @@ router.post(
   issueVATInvoice
 );
 
-// ✅ TÙY CHỌN: Nếu CASHIER muốn xem tất cả đơn (không cần thiết)
-// router.get(
-//   "/orders",
-//   restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
-//   getPOSOrderHistory
-// );
+// Lấy lịch sử đơn đã thanh toán
+router.get(
+  "/orders",
+  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
+  getPOSOrderHistory
+);
 
 export default router;

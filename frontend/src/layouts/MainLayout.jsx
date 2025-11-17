@@ -55,6 +55,10 @@ const MainLayout = () => {
       navigate("/warehouse/products");
     } else if (user?.role === "ORDER_MANAGER") {
       navigate("/order-manager/orders");
+    } else if (user?.role === "POS_STAFF") {
+      navigate("/pos/dashboard");
+    } else if (user?.role === "CASHIER") {
+      navigate("/CASHIER/dashboard");
     }
     setMobileMenuOpen(false);
   };

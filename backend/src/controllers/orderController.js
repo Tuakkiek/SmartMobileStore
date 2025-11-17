@@ -1,8 +1,3 @@
-// ============================================
-// FILE: backend/src/controllers/orderController.js
-// FIXED: Handle missing productId in cart items + ADDED RETURNED status
-// ============================================
-
 import mongoose from "mongoose";
 import axios from "axios";
 import Order from "../models/Order.js";
@@ -350,7 +345,7 @@ export const getMyOrders = async (req, res) => {
 };
 
 // ============================================
-// GET ORDER BY ID
+// GET ORDER BY ID (ĐÃ SỬA LOGIC PHÂN QUYỀN)
 // ============================================
 export const getOrderById = async (req, res) => {
   try {
@@ -361,7 +356,7 @@ export const getOrderById = async (req, res) => {
           "items.productName items.quantity items.price items.images " +
           "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
           "items.variantSku items.originalPrice items.total " +
-          "statusHistory posInfo" // ← THÊM posInfo ĐỂ HIỆN THU NGÂN
+          "statusHistory posInfo paymentInfo customerId" // <-- Đã thêm customerId
       )
       .populate("customerId", "fullName phoneNumber email");
 
@@ -372,25 +367,58 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    // === QUYỀN TRUY CẬP MỞ RỘNG CHO POS_STAFF ===
+    // === THÊM LOG ĐỂ DEBUG ===
     const userId = req.user._id.toString();
+    console.log("=== ORDER ACCESS CHECK ===");
+    console.log("User ID:", userId);
+    console.log("User Role:", req.user.role);
+    console.log("Order ID:", order._id.toString());
+    console.log("Order customerId:", order.customerId._id.toString());
+    // console.log("Order posInfo:", JSON.stringify(order.posInfo, null, 2));
+    // console.log(
+    //   "Order paymentInfo:",
+    //   JSON.stringify(order.paymentInfo, null, 2)
+    // );
+
     const isOwner = order.customerId._id.toString() === userId;
     const isAdmin = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
     const isPOSStaff = req.user.role === "POS_STAFF";
+    const isCashier = req.user.role === "CASHIER";
 
-    // 1. Khách hàng xem đơn của mình
-    // 2. Admin/Order Manager xem tất cả
-    // 3. POS Staff xem đơn do mình tạo
+    console.log("isOwner:", isOwner);
+    console.log("isAdmin:", isAdmin);
+    console.log("isPOSStaff:", isPOSStaff);
+    console.log("isCashier:", isCashier);
+
+    // ============================================
+    // === LOGIC PHÂN QUYỀN ĐÃ SỬA ===
+    // ============================================
+    // Kiểm tra xem đây có phải là đơn hàng POS không (có posInfo hoặc paymentInfo)
+    const isPOSOrder = !!order.posInfo || !!order.paymentInfo;
+    console.log("isPOSOrder:", isPOSOrder);
+
     if (
       !isOwner &&
       !isAdmin &&
-      !(isPOSStaff && order.posInfo?.cashierId?.toString() === userId)
+      // Logic mới:
+      // Nếu KHÔNG PHẢI là ( (người dùng có vai trò POS/Cashier) VÀ (đây là đơn POS) )
+      // thì mới từ chối.
+      !((isPOSStaff || isCashier) && isPOSOrder)
     ) {
+      console.log(
+        "❌ ACCESS DENIED - User is not Owner, Admin, or relevant POS/Cashier"
+      );
       return res.status(403).json({
         success: false,
         message: "Bạn không có quyền xem đơn hàng này",
       });
     }
+    // ============================================
+    // === KẾT THÚC SỬA ĐỔI ===
+    // ============================================
+
+    console.log("✅ ACCESS GRANTED");
+    console.log("========================");
 
     res.json({
       success: true,
@@ -404,6 +432,7 @@ export const getOrderById = async (req, res) => {
     });
   }
 };
+
 // ============================================
 // CANCEL ORDER (Customer) - FIXED
 // ============================================

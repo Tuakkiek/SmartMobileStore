@@ -1,8 +1,3 @@
-// ============================================
-// FILE: frontend/src/App.jsx
-// ✅ HOÀN CHỈNH: Tất cả routes cho 6 vai trò
-// ============================================
-
 import React, { useEffect } from "react";
 import {
   BrowserRouter,
@@ -37,9 +32,12 @@ import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
-import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory"; // ✅ THÊM
+import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory";
 import CASHIERDashboard from "@/pages/CASHIER/CASHIERDashboard";
 import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
+
+// ✅ THÊM 1: Import trang 404
+import Page404 from "@/pages/Page404";
 
 // ============================================
 // SCROLL TO TOP COMPONENT
@@ -60,7 +58,12 @@ const ScrollToTop = () => {
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
   if (rehydrating) return <Loading />;
-  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+
+  // ✅ THAY ĐỔI 2: Chuyển hướng về Trang chủ (/) thay vì (/login)
+  // Điều này giúp người dùng mới không bị "ép" đăng nhập
+  if (!isAuthenticated || !user) return <Navigate to="/" replace />;
+  // ===========================================================
+
   if (allowedRoles && !allowedRoles.includes(user.role))
     return <Navigate to="/" replace />;
   return children;
@@ -203,8 +206,7 @@ function App() {
           }
         >
           <Route path="/pos/dashboard" element={<POSDashboard />} />
-          <Route path="/pos/orders" element={<POSOrderHistory />} />{" "}
-          {/* ✅ THÊM */}
+          <Route path="/pos/orders" element={<POSOrderHistory />} />
         </Route>
 
         {/* ========================================
@@ -237,7 +239,8 @@ function App() {
         {/* ========================================
             404 - NOT FOUND
         ======================================== */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* ✅ THAY ĐỔI 3: Dẫn các đường dẫn sai về trang 404 */}
+        <Route path="*" element={<Page404 />} />
       </Routes>
 
       <Toaster position="bottom-right" richColors />
