@@ -238,8 +238,8 @@ export const getEmptyFormData = (category = "iPhone") => ({
   description: "",
 
   // ADD THESE:
-  featuredImage: "",
-  videoUrl: "",
+  featuredImages: [""],
+  videoUrls: [""],
 
   status: "AVAILABLE",
   specifications: getEmptySpecs(category),

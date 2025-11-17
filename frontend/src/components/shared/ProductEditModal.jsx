@@ -42,6 +42,7 @@ import { useProductForm } from "@/hooks/products/useProductForm";
 import { useVariantForm } from "@/hooks/products/useVariantForm";
 import { useProductValidation } from "@/hooks/products/useProductValidation";
 import { useProductAPI } from "@/hooks/products/useProductAPI";
+import { Plus, Trash2 } from "lucide-react";
 
 const ProductEditModal = ({
   open,
@@ -361,18 +362,108 @@ const ProductEditModal = ({
                   />
                 </div>
 
-                {/* Featured Image URL */}
+                {/* Featured Images URLs - MULTIPLE */}
                 <div className="space-y-2">
-                  <Label>URL Ảnh Nổi Bật (Featured Image)</Label>
-                  <Input
-                    value={formData.featuredImage || ""}
-                    onChange={(e) =>
-                      handleBasicChange("featuredImage", e.target.value)
-                    }
-                    placeholder="https://example.com/featured-image.jpg"
-                  />
+                  <Label>URL Ảnh Nổi Bật (Featured Images)</Label>
+                  {(formData.featuredImages || [""]).map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        value={url}
+                        onChange={(e) => {
+                          const newImages = [
+                            ...(formData.featuredImages || [""]),
+                          ];
+                          newImages[idx] = e.target.value;
+                          handleBasicChange("featuredImages", newImages);
+                        }}
+                        placeholder="https://example.com/featured-image.jpg"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newImages = (
+                            formData.featuredImages || [""]
+                          ).filter((_, i) => i !== idx);
+                          handleBasicChange(
+                            "featuredImages",
+                            newImages.length ? newImages : [""]
+                          );
+                        }}
+                        disabled={
+                          (formData.featuredImages || [""]).length === 1
+                        }
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newImages = [
+                        ...(formData.featuredImages || [""]),
+                        "",
+                      ];
+                      handleBasicChange("featuredImages", newImages);
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> Thêm URL ảnh
+                  </Button>
                   <p className="text-xs text-gray-500">
-                    Ảnh này sẽ hiển thị nổi bật trên trang sản phẩm
+                    Các ảnh này sẽ hiển thị nổi bật trên trang sản phẩm
+                  </p>
+                </div>
+
+                {/* Video URLs - MULTIPLE */}
+                <div className="space-y-2">
+                  <Label>URL Video Giới Thiệu</Label>
+                  {(formData.videoUrls || [""]).map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        value={url}
+                        onChange={(e) => {
+                          const newVideos = [...(formData.videoUrls || [""])];
+                          newVideos[idx] = e.target.value;
+                          handleBasicChange("videoUrls", newVideos);
+                        }}
+                        placeholder="https://youtube.com/watch?v=... hoặc https://example.com/video.mp4"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newVideos = (formData.videoUrls || [""]).filter(
+                            (_, i) => i !== idx
+                          );
+                          handleBasicChange(
+                            "videoUrls",
+                            newVideos.length ? newVideos : [""]
+                          );
+                        }}
+                        disabled={(formData.videoUrls || [""]).length === 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newVideos = [...(formData.videoUrls || [""]), ""];
+                      handleBasicChange("videoUrls", newVideos);
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> Thêm URL video
+                  </Button>
+                  <p className="text-xs text-gray-500">
+                    URL YouTube hoặc video trực tiếp (MP4)
                   </p>
                 </div>
 

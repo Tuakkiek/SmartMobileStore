@@ -11,12 +11,7 @@ import { getEmptyFormData, emptyVariant } from "@/lib/productConstants";
  * @param {object} product - Dữ liệu sản phẩm (nếu ở chế độ edit)
  * @returns {object} { formData, setFormData, handleBasicChange, handleSpecChange, handleColorChange, addColor, removeColor, handleCustomSpecChange, addCustomSpec, removeCustomSpec }
  */
-export const useProductForm = (
-  open,
-  isEdit,
-  effectiveCategory,
-  product
-) => {
+export const useProductForm = (open, isEdit, effectiveCategory, product) => {
   const [formData, setFormData] = useState(null);
 
   // LOG để debug
@@ -101,6 +96,16 @@ export const useProductForm = (
         installmentBadge: product.installmentBadge || "NONE",
         specifications: specs,
         variants: populatedVariants,
+        featuredImages: Array.isArray(product.featuredImages)
+          ? product.featuredImages
+          : product.featuredImage
+          ? [product.featuredImage]
+          : [""],
+        videoUrls: Array.isArray(product.videoUrls)
+          ? product.videoUrls
+          : product.videoUrl
+          ? [product.videoUrl]
+          : [""],
       });
     } else {
       console.log("✅ Creating new product form");

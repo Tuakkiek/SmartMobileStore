@@ -117,11 +117,21 @@ export const useProductAPI = (
         };
       }
 
+      // Lọc bỏ URLs rỗng
+      cleaned.featuredImages = (cleaned.featuredImages || [])
+        .map((url) => url?.trim())
+        .filter(Boolean);
+
+      cleaned.videoUrls = (cleaned.videoUrls || [])
+        .map((url) => url?.trim())
+        .filter(Boolean);
+
       console.log("Cleaned payload:", JSON.stringify(cleaned, null, 2));
       return cleaned;
     },
     [effectiveCategory]
   );
+
   const handleSubmit = useCallback(
     async (e, formData) => {
       e.preventDefault();

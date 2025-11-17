@@ -386,40 +386,51 @@ const ProductDetailPage = () => {
                 </div>
               </div>
 
-              {/* Phần nội dung nổi bật */}
-              {(product.featuredImage || product.videoUrl) && (
+              {/* Phần nội dung nổi bật - MULTIPLE ITEMS */}
+              {((product.featuredImages && product.featuredImages.length > 0) ||
+                (product.videoUrls && product.videoUrls.length > 0)) && (
                 <div className="mt-4 space-y-3">
                   {/* Hình ảnh nổi bật */}
-                  {product.featuredImage && (
-                    <div className="rounded-lg overflow-hidden border">
-                      <img
-                        src={product.featuredImage}
-                        alt="Featured"
-                        className="w-full h-auto"
-                      />
-                    </div>
-                  )}
+                  {product.featuredImages &&
+                    product.featuredImages
+                      .filter(Boolean)
+                      .map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          className="rounded-lg overflow-hidden border"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Featured ${idx + 1}`}
+                            className="w-full h-auto"
+                          />
+                        </div>
+                      ))}
 
-                  {/* Video */}
-                  {product.videoUrl && (
-                    <div className="rounded-lg overflow-hidden border aspect-video">
-                      {product.videoUrl.includes("youtube.com") ||
-                      product.videoUrl.includes("youtu.be") ? (
-                        <iframe
-                          src={product.videoUrl.replace("watch?v=", "embed/")}
-                          className="w-full h-full"
-                          allowFullScreen
-                          title="Product Video"
-                        />
-                      ) : (
-                        <video
-                          src={product.videoUrl}
-                          controls
-                          className="w-full h-full"
-                        />
-                      )}
-                    </div>
-                  )}
+                  {/* Videos */}
+                  {product.videoUrls &&
+                    product.videoUrls.filter(Boolean).map((videoUrl, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-lg overflow-hidden border aspect-video"
+                      >
+                        {videoUrl.includes("youtube.com") ||
+                        videoUrl.includes("youtu.be") ? (
+                          <iframe
+                            src={videoUrl.replace("watch?v=", "embed/")}
+                            className="w-full h-full"
+                            allowFullScreen
+                            title={`Product Video ${idx + 1}`}
+                          />
+                        ) : (
+                          <video
+                            src={videoUrl}
+                            controls
+                            className="w-full h-full"
+                          />
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
