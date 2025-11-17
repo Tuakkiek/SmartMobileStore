@@ -360,6 +360,36 @@ const ProductEditModal = ({
                     placeholder="Nhập mô tả sản phẩm..."
                   />
                 </div>
+
+                {/* Featured Image URL */}
+                <div className="space-y-2">
+                  <Label>URL Ảnh Nổi Bật (Featured Image)</Label>
+                  <Input
+                    value={formData.featuredImage || ""}
+                    onChange={(e) =>
+                      handleBasicChange("featuredImage", e.target.value)
+                    }
+                    placeholder="https://example.com/featured-image.jpg"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Ảnh này sẽ hiển thị nổi bật trên trang sản phẩm
+                  </p>
+                </div>
+
+                {/* Video URL */}
+                <div className="space-y-2">
+                  <Label>URL Video Giới Thiệu</Label>
+                  <Input
+                    value={formData.videoUrl || ""}
+                    onChange={(e) =>
+                      handleBasicChange("videoUrl", e.target.value)
+                    }
+                    placeholder="https://youtube.com/watch?v=... hoặc https://example.com/video.mp4"
+                  />
+                  <p className="text-xs text-gray-500">
+                    URL YouTube hoặc video trực tiếp (MP4)
+                  </p>
+                </div>
               </TabsContent>
 
               {/* TAB THÔNG SỐ */}

@@ -236,6 +236,11 @@ export const getEmptyFormData = (category = "iPhone") => ({
   category,
   condition: "NEW",
   description: "",
+
+  // ADD THESE:
+  featuredImage: "",
+  videoUrl: "",
+
   status: "AVAILABLE",
   specifications: getEmptySpecs(category),
   variants: [emptyVariant(category)],

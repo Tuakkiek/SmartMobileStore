@@ -385,6 +385,43 @@ const ProductDetailPage = () => {
                   )}
                 </div>
               </div>
+
+              {/* Phần nội dung nổi bật */}
+              {(product.featuredImage || product.videoUrl) && (
+                <div className="mt-4 space-y-3">
+                  {/* Hình ảnh nổi bật */}
+                  {product.featuredImage && (
+                    <div className="rounded-lg overflow-hidden border">
+                      <img
+                        src={product.featuredImage}
+                        alt="Featured"
+                        className="w-full h-auto"
+                      />
+                    </div>
+                  )}
+
+                  {/* Video */}
+                  {product.videoUrl && (
+                    <div className="rounded-lg overflow-hidden border aspect-video">
+                      {product.videoUrl.includes("youtube.com") ||
+                      product.videoUrl.includes("youtu.be") ? (
+                        <iframe
+                          src={product.videoUrl.replace("watch?v=", "embed/")}
+                          className="w-full h-full"
+                          allowFullScreen
+                          title="Product Video"
+                        />
+                      ) : (
+                        <video
+                          src={product.videoUrl}
+                          controls
+                          className="w-full h-full"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
