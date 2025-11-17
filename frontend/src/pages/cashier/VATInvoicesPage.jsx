@@ -1,7 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/pos-staff/VATInvoicesPage.jsx
-// ✅ V2: Chỉ hiển thị đơn của user hiện tại, Admin thấy tất cả
-// + Bộ lọc nâng cao
+// ✅ V3: Đã xóa bộ lọc, chỉ giữ lại thanh tìm kiếm mã
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -9,15 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { toast } from "sonner";
+// Import Label bị xóa vì không còn dùng trong form
 import {
   Dialog,
   DialogContent,
@@ -25,17 +16,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import {
   Receipt,
   Search,
   Eye,
-  Calendar,
+  // Calendar, // Xóa
   DollarSign,
   TrendingUp,
   ShoppingBag,
   FileText,
   Download,
-  Filter,
+  // Filter, // Xóa
   X,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
@@ -47,24 +39,17 @@ const VATInvoicesPage = () => {
   const isAdmin = user?.role === "ADMIN";
 
   // ============================================
-  // STATE
+  // STATE (ĐÃ ĐƠN GIẢN HÓA)
   // ============================================
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
-  // Filters
+  // Chỉ giữ lại state cho tìm kiếm
+  const [searchInput, setSearchInput] = useState(""); // State cho ô input
   const [filters, setFilters] = useState({
-    search: "",
-    startDate: "",
-    endDate: "",
-    status: "",
-    paymentStatus: "",
-    minAmount: "",
-    maxAmount: "",
-    hasVAT: "",
+    search: "", // State kích hoạt tìm kiếm
   });
 
   const [stats, setStats] = useState({
@@ -75,11 +60,11 @@ const VATInvoicesPage = () => {
   });
 
   // ============================================
-  // FETCH ORDERS
+  // FETCH ORDERS (ĐÃ ĐƠN GIẢN HÓA)
   // ============================================
   useEffect(() => {
     fetchOrders();
-  }, [filters]);
+  }, [filters]); // Chỉ trigger khi 'filters' thay đổi
 
   const fetchOrders = async () => {
     setIsLoading(true);
@@ -87,10 +72,8 @@ const VATInvoicesPage = () => {
       const authStorage = localStorage.getItem("auth-storage");
       const token = authStorage ? JSON.parse(authStorage).state.token : null;
 
-      const params = {
-        ...(filters.startDate && { startDate: filters.startDate }),
-        ...(filters.endDate && { endDate: filters.endDate }),
-      };
+      // Xóa các params không cần thiết
+      const params = {};
 
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}/pos/my-orders`,
@@ -102,7 +85,7 @@ const VATInvoicesPage = () => {
 
       let ordersData = response.data.data.orders || [];
 
-      // Client-side filtering
+      // Client-side filtering (Chỉ giữ lại 'search')
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         ordersData = ordersData.filter(
@@ -116,43 +99,9 @@ const VATInvoicesPage = () => {
         );
       }
 
-      if (filters.status) {
-        ordersData = ordersData.filter(
-          (order) => order.status === filters.status
-        );
-      }
-
-      if (filters.paymentStatus) {
-        ordersData = ordersData.filter(
-          (order) => order.paymentStatus === filters.paymentStatus
-        );
-      }
-
-      if (filters.minAmount) {
-        ordersData = ordersData.filter(
-          (order) => order.totalAmount >= parseFloat(filters.minAmount)
-        );
-      }
-
-      if (filters.maxAmount) {
-        ordersData = ordersData.filter(
-          (order) => order.totalAmount <= parseFloat(filters.maxAmount)
-        );
-      }
-
-      if (filters.hasVAT === "yes") {
-        ordersData = ordersData.filter(
-          (order) => order.vatInvoice?.invoiceNumber
-        );
-      } else if (filters.hasVAT === "no") {
-        ordersData = ordersData.filter(
-          (order) => !order.vatInvoice?.invoiceNumber
-        );
-      }
-
       setOrders(ordersData);
 
-      // Calculate statistics
+      // Calculate statistics (Giữ nguyên)
       const total = ordersData.length;
       const revenue = ordersData.reduce(
         (sum, order) => sum + order.totalAmount,
@@ -177,23 +126,19 @@ const VATInvoicesPage = () => {
   };
 
   // ============================================
-  // RESET FILTERS
+  // HANDLERS MỚI CHO TÌM KIẾM
   // ============================================
-  const resetFilters = () => {
-    setFilters({
-      search: "",
-      startDate: "",
-      endDate: "",
-      status: "",
-      paymentStatus: "",
-      minAmount: "",
-      maxAmount: "",
-      hasVAT: "",
-    });
+  const handleSearch = () => {
+    setFilters({ search: searchInput });
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput("");
+    setFilters({ search: "" });
   };
 
   // ============================================
-  // VIEW DETAIL
+  // VIEW DETAIL (Giữ nguyên)
   // ============================================
   const handleViewDetail = async (orderId) => {
     try {
@@ -217,7 +162,7 @@ const VATInvoicesPage = () => {
   };
 
   // ============================================
-  // PRINT RECEIPT
+  // PRINT RECEIPT (Giữ nguyên)
   // ============================================
   const handleReprintReceipt = (order) => {
     const paymentReceived =
@@ -228,7 +173,6 @@ const VATInvoicesPage = () => {
     const changeGiven =
       order.posInfo?.changeGiven || order.paymentInfo?.changeGiven || 0;
 
-    // ✅ FALLBACK cho cashierName
     const cashierName =
       order.posInfo?.cashierName ||
       order.paymentInfo?.processedBy?.fullName ||
@@ -260,14 +204,12 @@ const VATInvoicesPage = () => {
         </style>
       </head>
       <body>
-        <!-- Header -->
         <div class="header">
           <h1>HÓA ĐƠN BÁN HÀNG</h1>
           <p>Apple Store Cần Thơ</p>
           <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ | Hotline: 1900.xxxx</p>
         </div>
 
-        <!-- Order Info -->
         <div class="info-section">
           <div class="info-row">
             <span class="info-label">Số đơn hàng:</span>
@@ -293,7 +235,6 @@ const VATInvoicesPage = () => {
           </div>
         </div>
 
-        <!-- Items Table -->
         <table>
           <thead>
             <tr>
@@ -326,7 +267,6 @@ const VATInvoicesPage = () => {
           </tbody>
         </table>
 
-        <!-- Total Section -->
         <div class="total-section">
           <div class="total-row">
             <span>Tạm tính:</span>
@@ -348,7 +288,6 @@ const VATInvoicesPage = () => {
 
         <div style="clear: both;"></div>
 
-        <!-- Footer -->
         <div class="footer">
           <p>Cảm ơn quý khách đã mua hàng!</p>
           <p>Bảo hành 12 tháng chính hãng Apple | Đổi trả trong 30 ngày</p>
@@ -368,12 +307,12 @@ const VATInvoicesPage = () => {
   };
 
   // ============================================
-  // RENDER
+  // RENDER (ĐÃ THAY ĐỔI HEADER, XÓA BỘ LỌC)
   // ============================================
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header (ĐÃ THAY ĐỔI) */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
           <p className="text-muted-foreground">
@@ -382,13 +321,36 @@ const VATInvoicesPage = () => {
               : "Xem các đơn hàng đã xử lý"}
           </p>
         </div>
-        <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
-          <Filter className="w-4 h-4 mr-2" />
-          {showFilters ? "Ẩn bộ lọc" : "Hiện bộ lọc"}
-        </Button>
+        {/* === Thanh tìm kiếm mới === */}
+        <div className="flex w-full md:w-auto md:max-w-sm items-center gap-2">
+          <Input
+            type="text"
+            placeholder="Tìm theo mã đơn, phiếu, SĐT..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSearch();
+            }}
+            className="flex-1"
+          />
+          <Button onClick={handleSearch} aria-label="Tìm kiếm">
+            <Search className="w-4 h-4" />
+          </Button>
+          {/* Nút xóa chỉ hiện khi đang có tìm kiếm */}
+          {filters.search && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClearSearch}
+              aria-label="Xóa tìm kiếm"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Statistics */}
+      {/* Statistics (Giữ nguyên) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
@@ -446,9 +408,7 @@ const VATInvoicesPage = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Hóa đơn
-                </p>
+                <p className="text-sm text-muted-foreground mb-1">Hóa đơn</p>
                 <h3 className="text-2xl font-bold">{stats.totalVATInvoices}</h3>
               </div>
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
@@ -459,149 +419,10 @@ const VATInvoicesPage = () => {
         </Card>
       </div>
 
-      {/* Advanced Filters */}
-      {showFilters && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Bộ lọc nâng cao
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                <X className="w-4 h-4 mr-2" />
-                Xóa bộ lọc
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label>Tìm kiếm</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Mã đơn, tên, SĐT..."
-                    value={filters.search}
-                    onChange={(e) =>
-                      setFilters({ ...filters, search: e.target.value })
-                    }
-                    className="pl-9"
-                  />
-                </div>
-              </div>
+      {/* Advanced Filters (ĐÃ BỊ XÓA) */}
+      {/* {showFilters && ( ... )} */}
 
-              <div>
-                <Label>Từ ngày</Label>
-                <Input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) =>
-                    setFilters({ ...filters, startDate: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Đến ngày</Label>
-                <Input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) =>
-                    setFilters({ ...filters, endDate: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Trạng thái đơn</Label>
-                <Select
-                  value={filters.status}
-                  onValueChange={(value) =>
-                    setFilters({ ...filters, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
-                    <SelectItem value="PENDING_PAYMENT">
-                      Chờ thanh toán
-                    </SelectItem>
-                    <SelectItem value="DELIVERED">Đã giao</SelectItem>
-                    <SelectItem value="CANCELLED">Đã hủy</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Thanh toán</Label>
-                <Select
-                  value={filters.paymentStatus}
-                  onValueChange={(value) =>
-                    setFilters({ ...filters, paymentStatus: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
-                    <SelectItem value="PAID">Đã thanh toán</SelectItem>
-                    <SelectItem value="UNPAID">Chưa thanh toán</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Giá trị tối thiểu</Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={filters.minAmount}
-                  onChange={(e) =>
-                    setFilters({ ...filters, minAmount: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Giá trị tối đa</Label>
-                <Input
-                  type="number"
-                  placeholder="999,999,999"
-                  value={filters.maxAmount}
-                  onChange={(e) =>
-                    setFilters({ ...filters, maxAmount: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Hóa đơn</Label>
-                <Select
-                  value={filters.hasVAT}
-                  onValueChange={(value) =>
-                    setFilters({ ...filters, hasVAT: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tất cả" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Tất cả</SelectItem>
-                    <SelectItem value="yes">Đã xuất </SelectItem>
-                    <SelectItem value="no">Chưa xuất</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Orders List */}
+      {/* Orders List (Giữ nguyên) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -617,7 +438,11 @@ const VATInvoicesPage = () => {
           ) : orders.length === 0 ? (
             <div className="text-center py-8">
               <Receipt className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Không có đơn hàng nào</p>
+              <p className="text-muted-foreground">
+                {filters.search
+                  ? "Không tìm thấy đơn hàng"
+                  : "Không có đơn hàng nào"}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -713,7 +538,7 @@ const VATInvoicesPage = () => {
         </CardContent>
       </Card>
 
-      {/* Detail Dialog */}
+      {/* Detail Dialog (Giữ nguyên) */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>

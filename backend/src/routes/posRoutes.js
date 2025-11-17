@@ -30,7 +30,11 @@ router.use(protect);
 router.post("/create-order", restrictTo("POS_STAFF", "ADMIN"), createPOSOrder);
 
 // Lấy lịch sử đơn của mình (danh sách)
-router.get("/my-orders", restrictTo("POS_STAFF", "ADMIN"), getPOSOrderHistory);
+router.get(
+  "/my-orders",
+  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
+  getPOSOrderHistory
+);
 
 // ✅ THÊM: LẤY CHI TIẾT ĐƠN HÀNG (DÙNG LẠI TỪ ORDER CONTROLLER)
 router.get(
