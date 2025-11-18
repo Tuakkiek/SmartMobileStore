@@ -1,11 +1,11 @@
 // ============================================
 // FILE: frontend/src/components/shared/SearchOverlay.jsx
-// ✅ UPDATED: Simplified UI & Fixed navigation
+// ✅ UPDATED: Logic Upgrade (Typo Fix + Smart Sort + Debounce) - UI Preserved
 // ============================================
 
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, X } from "lucide-react";
+import { Search, X, ChevronRight } from "lucide-react";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -16,7 +16,91 @@ import {
 } from "@/lib/api";
 
 // ============================================
-// CATEGORY CONFIG
+// 1. TYPO DICTIONARY & HELPER
+// ============================================
+const TYPO_MAPPINGS = {
+  // iPhone
+  ip: "iphone",
+  ifone: "iphone",
+  iphon: "iphone",
+  iphoen: "iphone",
+  ipone: "iphone",
+  "ai phôn": "iphone",
+  "dt ip": "iphone",
+  ip15: "iphone 15",
+  ip14: "iphone 14",
+  ip13: "iphone 13",
+  "15pm": "iphone 15 pro max",
+  promax: "pro max",
+
+  // iPad
+  iapd: "ipad",
+  pad: "ipad",
+  taplet: "ipad",
+  "may tinh bang": "ipad",
+
+  // Mac
+  mac: "macbook",
+  macbok: "macbook",
+  macboo: "macbook",
+  "lap top": "macbook",
+  mb: "macbook",
+  mba: "macbook air",
+  mbp: "macbook pro",
+
+  // AirPods
+  airpod: "airpods",
+  aripod: "airpods",
+  "tai nghe": "airpods",
+  ap2: "airpods 2",
+  ap3: "airpods 3",
+
+  // Watch
+  wach: "apple watch",
+  wacth: "apple watch",
+  "dong ho": "apple watch",
+  aw: "apple watch",
+
+  // Accessories
+  sac: "sạc",
+  cap: "cáp",
+  "op lung": "ốp lưng",
+  chuot: "chuột",
+  "ban phim": "bàn phím",
+};
+
+const correctTypos = (input) => {
+  if (!input) return "";
+  let corrected = input.toLowerCase().trim();
+
+  // Check khớp từ chính xác
+  if (TYPO_MAPPINGS[corrected]) return TYPO_MAPPINGS[corrected];
+
+  // Check thay thế từ trong câu
+  Object.keys(TYPO_MAPPINGS).forEach((key) => {
+    const regex = new RegExp(`\\b${key}\\b`, "gi");
+    if (regex.test(corrected)) {
+      corrected = corrected.replace(regex, TYPO_MAPPINGS[key]);
+    }
+  });
+  return corrected;
+};
+
+// ============================================
+// 2. RELEVANCE SCORING
+// ============================================
+const calculateRelevanceScore = (productName, query) => {
+  const name = productName.toLowerCase();
+  const q = query.toLowerCase();
+  if (name === q) return 100;
+  if (name.startsWith(q)) return 90;
+  if (name.includes(` ${q} `)) return 80;
+  if (name.includes(q)) return 60;
+  return 0;
+};
+
+// ============================================
+// CATEGORY CONFIG (Increased Limits)
 // ============================================
 const SEARCH_CATEGORIES = [
   {
@@ -24,48 +108,33 @@ const SEARCH_CATEGORIES = [
     name: "iPhone",
     api: iPhoneAPI,
     route: "dien-thoai",
-    limit: 3,
+    limit: 10,
   },
-  {
-    id: "ipad",
-    name: "iPad",
-    api: iPadAPI,
-    route: "may-tinh-bang",
-    limit: 2,
-  },
-  {
-    id: "mac",
-    name: "Mac",
-    api: macAPI,
-    route: "macbook",
-    limit: 2,
-  },
+  { id: "ipad", name: "iPad", api: iPadAPI, route: "may-tinh-bang", limit: 10 },
+  { id: "mac", name: "Mac", api: macAPI, route: "macbook", limit: 10 },
   {
     id: "airpods",
     name: "AirPods",
     api: airPodsAPI,
     route: "tai-nghe",
-    limit: 1,
+    limit: 10,
   },
   {
     id: "watch",
     name: "Apple Watch",
     api: appleWatchAPI,
     route: "apple-watch",
-    limit: 1,
+    limit: 10,
   },
   {
     id: "accessories",
     name: "Accessories",
     api: accessoryAPI,
     route: "phu-kien",
-    limit: 1,
+    limit: 10,
   },
 ];
 
-// ============================================
-// QUICK LINKS
-// ============================================
 const QUICK_LINKS = [
   { name: "Tìm cửa hàng", path: "/stores" },
   { name: "iPhone", path: "/dien-thoai" },
@@ -76,61 +145,45 @@ const QUICK_LINKS = [
 ];
 
 // ============================================
-// SEARCH SERVICE
+// SEARCH SERVICE (Updated Logic)
 // ============================================
-const searchProducts = async (query) => {
-  if (!query?.trim()) return [];
+const searchProducts = async (rawQuery) => {
+  if (!rawQuery?.trim()) return [];
 
-  console.log("🔎 Searching for:", query);
+  const correctedQuery = correctTypos(rawQuery);
+  // console.log(`🔍 Corrected: ${correctedQuery}`);
 
   try {
     const searchPromises = SEARCH_CATEGORIES.map(async (category) => {
       try {
-        console.log(`📡 Fetching from ${category.name}...`);
         const response = await category.api.getAll({
-          search: query,
+          search: correctedQuery,
           limit: category.limit,
         });
-
         const products = response.data?.data?.products || [];
-        console.log(`✅ ${category.name} returned ${products.length} products`);
-
-        if (products.length > 0) {
-          console.log(`📦 ${category.name} first product:`, {
-            _id: products[0]._id,
-            name: products[0].name,
-            baseSlug: products[0].baseSlug,
-            variantsCount: products[0].variants?.length,
-            firstVariant: products[0].variants?.[0],
-          });
-        }
 
         return products.map((product) => ({
           ...product,
           _category: category.route,
           _categoryName: category.name,
+          _score: calculateRelevanceScore(
+            product.name || product.model,
+            correctedQuery
+          ),
         }));
       } catch (error) {
-        console.warn(`❌ Search error for ${category.name}:`, error.message);
         return [];
       }
     });
 
     const results = await Promise.all(searchPromises);
-    const allResults = results.flat().slice(0, 8);
+    let allResults = results.flat();
 
-    console.log(`🎉 Total search results: ${allResults.length}`);
-    console.log(
-      "📋 All results:",
-      allResults.map((p) => ({
-        name: p.name,
-        category: p._category,
-        baseSlug: p.baseSlug,
-        variantsCount: p.variants?.length,
-      }))
-    );
+    // Sắp xếp theo điểm số (Cao -> Thấp)
+    allResults.sort((a, b) => b._score - a._score);
 
-    return allResults;
+    // Lấy 10 kết quả tốt nhất
+    return allResults.slice(0, 10);
   } catch (error) {
     console.error("❌ Search error:", error);
     return [];
@@ -138,71 +191,24 @@ const searchProducts = async (query) => {
 };
 
 // ============================================
-// SEARCH RESULT ITEM COMPONENT
+// SEARCH RESULT ITEM COMPONENT (UI Unchanged)
 // ============================================
 const SearchResultItem = ({ product, category, onClose }) => {
   const navigate = useNavigate();
-
-  console.log("📦 SearchResultItem - Product data:", {
-    _id: product._id,
-    name: product.name,
-    model: product.model,
-    baseSlug: product.baseSlug,
-    slug: product.slug,
-    category: product.category,
-    routeCategory: category,
-    variantsCount: product.variants?.length,
-    variants: product.variants?.map((v) => ({
-      _id: v._id,
-      sku: v.sku,
-      slug: v.slug,
-      color: v.color,
-      storage: v.storage,
-      stock: v.stock,
-    })),
-  });
-
-  // ✅ Lấy variant đầu tiên có stock > 0, nếu không có thì lấy variant đầu tiên
   const firstVariant =
     product.variants?.find((v) => v.stock > 0) || product.variants?.[0];
-
-  console.log("🎯 Selected first variant:", {
-    _id: firstVariant?._id,
-    sku: firstVariant?.sku,
-    slug: firstVariant?.slug,
-    stock: firstVariant?.stock,
-  });
-
-  // ✅ Lấy ảnh đầu tiên từ variant
   const displayImage = firstVariant?.images?.[0] || product.images?.[0];
-
-  // ✅ Lấy giá từ variant đầu tiên
   const displayPrice = firstVariant?.price || product.price || 0;
 
-  // ✅ Tạo đường dẫn: /{category}/{variant.slug}?sku={variant.sku}
   const getProductPath = () => {
     if (firstVariant?.slug && firstVariant?.sku) {
-      const path = `/${category}/${firstVariant.slug}?sku=${firstVariant.sku}`;
-      console.log("✅ Generated path with variant:", path);
-      return path;
+      return `/${category}/${firstVariant.slug}?sku=${firstVariant.sku}`;
     }
-
-    // Fallback: dùng baseSlug
-    const fallbackPath = `/${category}/${product.baseSlug || product.slug}`;
-    console.log("⚠️ Fallback path (no variant):", fallbackPath);
-    return fallbackPath;
+    return `/${category}/${product.baseSlug || product.slug}`;
   };
 
   const handleClick = () => {
     const path = getProductPath();
-    console.log("🔍 Navigating to:", path);
-    console.log("📍 Full navigation details:", {
-      category,
-      productBaseSlug: product.baseSlug,
-      variantSlug: firstVariant?.slug,
-      sku: firstVariant?.sku,
-      finalPath: path,
-    });
     navigate(path);
     onClose();
   };
@@ -212,7 +218,6 @@ const SearchResultItem = ({ product, category, onClose }) => {
       onClick={handleClick}
       className="flex items-center gap-4 p-3 bg-gray-900/30 rounded-lg hover:bg-gray-900/50 transition-all text-left w-full group"
     >
-      {/* Product Image */}
       <div className="w-16 h-16 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
         {displayImage ? (
           <img
@@ -226,15 +231,10 @@ const SearchResultItem = ({ product, category, onClose }) => {
           </div>
         )}
       </div>
-
-      {/* Product Info */}
       <div className="flex-1 min-w-0">
-        {/* Model Name */}
         <h4 className="text-white font-medium text-sm group-hover:text-blue-400 transition-colors truncate">
-          {product.model}
+          {product.model || product.name}
         </h4>
-
-        {/* Price */}
         <p className="text-blue-400 text-sm font-semibold mt-1">
           {new Intl.NumberFormat("vi-VN", {
             style: "currency",
@@ -242,8 +242,6 @@ const SearchResultItem = ({ product, category, onClose }) => {
           }).format(displayPrice)}
         </p>
       </div>
-
-      {/* Arrow Icon */}
       <div className="text-gray-600 group-hover:text-blue-400 transition-colors">
         →
       </div>
@@ -255,61 +253,71 @@ const SearchResultItem = ({ product, category, onClose }) => {
 // MAIN SEARCH OVERLAY COMPONENT
 // ============================================
 const SearchOverlay = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef(null);
 
-  // ============================================
-  // SEARCH EFFECT - Debounced
-  // ============================================
+  // Handle View All Navigation
+  const handleViewAll = () => {
+    const corrected = correctTypos(searchQuery);
+    if (corrected) {
+      navigate(`/tim-kiem?s=${encodeURIComponent(corrected)}`);
+      onClose();
+    }
+  };
+
+  // Debounce Effect (500ms)
   useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    // Set loading immediately when typing starts
+    setIsSearching(true);
+
     const delaySearch = setTimeout(async () => {
-      if (searchQuery.trim() && isOpen) {
-        setIsSearching(true);
+      if (isOpen) {
         try {
           const results = await searchProducts(searchQuery);
           setSearchResults(results);
         } catch (error) {
-          console.error("Search error:", error);
           setSearchResults([]);
         } finally {
           setIsSearching(false);
         }
-      } else {
-        setSearchResults([]);
       }
-    }, 300);
+    }, 500); // Chờ 500ms
 
     return () => clearTimeout(delaySearch);
   }, [searchQuery, isOpen]);
 
-  // ============================================
-  // AUTO FOCUS
-  // ============================================
+  // Auto Focus
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [isOpen]);
 
-  // ============================================
-  // KEYBOARD SHORTCUTS
-  // ============================================
+  // Keyboard Shortcuts (Updated with Enter)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && isOpen) {
         onClose();
       }
+      if (e.key === "Enter" && isOpen) {
+        handleViewAll();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, searchQuery]);
 
-  // ============================================
-  // RESET ON CLOSE
-  // ============================================
+  // Reset on Close
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
@@ -317,9 +325,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
-  // ============================================
-  // RENDER
-  // ============================================
   return (
     <div
       className={`fixed inset-0 z-50 transition-opacity duration-300 ${
@@ -365,7 +370,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* Quick Links - Show when no search query */}
+            {/* Quick Links */}
             {!searchQuery && (
               <div className="mb-8">
                 <h3 className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4">
@@ -395,7 +400,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                 <h3 className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4">
                   {isSearching
                     ? "Đang tìm kiếm..."
-                    : `Kết quả cho "${searchQuery}"`}
+                    : `Kết quả cho "${correctTypos(searchQuery)}"`}
                 </h3>
 
                 {isSearching ? (
@@ -404,18 +409,12 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                   </div>
                 ) : searchResults.length > 0 ? (
                   <>
-                    {/* ✅ THÊM NÚT NÀY */}
                     <div className="mb-4 flex justify-between items-center">
                       <p className="text-sm text-gray-400">
                         Tìm thấy {searchResults.length} sản phẩm
                       </p>
                       <button
-                        onClick={() => {
-                          navigate(
-                            `/tim-kiem?s=${encodeURIComponent(searchQuery)}`
-                          );
-                          onClose();
-                        }}
+                        onClick={handleViewAll}
                         className="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
                       >
                         Xem tất cả kết quả
