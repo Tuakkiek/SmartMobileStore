@@ -523,7 +523,7 @@ const ProductDetailPage = () => {
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                     <span className="font-semibold">
-                      {product.averageRating}
+                      {product.averageRating.toFixed(1)}
                     </span>
                     <span className="text-gray-600">
                       {product.totalReviews} đánh giá

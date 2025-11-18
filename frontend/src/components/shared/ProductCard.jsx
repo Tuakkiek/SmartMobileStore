@@ -64,6 +64,9 @@ const StarRating = ({ rating, reviewCount = 0 }) => {
           }`}
         />
       ))}
+      <span className="text-[10px] font-semibold ml-1">
+        {rating.toFixed(1)}
+      </span>
       {/* Đã thêm md:text-xs (nhỏ hơn trên mobile) */}
       <span className="text-[10px] text-gray-500 ml-1 md:text-xs">
         {totalReviewsText}
@@ -118,7 +121,7 @@ const ProductCard = ({
   const displayPrice = current.price || product.price || 0;
   const displayOriginalPrice =
     current.originalPrice || product.originalPrice || 0;
-  const rating = product.averageRating || 0;
+  const rating = parseFloat((product.averageRating || 0).toFixed(1)); // ✅ Đảm bảo 1 chữ số thập phân
   const reviewCount = product.reviewCount || 0;
   const displayImage =
     current?.images?.[0] ||

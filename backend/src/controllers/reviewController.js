@@ -23,7 +23,7 @@ const findProductAndUpdateRating = async (productId) => {
 
       if (reviews.length > 0) {
         const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-        product.averageRating = sum / reviews.length;
+        product.averageRating = Math.round((sum / reviews.length) * 10) / 10; // ✅ Làm tròn 1 chữ số
         product.totalReviews = reviews.length;
       } else {
         product.averageRating = 0;
