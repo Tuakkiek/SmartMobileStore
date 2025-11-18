@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/reviewController.js
-// ✅ FIXED: Import Review model correctly
+// ✅ FIXED: Complete with all functions properly exported
 // ============================================
 
 import Review from "../models/Review.js";
@@ -23,7 +23,7 @@ const findProductAndUpdateRating = async (productId) => {
 
       if (reviews.length > 0) {
         const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-        product.averageRating = Math.round((sum / reviews.length) * 10) / 10; // ✅ Làm tròn 1 chữ số
+        product.averageRating = Math.round((sum / reviews.length) * 10) / 10;
         product.totalReviews = reviews.length;
       } else {
         product.averageRating = 0;
@@ -41,7 +41,6 @@ const findProductAndUpdateRating = async (productId) => {
 // ============================================
 // GET PRODUCT REVIEWS
 // ============================================
-// ✅ UPDATE: Get reviews (filter hidden for non-admin)
 export const getProductReviews = async (req, res) => {
   try {
     const query = { productId: req.params.productId };
@@ -52,8 +51,8 @@ export const getProductReviews = async (req, res) => {
     }
 
     const reviews = await Review.find(query)
-      .populate("customerId", "fullName")
-      .populate("adminReply.adminId", "fullName role")
+      .populate("customerId", "fullName avatar")
+      .populate("adminReply.adminId", "fullName role avatar")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: { reviews } });
@@ -67,9 +66,9 @@ export const getProductReviews = async (req, res) => {
 // ============================================
 export const createReview = async (req, res) => {
   try {
-    const { productId, rating, comment, productModel } = req.body; // ✅ Thêm productModel
+    const { productId, rating, comment, productModel } = req.body;
 
-    console.log("📥 Received review data:", req.body); // ✅ LOG
+    console.log("📥 Received review data:", req.body);
 
     // Verify product exists
     const product = await findProductAndUpdateRating(productId);
@@ -83,7 +82,7 @@ export const createReview = async (req, res) => {
     // Create review
     const review = await Review.create({
       productId,
-      productModel, // ✅ THÊM DÒNG NÀY
+      productModel,
       customerId: req.user._id,
       rating,
       comment,
@@ -98,7 +97,7 @@ export const createReview = async (req, res) => {
       data: { review },
     });
   } catch (error) {
-    console.error("❌ Create review error:", error); // ✅ LOG
+    console.error("❌ Create review error:", error);
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -182,10 +181,8 @@ export const deleteReview = async (req, res) => {
 };
 
 // ============================================
-// NEW FUNCTIONS: Admin Reply to Review
+// ADMIN: REPLY TO REVIEW
 // ============================================
-
-// ✅ NEW: Admin reply to review
 export const replyToReview = async (req, res) => {
   try {
     const { content } = req.body;
@@ -213,6 +210,9 @@ export const replyToReview = async (req, res) => {
 
     await review.save();
 
+    // Populate để trả về đầy đủ thông tin
+    await review.populate("adminReply.adminId", "fullName role avatar");
+
     res.json({
       success: true,
       message: "Phản hồi thành công",
@@ -223,7 +223,54 @@ export const replyToReview = async (req, res) => {
   }
 };
 
-// ✅ NEW: Toggle review visibility
+// ============================================
+// ADMIN: UPDATE REPLY
+// ============================================
+export const updateAdminReply = async (req, res) => {
+  try {
+    const { content } = req.body;
+    const review = await Review.findById(req.params.id);
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đánh giá",
+      });
+    }
+
+    if (!review.adminReply?.content) {
+      return res.status(400).json({
+        success: false,
+        message: "Chưa có phản hồi để chỉnh sửa",
+      });
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập nội dung phản hồi",
+      });
+    }
+
+    review.adminReply.content = content.trim();
+    review.adminReply.repliedAt = new Date();
+
+    await review.save();
+    await review.populate("adminReply.adminId", "fullName role avatar");
+
+    res.json({
+      success: true,
+      message: "Cập nhật phản hồi thành công",
+      data: { review },
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================
+// ADMIN: TOGGLE REVIEW VISIBILITY
+// ============================================
 export const toggleReviewVisibility = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -248,11 +295,15 @@ export const toggleReviewVisibility = async (req, res) => {
   }
 };
 
+// ============================================
+// EXPORTS
+// ============================================
 export default {
   getProductReviews,
   createReview,
   updateReview,
   deleteReview,
-  replyToReview, // ✅ NEW
-  toggleReviewVisibility, // ✅ NEW
+  replyToReview,
+  updateAdminReply,
+  toggleReviewVisibility,
 };

@@ -2,7 +2,16 @@ import React, { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { reviewAPI } from "@/lib/api";
 import { toast } from "sonner";
-import { Star, Eye, EyeOff, MessageSquare, Send } from "lucide-react";
+import {
+  Star,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Send,
+  Edit2,
+  X,
+  Check,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,6 +32,7 @@ export const ReviewsTab = ({ productId, product }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isAdmin = user?.role === "ADMIN";
+  const isCustomer = user?.role === "CUSTOMER";
 
   useEffect(() => {
     fetchReviews();
@@ -72,7 +82,6 @@ export const ReviewsTab = ({ productId, product }) => {
       return;
     }
 
-    // ✅ Map category sang đúng enum của backend
     const productModelMap = {
       iPhone: "IPhone",
       iPad: "IPad",
@@ -286,6 +295,8 @@ export const ReviewsTab = ({ productId, product }) => {
                   key={review._id}
                   review={review}
                   isAdmin={isAdmin}
+                  isCustomer={isCustomer}
+                  currentUserId={user?._id}
                   onUpdate={fetchReviews}
                 />
               ))}
@@ -297,14 +308,61 @@ export const ReviewsTab = ({ productId, product }) => {
   );
 };
 
-// ✅ Review Item with Admin Reply
-const ReviewItem = ({ review, isAdmin, onUpdate }) => {
+// ✅ Review Item with Edit & Admin Reply
+const ReviewItem = ({
+  review,
+  isAdmin,
+  isCustomer,
+  currentUserId,
+  onUpdate,
+}) => {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const customerName = review.customerId?.fullName || "Người dùng";
+  // ✅ Edit states for customer review
+  const [isEditingReview, setIsEditingReview] = useState(false);
+  const [editRating, setEditRating] = useState(review.rating);
+  const [editComment, setEditComment] = useState(review.comment);
+  const [hoveredEditRating, setHoveredEditRating] = useState(0);
 
+  // ✅ Edit state for admin reply
+  const [isEditingReply, setIsEditingReply] = useState(false);
+  const [editReplyContent, setEditReplyContent] = useState(
+    review.adminReply?.content || ""
+  );
+
+  const customerName = review.customerId?.fullName || "Người dùng";
+  const isOwnReview = currentUserId === review.customerId?._id;
+
+  // ✅ Handle Customer Edit Review
+  const handleUpdateReview = async () => {
+    if (editRating === 0) {
+      toast.error("Vui lòng chọn số sao");
+      return;
+    }
+    if (!editComment.trim()) {
+      toast.error("Vui lòng nhập nội dung đánh giá");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await reviewAPI.update(review._id, {
+        rating: editRating,
+        comment: editComment.trim(),
+      });
+      toast.success("Cập nhật đánh giá thành công!");
+      setIsEditingReview(false);
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể cập nhật");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ✅ Handle Admin Reply
   const handleAdminReply = async () => {
     if (!replyContent.trim()) {
       toast.error("Vui lòng nhập nội dung phản hồi");
@@ -325,6 +383,26 @@ const ReviewItem = ({ review, isAdmin, onUpdate }) => {
     }
   };
 
+  // ✅ Handle Update Admin Reply
+  const handleUpdateAdminReply = async () => {
+    if (!editReplyContent.trim()) {
+      toast.error("Vui lòng nhập nội dung phản hồi");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await reviewAPI.updateAdminReply(review._id, editReplyContent.trim());
+      toast.success("Cập nhật phản hồi thành công!");
+      setIsEditingReply(false);
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể cập nhật");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleToggleVisibility = async () => {
     try {
       await reviewAPI.toggleVisibility(review._id);
@@ -339,14 +417,17 @@ const ReviewItem = ({ review, isAdmin, onUpdate }) => {
 
   return (
     <div
-      className={`bg-white border rounded-2xl p-6 ${
-        review.isHidden ? "opacity-50" : ""
-      }`}
+      className={`bg-white border rounded-2xl p-6 transition-opacity ${
+        review.isHidden && !isAdmin ? "hidden" : ""
+      } ${review.isHidden ? "opacity-75 border-gray-300" : ""}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-4">
           <Avatar className="w-10 h-10">
+            {review.customerId?.avatar && (
+              <AvatarImage src={review.customerId.avatar} alt={customerName} />
+            )}
             <AvatarFallback className="bg-red-100 text-red-600 font-semibold">
               {getNameInitials(customerName)}
             </AvatarFallback>
@@ -359,50 +440,133 @@ const ReviewItem = ({ review, isAdmin, onUpdate }) => {
                 {formatDate(review.createdAt)}
               </span>
               {review.isHidden && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs bg-gray-200">
                   Đã ẩn
                 </Badge>
               )}
             </div>
 
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  className={`w-4 h-4 ${
-                    star <= review.rating
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "text-gray-300"
-                  }`}
-                />
-              ))}
-            </div>
+            {!isEditingReview ? (
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`w-4 h-4 ${
+                      star <= review.rating
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setEditRating(star)}
+                    onMouseEnter={() => setHoveredEditRating(star)}
+                    onMouseLeave={() => setHoveredEditRating(0)}
+                  >
+                    <Star
+                      className={`w-5 h-5 ${
+                        star <= (hoveredEditRating || editRating)
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Admin Actions */}
-        {isAdmin && (
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={handleToggleVisibility}>
-              {review.isHidden ? (
-                <Eye className="w-4 h-4" />
-              ) : (
-                <EyeOff className="w-4 h-4" />
-              )}
-            </Button>
+        {/* Actions */}
+        <div className="flex gap-2">
+          {/* Customer Edit Button */}
+          {isCustomer && isOwnReview && !isEditingReview && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowReplyForm(!showReplyForm)}
+              onClick={() => setIsEditingReview(true)}
             >
-              <MessageSquare className="w-4 h-4" />
+              <Edit2 className="w-4 h-4" />
             </Button>
-          </div>
-        )}
+          )}
+
+          {/* Admin Actions */}
+          {isAdmin && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleVisibility}
+              >
+                {review.isHidden ? (
+                  <Eye className="w-4 h-4" />
+                ) : (
+                  <EyeOff className="w-4 h-4" />
+                )}
+              </Button>
+              {!review.adminReply?.content && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowReplyForm(!showReplyForm)}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Comment */}
-      <p className="text-gray-700 whitespace-pre-wrap mb-4">{review.comment}</p>
+      {!isEditingReview ? (
+        <p className="text-gray-700 whitespace-pre-wrap mb-4">
+          {review.comment}
+        </p>
+      ) : (
+        <div className="mb-4">
+          <Textarea
+            value={editComment}
+            onChange={(e) => setEditComment(e.target.value)}
+            maxLength={3000}
+            rows={4}
+            className="mb-2"
+          />
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-500">
+              {editComment.length}/3000
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsEditingReview(false);
+                  setEditRating(review.rating);
+                  setEditComment(review.comment);
+                }}
+              >
+                <X className="w-4 h-4 mr-1" /> Hủy
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleUpdateReview}
+                disabled={isSubmitting}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Check className="w-4 h-4 mr-1" />
+                {isSubmitting ? "Đang lưu..." : "Lưu"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Admin Reply Display */}
       {review.adminReply?.content && (
@@ -410,10 +574,15 @@ const ReviewItem = ({ review, isAdmin, onUpdate }) => {
           <div className="flex items-start gap-3">
             <Avatar className="w-8 h-8">
               {review.adminReply.adminId?.avatar && (
-                <AvatarImage src={review.adminReply.adminId.avatar} />
+                <AvatarImage
+                  src={review.adminReply.adminId.avatar}
+                  alt={review.adminReply.adminId?.fullName || "Admin"}
+                />
               )}
               <AvatarFallback className="bg-blue-600 text-white text-xs">
-                {getNameInitials(review.adminReply.adminId?.fullName)}
+                {getNameInitials(
+                  review.adminReply.adminId?.fullName || "Admin"
+                )}
               </AvatarFallback>
             </Avatar>
 
@@ -423,13 +592,62 @@ const ReviewItem = ({ review, isAdmin, onUpdate }) => {
                   {review.adminReply.adminId?.fullName || "Admin"}
                 </span>
                 <Badge className="bg-blue-600 text-xs">Quản trị viên</Badge>
+                {isAdmin && !isEditingReply && (
+                  <button
+                    onClick={() => setIsEditingReply(true)}
+                    className="ml-auto text-gray-500 hover:text-blue-600"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
-              <p className="text-sm text-gray-800">
-                {review.adminReply.content}
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                {formatDate(review.adminReply.repliedAt)}
-              </p>
+
+              {!isEditingReply ? (
+                <>
+                  <p className="text-sm text-gray-800">
+                    {review.adminReply.content}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {formatDate(review.adminReply.repliedAt)}
+                  </p>
+                </>
+              ) : (
+                <div className="mt-2">
+                  <Textarea
+                    value={editReplyContent}
+                    onChange={(e) => setEditReplyContent(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    className="mb-2"
+                  />
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">
+                      {editReplyContent.length}/500
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditingReply(false);
+                          setEditReplyContent(review.adminReply.content);
+                        }}
+                      >
+                        <X className="w-3 h-3 mr-1" /> Hủy
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleUpdateAdminReply}
+                        disabled={isSubmitting}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Check className="w-3 h-3 mr-1" />
+                        {isSubmitting ? "Đang lưu..." : "Lưu"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -4,8 +4,9 @@ import {
   createReview,
   updateReview,
   deleteReview,
-  replyToReview, // ✅ NEW
-  toggleReviewVisibility, // ✅ NEW
+  replyToReview,
+  updateAdminReply, // ✅ THÊM DÒNG NÀY
+  toggleReviewVisibility,
 } from "../controllers/reviewController.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
@@ -27,5 +28,7 @@ router.patch(
   restrictTo("ADMIN"),
   toggleReviewVisibility
 );
+// reviewRoutes.js
+router.put("/:id/reply", restrictTo("ADMIN"), updateAdminReply); // Update admin reply
 
 export default router;
