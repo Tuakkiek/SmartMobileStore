@@ -133,7 +133,7 @@ const MainLayout = () => {
               className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
             >
               <span className="text-black font-bold text-lg transition-colors duration-300 hover:text-gray-700">
-                LOGO
+                Ninh Kiều iSTORE
               </span>
             </Link>
 
