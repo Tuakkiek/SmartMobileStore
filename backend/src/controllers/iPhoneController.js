@@ -80,7 +80,7 @@ export const create = async (req, res) => {
       variants: [],
       // ✅ THÊM 2 DÒNG NÀY
       featuredImages: productData.featuredImages || [],
-      videoUrls: productData.videoUrls || [],
+      videoUrl: productData.videoUrl?.trim() || "",
     });
 
     await product.save({ session });
@@ -219,8 +219,8 @@ export const update = async (req, res) => {
     // ✅ THÊM 2 DÒNG NÀY
     if (data.featuredImages !== undefined)
       product.featuredImages = data.featuredImages;
-    if (data.videoUrls !== undefined) product.videoUrls = data.videoUrls;
-
+    if (data.videoUrl !== undefined)
+      product.videoUrl = data.videoUrl?.trim() || "";
     // Cập nhật slug nếu model thay đổi hoặc frontend gửi
     let newSlug = product.slug || product.baseSlug;
 

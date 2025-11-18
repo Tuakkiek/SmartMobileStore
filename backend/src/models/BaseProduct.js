@@ -72,7 +72,7 @@ export const createBaseProductSchema = () => {
 
       // ADD NEW FIELDS
       featuredImages: [{ type: String, trim: true }],
-      videoUrls: [{ type: String, trim: true }],
+      videoUrl: { type: String, trim: true, default: "" },
 
       // Specifications - will be overridden by each product type
       specifications: {

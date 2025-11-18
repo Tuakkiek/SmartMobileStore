@@ -71,12 +71,27 @@ const ProductDetailPage = () => {
   const [activeTab, setActiveTab] = useState("info");
   const [userSelectedKey, setUserSelectedKey] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
+  const [activeMediaTab, setActiveMediaTab] = useState("variant"); // 'variant' | 'featured' | 'video'
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [fullSlug]);
+
+  // Get images based on active media tab
+  const getCurrentMainImages = () => {
+    if (activeMediaTab === "featured" && product?.featuredImages?.length > 0) {
+      return product.featuredImages.filter(Boolean);
+    }
+
+    if (activeMediaTab === "video") {
+      return [];
+    }
+
+    // Default: variant images (logic cũ)
+    return selectedVariant?.images?.filter(Boolean) || [];
+  };
 
   useEffect(() => {
     const fetchProductData = async () => {
@@ -117,6 +132,10 @@ const ProductDetailPage = () => {
             VARIANT_KEY_FIELD[fetchedProduct.category] || "storage";
           setUserSelectedKey(variantToSelect[keyField]);
         }
+
+        // Set default tab to variant
+        setActiveMediaTab("variant");
+        setSelectedImage(0);
 
         setIsLoading(false);
       } catch (err) {
@@ -164,6 +183,9 @@ const ProductDetailPage = () => {
     const finalImageIndex = newImageIndex >= 0 ? newImageIndex : 0;
     setSelectedVariant(variant);
     setSelectedImage(finalImageIndex);
+
+    // Reset về tab variant khi đổi màu
+    setActiveMediaTab("variant");
   };
 
   const handleAddToCart = async (redirectToCheckout = false) => {
@@ -197,16 +219,15 @@ const ProductDetailPage = () => {
 
     if (result.success) {
       if (redirectToCheckout) {
-        // Chuyển sang cart với parameter để auto-select
         navigate(`/cart?select=${selectedVariant._id}`);
       } else {
-        // Hiển thị modal như bình thường
         setShowAddToCartModal(true);
       }
     } else {
       alert(result.message || "Thêm vào giỏ thất bại");
     }
   };
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN").format(price) + "đ";
   };
@@ -245,20 +266,6 @@ const ProductDetailPage = () => {
     });
   };
 
-  const nextImage = () => {
-    if (!selectedVariant?.images) return;
-    setSelectedImage((prev) =>
-      prev < selectedVariant.images.length - 1 ? prev + 1 : 0
-    );
-  };
-
-  const prevImage = () => {
-    if (!selectedVariant?.images) return;
-    setSelectedImage((prev) =>
-      prev > 0 ? prev - 1 : selectedVariant.images.length - 1
-    );
-  };
-
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-12">
@@ -279,11 +286,6 @@ const ProductDetailPage = () => {
     );
   }
 
-  // Ưu tiên featuredImages, fallback về variant.images
-  const images =
-    product.featuredImages?.length > 0
-      ? product.featuredImages
-      : selectedVariant?.images || [];
   const discount = getDiscountPercent();
   const groupedVariants = getGroupedVariants();
   const variantKeyOptions = getVariantKeyOptions();
@@ -308,140 +310,209 @@ const ProductDetailPage = () => {
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT: Image Gallery - 5 cols */}
-          <div className="lg:col-span-5">
+          {/* LEFT: Image Gallery - 7 cols */}
+          <div className="lg:col-span-7 h-96">
             <div className="bg-white rounded-lg overflow-hidden sticky top-4">
               {/* Main Image */}
-              <div className="relative aspect-square bg-white">
-                <img
-                  src={images[selectedImage] || "/placeholder.png"}
-                  alt={product.name}
-                  className="w-full h-full object-contain p-8"
-                />
-
-                {/* Navigation Arrows */}
-                {images.length > 1 && (
-                  <>
-                    <button
-                      onClick={prevImage}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
-                    >
-                      <ChevronLeft className="w-6 h-6 text-gray-700" />
-                    </button>
-                    <button
-                      onClick={nextImage}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
-                    >
-                      <ChevronRight className="w-6 h-6 text-gray-700" />
-                    </button>
-                  </>
-                )}
-
-                {/* Image Counter */}
-                {images.length > 1 && (
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
-                    {selectedImage + 1}/{images.length}
+              <div className="relative aspect-video bg-white">  {/* 16:9 Aspect Ratio */}
+                {activeMediaTab === "video" && product.videoUrl ? (
+                  // Hiển thị video
+                  <div className="w-full h-full p-8">
+                    {product.videoUrl.includes("youtube.com") ||
+                    product.videoUrl.includes("youtu.be") ? (
+                      <iframe
+                        src={product.videoUrl.replace("watch?v=", "embed/")}
+                        className="w-full h-full rounded-lg"
+                        allowFullScreen
+                        title="Product Video"
+                      />
+                    ) : (
+                      <video
+                        src={product.videoUrl}
+                        controls
+                        className="w-full h-full rounded-lg"
+                      />
+                    )}
                   </div>
+                ) : (
+                  // Hiển thị ảnh (featured hoặc variant)
+                  <>
+                    {(() => {
+                      const currentImages = getCurrentMainImages();
+                      return currentImages.length > 0 ? (
+                        <img
+                          src={
+                            currentImages[selectedImage] || "/placeholder.png"
+                          }
+                          alt={product.name}
+                          className="w-full h-full object-contain p-8"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          Không có ảnh
+                        </div>
+                      );
+                    })()}
+
+                    {/* Navigation Arrows */}
+                    {(() => {
+                      const currentImages = getCurrentMainImages();
+                      return (
+                        currentImages.length > 1 &&
+                        activeMediaTab !== "video" && (
+                          <>
+                            <button
+                              onClick={() => {
+                                const images = getCurrentMainImages();
+                                setSelectedImage((prev) =>
+                                  prev > 0 ? prev - 1 : images.length - 1
+                                );
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
+                            >
+                              <ChevronLeft className="w-6 h-6 text-gray-700" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const images = getCurrentMainImages();
+                                setSelectedImage((prev) =>
+                                  prev < images.length - 1 ? prev + 1 : 0
+                                );
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
+                            >
+                              <ChevronRight className="w-6 h-6 text-gray-700" />
+                            </button>
+
+                            {/* Image Counter */}
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
+                              {selectedImage + 1}/{currentImages.length}
+                            </div>
+                          </>
+                        )
+                      );
+                    })()}
+                  </>
                 )}
               </div>
 
               {/* Thumbnail Navigation */}
               <div className="p-4 border-t bg-gray-50">
                 <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-                  {/* Nổi bật button */}
-                  <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-red-500 transition-all bg-white">
-                    <Star className="w-5 h-5 text-gray-600" />
-                    <span className="text-xs text-gray-600 mt-1">Nổi bật</span>
-                  </button>
-
-                  {/* Video button if available */}
-                  <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-red-500 transition-all bg-white">
-                    <Play className="w-5 h-5 text-gray-600" />
-                    <span className="text-xs text-gray-600 mt-1">Video</span>
-                  </button>
-
-                  {/* Image thumbnails */}
-                  {images.slice(0, 6).map((img, idx) => (
+                  {/* Tab Nổi bật */}
+                  {product.featuredImages?.filter(Boolean).length > 0 && (
                     <button
-                      key={idx}
-                      onClick={() => setSelectedImage(idx)}
-                      className={`flex-shrink-0 w-16 h-16 border-2 rounded-lg overflow-hidden transition-all ${
-                        selectedImage === idx
+                      onClick={() => {
+                        setActiveMediaTab("featured");
+                        setSelectedImage(0);
+                      }}
+                      className={`flex-shrink-0 w-16 h-16 border-2 rounded-lg flex flex-col items-center justify-center transition-all bg-white ${
+                        activeMediaTab === "featured"
                           ? "border-red-600 ring-2 ring-red-200"
-                          : "border-gray-300 hover:border-gray-400"
+                          : "border-gray-300 hover:border-red-500"
                       }`}
                     >
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-full h-full object-contain p-1"
+                      <Star
+                        className={`w-5 h-5 ${
+                          activeMediaTab === "featured"
+                            ? "text-red-600"
+                            : "text-gray-600"
+                        }`}
                       />
-                    </button>
-                  ))}
-
-                  {/* More images indicator */}
-                  {images.length > 6 && (
-                    <button className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white hover:border-red-500 transition-all">
-                      <span className="text-sm font-semibold text-gray-600">
-                        +{images.length - 6}
+                      <span
+                        className={`text-xs mt-1 ${
+                          activeMediaTab === "featured"
+                            ? "text-red-600 font-semibold"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        Nổi bật
                       </span>
                     </button>
                   )}
+
+                  {/* Tab Video */}
+                  {product.videoUrl && (
+                    <button
+                      onClick={() => {
+                        setActiveMediaTab("video");
+                        setSelectedImage(0);
+                      }}
+                      className={`flex-shrink-0 w-16 h-16 border-2 rounded-lg flex flex-col items-center justify-center transition-all bg-white ${
+                        activeMediaTab === "video"
+                          ? "border-red-600 ring-2 ring-red-200"
+                          : "border-gray-300 hover:border-red-500"
+                      }`}
+                    >
+                      <Play
+                        className={`w-5 h-5 ${
+                          activeMediaTab === "video"
+                            ? "text-red-600"
+                            : "text-gray-600"
+                        }`}
+                      />
+                      <span
+                        className={`text-xs mt-1 ${
+                          activeMediaTab === "video"
+                            ? "text-red-600 font-semibold"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        Video
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Image thumbnails của variant */}
+                  {(() => {
+                    const variantImages =
+                      selectedVariant?.images?.filter(Boolean) || [];
+                    return variantImages.slice(0, 6).map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setActiveMediaTab("variant");
+                          setSelectedImage(idx);
+                        }}
+                        className={`flex-shrink-0 w-16 h-16 border-2 rounded-lg overflow-hidden transition-all ${
+                          selectedImage === idx && activeMediaTab === "variant"
+                            ? "border-red-600 ring-2 ring-red-200"
+                            : "border-gray-300 hover:border-gray-400"
+                        }`}
+                      >
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full h-full object-contain p-1"
+                        />
+                      </button>
+                    ));
+                  })()}
+
+                  {/* More images indicator */}
+                  {(() => {
+                    const variantImages =
+                      selectedVariant?.images?.filter(Boolean) || [];
+                    return (
+                      variantImages.length > 6 && (
+                        <button
+                          onClick={() => setActiveMediaTab("variant")}
+                          className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white hover:border-red-500 transition-all"
+                        >
+                          <span className="text-sm font-semibold text-gray-600">
+                            +{variantImages.length - 6}
+                          </span>
+                        </button>
+                      )
+                    );
+                  })()}
                 </div>
               </div>
-
-              {/* Phần nội dung nổi bật - MULTIPLE ITEMS */}
-              {((product.featuredImages && product.featuredImages.length > 0) ||
-                (product.videoUrls && product.videoUrls.length > 0)) && (
-                <div className="mt-4 space-y-3">
-                  {/* Hình ảnh nổi bật */}
-                  {product.featuredImages &&
-                    product.featuredImages
-                      .filter(Boolean)
-                      .map((imgUrl, idx) => (
-                        <div
-                          key={idx}
-                          className="rounded-lg overflow-hidden border"
-                        >
-                          <img
-                            src={imgUrl}
-                            alt={`Featured ${idx + 1}`}
-                            className="w-full h-auto"
-                          />
-                        </div>
-                      ))}
-
-                  {/* Videos */}
-                  {product.videoUrls &&
-                    product.videoUrls.filter(Boolean).map((videoUrl, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-lg overflow-hidden border aspect-video"
-                      >
-                        {videoUrl.includes("youtube.com") ||
-                        videoUrl.includes("youtu.be") ? (
-                          <iframe
-                            src={videoUrl.replace("watch?v=", "embed/")}
-                            className="w-full h-full"
-                            allowFullScreen
-                            title={`Product Video ${idx + 1}`}
-                          />
-                        ) : (
-                          <video
-                            src={videoUrl}
-                            controls
-                            className="w-full h-full"
-                          />
-                        )}
-                      </div>
-                    ))}
-                </div>
-              )}
             </div>
           </div>
 
-          {/* RIGHT: Product Info - 7 cols */}
-          <div className="lg:col-span-6">
+          {/* RIGHT: Product Info - 5 cols */}
+          <div className="lg:col-span-5">
             <div className="bg-white rounded-lg p-6">
               {/* Product Title & Meta */}
               <div className="mb-4">
@@ -530,7 +601,6 @@ const ProductDetailPage = () => {
                       groupedVariants[color].find((v) => v.stock > 0) ||
                       groupedVariants[color][0];
 
-                    // Get sample image
                     const sampleImage = availableVariant?.images?.[0];
 
                     return (
@@ -643,9 +713,8 @@ const ProductDetailPage = () => {
 
               {/* Action Buttons */}
               <div className="flex gap-3 mb-4">
-                {/* ✅ NÚT THÊM VÀO GIỎ HÀNG */}
                 <button
-                  onClick={handleAddToCart}
+                  onClick={() => handleAddToCart(false)}
                   disabled={cartLoading || selectedVariant.stock === 0}
                   className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
                 >
@@ -653,9 +722,8 @@ const ProductDetailPage = () => {
                   {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
                 </button>
 
-                {/* ✅ NÚT MUA NGAY */}
                 <button
-                  onClick={() => handleAddToCart(true)} // ← true = redirect + auto-select
+                  onClick={() => handleAddToCart(true)}
                   disabled={cartLoading || selectedVariant.stock === 0}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >
@@ -714,6 +782,8 @@ const ProductDetailPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Add to Cart Modal */}
       <AddToCartModal
         isOpen={showAddToCartModal}
         onClose={() => setShowAddToCartModal(false)}

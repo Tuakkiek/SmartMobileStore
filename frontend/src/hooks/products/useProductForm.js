@@ -101,11 +101,7 @@ export const useProductForm = (open, isEdit, effectiveCategory, product) => {
           : product.featuredImage
           ? [product.featuredImage]
           : [""],
-        videoUrls: Array.isArray(product.videoUrls)
-          ? product.videoUrls
-          : product.videoUrl
-          ? [product.videoUrl]
-          : [""],
+        videoUrl: product.videoUrl || "",
       });
     } else {
       console.log("✅ Creating new product form");

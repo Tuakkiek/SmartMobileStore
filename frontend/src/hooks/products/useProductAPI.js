@@ -122,13 +122,14 @@ export const useProductAPI = (
         .map((url) => url?.trim())
         .filter(Boolean);
 
-      cleaned.videoUrls = (cleaned.videoUrls || [])
-        .map((url) => url?.trim())
-        .filter(Boolean);
+      // Chỉ lấy 1 URL đầu tiên nếu là mảng, hoặc trim nếu là string
+      cleaned.videoUrl = Array.isArray(cleaned.videoUrl)
+        ? cleaned.videoUrl[0]?.trim() || ""
+        : cleaned.videoUrl?.trim() || "";
 
       // ✅ ĐẢM BẢO TRƯỜNG NÀY ĐƯỢC GỬI LÊN
       if (!cleaned.featuredImages) cleaned.featuredImages = [];
-      if (!cleaned.videoUrls) cleaned.videoUrls = [];
+      if (!cleaned.videoUrl) cleaned.videoUrl = "";
 
       console.log("📦 PAYLOAD GỬI LÊN:", JSON.stringify(cleaned, null, 2));
       return cleaned;

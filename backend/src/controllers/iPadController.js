@@ -85,6 +85,9 @@ export const create = async (req, res) => {
       totalReviews: 0,
       salesCount: 0,
       variants: [],
+
+      featuredImages: productData.featuredImages || [],
+      videoUrl: productData.videoUrl?.trim() || "",
     });
 
     await product.save({ session });
@@ -223,6 +226,11 @@ export const update = async (req, res) => {
     if (data.condition) product.condition = data.condition;
     if (data.status) product.status = data.status;
     if (data.installmentBadge) product.installmentBadge = data.installmentBadge;
+
+    if (data.featuredImages !== undefined)
+      product.featuredImages = data.featuredImages;
+    if (data.videoUrl !== undefined)
+      product.videoUrl = data.videoUrl?.trim() || "";
 
     // Cập nhật slug
     let newSlug = product.slug || product.baseSlug;

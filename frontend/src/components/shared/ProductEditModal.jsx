@@ -419,7 +419,7 @@ const ProductEditModal = ({
                 </div>
 
                 {/* Video URLs - MULTIPLE */}
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <Label>URL Video Giới Thiệu</Label>
                   {(formData.videoUrls || [""]).map((url, idx) => (
                     <div key={idx} className="flex items-center gap-2">
@@ -465,7 +465,7 @@ const ProductEditModal = ({
                   <p className="text-xs text-gray-500">
                     URL YouTube hoặc video trực tiếp (MP4)
                   </p>
-                </div>
+                </div> */}
 
                 {/* Video URL */}
                 <div className="space-y-2">
