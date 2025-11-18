@@ -22,6 +22,7 @@ import {
 import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
 import AddToCartModal from "@/components/product/AddToCartModal";
+import { ReviewsTab } from "@/components/product/ReviewsTab";
 import { Button } from "@/components/ui/button";
 
 const CATEGORY_MAP = {
@@ -314,7 +315,9 @@ const ProductDetailPage = () => {
           <div className="lg:col-span-7 h-96">
             <div className="bg-white rounded-lg overflow-hidden sticky top-4">
               {/* Main Image */}
-              <div className="relative aspect-video bg-white">  {/* 16:9 Aspect Ratio */}
+              <div className="relative aspect-video bg-white">
+                {" "}
+                {/* 16:9 Aspect Ratio */}
                 {activeMediaTab === "video" && product.videoUrl ? (
                   // Hiển thị video
                   <div className="w-full h-full p-8">
@@ -769,6 +772,20 @@ const ProductDetailPage = () => {
             >
               Chính sách & Bảo hành
               {activeTab === "warranty" && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab("reviews")}
+              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
+                activeTab === "reviews"
+                  ? "text-red-600 bg-red-50"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              }`}
+            >
+              Đánh giá ({product.totalReviews || 0})
+              {activeTab === "reviews" && (
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
               )}
             </button>
