@@ -403,16 +403,37 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                   </div>
                 ) : searchResults.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {searchResults.map((product) => (
-                      <SearchResultItem
-                        key={product._id}
-                        product={product}
-                        category={product._category}
-                        onClose={onClose}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {/* ✅ THÊM NÚT NÀY */}
+                    <div className="mb-4 flex justify-between items-center">
+                      <p className="text-sm text-gray-400">
+                        Tìm thấy {searchResults.length} sản phẩm
+                      </p>
+                      <button
+                        onClick={() => {
+                          navigate(
+                            `/tim-kiem?s=${encodeURIComponent(searchQuery)}`
+                          );
+                          onClose();
+                        }}
+                        className="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
+                      >
+                        Xem tất cả kết quả
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {searchResults.map((product) => (
+                        <SearchResultItem
+                          key={product._id}
+                          product={product}
+                          category={product._category}
+                          onClose={onClose}
+                        />
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center py-12">
                     <Search className="w-12 h-12 text-gray-700 mx-auto mb-4" />

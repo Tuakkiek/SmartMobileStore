@@ -38,6 +38,7 @@ import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
 
 // ✅ THÊM 1: Import trang 404
 import Page404 from "@/pages/Page404";
+import SearchResultsPage from "./pages/SearchResultsPage";
 
 // ============================================
 // SCROLL TO TOP COMPONENT
@@ -91,6 +92,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/tim-kiem" element={<SearchResultsPage />} />
           <Route path="/dien-thoai/*" element={<ProductDetailPage />} />
           <Route path="/may-tinh-bang/*" element={<ProductDetailPage />} />
           <Route path="/macbook/*" element={<ProductDetailPage />} />
