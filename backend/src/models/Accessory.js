@@ -47,19 +47,19 @@ accessoryVariantSchema.pre("save", function (next) {
 });
 
 // ✅ ADDED: Hàm tăng lượt bán cho từng biến thể
-accessoryVariantSchema.methods.incrementSales = async function (quantity = 1) {
-  this.salesCount += quantity;
-  await this.save();
+// accessoryVariantSchema.methods.incrementSales = async function (quantity = 1) {
+//   this.salesCount += quantity;
+//   await this.save();
 
-  // ✅ Đồng thời tăng lượt bán cho sản phẩm chính
-  const Accessory = mongoose.model("Accessory");
-  const parentProduct = await Accessory.findById(this.productId);
-  if (parentProduct) {
-    await parentProduct.incrementSales(quantity);
-  }
+//   // ✅ Đồng thời tăng lượt bán cho sản phẩm chính
+//   const Accessory = mongoose.model("Accessory");
+//   const parentProduct = await Accessory.findById(this.productId);
+//   if (parentProduct) {
+//     await parentProduct.incrementSales(quantity);
+//   }
 
-  return this.salesCount;
-};
+//   return this.salesCount;
+// };
 
 // ============================================
 // MAIN ACCESSORY SCHEMA

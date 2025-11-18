@@ -38,7 +38,6 @@ export const createOrder = async (req, res) => {
       promotionCode,
     } = req.body;
 
-    // Lấy giỏ hàng
     const cart = await Cart.findOne({ customerId: req.user._id }).session(
       session
     );
@@ -94,7 +93,7 @@ export const createOrder = async (req, res) => {
         sku: variant.sku,
       });
 
-      // STEP 2: Get productId from variant (NOT from cart item)
+      // STEP 2: Get productId from variant
       const actualProductId = variant.productId;
 
       if (!actualProductId) {
@@ -105,7 +104,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // STEP 3: Find product using productId from variant
+      // STEP 3: Find product
       const product = await models.Product.findById(actualProductId).session(
         session
       );
@@ -144,21 +143,18 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Giảm stock
+      // ✅ FIXED: Cập nhật variant - KHÔNG GỌI incrementSales()
       variant.stock -= item.quantity;
+      variant.salesCount = (variant.salesCount || 0) + item.quantity;
       await variant.save({ session });
 
-      // ✅ INCREMENT VARIANT SALES COUNT
-      if (variant.incrementSales) {
-        await variant.incrementSales(item.quantity);
-      } else {
-        variant.salesCount = (variant.salesCount || 0) + item.quantity;
-        await variant.save({ session });
-      }
-
-      // Tăng salesCount
+      // ✅ FIXED: Cập nhật product - CHỈ 1 LẦN
       product.salesCount = (product.salesCount || 0) + item.quantity;
       await product.save({ session });
+
+      console.log(
+        `✅ Updated: variant.salesCount=${variant.salesCount}, product.salesCount=${product.salesCount}`
+      );
 
       // Tính tiền
       const itemTotal = variant.price * item.quantity;
@@ -166,7 +162,7 @@ export const createOrder = async (req, res) => {
 
       // Create order item with correct productId
       orderItems.push({
-        productId: product._id, // Use product._id from database
+        productId: product._id,
         variantId: variant._id,
         productType: item.productType,
         productName: product.name,
@@ -186,6 +182,7 @@ export const createOrder = async (req, res) => {
 
       console.log("Item processed successfully");
     }
+
     console.log("\n=== ORDER ITEMS SUMMARY ===");
     console.log("Total items:", orderItems.length);
     console.log("Subtotal:", subtotal);
@@ -272,7 +269,7 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("\nORDER CREATED SUCCESSFULLY:", order[0]._id);
+    console.log("\n✅ ORDER CREATED SUCCESSFULLY:", order[0]._id);
 
     res.status(201).json({
       success: true,
@@ -467,7 +464,7 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    // Hoàn lại stock
+    // ✅ FIXED: Hoàn lại stock - KHÔNG GỌI incrementSales()
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
@@ -476,7 +473,6 @@ export const cancelOrder = async (req, res) => {
         );
         if (variant) {
           variant.stock += item.quantity;
-          // ✅ DECREMENT VARIANT SALES COUNT
           variant.salesCount = Math.max(
             0,
             (variant.salesCount || 0) - item.quantity
@@ -511,10 +507,8 @@ export const cancelOrder = async (req, res) => {
 
     order.status = "CANCELLED";
     order.cancelledAt = new Date();
-    // ✅ SỬA: Thêm optional chaining và default value
     order.cancelReason = req.body?.reason || "Khách hàng hủy đơn";
 
-    // ✅ THÊM: Cập nhật statusHistory
     order.statusHistory.push({
       status: "CANCELLED",
       updatedBy: req.user._id,
@@ -618,7 +612,7 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // === 1. XÁC THỰC CHUYỂN TRẠNG THÁI ===
+    // Xác thực chuyển trạng thái
     const validTransitions = {
       PENDING: ["CONFIRMED", "CANCELLED"],
       CONFIRMED: ["SHIPPING", "CANCELLED"],
@@ -638,7 +632,7 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // === 2. HOÀN KHO KHI HỦY/TRẢ HÀNG ===
+    // ✅ FIXED: Hoàn kho khi hủy/trả hàng - KHÔNG GỌI incrementSales()
     if (
       ["CANCELLED", "RETURNED"].includes(status) &&
       !["CANCELLED", "RETURNED"].includes(order.status)
@@ -651,7 +645,6 @@ export const updateOrderStatus = async (req, res) => {
           );
           if (variant) {
             variant.stock += item.quantity;
-            // ✅ DECREMENT VARIANT SALES COUNT
             variant.salesCount = Math.max(
               0,
               (variant.salesCount || 0) - item.quantity
@@ -673,7 +666,7 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
-    // === 3. CẬP NHẬT THỜI GIAN ===
+    // Cập nhật thời gian
     const now = new Date();
     if (status === "CONFIRMED") order.confirmedAt = now;
     if (status === "SHIPPING") order.shippingAt = now;
@@ -681,7 +674,7 @@ export const updateOrderStatus = async (req, res) => {
     if (status === "RETURNED") order.returnedAt = now;
     if (status === "CANCELLED") order.cancelledAt = now;
 
-    // === 4. CẬP NHẬT TRẠNG THÁI + LỊCH SỬ ===
+    // Cập nhật trạng thái + lịch sử
     order.status = status;
     order.statusHistory.push({
       status,
@@ -709,7 +702,6 @@ export const updateOrderStatus = async (req, res) => {
     session.endSession();
   }
 };
-
 // Helper: Ghi chú mặc định
 const getDefaultNote = (from, to) => {
   const notes = {
