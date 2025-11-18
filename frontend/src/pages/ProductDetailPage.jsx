@@ -279,7 +279,11 @@ const ProductDetailPage = () => {
     );
   }
 
-  const images = selectedVariant?.images || [];
+  // Ưu tiên featuredImages, fallback về variant.images
+  const images =
+    product.featuredImages?.length > 0
+      ? product.featuredImages
+      : selectedVariant?.images || [];
   const discount = getDiscountPercent();
   const groupedVariants = getGroupedVariants();
   const variantKeyOptions = getVariantKeyOptions();

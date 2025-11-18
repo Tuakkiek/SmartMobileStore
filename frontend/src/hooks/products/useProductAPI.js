@@ -117,7 +117,7 @@ export const useProductAPI = (
         };
       }
 
-      // Lọc bỏ URLs rỗng
+      // Lọc bỏ URLs rỗng VÀ GẮN VÀO PAYLOAD
       cleaned.featuredImages = (cleaned.featuredImages || [])
         .map((url) => url?.trim())
         .filter(Boolean);
@@ -126,7 +126,11 @@ export const useProductAPI = (
         .map((url) => url?.trim())
         .filter(Boolean);
 
-      console.log("Cleaned payload:", JSON.stringify(cleaned, null, 2));
+      // ✅ ĐẢM BẢO TRƯỜNG NÀY ĐƯỢC GỬI LÊN
+      if (!cleaned.featuredImages) cleaned.featuredImages = [];
+      if (!cleaned.videoUrls) cleaned.videoUrls = [];
+
+      console.log("📦 PAYLOAD GỬI LÊN:", JSON.stringify(cleaned, null, 2));
       return cleaned;
     },
     [effectiveCategory]

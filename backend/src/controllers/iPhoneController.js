@@ -78,6 +78,9 @@ export const create = async (req, res) => {
       totalReviews: 0,
       salesCount: 0,
       variants: [],
+      // ✅ THÊM 2 DÒNG NÀY
+      featuredImages: productData.featuredImages || [],
+      videoUrls: productData.videoUrls || [],
     });
 
     await product.save({ session });
@@ -212,6 +215,11 @@ export const update = async (req, res) => {
     if (data.condition) product.condition = data.condition;
     if (data.status) product.status = data.status;
     if (data.installmentBadge) product.installmentBadge = data.installmentBadge;
+
+    // ✅ THÊM 2 DÒNG NÀY
+    if (data.featuredImages !== undefined)
+      product.featuredImages = data.featuredImages;
+    if (data.videoUrls !== undefined) product.videoUrls = data.videoUrls;
 
     // Cập nhật slug nếu model thay đổi hoặc frontend gửi
     let newSlug = product.slug || product.baseSlug;
