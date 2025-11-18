@@ -177,3 +177,24 @@ export const changePassword = async (req, res) => {
     });
   }
 };
+
+// Thêm function mới
+export const updateAvatar = async (req, res) => {
+  try {
+    const { avatar } = req.body;
+    
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { avatar },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Cập nhật ảnh đại diện thành công",
+      data: { user },
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

@@ -776,7 +776,7 @@ const ProductDetailPage = () => {
               )}
             </button>
 
-            <button
+            {/* <button
               onClick={() => setActiveTab("reviews")}
               className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
                 activeTab === "reviews"
@@ -786,9 +786,9 @@ const ProductDetailPage = () => {
             >
               Đánh giá ({product.totalReviews || 0})
               {activeTab === "reviews" && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
+                <ReviewsTab productId={product._id} product={product} />
               )}
-            </button>
+            </button> */}
           </div>
 
           <div className="p-6">
@@ -798,6 +798,12 @@ const ProductDetailPage = () => {
             {activeTab === "warranty" && <WarrantyTab />}
           </div>
         </div>
+      </div>
+
+      {/* Reviews Section - Độc lập */}
+      <div className="mt-8 bg-white rounded-lg p-8">
+        <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
+        <ReviewsTab productId={product._id} product={product} />
       </div>
 
       {/* Add to Cart Modal */}

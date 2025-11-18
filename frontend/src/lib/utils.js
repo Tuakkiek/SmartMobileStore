@@ -90,3 +90,18 @@ export const fetchAllProducts = async (params = {}) => {
     throw error;
   }
 };
+
+// Lấy chữ viết tắt từ 2 từ cuối của tên
+export const getNameInitials = (fullName) => {
+  if (!fullName) return "U";
+  
+  const words = fullName.trim().split(/\s+/);
+  
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+  
+  // Lấy 2 chữ cuối
+  const lastTwo = words.slice(-2);
+  return lastTwo.map(word => word.charAt(0).toUpperCase()).join("");
+};

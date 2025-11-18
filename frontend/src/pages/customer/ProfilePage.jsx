@@ -50,6 +50,8 @@ import {
   getStatusColor,
   getStatusText,
 } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { getNameInitials } from "@/lib/utils";
 
 // Placeholder ảnh lỗi
 const PLACEHOLDER_IMG = "https://via.placeholder.com/64?text=No+Image";
@@ -72,8 +74,12 @@ const ProfilePage = () => {
           <Card>
             <CardContent className="p-6 space-y-4">
               <div className="text-center pb-4 border-b">
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-                  <User className="w-10 h-10 text-primary" />
+                <div className="flex justify-center mb-3">
+                  <Avatar className="w-20 h-20">
+                    <AvatarFallback className="bg-primary/10 text-primary text-2xl font-semibold">
+                      {getNameInitials(user?.fullName)}
+                    </AvatarFallback>
+                  </Avatar>
                 </div>
                 <h3 className="font-semibold text-lg">{user?.fullName}</h3>
                 <p className="text-sm text-muted-foreground">

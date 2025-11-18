@@ -84,6 +84,12 @@ const userSchema = new mongoose.Schema(
     },
     addresses: [addressSchema],
 
+    avatar: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
     // ✅ THÊM: Thông tin nhân viên POS
     storeLocation: {
       type: String,

@@ -2,12 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { reviewAPI } from "@/lib/api";
 import { toast } from "sonner";
-import { Star, ThumbsUp, Reply, Upload, X, Image as ImageIcon, Video } from "lucide-react";
+import { Star, Eye, EyeOff, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, getNameInitials } from "@/lib/utils";
 
 export const ReviewsTab = ({ productId, product }) => {
   const { user, isAuthenticated } = useAuthStore();
@@ -22,7 +22,8 @@ export const ReviewsTab = ({ productId, product }) => {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch reviews
+  const isAdmin = user?.role === "ADMIN";
+
   useEffect(() => {
     fetchReviews();
   }, [productId]);
@@ -40,7 +41,6 @@ export const ReviewsTab = ({ productId, product }) => {
     }
   };
 
-  // Calculate rating distribution
   const ratingDistribution = {
     5: reviews.filter((r) => r.rating === 5).length,
     4: reviews.filter((r) => r.rating === 4).length,
@@ -51,13 +51,11 @@ export const ReviewsTab = ({ productId, product }) => {
 
   const maxCount = Math.max(...Object.values(ratingDistribution), 1);
 
-  // Filter reviews
   const filteredReviews =
     activeFilter === "all"
       ? reviews
       : reviews.filter((r) => r.rating === parseInt(activeFilter));
 
-  // Submit review
   const handleSubmitReview = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để đánh giá");
@@ -74,21 +72,31 @@ export const ReviewsTab = ({ productId, product }) => {
       return;
     }
 
+    // ✅ Map category sang đúng enum của backend
+    const productModelMap = {
+      iPhone: "IPhone",
+      iPad: "IPad",
+      Mac: "Mac",
+      AirPods: "AirPods",
+      AppleWatch: "AppleWatch",
+      Accessory: "Accessory",
+    };
+
+    const payload = {
+      productId,
+      productModel: productModelMap[product.category] || product.category,
+      rating,
+      comment: comment.trim(),
+    };
+
     try {
       setIsSubmitting(true);
-      await reviewAPI.create({
-        productId,
-        rating,
-        comment: comment.trim(),
-      });
-
+      await reviewAPI.create(payload);
       toast.success("Đánh giá thành công!");
       setRating(0);
       setComment("");
       setShowReviewForm(false);
       fetchReviews();
-
-      // Reload page để cập nhật rating
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       console.error("Error submitting review:", error);
@@ -106,7 +114,6 @@ export const ReviewsTab = ({ productId, product }) => {
         {/* LEFT: Review Summary */}
         <div className="lg:col-span-1">
           <div className="bg-white border rounded-2xl p-6 sticky top-4">
-            {/* Average Rating */}
             <div className="text-center mb-6">
               <div className="text-5xl font-bold text-gray-900 mb-2">
                 {product.averageRating?.toFixed(1) || 0}
@@ -128,7 +135,6 @@ export const ReviewsTab = ({ productId, product }) => {
               </p>
             </div>
 
-            {/* Rating Distribution */}
             <div className="space-y-2 mb-6">
               {[5, 4, 3, 2, 1].map((star) => (
                 <div key={star} className="flex items-center gap-3">
@@ -140,7 +146,9 @@ export const ReviewsTab = ({ productId, product }) => {
                     <div
                       className="h-full bg-red-600 transition-all"
                       style={{
-                        width: `${(ratingDistribution[star] / maxCount) * 100}%`,
+                        width: `${
+                          (ratingDistribution[star] / maxCount) * 100
+                        }%`,
                       }}
                     />
                   </div>
@@ -151,7 +159,6 @@ export const ReviewsTab = ({ productId, product }) => {
               ))}
             </div>
 
-            {/* Write Review Button */}
             {canReview && (
               <Button
                 onClick={() => setShowReviewForm(!showReviewForm)}
@@ -165,7 +172,6 @@ export const ReviewsTab = ({ productId, product }) => {
 
         {/* RIGHT: Reviews List */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Filter Buttons */}
           <div className="flex flex-wrap gap-2">
             <Button
               variant={activeFilter === "all" ? "default" : "outline"}
@@ -178,22 +184,23 @@ export const ReviewsTab = ({ productId, product }) => {
             {[5, 4, 3, 2, 1].map((star) => (
               <Button
                 key={star}
-                variant={activeFilter === star.toString() ? "default" : "outline"}
+                variant={
+                  activeFilter === star.toString() ? "default" : "outline"
+                }
                 size="sm"
                 onClick={() => setActiveFilter(star.toString())}
                 className={activeFilter === star.toString() ? "bg-red-600" : ""}
               >
-                {star} <Star className="w-3 h-3 ml-1" /> ({ratingDistribution[star]})
+                {star} <Star className="w-3 h-3 ml-1" /> (
+                {ratingDistribution[star]})
               </Button>
             ))}
           </div>
 
-          {/* Review Form */}
           {showReviewForm && canReview && (
             <div className="bg-white border rounded-2xl p-6">
               <h3 className="font-bold text-lg mb-4">Viết đánh giá của bạn</h3>
 
-              {/* Star Rating */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">
                   Đánh giá của bạn <span className="text-red-600">*</span>
@@ -220,7 +227,6 @@ export const ReviewsTab = ({ productId, product }) => {
                 </div>
               </div>
 
-              {/* Comment */}
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">
                   Nội dung đánh giá <span className="text-red-600">*</span>
@@ -238,7 +244,6 @@ export const ReviewsTab = ({ productId, product }) => {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <div className="flex gap-3">
                 <Button
                   variant="outline"
@@ -262,7 +267,6 @@ export const ReviewsTab = ({ productId, product }) => {
             </div>
           )}
 
-          {/* Reviews List */}
           {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto"></div>
@@ -278,7 +282,12 @@ export const ReviewsTab = ({ productId, product }) => {
           ) : (
             <div className="space-y-4">
               {filteredReviews.map((review) => (
-                <ReviewItem key={review._id} review={review} />
+                <ReviewItem
+                  key={review._id}
+                  review={review}
+                  isAdmin={isAdmin}
+                  onUpdate={fetchReviews}
+                />
               ))}
             </div>
           )}
@@ -288,52 +297,183 @@ export const ReviewsTab = ({ productId, product }) => {
   );
 };
 
-// Review Item Component
-const ReviewItem = ({ review }) => {
+// ✅ Review Item with Admin Reply
+const ReviewItem = ({ review, isAdmin, onUpdate }) => {
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const customerName = review.customerId?.fullName || "Người dùng";
-  const initials = customerName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+
+  const handleAdminReply = async () => {
+    if (!replyContent.trim()) {
+      toast.error("Vui lòng nhập nội dung phản hồi");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await reviewAPI.replyToReview(review._id, replyContent.trim());
+      toast.success("Phản hồi thành công!");
+      setReplyContent("");
+      setShowReplyForm(false);
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể phản hồi");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleVisibility = async () => {
+    try {
+      await reviewAPI.toggleVisibility(review._id);
+      toast.success(
+        review.isHidden ? "Đã hiển thị đánh giá" : "Đã ẩn đánh giá"
+      );
+      onUpdate();
+    } catch (error) {
+      toast.error("Không thể thay đổi trạng thái");
+    }
+  };
 
   return (
-    <div className="bg-white border rounded-2xl p-6">
+    <div
+      className={`bg-white border rounded-2xl p-6 ${
+        review.isHidden ? "opacity-50" : ""
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-start gap-4 mb-3">
-        <Avatar className="w-10 h-10">
-          <AvatarFallback className="bg-red-100 text-red-600 font-semibold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start gap-4">
+          <Avatar className="w-10 h-10">
+            <AvatarFallback className="bg-red-100 text-red-600 font-semibold">
+              {getNameInitials(customerName)}
+            </AvatarFallback>
+          </Avatar>
 
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold">{customerName}</span>
-            <span className="text-xs text-gray-500">
-              {formatDate(review.createdAt)}
-            </span>
-          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-semibold">{customerName}</span>
+              <span className="text-xs text-gray-500">
+                {formatDate(review.createdAt)}
+              </span>
+              {review.isHidden && (
+                <Badge variant="secondary" className="text-xs">
+                  Đã ẩn
+                </Badge>
+              )}
+            </div>
 
-          {/* Stars */}
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Star
-                key={star}
-                className={`w-4 h-4 ${
-                  star <= review.rating
-                    ? "fill-yellow-400 text-yellow-400"
-                    : "text-gray-300"
-                }`}
-              />
-            ))}
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  className={`w-4 h-4 ${
+                    star <= review.rating
+                      ? "fill-yellow-400 text-yellow-400"
+                      : "text-gray-300"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Admin Actions */}
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleToggleVisibility}>
+              {review.isHidden ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowReplyForm(!showReplyForm)}
+            >
+              <MessageSquare className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Comment */}
-      <p className="text-gray-700 whitespace-pre-wrap">{review.comment}</p>
+      <p className="text-gray-700 whitespace-pre-wrap mb-4">{review.comment}</p>
+
+      {/* Admin Reply Display */}
+      {review.adminReply?.content && (
+        <div className="mt-4 ml-8 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+          <div className="flex items-start gap-3">
+            <Avatar className="w-8 h-8">
+              {review.adminReply.adminId?.avatar && (
+                <AvatarImage src={review.adminReply.adminId.avatar} />
+              )}
+              <AvatarFallback className="bg-blue-600 text-white text-xs">
+                {getNameInitials(review.adminReply.adminId?.fullName)}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-semibold text-sm">
+                  {review.adminReply.adminId?.fullName || "Admin"}
+                </span>
+                <Badge className="bg-blue-600 text-xs">Quản trị viên</Badge>
+              </div>
+              <p className="text-sm text-gray-800">
+                {review.adminReply.content}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                {formatDate(review.adminReply.repliedAt)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Reply Form */}
+      {isAdmin && showReplyForm && !review.adminReply?.content && (
+        <div className="mt-4 ml-8 p-4 bg-gray-50 border rounded-lg">
+          <Textarea
+            value={replyContent}
+            onChange={(e) => setReplyContent(e.target.value)}
+            placeholder="Nhập phản hồi của bạn..."
+            maxLength={500}
+            rows={3}
+            className="mb-2"
+          />
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-500">
+              {replyContent.length}/500
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowReplyForm(false);
+                  setReplyContent("");
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAdminReply}
+                disabled={isSubmitting || !replyContent.trim()}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Send className="w-4 h-4 mr-1" />
+                {isSubmitting ? "Đang gửi..." : "Gửi"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

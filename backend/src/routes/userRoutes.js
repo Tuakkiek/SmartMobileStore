@@ -11,6 +11,8 @@ import {
   deleteEmployee,
 } from "../controllers/userController.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
+import { updateEmployeeAvatar } from "../controllers/userController.js";
+import { updateEmployee } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -31,5 +33,8 @@ router.patch(
   toggleEmployeeStatus
 );
 router.delete("/employees/:id", restrictTo("ADMIN"), deleteEmployee);
+
+router.put("/employees/:id/avatar", restrictTo("ADMIN"), updateEmployeeAvatar);
+router.put("/employees/:id", restrictTo("ADMIN"), updateEmployee);
 
 export default router;

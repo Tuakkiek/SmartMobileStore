@@ -82,6 +82,7 @@ export const authAPI = {
   logout: () => api.post("/auth/logout"),
   getCurrentUser: () => api.get("/auth/me"),
   changePassword: (data) => api.put("/auth/change-password", data),
+  updateAvatar: (avatar) => api.put("/auth/avatar", { avatar }),
 };
 
 // ============================================
@@ -140,6 +141,9 @@ export const reviewAPI = {
   create: (data) => api.post("/reviews", data),
   update: (id, data) => api.put(`/reviews/${id}`, data),
   delete: (id) => api.delete(`/reviews/${id}`),
+  // ✅ NEW: Admin functions
+  replyToReview: (id, content) => api.post(`/reviews/${id}/reply`, { content }),
+  toggleVisibility: (id) => api.patch(`/reviews/${id}/toggle-visibility`),
 };
 
 // ============================================
@@ -168,6 +172,8 @@ export const userAPI = {
   toggleEmployeeStatus: (id) =>
     api.patch(`/users/employees/${id}/toggle-status`),
   deleteEmployee: (id) => api.delete(`/users/employees/${id}`),
+  updateEmployeeAvatar: (id, avatar) => api.put(`/users/employees/${id}/avatar`, { avatar }),
+  updateEmployee: (id, data) => api.put(`/users/employees/${id}`, data),
 };
 // ============================================
 // ANALYTICS API

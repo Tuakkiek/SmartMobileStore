@@ -1,7 +1,3 @@
-// ============================================
-// FILE: backend/src/models/Review.js
-// ============================================
-
 import mongoose from "mongoose";
 
 const reviewSchema = new mongoose.Schema(
@@ -50,13 +46,32 @@ const reviewSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // ✅ NEW: Admin reply
+    adminReply: {
+      content: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+      },
+      adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      repliedAt: {
+        type: Date,
+      },
+    },
+    // ✅ NEW: Admin moderation
+    isHidden: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Index để tìm kiếm nhanh
 reviewSchema.index({ productId: 1, customerId: 1 }, { unique: true });
 reviewSchema.index({ productId: 1, createdAt: -1 });
 reviewSchema.index({ customerId: 1 });

@@ -124,6 +124,7 @@ export const createEmployee = async (req, res) => {
       province,
       password,
       role,
+      avatar,
     });
 
     res.status(201).json({
@@ -173,6 +174,68 @@ export const deleteEmployee = async (req, res) => {
     }
 
     res.json({ success: true, message: "Xóa nhân viên thành công" });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const updateEmployeeAvatar = async (req, res) => {
+  try {
+    const { avatar } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { avatar },
+      { new: true }
+    );
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên" });
+    }
+
+    res.json({
+      success: true,
+      message: "Cập nhật ảnh đại diện thành công",
+      data: { user },
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const updateEmployee = async (req, res) => {
+  try {
+    const { fullName, phoneNumber, email, province, password, role, avatar } =
+      req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy nhân viên" });
+    }
+
+    // Cập nhật thông tin
+    user.fullName = fullName || user.fullName;
+    user.phoneNumber = phoneNumber || user.phoneNumber;
+    user.email = email || user.email;
+    user.province = province || user.province;
+    user.role = role || user.role;
+    user.avatar = avatar !== undefined ? avatar : user.avatar;
+
+    // Chỉ cập nhật password nếu được cung cấp
+    if (password && password.trim()) {
+      user.password = password;
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Cập nhật nhân viên thành công",
+      data: { user },
+    });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
