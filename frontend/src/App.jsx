@@ -85,7 +85,7 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Breadcrumb />
+      {/* <Breadcrumb /> */}
       <Routes>
         {/* ========================================
             PUBLIC ROUTES

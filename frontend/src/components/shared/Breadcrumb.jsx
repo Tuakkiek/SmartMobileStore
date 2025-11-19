@@ -91,7 +91,7 @@ const Breadcrumb = () => {
   return (
     <nav
       aria-label="Breadcrumb"
-      className="w-full bg-slate-50 pl-24 mt-6 items-center py-3 shadow-sm relative top-16 z-40"
+      className="w-full bg-slate-50 pl-24 mt-6 items-center py-3 shadow-sm relative top-16 z-30"
     >
       {/* ✅ LOG 2: Thêm background để dễ nhìn thấy component */}
       <ol className="flex flex-wrap items-center text-sm text-gray-500">
