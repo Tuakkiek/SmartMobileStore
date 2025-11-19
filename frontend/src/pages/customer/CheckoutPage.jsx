@@ -27,6 +27,7 @@ import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { Plus, MapPin, ChevronRight } from "lucide-react";
+import AddressFormDialog from "@/components/shared/AddressFormDialog";
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -43,23 +44,16 @@ const CheckoutPage = () => {
   });
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [showSelectAddressDialog, setShowSelectAddressDialog] = useState(false);
-  const [showAddressDialog, setShowAddressDialog] = useState(false);
-  const [editingAddress, setEditingAddress] = useState(null);
-  const [newAddress, setNewAddress] = useState({
-    fullName: "",
-    phoneNumber: "",
-    province: "",
-    district: "", // ✅ THÊM
-    commune: "", // ✅ THÊM (thay ward)
-    detailAddress: "",
-    isDefault: false,
-  });
 
   // Promotion states
   const [promotionCode, setPromotionCode] = useState("");
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [promotionError, setPromotionError] = useState("");
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  const [showAddressDialog, setShowAddressDialog] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
 
   useEffect(() => {
     if (user?.addresses?.length > 0) {
@@ -111,13 +105,6 @@ const CheckoutPage = () => {
     });
   };
 
-  const handleAddressChange = (e) => {
-    setNewAddress({
-      ...newAddress,
-      [e.target.id]: e.target.value,
-    });
-  };
-
   const handleCheckboxChange = (e) => {
     setNewAddress({
       ...newAddress,
@@ -160,44 +147,30 @@ const CheckoutPage = () => {
   };
 
   // Handle add or edit address
-  const handleSubmitAddress = async (e) => {
-    e.preventDefault();
+  const handleSubmitAddress = async (formData, addressId) => {
+    setIsSubmittingAddress(true);
     try {
-      if (editingAddress) {
-        await userAPI.updateAddress({ ...newAddress, _id: editingAddress._id });
+      if (addressId) {
+        // EDIT
+        await userAPI.updateAddress(addressId, formData);
         toast.success("Cập nhật địa chỉ thành công");
       } else {
-        await userAPI.addAddress(newAddress);
+        // ADD
+        await userAPI.addAddress(formData);
         toast.success("Thêm địa chỉ thành công");
       }
       await getCurrentUser();
       setShowAddressDialog(false);
-      setEditingAddress(null);
-      setNewAddress({
-        fullName: "",
-        phoneNumber: "",
-        province: "",
-        district: "",
-        commune: "",
-        detailAddress: "",
-        isDefault: false,
-      });
+      setEditingAddressId(null);
     } catch (error) {
       toast.error("Thao tác thất bại");
+    } finally {
+      setIsSubmittingAddress(false);
     }
   };
 
   const openEditAddress = (address) => {
-    setEditingAddress(address);
-    setNewAddress({
-      fullName: address.fullName,
-      phoneNumber: address.phoneNumber,
-      province: address.province,
-      district: address.district,
-      commune: address.commune,
-      detailAddress: address.detailAddress,
-      isDefault: address.isDefault,
-    });
+    setEditingAddressId(address._id);
     setShowSelectAddressDialog(false);
     setShowAddressDialog(true);
   };
@@ -207,12 +180,7 @@ const CheckoutPage = () => {
   );
 
   const getFullAddress = (address) => {
-    return [
-      address.detailAddress,
-      address.commune,
-      address.district,
-      address.province,
-    ]
+    return [address.detailAddress, address.ward, address.province]
       .filter((part) => part && part.trim() !== "")
       .join(", ");
   };
@@ -247,19 +215,14 @@ const CheckoutPage = () => {
           fullName: selectedAddress.fullName,
           phoneNumber: selectedAddress.phoneNumber,
           province: selectedAddress.province,
-          // ✅ MAP ward → district (tạm thời)
-          district:
-            selectedAddress.district ||
-            selectedAddress.ward ||
-            selectedAddress.province,
-          // ✅ MAP ward → commune
-          commune: selectedAddress.commune || selectedAddress.ward || "",
+          // Map ward từ form ProfilePage thành district + commune
+          district: selectedAddress.ward || selectedAddress.province,
+          commune: selectedAddress.ward || "",
           detailAddress: selectedAddress.detailAddress,
         },
         paymentMethod: formData.paymentMethod,
         note: formData.note,
         promotionCode: appliedPromotion?.code || undefined,
-        // CHỈ GỬI SẢN PHẨM ĐƯỢC CHỌN
         items: checkoutItems.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
@@ -612,16 +575,7 @@ const CheckoutPage = () => {
               variant="outline"
               className="w-full text-red-500"
               onClick={() => {
-                setEditingAddress(null);
-                setNewAddress({
-                  fullName: "",
-                  phoneNumber: "",
-                  province: "",
-                  district: "",
-                  commune: "",
-                  detailAddress: "",
-                  isDefault: false,
-                });
+                setEditingAddressId(null);
                 setShowSelectAddressDialog(false);
                 setShowAddressDialog(true);
               }}
@@ -633,112 +587,17 @@ const CheckoutPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for add/edit address */}
-      <Dialog open={showAddressDialog} onOpenChange={setShowAddressDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingAddress ? "Sửa địa chỉ" : "Thêm địa chỉ mới"}
-            </DialogTitle>
-            <DialogDescription>
-              Nhập thông tin địa chỉ đầy đủ.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmitAddress} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Họ và tên *</Label>
-                <Input
-                  id="fullName"
-                  value={newAddress.fullName}
-                  onChange={handleAddressChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Số điện thoại *</Label>
-                <Input
-                  id="phoneNumber"
-                  type="tel"
-                  value={newAddress.phoneNumber}
-                  onChange={handleAddressChange}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="province">Tỉnh/Thành phố *</Label>
-                <Input
-                  id="province"
-                  value={newAddress.province}
-                  onChange={handleAddressChange}
-                  required
-                />
-              </div>
-
-              {/* ✅ THÊM DISTRICT */}
-              <div className="space-y-2">
-                <Label htmlFor="district">Quận/Huyện *</Label>
-                <Input
-                  id="district"
-                  value={newAddress.district}
-                  onChange={handleAddressChange}
-                  required
-                />
-              </div>
-
-              {/* ✅ ĐỔI ward → commune */}
-              <div className="space-y-2">
-                <Label htmlFor="commune">Phường/Xã *</Label>
-                <Input
-                  id="commune"
-                  value={newAddress.commune}
-                  onChange={handleAddressChange}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="detailAddress">Địa chỉ cụ thể *</Label>
-              <Input
-                id="detailAddress"
-                placeholder="Số nhà, tên đường..."
-                value={newAddress.detailAddress}
-                onChange={handleAddressChange}
-                required
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="isDefault"
-                checked={newAddress.isDefault}
-                onChange={handleCheckboxChange}
-                className="w-4 h-4"
-              />
-              <Label htmlFor="isDefault">Đặt làm địa chỉ mặc định</Label>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowAddressDialog(false)}
-              >
-                Hủy
-              </Button>
-              <Button type="submit">
-                {editingAddress ? "Cập nhật" : "Thêm"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddressFormDialog
+        open={showAddressDialog}
+        onOpenChange={setShowAddressDialog}
+        onSubmit={handleSubmitAddress}
+        editingAddress={
+          editingAddressId
+            ? user?.addresses?.find((a) => a._id === editingAddressId)
+            : null
+        }
+        isLoading={isSubmittingAddress}
+      />
     </div>
   );
 };

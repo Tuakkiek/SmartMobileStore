@@ -1,3 +1,4 @@
+// components/shared/AvatarUpload.jsx
 import React, { useState } from "react";
 import { Camera, Eye } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

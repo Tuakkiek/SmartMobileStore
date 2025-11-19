@@ -51,6 +51,7 @@ import {
   getStatusText,
 } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import AddressFormDialog from "@/components/shared/AddressFormDialog";
 import { getNameInitials } from "@/lib/utils";
 
 // Placeholder ảnh lỗi
@@ -709,37 +710,24 @@ const ProfileForm = ({ user, onUpdate }) => {
 
 const AddressesManager = ({ user, onUpdate }) => {
   const [showDialog, setShowDialog] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({
-    fullName: "",
-    phoneNumber: "",
-    province: "",
-    ward: "",
-    detailAddress: "",
-    isDefault: false,
-  });
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (e) => {
-    const value =
-      e.target.type === "checkbox" ? e.target.checked : e.target.value;
-    setFormData({
-      ...formData,
-      [e.target.name]: value,
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmitAddress = async (formData, addressId) => {
+    setIsSubmitting(true);
     try {
-      if (editingId) {
-        await userAPI.updateAddress(editingId, formData);
+      if (addressId) {
+        await userAPI.updateAddress(addressId, formData);
       } else {
         await userAPI.addAddress(formData);
       }
       onUpdate();
-      resetForm();
+      setShowDialog(false);
+      setEditingAddressId(null);
     } catch (error) {
       alert(error.response?.data?.message || "Thao tác thất bại");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -754,22 +742,8 @@ const AddressesManager = ({ user, onUpdate }) => {
   };
 
   const handleEdit = (address) => {
-    setFormData(address);
-    setEditingId(address._id);
+    setEditingAddressId(address._id);
     setShowDialog(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      fullName: "",
-      phoneNumber: "",
-      province: "",
-      ward: "",
-      detailAddress: "",
-      isDefault: false,
-    });
-    setShowDialog(false);
-    setEditingId(null);
   };
 
   return (
@@ -777,7 +751,12 @@ const AddressesManager = ({ user, onUpdate }) => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Địa chỉ của tôi</CardTitle>
-          <Button onClick={() => setShowDialog(true)}>
+          <Button
+            onClick={() => {
+              setEditingAddressId(null);
+              setShowDialog(true);
+            }}
+          >
             <Plus className="w-4 h-4 mr-2" />
             Thêm địa chỉ
           </Button>
@@ -798,7 +777,8 @@ const AddressesManager = ({ user, onUpdate }) => {
                   {address.isDefault && <Badge>Mặc định</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {address.detailAddress}, {address.ward}, {address.province}
+                  {address.detailAddress}, {address.commune || address.ward},{" "}
+                  {address.district || address.ward}, {address.province}
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -824,93 +804,18 @@ const AddressesManager = ({ user, onUpdate }) => {
         </div>
       </CardContent>
 
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ mới"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Họ và tên</Label>
-                <Input
-                  id="fullName"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Số điện thoại</Label>
-                <Input
-                  id="phoneNumber"
-                  name="phoneNumber"
-                  value={formData.phoneNumber}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="province">Tỉnh/Thành phố</Label>
-                <Input
-                  id="province"
-                  name="province"
-                  value={formData.province}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ward">Phường/Xã</Label>
-                <Input
-                  id="ward"
-                  name="ward"
-                  value={formData.ward}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="detailAddress">Địa chỉ cụ thể</Label>
-              <Input
-                id="detailAddress"
-                name="detailAddress"
-                value={formData.detailAddress}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="isDefault"
-                name="isDefault"
-                checked={formData.isDefault}
-                onChange={handleChange}
-                className="w-4 h-4"
-              />
-              <Label htmlFor="isDefault">Đặt làm địa chỉ mặc định</Label>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={resetForm}>
-                Hủy
-              </Button>
-              <Button type="submit">{editingId ? "Cập nhật" : "Thêm"}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* SỬ DỤNG COMPONENT TÁI SỬ DỤNG */}
+      <AddressFormDialog
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        onSubmit={handleSubmitAddress}
+        editingAddress={
+          editingAddressId
+            ? user?.addresses?.find((a) => a._id === editingAddressId)
+            : null
+        }
+        isLoading={isSubmitting}
+      />
     </Card>
   );
 };
