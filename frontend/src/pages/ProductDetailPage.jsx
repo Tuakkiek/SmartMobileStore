@@ -9,6 +9,8 @@ import {
   Share2,
   Play,
   Package2,
+  Shield,
+  Check,
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import {
@@ -19,6 +21,8 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
+import SlideInPanel from "@/components/product/SlideInPanel";
+import QuickSpecs from "@/components/product/QuickSpecs";
 import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
 import AddToCartModal from "@/components/product/AddToCartModal";
@@ -73,6 +77,8 @@ const ProductDetailPage = () => {
   const [userSelectedKey, setUserSelectedKey] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState("variant"); // 'variant' | 'featured' | 'video'
+  const [showSpecsPanel, setShowSpecsPanel] = useState(false);
+  const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
 
@@ -294,8 +300,6 @@ const ProductDetailPage = () => {
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
-
-
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* LEFT: Image Gallery - 7 cols */}
@@ -496,6 +500,50 @@ const ProductDetailPage = () => {
                       )
                     );
                   })()}
+                </div>
+              </div>
+
+              {/* Quick Specs Section - MỚI THÊM */}
+              <div className="p-4 bg-gray-50 border-t">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-gray-900">Thông số nổi bật</h3>
+                  <button
+                    onClick={() => setShowSpecsPanel(true)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                  >
+                    Xem tất cả
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <QuickSpecs specifications={product.specifications} />
+              </div>
+
+              {/* Warranty Quick Info - MỚI THÊM */}
+              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    <span className="font-bold text-gray-900">
+                      Chính sách bảo hành
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowWarrantyPanel(true)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                  >
+                    Chi tiết
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-green-600" />
+                    <span className="text-gray-700">Bảo hành 12 tháng</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-green-600" />
+                    <span className="text-gray-700">Đổi trả 30 ngày</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -733,58 +781,6 @@ const ProductDetailPage = () => {
           </div>
         </div>
 
-        {/* Tabs Section */}
-        <div className="mt-8 bg-white rounded-lg overflow-hidden">
-          <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab("info")}
-              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
-                activeTab === "info"
-                  ? "text-red-600 bg-red-50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              Thông số kỹ thuật
-              {activeTab === "info" && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("warranty")}
-              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
-                activeTab === "warranty"
-                  ? "text-red-600 bg-red-50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              Chính sách & Bảo hành
-              {activeTab === "warranty" && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600"></div>
-              )}
-            </button>
-
-            {/* <button
-              onClick={() => setActiveTab("reviews")}
-              className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
-                activeTab === "reviews"
-                  ? "text-red-600 bg-red-50"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              Đánh giá ({product.totalReviews || 0})
-              {activeTab === "reviews" && (
-                <ReviewsTab productId={product._id} product={product} />
-              )}
-            </button> */}
-          </div>
-
-          <div className="p-6">
-            {activeTab === "info" && (
-              <SpecificationsTab specifications={product.specifications} />
-            )}
-            {activeTab === "warranty" && <WarrantyTab />}
-          </div>
-        </div>
       </div>
 
       {/* Reviews Section - Độc lập */}
@@ -792,6 +788,23 @@ const ProductDetailPage = () => {
         <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
         <ReviewsTab productId={product._id} product={product} />
       </div>
+
+      {/* Slide-in Panels */}
+      <SlideInPanel
+        isOpen={showSpecsPanel}
+        onClose={() => setShowSpecsPanel(false)}
+        title="Thông số kỹ thuật"
+      >
+        <SpecificationsTab specifications={product.specifications} />
+      </SlideInPanel>
+
+      <SlideInPanel
+        isOpen={showWarrantyPanel}
+        onClose={() => setShowWarrantyPanel(false)}
+        title="Chính sách & Bảo hành"
+      >
+        <WarrantyTab />
+      </SlideInPanel>
 
       {/* Add to Cart Modal */}
       <AddToCartModal
