@@ -26,7 +26,9 @@ import {
 import { Loading } from "@/components/shared/Loading";
 import ProductCard from "@/components/shared/ProductCard";
 import ProductEditModal from "@/components/shared/ProductEditModal";
+import CSVImporter from "@/components/shared/CSVImporter";
 import { CATEGORIES } from "@/lib/productConstants";
+import { Label } from "recharts";
 
 // ============================================
 // API MAPPING
@@ -54,6 +56,7 @@ const ProductsPage = () => {
   const [addMode, setAddMode] = useState("normal");
   const [showJsonForm, setShowJsonForm] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
+  const [showCSVImporter, setShowCSVImporter] = useState(false);
 
   // Fetch products khi thay đổi tab
   useEffect(() => {
@@ -132,6 +135,8 @@ const ProductsPage = () => {
     if (mode === "json") {
       setJsonInput("");
       setShowJsonForm(true);
+    } else if (mode === "csv") {
+      setShowCSVImporter(true); // ✅ THÊM
     } else {
       setCurrentMode("create");
       setCurrentProduct(null);
@@ -256,6 +261,7 @@ const ProductsPage = () => {
             <SelectContent>
               <SelectItem value="normal">Bình thường</SelectItem>
               <SelectItem value="json">JSON</SelectItem>
+              <SelectItem value="csv">CSV</SelectItem> {/* ✅ THÊM */}
             </SelectContent>
           </Select>
           <Button onClick={() => handleCreate(addMode)}>
@@ -263,7 +269,6 @@ const ProductsPage = () => {
           </Button>
         </div>
       </div>
-
       {/* CATEGORY TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid grid-cols-6 w-full">
@@ -327,7 +332,6 @@ const ProductsPage = () => {
           </TabsContent>
         ))}
       </Tabs>
-
       {/* JSON FORM MODAL */}
       {showJsonForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -379,7 +383,34 @@ const ProductsPage = () => {
           </div>
         </div>
       )}
+      {/* CSV IMPORTER MODAL */}
+      {showCSVImporter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold">
+                Import từ CSV - {activeTab}
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCSVImporter(false)}
+              >
+                ✕
+              </Button>
+            </div>
 
+            <CSVImporter
+              category={activeTab}
+              api={API_MAP[activeTab]}
+              onSuccess={() => {
+                setShowCSVImporter(false);
+                fetchProducts();
+              }}
+            />
+          </div>
+        </div>
+      )}
       {/* SHARED EDIT/CREATE MODAL */}
       <ProductEditModal
         open={showModal}

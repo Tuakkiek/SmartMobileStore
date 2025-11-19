@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import {
+  useSearchParams,
+  useNavigate,
+  useLocation, // THÊM MỚI - để hỗ trợ URL đẹp sau này
+} from "react-router-dom";
 import { SlidersHorizontal, ChevronDown, Package } from "lucide-react";
 import {
   iPhoneAPI,
@@ -10,7 +14,7 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 import ProductCard from "@/components/shared/ProductCard";
-import ProductFilters from "@/components/shared/ProductFilters"; // Assuming this path for the component
+import ProductFilters from "@/components/shared/ProductFilters";
 
 // ============================================
 // API MAPPING - Chuẩn hóa category với API
@@ -53,42 +57,43 @@ const FILTER_OPTIONS = {
   },
 };
 
-const FILTER_LABELS = {
-  storage: "Dung lượng",
-  ram: "RAM",
-  connectivity: "Kết nối",
-  condition: "Tình trạng",
+// TÊN HIỂN THỊ ĐẸP CHO TIÊU ĐỀ (iPhone → Điện thoại, Mac → MacBook,...)
+const DISPLAY_LABELS = {
+  iPhone: "Điện thoại",
+  iPad: "Máy tính bảng",
+  Mac: "MacBook",
+  AirPods: "Tai nghe",
+  AppleWatch: "Apple Watch",
+  Accessories: "Phụ kiện",
 };
 
-const CONDITION_LABELS = {
-  NEW: "Mới 100%",
-  LIKE_NEW: "Like New (99%)",
+// HỖ TRỢ URL ĐẸP (tùy chọn mở rộng sau)
+const PATH_TO_CATEGORY = {
+  "/dien-thoai": "iPhone",
+  "/may-tinh-bang": "iPad",
+  "/macbook": "Mac",
+  "/tai-nghe": "AirPods",
+  "/apple-watch": "AppleWatch",
+  "/phu-kien": "Accessories",
 };
 
 // ============================================
-// PRICE RANGE PRESETS
+// COMPONENT - NHẬN category QUA PROPS (nếu có truyền)
 // ============================================
-const PRICE_RANGES = [
-  { label: "Dưới 5 triệu", min: 0, max: 5000000 },
-  { label: "5 - 10 triệu", min: 5000000, max: 10000000 },
-  { label: "10 - 15 triệu", min: 10000000, max: 15000000 },
-  { label: "15 - 20 triệu", min: 15000000, max: 20000000 },
-  { label: "20 - 30 triệu", min: 20000000, max: 30000000 },
-  { label: "Trên 30 triệu", min: 30000000, max: Infinity },
-];
-
-const ProductsPage = () => {
+const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // ============================================
-  // STATE MANAGEMENT
-  // ============================================
-  const categoryParam = searchParams.get("category") || "iPhone";
+  // ƯU TIÊN: forcedCategory (truyền từ ngoài vào) > URL đẹp > query ?category= > mặc định iPhone
+  const categoryFromQuery = searchParams.get("category");
+  const categoryFromPath = PATH_TO_CATEGORY[location.pathname];
+  const category =
+    forcedCategory || categoryFromPath || categoryFromQuery || "iPhone";
+
   const modelParam = searchParams.get("model") || "";
   const searchQuery = searchParams.get("search") || "";
 
-  const category = categoryParam;
   const api = API_MAP[category] || iPhoneAPI;
   const availableFilters = FILTER_OPTIONS[category] || {};
 
@@ -133,7 +138,7 @@ const ProductsPage = () => {
       });
       setSelectedPricePreset(null);
     }
-  }, [category, searchParams]);
+  }, [category, searchParams, availableFilters]);
 
   // ============================================
   // FETCH PRODUCTS
@@ -159,7 +164,7 @@ const ProductsPage = () => {
         params.model = modelParam;
       }
 
-      console.log("📡 Fetching products:", { category, params });
+      console.log("Fetching products:", { category, params });
 
       const response = await api.getAll(params);
       const data = response.data?.data;
@@ -211,7 +216,6 @@ const ProductsPage = () => {
               ? parseFloat(priceRange.max)
               : Infinity;
 
-            // Check if any variant falls within price range
             const hasMatchingPrice = product.variants?.some((variant) => {
               const variantPrice = variant.price || 0;
               return variantPrice >= minPrice && variantPrice <= maxPrice;
@@ -227,7 +231,7 @@ const ProductsPage = () => {
       setProducts(fetchedProducts);
       setTotal(fetchedProducts.length);
     } catch (err) {
-      console.error("❌ Fetch error:", err);
+      console.error("Fetch error:", err);
       setError(err.response?.data?.message || "Không thể tải sản phẩm");
       setProducts([]);
       setTotal(0);
@@ -281,6 +285,12 @@ const ProductsPage = () => {
     params.delete("minPrice");
     params.delete("maxPrice");
     params.set("page", "1");
+
+    // Nếu có forcedCategory thì KHÔNG ghi category vào URL
+    if (!forcedCategory) {
+      params.set("category", category);
+    }
+
     navigate(`?${params.toString()}`, { replace: true });
 
     setPage(1);
@@ -320,6 +330,11 @@ const ProductsPage = () => {
       params.delete("maxPrice");
     }
 
+    // Chỉ thêm category vào URL nếu KHÔNG có forcedCategory
+    if (!forcedCategory) {
+      params.set("category", category);
+    }
+
     params.set("page", "1");
     navigate(`?${params.toString()}`, { replace: true });
   };
@@ -349,14 +364,8 @@ const ProductsPage = () => {
       0
     ) + (priceRange.min || priceRange.max ? 1 : 0);
 
-  const categoryLabel = {
-    iPhone: "iPhone",
-    iPad: "iPad",
-    Mac: "Mac",
-    AirPods: "AirPods",
-    AppleWatch: "Apple Watch",
-    Accessories: "Phụ kiện",
-  }[category];
+  // DÙNG TÊN ĐẸP CHO TIÊU ĐỀ
+  const categoryLabel = DISPLAY_LABELS[category] || category;
 
   // ============================================
   // RENDER
@@ -391,6 +400,14 @@ const ProductsPage = () => {
               availableFilters={availableFilters}
               onClearFilters={clearFilters}
               activeFiltersCount={activeFiltersCount}
+              currentCategory={category}
+              onCategoryChange={(newCategory) => {
+                // Reset tất cả filter và chuyển danh mục
+                setFilters({});
+                setPriceRange({ min: "", max: "" });
+                setPage(1);
+                navigate(`?category=${newCategory}`);
+              }}
             />
           </aside>
 
@@ -497,7 +514,7 @@ const ProductsPage = () => {
 
                 <div className="flex gap-1">
                   {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const pageNum = i + 1;
+                    const pageNum = i + +1;
                     return (
                       <button
                         key={pageNum}
@@ -512,7 +529,6 @@ const ProductsPage = () => {
                       </button>
                     );
                   })}
-
                   {totalPages > 5 && (
                     <>
                       <span className="px-2 py-2">...</span>

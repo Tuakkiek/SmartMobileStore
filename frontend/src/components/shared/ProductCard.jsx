@@ -394,8 +394,16 @@ const ProductCard = ({
            2. Thêm line-clamp-2 (cần plugin tailwind)
            3. Dùng h-10 (2.5rem) để giữ 2 dòng
           */}
-          <h3 className="text-sm md:text-base font-bold line-clamp-2 overflow-hidden text-ellipsis">
-            {product.name}
+          <h3 className="text-sm md:text-base font-bold leading-tight min-h-[2.5rem] md:min-h-[3rem] relative">
+            <span className="block line-clamp-2">{product.name}</span>
+
+            {/* Ép luôn chiếm 2 dòng */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 block line-clamp-2 pointer-events-none opacity-0"
+            >
+              {product.name + "\n "}
+            </span>
           </h3>
           {/* BADGE TRẢ GÓP (Giữ nguyên) */}
           <div className="min-h-[1.5rem] mt-1 flex items-center">

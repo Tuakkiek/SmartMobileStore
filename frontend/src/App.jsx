@@ -16,7 +16,7 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 
 // Pages
 import HomePage from "@/pages/HomePage";
-import ProductsPage from "@/pages/ProductsPage";
+import ProductsPage from "@/pages/ProductsPage"; // Dùng chung cho tất cả danh mục
 import ProductDetailPage from "@/pages/ProductDetailPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
@@ -25,32 +25,33 @@ import CheckoutPage from "@/pages/customer/CheckoutPage";
 import OrdersPage from "@/pages/customer/OrdersPage";
 import OrderDetailPage from "@/pages/customer/OrderDetailPage";
 import ProfilePage from "@/pages/customer/ProfilePage";
+
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import EmployeesPage from "@/pages/admin/EmployeesPage";
 import PromotionsPage from "@/pages/admin/PromotionsPage";
+
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
+
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
+
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
 import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory";
+
 import CASHIERDashboard from "@/pages/CASHIER/CASHIERDashboard";
 import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
-import Breadcrumb from "@/components/shared/Breadcrumb";
 
-// ✅ THÊM 1: Import trang 404
 import Page404 from "@/pages/Page404";
-import SearchResultsPage from "./pages/SearchResultsPage";
+import SearchResultsPage from "@/pages/SearchResultsPage";
 
 // ============================================
-// SCROLL TO TOP COMPONENT
+// SCROLL TO TOP
 // ============================================
 const ScrollToTop = () => {
   const { pathname } = useLocation();
-
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
-
   return null;
 };
 
@@ -59,15 +60,15 @@ const ScrollToTop = () => {
 // ============================================
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, rehydrating } = useAuthStore();
+
   if (rehydrating) return <Loading />;
 
-  // ✅ THAY ĐỔI 2: Chuyển hướng về Trang chủ (/) thay vì (/login)
-  // Điều này giúp người dùng mới không bị "ép" đăng nhập
   if (!isAuthenticated || !user) return <Navigate to="/" replace />;
-  // ===========================================================
 
-  if (allowedRoles && !allowedRoles.includes(user.role))
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
+  }
+
   return children;
 };
 
@@ -85,21 +86,36 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      {/* <Breadcrumb /> */}
+      <Toaster position="bottom-right" richColors />
+
       <Routes>
         {/* ========================================
-            PUBLIC ROUTES
-        ======================================== */}
+            PUBLIC ROUTES - MainLayout
+======================================== */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
+
+          {/* Danh mục sản phẩm - URL đẹp + dùng chung ProductsPage */}
+          <Route path="/dien-thoai" element={<ProductsPage />} />
+          <Route path="/may-tinh-bang" element={<ProductsPage />} />
+          <Route path="/macbook" element={<ProductsPage />} />
+          <Route path="/tai-nghe" element={<ProductsPage />} />
+          <Route path="/apple-watch" element={<ProductsPage />} />
+          <Route path="/phu-kien" element={<ProductsPage />} />
+
+          {/* Route cũ vẫn giữ để tương thích (nếu cần) */}
           <Route path="/products" element={<ProductsPage />} />
+
+          {/* Tìm kiếm */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
-          <Route path="/dien-thoai/*" element={<ProductDetailPage />} />
-          <Route path="/may-tinh-bang/*" element={<ProductDetailPage />} />
-          <Route path="/macbook/*" element={<ProductDetailPage />} />
-          <Route path="/tai-nghe/*" element={<ProductDetailPage />} />
-          <Route path="/apple-watch/*" element={<ProductDetailPage />} />
-          <Route path="/phu-kien/*" element={<ProductDetailPage />} />
+
+          {/* Chi tiết sản phẩm - dùng slug đẹp */}
+          <Route
+            path="/:categorySlug/:productSlug"
+            element={<ProductDetailPage />}
+          />
+
+          {/* Đăng nhập / Đăng ký */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -163,11 +179,9 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
-          <Route path="/admin/shipping" element={<ShipperDashboard />} />
         </Route>
-
         {/* ========================================
-            WAREHOUSE STAFF ROUTES
+            WAREHOUSE STAFF
         ======================================== */}
         <Route
           element={
@@ -183,7 +197,7 @@ function App() {
         </Route>
 
         {/* ========================================
-            ORDER MANAGER ROUTES
+            ORDER MANAGER
         ======================================== */}
         <Route
           element={
@@ -199,7 +213,7 @@ function App() {
         </Route>
 
         {/* ========================================
-            POS STAFF ROUTES
+            POS STAFF
         ======================================== */}
         <Route
           element={
@@ -213,7 +227,7 @@ function App() {
         </Route>
 
         {/* ========================================
-            CASHIER ROUTES
+            CASHIER
         ======================================== */}
         <Route
           element={
@@ -222,12 +236,12 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/CASHIER/dashboard" element={<CASHIERDashboard />} />
-          <Route path="/CASHIER/vat-invoices" element={<VATInvoicesPage />} />
+          <Route path="/cashier/dashboard" element={<CASHIERDashboard />} />
+          <Route path="/cashier/vat-invoices" element={<VATInvoicesPage />} />
         </Route>
 
         {/* ========================================
-            SHIPPER ROUTES
+            SHIPPER
         ======================================== */}
         <Route
           element={
@@ -242,11 +256,8 @@ function App() {
         {/* ========================================
             404 - NOT FOUND
         ======================================== */}
-        {/* ✅ THAY ĐỔI 3: Dẫn các đường dẫn sai về trang 404 */}
         <Route path="*" element={<Page404 />} />
       </Routes>
-
-      <Toaster position="bottom-right" richColors />
     </BrowserRouter>
   );
 }
