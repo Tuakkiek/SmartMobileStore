@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, Search, User, Menu, X } from "lucide-react";
+import {
+  ShoppingCart,
+  Search,
+  User,
+  Menu,
+  X,
+  Package,
+  MapPin,
+  Phone,
+  Clock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
@@ -9,16 +19,165 @@ import SearchOverlay from "@/components/shared/SearchOverlay";
 import CategoryDropdown from "@/components/shared/CategoryDropdown";
 import Breadcrumb from "@/components/shared/Breadcrumb";
 
+// Import API
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
+
+const API_MAP = {
+  iPhone: iPhoneAPI,
+  iPad: iPadAPI,
+  Mac: macAPI,
+  AirPods: airPodsAPI,
+  "Apple Watch": appleWatchAPI,
+  "Phụ Kiện": accessoryAPI,
+};
+
+const CATEGORY_IMAGES = {
+  iPhone: "/iphone_17_pro_bac.png",
+  iPad: "/ipad_air_xanh.png",
+  Mac: "/mac.png",
+  AirPods: "/airpods.png",
+  "Apple Watch": "/applewatch.png",
+  "Phụ Kiện": "/op_ip_17_pro.png",
+};
+
+const CATEGORY_PARAM_MAP = {
+  iPhone: "iPhone",
+  iPad: "iPad",
+  Mac: "Mac",
+  AirPods: "AirPods",
+  "Apple Watch": "AppleWatch",
+  "Phụ Kiện": "Accessories",
+};
+
+const categories = [
+  "iPhone",
+  "iPad",
+  "Mac",
+  "AirPods",
+  "Apple Watch",
+  "Phụ Kiện",
+];
+
+// Dữ liệu cửa hàng tại Cần Thơ
+const stores = [
+  {
+    id: 1,
+    name: "Ninh Kiều iSTORE - Chi nhánh Trần Hưng Đạo",
+    district: "Ninh Kiều",
+    address: "123 Trần Hưng Đạo, Phường Cái Khế, Quận Ninh Kiều, TP. Cần Thơ",
+    phone: "0292 3831 234",
+    hours: "8:00 - 21:00 (Thứ 2 - Chủ Nhật)",
+    isMain: true,
+  },
+  {
+    id: 2,
+    name: "Ninh Kiều iSTORE - Chi nhánh Mậu Thân",
+    district: "Ninh Kiều",
+    address: "456 Mậu Thân, Phường An Hòa, Quận Ninh Kiều, TP. Cần Thơ",
+    phone: "0292 3831 567",
+    hours: "8:00 - 21:00 (Thứ 2 - Chủ Nhật)",
+  },
+  {
+    id: 3,
+    name: "Ninh Kiều iSTORE - Vincom Hùng Vương",
+    district: "Ninh Kiều",
+    address:
+      "Vincom Plaza Xuân Khánh, 209 Đường 30/4, Phường Xuân Khánh, Quận Ninh Kiều",
+    phone: "0292 3831 890",
+    hours: "9:00 - 22:00 (Thứ 2 - Chủ Nhật)",
+  },
+  {
+    id: 4,
+    name: "Ninh Kiều iSTORE - Cái Răng",
+    district: "Cái Răng",
+    address:
+      "789 Trần Hoàng Na, Phường Thường Thạnh, Quận Cái Răng, TP. Cần Thơ",
+    phone: "0292 3832 123",
+    hours: "8:00 - 21:00 (Thứ 2 - Chủ Nhật)",
+  },
+  {
+    id: 5,
+    name: "Ninh Kiều iSTORE - Bình Thủy",
+    district: "Bình Thủy",
+    address: "321 Bùi Hữu Nghĩa, Phường Bình Thủy, Quận Bình Thủy, TP. Cần Thơ",
+    phone: "0292 3832 456",
+    hours: "8:00 - 20:00 (Thứ 2 - Chủ Nhật)",
+  },
+  {
+    id: 6,
+    name: "Ninh Kiều iSTORE - Ô Môn",
+    district: "Ô Môn",
+    address: "654 Quốc Lộ 91B, Phường Châu Văn Liêm, Quận Ô Môn, TP. Cần Thơ",
+    phone: "0292 3832 789",
+    hours: "8:00 - 20:00 (Thứ 2 - Chủ Nhật)",
+  },
+];
+const districts = ["Tất cả", "Ninh Kiều", "Cái Răng", "Bình Thủy", "Ô Môn"];
+
 const MainLayout = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuthStore();
   const { getItemCount } = useCartStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [storeMenuOpen, setStoreMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(0);
+  const [selectedDistrict, setSelectedDistrict] = useState(0);
+  const [categoryProducts, setCategoryProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [desktopStoreMenuOpen, setDesktopStoreMenuOpen] = useState(false);
+  const [desktopSelectedDistrict, setDesktopSelectedDistrict] = useState(0);
+  const [contactMenuOpen, setContactMenuOpen] = useState(false);
 
   const categoryMenuRef = useRef(null);
+
+  // Fetch products by category
+  const fetchCategoryProducts = async (categoryName) => {
+    setLoading(true);
+    try {
+      const api = API_MAP[categoryName];
+      if (!api) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.getAll({ limit: 100 });
+      const products = response.data?.data?.products || response.data || [];
+      setCategoryProducts(products);
+    } catch (error) {
+      console.error(`Error loading ${categoryName}:`, error);
+      setCategoryProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load iPhone products on mobile menu open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      fetchCategoryProducts(categories[0]); // Load iPhone by default
+    }
+  }, [mobileMenuOpen]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen || storeMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [mobileMenuOpen, storeMenuOpen]);
 
   // Close category menu when clicking outside
   useEffect(() => {
@@ -40,6 +199,30 @@ const MainLayout = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [categoryMenuOpen]);
+
+  useEffect(() => {
+    if (desktopStoreMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [desktopStoreMenuOpen]);
+
+  useEffect(() => {
+    if (contactMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [contactMenuOpen]);
 
   const handleLogout = async () => {
     await logout();
@@ -74,13 +257,42 @@ const MainLayout = () => {
     setSearchOpen(false);
   };
 
-  const handleCategoryClick = (categoryId) => {
-    setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
+  const handleCategoryClick = (categoryIdx) => {
+    setSelectedCategory(categoryIdx);
+    fetchCategoryProducts(categories[categoryIdx]);
   };
+
+  const handleDistrictClick = (districtIdx) => {
+    setSelectedDistrict(districtIdx);
+  };
+
+  const navigateToCategory = (categoryName) => {
+    const param = CATEGORY_PARAM_MAP[categoryName];
+    navigate(`/products?category=${encodeURIComponent(param)}`);
+    setMobileMenuOpen(false);
+  };
+
+  const handleProductClick = (product) => {
+    // Navigate to product detail or products page with model filter
+    const catParam = CATEGORY_PARAM_MAP[categories[selectedCategory]];
+    navigate(
+      `/products?category=${encodeURIComponent(
+        catParam
+      )}&model=${encodeURIComponent(product.model || product.name)}`
+    );
+    setMobileMenuOpen(false);
+  };
+
+  const filteredStores =
+    selectedDistrict === 0
+      ? stores
+      : stores.filter(
+          (store) => store.district === districts[selectedDistrict]
+        );
 
   return (
     <div className="min-h-screen flex flex-col relative pb-16 md:pb-0">
-      {/* Search Overlay - Tách riêng thành component */}
+      {/* Search Overlay */}
       <SearchOverlay isOpen={searchOpen} onClose={handleSearchClose} />
 
       {/* Header */}
@@ -88,7 +300,6 @@ const MainLayout = () => {
         <div className="max-w-7xl mx-auto">
           {/* Mobile Header */}
           <div className="md:hidden flex items-center justify-between gap-3">
-            {/* Logo */}
             <Link
               to="/"
               className="bg-white rounded-full px-6 py-2.5 flex items-center justify-center"
@@ -96,7 +307,6 @@ const MainLayout = () => {
               <span className="text-black font-bold text-sm">LOGO</span>
             </Link>
 
-            {/* Search Bar */}
             <div className="flex-1">
               <div className="relative">
                 <input
@@ -110,7 +320,6 @@ const MainLayout = () => {
               </div>
             </div>
 
-            {/* Shopping Cart Icon (Mobile) */}
             {isAuthenticated && user?.role === "CUSTOMER" && (
               <button
                 onClick={() => navigate("/cart")}
@@ -128,7 +337,6 @@ const MainLayout = () => {
 
           {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between gap-6">
-            {/* Logo */}
             <Link
               to="/"
               className="bg-white rounded-full px-8 py-4 flex items-center justify-center min-w-[180px] transition-all duration-300 hover:bg-gray-200 hover:scale-105"
@@ -138,7 +346,6 @@ const MainLayout = () => {
               </span>
             </Link>
 
-            {/* Search Bar */}
             <div className="flex-1 max-w-md">
               <div className="relative transition-all duration-300 hover:scale-105">
                 <input
@@ -152,9 +359,7 @@ const MainLayout = () => {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex items-center gap-3">
-              {/* Giỏ hàng */}
               {isAuthenticated && user?.role === "CUSTOMER" && (
                 <button
                   onClick={() => navigate("/cart")}
@@ -172,7 +377,6 @@ const MainLayout = () => {
                 </button>
               )}
 
-              {/* Tài khoản */}
               {isAuthenticated ? (
                 <button
                   onClick={handleProfileNavigation}
@@ -195,13 +399,13 @@ const MainLayout = () => {
                 </button>
               )}
 
-              {/* Category Dropdown - Component riêng */}
               <CategoryDropdown />
             </div>
           </div>
         </div>
       </header>
       <Breadcrumb />
+
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
         <div
@@ -213,6 +417,10 @@ const MainLayout = () => {
         >
           <Link
             to="/"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setStoreMenuOpen(false);
+            }}
             className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
           >
             <svg
@@ -232,43 +440,34 @@ const MainLayout = () => {
           </Link>
 
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={() => {
+              setMobileMenuOpen(true);
+              setStoreMenuOpen(false);
+            }}
             className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
           >
             <Menu className="w-5 h-5" />
             <span className="text-[10px] font-medium">Danh mục</span>
           </button>
-
           {isAuthenticated && user?.role === "CUSTOMER" && (
             <button
-              onClick={() => navigate("/cart")}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setStoreMenuOpen(true);
+              }}
               className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors relative"
             >
-              <ShoppingCart className="w-5 h-5" />
+              <MapPin className="w-5 h-5" />
               <span className="text-[10px] font-medium">Cửa hàng</span>
-              {cartItemCount > 0 && (
-                <Badge className="absolute top-1 right-6 h-4 w-4 flex items-center justify-center p-0 text-[10px] bg-red-500">
-                  {cartItemCount}
-                </Badge>
-              )}
             </button>
           )}
 
-          <button className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-            <span className="text-[10px] font-medium">Thông báo</span>
+          <button
+            onClick={() => setContactMenuOpen(true)}
+            className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
+          >
+            <Phone className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Liên hệ</span>
           </button>
 
           {isAuthenticated ? (
@@ -291,99 +490,627 @@ const MainLayout = () => {
         </div>
       </nav>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Category Menu Overlay */}
       {mobileMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 z-30 bg-black/50"
+          className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
           onClick={() => setMobileMenuOpen(false)}
         >
           <div
-            className="absolute bottom-16 left-0 right-0 bg-white rounded-t-2xl p-4 space-y-2 max-h-[70vh] overflow-y-auto"
+            className="absolute bottom-0 left-0 right-0 bg-black rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
-            <h3 className="font-bold text-lg mb-4 px-2">Danh mục</h3>
+            {/* Header */}
+            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-semibold">Danh mục</span>
+              </div>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-white hover:text-gray-400 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
 
-            {["iPhone", "iPad", "Mac", "AirPods", "Apple Watch"].map(
-              (name, idx) => (
-                <div key={idx} className="mb-4">
-                  <button
-                    onClick={() => handleCategoryClick(idx)}
-                    className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-100 rounded-lg flex items-center justify-between"
-                  >
-                    {name}
-                    <span
-                      className={`transition-transform ${
-                        selectedCategory === idx ? "rotate-180" : ""
+            {/* Main Content */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left Sidebar - Categories */}
+              <div className="w-1/3 bg-neutral-900 overflow-y-auto">
+                {categories.map((categoryName, idx) => {
+                  const imgSrc = CATEGORY_IMAGES[categoryName];
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleCategoryClick(idx)}
+                      className={`w-full text-left px-3 py-4 border-b border-gray-800 transition-colors flex flex-col items-center gap-2 ${
+                        selectedCategory === idx
+                          ? "bg-black text-white"
+                          : "text-gray-400 hover:text-white hover:bg-neutral-800"
                       }`}
                     >
-                      ▼
-                    </span>
-                  </button>
+                      <img
+                        src={imgSrc}
+                        alt={categoryName}
+                        className="w-12 h-12 object-contain"
+                      />
+                      <span className="text-xs font-medium text-center">
+                        {categoryName}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                  {selectedCategory === idx && (
-                    <div className="pl-4 mt-2 space-y-3">
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-700 mb-1 px-4">
-                          Dòng {name}
-                        </h4>
-                        <button className="block w-full text-left px-4 py-1.5 text-xs text-gray-600 hover:text-black hover:bg-gray-50 rounded">
-                          {name} Pro Max
-                        </button>
-                        <button className="block w-full text-left px-4 py-1.5 text-xs text-gray-600 hover:text-black hover:bg-gray-50 rounded">
-                          {name} Pro
-                        </button>
+              {/* Right Content - Products */}
+              <div className="flex-1 bg-black overflow-y-auto">
+                <div className="p-4">
+                  <h2 className="text-white text-lg font-bold mb-4">
+                    {categories[selectedCategory]}
+                  </h2>
+
+                  {loading ? (
+                    <div className="space-y-4">
+                      <div className="mb-6">
+                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
+                          Gợi ý cho bạn
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[1, 2].map((idx) => (
+                            <div
+                              key={idx}
+                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800"
+                            >
+                              <div className="bg-gray-800 rounded-lg aspect-square mb-2 animate-pulse"></div>
+                              <div className="h-3 bg-gray-800 rounded mb-1 animate-pulse"></div>
+                              <div className="h-2 bg-gray-800 rounded animate-pulse w-2/3"></div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    </div>
+                  ) : categoryProducts.length > 0 ? (
+                    <>
+                      <div className="mb-6">
+                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
+                          Gợi ý cho bạn
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {categoryProducts.slice(0, 2).map((product, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleProductClick(product)}
+                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800 hover:border-gray-600 transition-colors"
+                            >
+                              <div className="bg-white rounded-lg aspect-square mb-2 flex items-center justify-center overflow-hidden">
+                                {product.images?.[0] ||
+                                product.variants?.[0]?.images?.[0] ? (
+                                  <img
+                                    src={
+                                      product.images?.[0] ||
+                                      product.variants?.[0]?.images?.[0]
+                                    }
+                                    alt={product.name}
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <Package className="w-12 h-12 text-gray-400" />
+                                )}
+                              </div>
+                              <p className="text-white text-xs font-medium mb-1 line-clamp-2">
+                                {product.name}
+                              </p>
+                              <p className="text-gray-400 text-xs">
+                                {product.variants?.[0]?.price
+                                  ? `${product.variants[0].price.toLocaleString(
+                                      "vi-VN"
+                                    )}đ`
+                                  : "Liên hệ"}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
+                          Chọn theo dòng
+                        </h3>
+                        <div className="space-y-2">
+                          {categoryProducts.map((product, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleProductClick(product)}
+                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800 hover:border-gray-600 transition-colors flex items-center gap-3 w-full"
+                            >
+                              <div className="bg-white rounded-lg w-12 h-12 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                {product.images?.[0] ||
+                                product.variants?.[0]?.images?.[0] ? (
+                                  <img
+                                    src={
+                                      product.images?.[0] ||
+                                      product.variants?.[0]?.images?.[0]
+                                    }
+                                    alt={product.name}
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <Package className="w-10 h-10 text-gray-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0 text-left">
+                                <p className="text-white text-xs font-semibold mb-0.5 truncate">
+                                  {product.name}
+                                </p>
+                                <p className="text-gray-400 text-xs truncate">
+                                  {product.variants?.[0]?.price
+                                    ? `${product.variants[0].price.toLocaleString(
+                                        "vi-VN"
+                                      )}đ`
+                                    : product.model || "Liên hệ"}
+                                </p>
+                              </div>
+                              <svg
+                                className="w-4 h-4 text-gray-600 flex-shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          navigateToCategory(categories[selectedCategory])
+                        }
+                        className="w-full mt-4 bg-white text-black rounded-full py-2.5 px-6 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                      >
+                        Xem tất cả {categories[selectedCategory]}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                      <Package className="w-16 h-16 mb-4" />
+                      <p className="text-sm">Không có sản phẩm</p>
                     </div>
                   )}
                 </div>
-              )
-            )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <Link
-              to="/products"
-              className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Tất cả sản phẩm
-            </Link>
-            <Link
-              to="/stores"
-              className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Tìm cửa hàng
-            </Link>
+      {/* Mobile Store Menu Overlay */}
+      {storeMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
+          onClick={() => setStoreMenuOpen(false)}
+        >
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-black rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <MapPin className="w-6 h-6" />
+                <span className="text-lg font-semibold">Cửa hàng</span>
+              </div>
+              <button
+                onClick={() => setStoreMenuOpen(false)}
+                className="text-white hover:text-gray-400 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
 
-            {isAuthenticated && (
-              <>
-                <div className="border-t border-gray-200 my-2"></div>
-                {user?.role === "CUSTOMER" && (
-                  <>
-                    <Link
-                      to="/profile"
-                      className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Thông tin tài khoản
-                    </Link>
-                    <Link
-                      to="/orders"
-                      className="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Đơn hàng của tôi
-                    </Link>
-                  </>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-lg font-medium"
+            {/* Main Content */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left Sidebar - Districts */}
+              <div className="w-1/3 bg-neutral-900 overflow-y-auto">
+                {districts.map((districtName, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleDistrictClick(idx)}
+                    className={`w-full text-left px-3 py-4 border-b border-gray-800 transition-colors ${
+                      selectedDistrict === idx
+                        ? "bg-black text-white"
+                        : "text-gray-400 hover:text-white hover:bg-neutral-800"
+                    }`}
+                  >
+                    <span className="text-xs font-medium">{districtName}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Right Content - Stores */}
+              <div className="flex-1 bg-black overflow-y-auto">
+                <div className="p-4">
+                  <h2 className="text-white text-lg font-bold mb-4">
+                    {districts[selectedDistrict]}
+                  </h2>
+
+                  {filteredStores.length > 0 ? (
+                    <div className="space-y-3">
+                      {filteredStores.map((store) => (
+                        <div
+                          key={store.id}
+                          className="bg-neutral-900 rounded-xl p-4 border border-gray-800"
+                        >
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className="bg-white rounded-lg p-2 flex-shrink-0">
+                              <MapPin className="w-5 h-5 text-red-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-white text-sm font-semibold mb-1 flex items-center gap-2">
+                                {store.name}
+                                {store.isMain && (
+                                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                                    Chính
+                                  </span>
+                                )}
+                              </h3>
+                              <p className="text-gray-400 text-xs">
+                                Quận {store.district}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                              <p className="text-gray-300 text-xs leading-relaxed">
+                                {store.address}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                              <a
+                                href={`tel:${store.phone}`}
+                                className="text-blue-400 text-xs hover:underline"
+                              >
+                                {store.phone}
+                              </a>
+                            </div>
+
+                            <div className="flex items-start gap-2">
+                              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                              <p className="text-gray-300 text-xs">
+                                {store.hours}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t border-gray-800 flex gap-2">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                store.address
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 bg-white text-black rounded-full py-2 px-4 text-xs font-semibold hover:bg-gray-200 transition-colors text-center"
+                            >
+                              Chỉ đường
+                            </a>
+                            <a
+                              href={`tel:${store.phone}`}
+                              className="flex-1 bg-neutral-800 text-white rounded-full py-2 px-4 text-xs font-semibold hover:bg-neutral-700 transition-colors text-center border border-gray-700"
+                            >
+                              Gọi ngay
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                      <MapPin className="w-16 h-16 mb-4" />
+                      <p className="text-sm">Không có cửa hàng</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Mobile Contact Menu Overlay */}
+      {contactMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
+          onClick={() => setContactMenuOpen(false)}
+        >
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <Phone className="w-6 h-6" />
+                <div>
+                  <span className="text-lg font-semibold">Tổng đài hỗ trợ</span>
+                  <p className="text-xs text-gray-400">(Từ 8:00-21:00)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setContactMenuOpen(false)}
+                className="text-white hover:text-gray-400 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Contact list - Scrollable */}
+            <div className="flex-1 overflow-y-auto bg-black p-4">
+              <div className="space-y-3">
+                {/* Hotline bán hàng */}
+                <a
+                  href="tel:1900633909"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
                 >
-                  Đăng xuất
-                </button>
-              </>
-            )}
+                  <p className="text-gray-400 text-xs mb-2">
+                    Hotline bán hàng:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      1900.633.909 (Bấm phím 1)
+                    </span>
+                  </div>
+                </a>
+
+                {/* Khách hàng doanh nghiệp */}
+                <a
+                  href="tel:0932640089"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                >
+                  <p className="text-gray-400 text-xs mb-2">
+                    Khách hàng doanh nghiệp:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      0932.640.089
+                    </span>
+                  </div>
+                </a>
+
+                {/* Hotline bảo hành */}
+                <a
+                  href="tel:1900633909"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                >
+                  <p className="text-gray-400 text-xs mb-2">
+                    Hotline bảo hành, kỹ thuật:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      1900.633.909 (Bấm phím 2)
+                    </span>
+                  </div>
+                </a>
+
+                {/* Hotline hỗ trợ phần mềm */}
+                <a
+                  href="tel:1900633909"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                >
+                  <p className="text-gray-400 text-xs mb-2">
+                    Hotline hỗ trợ phần mềm:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      1900.633.909 (Bấm phím 3)
+                    </span>
+                  </div>
+                </a>
+
+                {/* Hotline tư vấn trả góp */}
+                <a
+                  href="tel:0977649939"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                >
+                  <p className="text-gray-400 text-xs mb-2">
+                    Hotline tư vấn trả góp:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      0977.649.939
+                    </span>
+                  </div>
+                </a>
+
+                {/* Hotline phản ánh chất lượng */}
+                <a
+                  href="tel:0981000731"
+                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                >
+                  <p className="text-gray-400 text-xs mb-2">
+                    Hotline phản ánh chất lượng dịch vụ:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-500" />
+                    <span className="text-red-500 font-bold text-base">
+                      0981.000.731
+                    </span>
+                  </div>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Store Menu Overlay */}
+      {desktopStoreMenuOpen && (
+        <div
+          className="hidden md:block fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+          onClick={() => setDesktopStoreMenuOpen(false)}
+        >
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black rounded-2xl w-full max-w-5xl max-h-[85vh] flex overflow-hidden shadow-2xl border border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="absolute top-0 left-0 right-0 bg-black/95 backdrop-blur-sm text-white p-6 flex items-center justify-between border-b border-gray-800 z-10">
+              <div className="flex items-center gap-4">
+                <MapPin className="w-7 h-7" />
+                <span className="text-2xl font-semibold">
+                  Hệ Thống Cửa Hàng
+                </span>
+              </div>
+              <button
+                onClick={() => setDesktopStoreMenuOpen(false)}
+                className="text-white hover:text-gray-400 transition-colors p-2 hover:bg-white/10 rounded-full"
+              >
+                <X className="w-7 h-7" />
+              </button>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex w-full mt-20">
+              {/* Left Sidebar - Districts */}
+              <div className="w-64 bg-neutral-900 overflow-y-auto border-r border-gray-800">
+                {districts.map((districtName, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setDesktopSelectedDistrict(idx)}
+                    className={`w-full text-left px-6 py-4 border-b border-gray-800 transition-all duration-200 ${
+                      desktopSelectedDistrict === idx
+                        ? "bg-black text-white font-semibold"
+                        : "text-gray-400 hover:text-white hover:bg-neutral-800"
+                    }`}
+                  >
+                    <span className="text-sm">{districtName}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Right Content - Stores */}
+              <div className="flex-1 bg-black overflow-y-auto">
+                <div className="p-6">
+                  <h2 className="text-white text-xl font-bold mb-6">
+                    {districts[desktopSelectedDistrict]}
+                  </h2>
+
+                  {(desktopSelectedDistrict === 0
+                    ? stores
+                    : stores.filter(
+                        (store) =>
+                          store.district === districts[desktopSelectedDistrict]
+                      )
+                  ).length > 0 ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {(desktopSelectedDistrict === 0
+                        ? stores
+                        : stores.filter(
+                            (store) =>
+                              store.district ===
+                              districts[desktopSelectedDistrict]
+                          )
+                      ).map((store) => (
+                        <div
+                          key={store.id}
+                          className="bg-neutral-900 rounded-xl p-5 border border-gray-800 hover:border-gray-600 transition-all duration-200 hover:shadow-lg"
+                        >
+                          <div className="flex items-start gap-3 mb-4">
+                            <div className="bg-white rounded-lg p-2.5 flex-shrink-0">
+                              <MapPin className="w-6 h-6 text-red-500" />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-white text-base font-semibold mb-1 flex items-center gap-2 flex-wrap">
+                                {store.name}
+                                {store.isMain && (
+                                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                                    Chính
+                                  </span>
+                                )}
+                              </h3>
+                              <p className="text-gray-400 text-sm">
+                                Quận {store.district}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {/* Address */}
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0 mt-1" />
+                              <p className="text-gray-300 text-sm leading-relaxed">
+                                {store.address}
+                              </p>
+                            </div>
+
+                            {/* Phone */}
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                              <a
+                                href={`tel:${store.phone}`}
+                                className="text-blue-400 text-sm hover:underline"
+                              >
+                                {store.phone}
+                              </a>
+                            </div>
+
+                            {/* Hours */}
+                            <div className="flex items-start gap-2">
+                              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0 mt-1" />
+                              <p className="text-gray-300 text-sm">
+                                {store.hours}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Buttons */}
+                          <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                store.address
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 bg-white text-black rounded-full py-2.5 px-4 text-sm font-semibold hover:bg-gray-200 transition-colors text-center"
+                            >
+                              Chỉ đường
+                            </a>
+
+                            <a
+                              href={`tel:${store.phone}`}
+                              className="flex-1 bg-neutral-800 text-white rounded-full py-2.5 px-4 text-sm font-semibold hover:bg-neutral-700 transition-colors text-center border border-gray-700"
+                            >
+                              Gọi ngay
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-96 text-gray-500">
+                      <MapPin className="w-20 h-20 mb-4" />
+                      <p className="text-base">
+                        Không có cửa hàng trong khu vực này
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -403,7 +1130,9 @@ const MainLayout = () => {
               </div>
               <div className="flex items-center gap-4">
                 <a
-                  href="#"
+                  href="https://twitter.com/Apple"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-white hover:text-gray-400 transition-colors"
                 >
                   <svg
@@ -415,7 +1144,9 @@ const MainLayout = () => {
                   </svg>
                 </a>
                 <a
-                  href="#"
+                  href="https://www.instagram.com/apple/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-white hover:text-gray-400 transition-colors"
                 >
                   <svg
@@ -427,7 +1158,9 @@ const MainLayout = () => {
                   </svg>
                 </a>
                 <a
-                  href="#"
+                  href="https://www.youtube.com/user/Apple"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-white hover:text-gray-400 transition-colors"
                 >
                   <svg
@@ -439,7 +1172,9 @@ const MainLayout = () => {
                   </svg>
                 </a>
                 <a
-                  href="#"
+                  href="https://www.linkedin.com/company/apple/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-white hover:text-gray-400 transition-colors"
                 >
                   <svg
@@ -459,52 +1194,52 @@ const MainLayout = () => {
               </h3>
               <ul className="space-y-2.5">
                 <li>
-                  <a
-                    href="#"
+                  <button
+                    onClick={() => setDesktopStoreMenuOpen(true)}
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Cửa Hàng
-                  </a>
+                  </button>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    to="/products?category=iPhone"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     iPhone
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    to="/products?category=iPad"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     iPad
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    to="/products?category=Mac"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Mac
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    to="/products?category=AppleWatch"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Watch
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    to="/products?category=AirPods"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Airpods
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>

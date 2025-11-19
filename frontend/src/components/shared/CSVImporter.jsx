@@ -3,8 +3,10 @@ import Papa from "papaparse";
 import { Button } from "@/components/ui/button";
 import { Upload, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/authStore";
 
 const CSVImporter = ({ category, api, onSuccess }) => {
+  const { user } = useAuthStore(); // Lấy thông tin người dùng từ authStore
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState(null);
@@ -54,6 +56,8 @@ const CSVImporter = ({ category, api, onSuccess }) => {
           videoUrl: row.videoUrl?.trim() || "",
           specifications: {},
           variants: [],
+          createdBy: user?._id || user?.id, // Thêm createdBy từ user hiện tại
+          category: category, // Gán đúng category
         };
 
         // Specifications theo category

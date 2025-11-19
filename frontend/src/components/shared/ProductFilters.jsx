@@ -28,12 +28,12 @@ export const CONDITION_LABELS = {
 };
 
 export const CATEGORY_DISPLAY = {
-  iPhone: "Điện thoại iPhone",
+  iPhone: "iPhone",
   iPad: "iPad",
   Mac: "MacBook",
-  AirPods: "Tai nghe AirPods",
+  AirPods: " AirPods",
   AppleWatch: "Apple Watch",
-  Accessories: "Phụ kiện Apple",
+  Accessories: "Phụ kiện",
 };
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_DISPLAY);
@@ -48,7 +48,8 @@ const ProductFilters = ({
   activeFiltersCount,
   className = "",
   currentCategory,
-  onCategoryChange, // THÊM PROP MỚI: xử lý khi đổi danh mục từ filter
+  onCategoryChange,
+  hideCategory = false, // ← PROP MỚI: Ẩn hoàn toàn mục Danh mục
 }) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
@@ -57,14 +58,14 @@ const ProductFilters = ({
   useEffect(() => {
     setExpandedSections((prev) => {
       const next = { ...prev };
-      next.category = true;
+      if (!hideCategory) next.category = true;
       next.price = true;
       Object.keys(availableFilters).forEach((key) => {
         if (next[key] === undefined) next[key] = true;
       });
       return next;
     });
-  }, [availableFilters]);
+  }, [availableFilters, hideCategory]);
 
   const toggleSection = (section) => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -97,47 +98,50 @@ const ProductFilters = ({
           </button>
         )}
       </div>
-      {/* ================== MỤC DANH MỤC (ĐÃ SỬA ĐẸP) ================== */}
-      <div className="mb-5">
-        <button
-          onClick={() => toggleSection("category")}
-          className="flex items-center justify-between w-full mb-3 text-left"
-        >
-          <span className="font-semibold text-gray-800">Danh mục</span>
-          <ChevronDown
-            className={`w-5 h-5 transition-transform text-gray-500 ${
-              expandedSections.category ? "rotate-180" : ""
-            }`}
-          />
-        </button>
 
-        {expandedSections.category && (
-          <div className="space-y-2 pl-1">
-            {ALL_CATEGORIES.map((cat) => {
-              const isCurrent = currentCategory === cat;
+      {/* ================== MỤC DANH MỤC - CHỈ HIỂN THỊ KHI KHÔNG ẨN ================== */}
+      {!hideCategory && (
+        <div className="mb-5">
+          <button
+            onClick={() => toggleSection("category")}
+            className="flex items-center justify-between w-full mb-3 text-left"
+          >
+            <span className="font-semibold text-gray-800">Danh mục</span>
+            <ChevronDown
+              className={`w-5 h-5 transition-transform text-gray-500 ${
+                expandedSections.category ? "rotate-180" : ""
+              }`}
+            />
+          </button>
 
-              return (
-                <button
-                  key={cat}
-                  onClick={() => !isCurrent && onCategoryChange?.(cat)}
-                  className={`w-full text-left p-3 rounded-lg transition-all flex items-center justify-between
-                    ${
-                      isCurrent
-                        ? "bg-blue-50 border border-blue-300 text-blue-700 font-medium shadow-sm"
-                        : "hover:bg-gray-50 text-gray-700"
-                    }`}
-                >
-                  <span className="text-sm font-medium">
-                    {CATEGORY_DISPLAY[cat]}
-                  </span>
-                  {isCurrent && <Check className="w-5 h-5 text-blue-600" />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <div className="border-t mt-4 pt-1"></div>
-      </div>
+          {expandedSections.category && (
+            <div className="space-y-2 pl-1">
+              {ALL_CATEGORIES.map((cat) => {
+                const isCurrent = currentCategory === cat;
+
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => !isCurrent && onCategoryChange?.(cat)}
+                    className={`w-full text-left p-3 rounded-lg transition-all flex items-center justify-between
+                      ${
+                        isCurrent
+                          ? "bg-blue-50 border border-blue-300 text-blue-700 font-medium shadow-sm"
+                          : "hover:bg-gray-50 text-gray-700"
+                      }`}
+                  >
+                    <span className="text-sm font-medium">
+                      {CATEGORY_DISPLAY[cat] || cat}
+                    </span>
+                    {isCurrent && <Check className="w-5 h-5 text-blue-600" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="border-t mt-4 pt-1"></div>
+        </div>
+      )}
 
       {/* ================== CÁC BỘ LỌC KHÁC ================== */}
       {Object.entries(availableFilters).map(([key, options]) => (

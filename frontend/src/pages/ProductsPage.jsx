@@ -59,8 +59,8 @@ const FILTER_OPTIONS = {
 
 // TÊN HIỂN THỊ ĐẸP CHO TIÊU ĐỀ (iPhone → Điện thoại, Mac → MacBook,...)
 const DISPLAY_LABELS = {
-  iPhone: "Điện thoại",
-  iPad: "Máy tính bảng",
+  iPhone: "iPhone",
+  iPad: "iPad",
   Mac: "MacBook",
   AirPods: "Tai nghe",
   AppleWatch: "Apple Watch",
@@ -290,7 +290,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     if (!forcedCategory) {
       params.set("category", category);
     }
-
     navigate(`?${params.toString()}`, { replace: true });
 
     setPage(1);
