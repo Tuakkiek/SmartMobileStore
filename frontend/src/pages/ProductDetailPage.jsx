@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
+import { useAuthStore } from "@/store/authStore";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -81,6 +82,7 @@ const ProductDetailPage = () => {
   const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
 
   const { addToCart, isLoading: cartLoading } = useCartStore();
+  const { user, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -196,16 +198,25 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async (redirectToCheckout = false) => {
+    // ✅ KIỂM TRA ĐĂNG NHẬP TRƯỚC
+    if (!isAuthenticated || !user) {
+      // Lưu URL hiện tại để redirect về sau khi đăng nhập
+      const currentPath = location.pathname + location.search;
+      sessionStorage.setItem("redirectAfterLogin", currentPath);
+
+      navigate("/login", {
+        state: {
+          from: currentPath,
+          message: "Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng",
+        },
+      });
+      return;
+    }
+
     if (!selectedVariant || !product) {
       console.error("❌ Missing product or variant");
       return;
     }
-
-    console.log("🛒 Adding to cart:", {
-      variantId: selectedVariant._id,
-      productCategory: product.category,
-      categoryInfo: categoryInfo,
-    });
 
     const productType =
       categoryInfo?.category || categoryInfo?.model || product.category;
@@ -234,7 +245,6 @@ const ProductDetailPage = () => {
       alert(result.message || "Thêm vào giỏ thất bại");
     }
   };
-
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN").format(price) + "đ";
   };
@@ -304,7 +314,7 @@ const ProductDetailPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
           {/* LEFT: Image Gallery - 7 cols */}
           <div className="lg:col-span-7">
-            <div className="bg-white rounded-lg overflow-hidden sticky top-4">
+            <div className="bg-white rounded-lg overflow-hidden lg:sticky lg:top-4">
               {/* Main Image */}
               <div className="relative aspect-square sm:aspect-video bg-white">
                 {" "}
@@ -506,46 +516,50 @@ const ProductDetailPage = () => {
                 </div>
               </div>
 
-              {/* Quick Specs Section - MỚI THÊM */}
-              <div className="p-3 sm:p-4 bg-gray-50 border-t">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-gray-900">Thông số nổi bật</h3>
-                  <button
-                    onClick={() => setShowSpecsPanel(true)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
-                  >
-                    Xem tất cả
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+              <div className="hidden lg:block">
+                {/* Quick Specs Section */}
+                <div className="p-4 bg-gray-50 border-t">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-gray-900">
+                      Thông số nổi bật
+                    </h3>
+                    <button
+                      onClick={() => setShowSpecsPanel(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                    >
+                      Xem tất cả
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <QuickSpecs specifications={product.specifications} />
                 </div>
-                <QuickSpecs specifications={product.specifications} />
-              </div>
 
-              {/* Warranty Quick Info - MỚI THÊM */}
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-t">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-blue-600" />
-                    <span className="font-bold text-gray-900">
-                      Chính sách bảo hành
-                    </span>
+                {/* Warranty Quick Info */}
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-blue-600" />
+                      <span className="font-bold text-gray-900">
+                        Chính sách bảo hành
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowWarrantyPanel(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                    >
+                      Chi tiết
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowWarrantyPanel(true)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
-                  >
-                    Chi tiết
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-600" />
-                    <span className="text-gray-700">Bảo hành 12 tháng</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-green-600" />
-                    <span className="text-gray-700">Đổi trả 30 ngày</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <span className="text-gray-700">Bảo hành 12 tháng</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <span className="text-gray-700">Đổi trả 30 ngày</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -628,7 +642,7 @@ const ProductDetailPage = () => {
               {/* Color Selection */}
               <div className="mb-6">
                 <h3 className="text-sm font-semibold mb-3">Màu sắc</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {Object.keys(groupedVariants).map((color) => {
                     const isSelected = selectedVariant.color === color;
                     const hasStock = groupedVariants[color].some(
@@ -780,6 +794,55 @@ const ProductDetailPage = () => {
                   </p>
                 </div>
               )}
+
+              {/* ===== THÊM SPECS & WARRANTY CHO MOBILE ===== */}
+              <div className="lg:hidden space-y-4 mt-6">
+                {/* Quick Specs Mobile */}
+                <div className="p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-gray-900">
+                      Thông số nổi bật
+                    </h3>
+                    <button
+                      onClick={() => setShowSpecsPanel(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                    >
+                      Xem tất cả
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <QuickSpecs specifications={product.specifications} />
+                </div>
+
+                {/* Warranty Mobile */}
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-blue-600" />
+                      <span className="font-bold text-gray-900">
+                        Chính sách bảo hành
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowWarrantyPanel(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1"
+                    >
+                      Chi tiết
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <span className="text-gray-700">Bảo hành 12 tháng</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <span className="text-gray-700">Đổi trả 30 ngày</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
