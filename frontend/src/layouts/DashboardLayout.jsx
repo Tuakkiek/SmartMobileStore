@@ -58,7 +58,7 @@ const DashboardLayout = () => {
         { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
-        { path: "/admin/shipping", icon: Truck, label: "Giao hàng" },
+        { path: "/shipper/dashboard", icon: Truck, label: "Giao hàng" },
         { path: "/pos/dashboard", icon: Receipt, label: "POS - Bán hàng" },
 
         // ✅ THÊM 2 DÒNG NÀY
