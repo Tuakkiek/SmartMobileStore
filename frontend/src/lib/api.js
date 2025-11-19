@@ -5,8 +5,13 @@
 
 import axios from "axios";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+// ============================================
+// AXIOS INSTANCE
+// ============================================
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
@@ -41,14 +46,14 @@ api.interceptors.response.use(
       !error.config.url.includes("/auth/login")
     ) {
       localStorage.removeItem("auth-storage");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      // ✅ Redirect về trang chủ thay vì login (theo App.jsx của bạn)
+      if (window.location.pathname !== "/") {
+        window.location.href = "/";
       }
     }
     return Promise.reject(error);
   }
 );
-
 // ============================================
 // PRODUCT APIs (DRY)
 // ============================================
@@ -243,6 +248,35 @@ export const getTopNewProducts = async () => {
     return [];
   }
 };
+
+// ============================================
+// ERROR HANDLER (cho production)
+// ============================================
+export const handleApiError = (error) => {
+  if (error.response) {
+    // Server trả về lỗi
+    return {
+      success: false,
+      message: error.response.data?.message || "Có lỗi xảy ra",
+      status: error.response.status,
+    };
+  } else if (error.request) {
+    // Không nhận được response
+    return {
+      success: false,
+      message: "Không thể kết nối đến server",
+      status: 0,
+    };
+  } else {
+    // Lỗi khác
+    return {
+      success: false,
+      message: error.message || "Có lỗi xảy ra",
+      status: -1,
+    };
+  }
+};
+
 
 // ============================================
 // EXPORT DEFAULT
