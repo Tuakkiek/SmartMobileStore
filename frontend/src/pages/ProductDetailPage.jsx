@@ -300,13 +300,13 @@ const ProductDetailPage = () => {
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="container mx-auto px-2 sm:px-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
           {/* LEFT: Image Gallery - 7 cols */}
-          <div className="lg:col-span-7 h-96">
+          <div className="lg:col-span-7">
             <div className="bg-white rounded-lg overflow-hidden sticky top-4">
               {/* Main Image */}
-              <div className="relative aspect-video bg-white">
+              <div className="relative aspect-square sm:aspect-video bg-white">
                 {" "}
                 {/* 16:9 Aspect Ratio */}
                 {activeMediaTab === "video" && product.videoUrl ? (
@@ -362,7 +362,7 @@ const ProductDetailPage = () => {
                                   prev > 0 ? prev - 1 : images.length - 1
                                 );
                               }}
-                              className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
+                              className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-10 sm:h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all"
                             >
                               <ChevronLeft className="w-6 h-6 text-gray-700" />
                             </button>
@@ -391,8 +391,11 @@ const ProductDetailPage = () => {
               </div>
 
               {/* Thumbnail Navigation */}
-              <div className="p-4 border-t bg-gray-50">
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              <div className="p-2 sm:p-4 border-t bg-gray-50">
+                <div
+                  className="flex gap-1 sm:gap-2 overflow-x-auto pb-2 -mx-2 px-2 sm:mx-0 sm:px-0"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
                   {/* Tab Nổi bật */}
                   {product.featuredImages?.filter(Boolean).length > 0 && (
                     <button
@@ -491,7 +494,7 @@ const ProductDetailPage = () => {
                       variantImages.length > 6 && (
                         <button
                           onClick={() => setActiveMediaTab("variant")}
-                          className="flex-shrink-0 w-16 h-16 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white hover:border-red-500 transition-all"
+                          className="flex-shrink-0 w-16 h-16 sm:w-16 sm:h-16  border-2 border-gray-300 rounded-lg flex items-center justify-center bg-white hover:border-red-500 transition-all"
                         >
                           <span className="text-sm font-semibold text-gray-600">
                             +{variantImages.length - 6}
@@ -504,7 +507,7 @@ const ProductDetailPage = () => {
               </div>
 
               {/* Quick Specs Section - MỚI THÊM */}
-              <div className="p-4 bg-gray-50 border-t">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold text-gray-900">Thông số nổi bật</h3>
                   <button
@@ -551,10 +554,10 @@ const ProductDetailPage = () => {
 
           {/* RIGHT: Product Info - 5 cols */}
           <div className="lg:col-span-5">
-            <div className="bg-white rounded-lg p-6">
+            <div className="bg-white rounded-lg p-4 sm:p-6">
               {/* Product Title & Meta */}
               <div className="mb-4">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                   {product.name}
                 </h1>
                 <div className="flex items-center gap-4 text-sm">
@@ -625,7 +628,7 @@ const ProductDetailPage = () => {
               {/* Color Selection */}
               <div className="mb-6">
                 <h3 className="text-sm font-semibold mb-3">Màu sắc</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                   {Object.keys(groupedVariants).map((color) => {
                     const isSelected = selectedVariant.color === color;
                     const hasStock = groupedVariants[color].some(
@@ -700,7 +703,7 @@ const ProductDetailPage = () => {
               {/* Price Section */}
               <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-5 mb-6 border border-red-100">
                 <div className="flex items-baseline gap-3 mb-3">
-                  <span className="text-3xl font-bold text-red-600">
+                  <span className="text-2xl sm:text-3xl font-bold text-red-600">
                     {formatPrice(selectedVariant.price)}
                   </span>
                   {selectedVariant.originalPrice > selectedVariant.price && (
@@ -750,11 +753,11 @@ const ProductDetailPage = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
                 <button
                   onClick={() => handleAddToCart(false)}
                   disabled={cartLoading || selectedVariant.stock === 0}
-                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
+                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold  sm:py-4  sm:px-6 sm:text-lg py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
                 >
                   <ShoppingCart className="w-5 h-5" />
                   {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
@@ -780,11 +783,10 @@ const ProductDetailPage = () => {
             </div>
           </div>
         </div>
-
       </div>
 
       {/* Reviews Section - Độc lập */}
-      <div className="mt-8 bg-white rounded-lg p-8 px-24">
+      <div className="mt-4 sm:mt-8 bg-white rounded-lg p-4 sm:p-8 sm:px-24">
         <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
         <ReviewsTab productId={product._id} product={product} />
       </div>

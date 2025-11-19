@@ -265,7 +265,7 @@ const POSDashboard = () => {
             phoneNumber: customerPhone.trim(),
           },
           totalAmount,
-          storeLocation: "Apple Store Cần Thơ",
+          storeLocation: "Ninh Kiều iStore",
         },
         {
           headers: {

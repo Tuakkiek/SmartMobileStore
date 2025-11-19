@@ -173,8 +173,9 @@ export const createPOSOrder = async (req, res) => {
             fullName: customerInfo.fullName,
             phoneNumber: customerInfo.phoneNumber,
             province: storeLocation || "Cần Thơ",
-            district: "Ninh Kiều",
-            commune: "Xuân Khánh",
+            // district: "Ninh Kiều",
+            // commune: "Xuân Khánh",
+            ward: "Ninh Kiều",
             detailAddress: "Mua tại cửa hàng",
           },
           paymentMethod: "CASH",
@@ -186,7 +187,7 @@ export const createPOSOrder = async (req, res) => {
           posInfo: {
             staffId: req.user._id,
             staffName: req.user.fullName,
-            storeLocation: storeLocation || "Apple Store Cần Thơ",
+            storeLocation: storeLocation || "Ninh Kiều iStore",
             receiptNumber,
           },
         },
@@ -454,14 +455,14 @@ export const issueVATInvoice = async (req, res) => {
     if (order.paymentStatus !== "PAID") {
       return res.status(400).json({
         success: false,
-        message: "Chỉ xuất VAT cho đơn đã thanh toán",
+        message: "Chỉ xuất cho đơn đã thanh toán",
       });
     }
 
     if (order.vatInvoice?.invoiceNumber) {
       return res.status(400).json({
         success: false,
-        message: "Đơn hàng đã có hóa đơn VAT",
+        message: "Đơn hàng đã có hóa đơn",
       });
     }
 
@@ -495,11 +496,11 @@ export const issueVATInvoice = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Xuất hóa đơn VAT thành công",
+      message: "Xuất hóa đơn thành công",
       data: { order },
     });
   } catch (error) {
-    console.error("ISSUE VAT INVOICE ERROR:", error);
+    console.error("ISSUE INVOICE ERROR:", error);
     res.status(400).json({
       success: false,
       message: error.message,

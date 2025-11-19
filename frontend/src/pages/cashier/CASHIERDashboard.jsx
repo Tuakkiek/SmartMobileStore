@@ -190,8 +190,8 @@ const CASHIERDashboard = () => {
       toast.success("Xuất hóa đơn VAT thành công!");
       setShowVATDialog(false);
     } catch (error) {
-      console.error("Lỗi xuất VAT:", error);
-      toast.error(error.response?.data?.message || "Xuất VAT thất bại");
+      console.error("Lỗi  :", error);
+      toast.error(error.response?.data?.message || "  thất bại");
     } finally {
       setIsLoading(false);
     }
@@ -237,7 +237,7 @@ const CASHIERDashboard = () => {
         <!-- Header -->
         <div class="header">
           <h1>HÓA ĐƠN BÁN HÀNG</h1>
-          <p>Apple Store Cần Thơ</p>
+          <p>Ninh Kiều iStore</p>
           <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ | Hotline: 1900.xxxx</p>
         </div>
 

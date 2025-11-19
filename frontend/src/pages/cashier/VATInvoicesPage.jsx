@@ -206,8 +206,8 @@ const VATInvoicesPage = () => {
       <body>
         <div class="header">
           <h1>HÓA ĐƠN BÁN HÀNG</h1>
-          <p>Apple Store Cần Thơ</p>
-          <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ | Hotline: 1900.xxxx</p>
+          <p>Ninh Kiều iStore</p>
+          <p>Địa chỉ: Ninh Kiều, Cần Thơ | Hotline: 1900.9999</p>
         </div>
 
         <div class="info-section">
@@ -585,7 +585,7 @@ const VATInvoicesPage = () => {
                   </p>
                   {selectedOrder.vatInvoice?.invoiceNumber && (
                     <Badge className="bg-green-100 text-green-800 mt-2">
-                      Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
+                      Đã : {selectedOrder.vatInvoice.invoiceNumber}
                     </Badge>
                   )}
                 </div>
