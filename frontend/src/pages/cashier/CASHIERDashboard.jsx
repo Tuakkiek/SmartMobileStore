@@ -660,7 +660,7 @@ const CASHIERDashboard = () => {
               Hủy
             </Button>
             <Button onClick={handleIssueVAT} disabled={isLoading}>
-              {isLoading ? "Đang xuất..." : "Xuất hóa đơn VAT"}
+              {isLoading ? "Đang xuất..." : "Xuất hóa đơn"}
             </Button>
           </DialogFooter>
         </DialogContent>
