@@ -42,8 +42,7 @@ const addressSchema = new mongoose.Schema(
     fullName: { type: String, required: true, trim: true },
     phoneNumber: { type: String, required: true, trim: true },
     province: { type: String, required: true, trim: true },
-    district: { type: String, required: true, trim: true },
-    commune: { type: String, required: true, trim: true },
+    ward: { type: String, required: true, trim: true }, // Chỉ giữ ward
     detailAddress: { type: String, required: true, trim: true },
   },
   { _id: false }

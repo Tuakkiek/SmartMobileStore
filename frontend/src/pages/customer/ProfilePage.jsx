@@ -534,9 +534,7 @@ const OrderDetailDialog = ({
             <p className="text-sm">{order.shippingAddress?.phoneNumber}</p>
             <p className="text-sm text-muted-foreground">
               {order.shippingAddress?.detailAddress},{" "}
-              {order.shippingAddress?.commune},{" "}
-              {order.shippingAddress?.district},{" "}
-              {order.shippingAddress?.province}
+              {order.shippingAddress?.ward}, {order.shippingAddress?.province}
             </p>
           </div>
 
@@ -782,8 +780,7 @@ const AddressesManager = ({ user, onUpdate }) => {
                   {address.isDefault && <Badge>Mặc định</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {address.detailAddress}, {address.commune || address.ward},{" "}
-                  {address.district || address.ward}, {address.province}
+                  {address.detailAddress}, {address.ward}, {address.province}
                 </p>
                 <div className="flex gap-2">
                   <Button
