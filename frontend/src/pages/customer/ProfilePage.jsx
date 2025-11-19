@@ -53,6 +53,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import AddressFormDialog from "@/components/shared/AddressFormDialog";
 import { getNameInitials } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Placeholder ảnh lỗi
 const PLACEHOLDER_IMG = "https://via.placeholder.com/64?text=No+Image";
@@ -641,8 +642,10 @@ const ProfileForm = ({ user, onUpdate }) => {
       await userAPI.updateProfile(formData);
       setSuccess("Cập nhật thông tin thành công");
       onUpdate();
+      toast.success("Cập nhật thông tin thành công");
     } catch (error) {
       setError(error.response?.data?.message || "Cập nhật thất bại");
+      toast.error(error.response?.data?.message || "Cập nhật thất bại");
     } finally {
       setIsLoading(false);
     }
@@ -724,8 +727,10 @@ const AddressesManager = ({ user, onUpdate }) => {
       onUpdate();
       setShowDialog(false);
       setEditingAddressId(null);
+      toast.success("Thao tác thành công");
     } catch (error) {
-      alert(error.response?.data?.message || "Thao tác thất bại");
+      //alert(error.response?.data?.message || "Thao tác thất bại");
+      toast.error(error.response?.data?.message || "Thao tác thất bại");
     } finally {
       setIsSubmitting(false);
     }

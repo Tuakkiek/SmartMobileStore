@@ -216,7 +216,8 @@ const CheckoutPage = () => {
           phoneNumber: selectedAddress.phoneNumber,
           province: selectedAddress.province,
           // Map ward từ form ProfilePage thành district + commune
-          district: selectedAddress.ward || selectedAddress.province,
+          // district: selectedAddress.ward || selectedAddress.province,
+          ward: selectedAddress.ward || "",
           commune: selectedAddress.ward || "",
           detailAddress: selectedAddress.detailAddress,
         },
