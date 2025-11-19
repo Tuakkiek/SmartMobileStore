@@ -37,9 +37,29 @@ const app = express();
 const __dirname = path.resolve();
 
 // ================================
+// 🔹 Khởi động server (di chuyển lên trước)
+// ================================
+const PORT = config.port || process.env.PORT || 5000;
+
+const startServer = () => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📍 Environment: ${config.nodeEnv}`);
+    console.log(
+      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
+    );
+    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
+    console.log(
+      `⏰ Current time: ${new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      })}`
+    );
+  });
+};
+
+// ================================
 // 🔹 Middleware
 // ================================
-
 if (process.env.NODE_ENV !== "production") {
   app.use(
     cors({
@@ -108,45 +128,32 @@ app.use((err, req, res, next) => {
 });
 
 // ================================
-// 🔹 404 Handler
+// 🔹 Production: Serve static files & SPA
 // ================================
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
-});
-
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
+  // Dùng đường dẫn tuyệt đối từ process.cwd()
+  const frontendPath = path.join(process.cwd(), "../frontend/dist");
+
+  console.log("📁 Current working directory:", process.cwd());
+  console.log("📁 Frontend path:", frontendPath);
+
+  app.use(express.static(frontendPath));
 
   app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+    res.sendFile(path.join(frontendPath, "index.html"));
+  });
+} else {
+  app.use((req, res) => {
+    res.status(404).json({
+      success: false,
+      message: "Route not found",
+    });
   });
 }
 
 // ================================
-// 🔹 Khởi động server
+// 🔹 Xử lý sự cố kết nối MongoDB
 // ================================
-const PORT = config.port || process.env.PORT || 5000;
-
-const startServer = () => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📍 Environment: ${config.nodeEnv}`);
-    console.log(
-      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
-    );
-    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
-    console.log(
-      `⏰ Current time: ${new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Ho_Chi_Minh",
-      })}`
-    );
-  });
-};
-
-// Xử lý sự cố kết nối MongoDB
 mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err);
   process.exit(1);
