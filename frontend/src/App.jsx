@@ -38,10 +38,10 @@ import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
 import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory";
 
-import CASHIERDashboard from "@/pages/CASHIER/CASHIERDashboard";
-import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
+import CASHIERDashboard from "@/pages/cashier/CASHIERDashboard";
+import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
 
-import Page404 from "@/pages/Page404";
+import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
 
 // ============================================
