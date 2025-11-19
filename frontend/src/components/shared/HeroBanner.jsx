@@ -181,7 +181,7 @@ const HeroBannerCarousel = ({ onSlideChange }) => {
         opts={{
           loop: true,
         }}
-        className="relative overflow-hidden rounded-none md:rounded-2xl"
+        className="relative overflow-hidden md:rounded-none"
       >
                {" "}
         <CarouselContent>
@@ -234,7 +234,7 @@ const HeroBannerCarousel = ({ onSlideChange }) => {
           ))}
                  
         </div>
-              
+             
       </Carousel>
        
     </div>

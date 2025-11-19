@@ -199,18 +199,9 @@ const SearchResultsPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="container mx-auto px-4 max-w-7xl">
         {/* Header Section */}
         <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="mb-4 pl-0 hover:pl-2 transition-all text-gray-500 hover:text-black hover:bg-transparent"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Quay lại trang chủ
-          </Button>
-
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">

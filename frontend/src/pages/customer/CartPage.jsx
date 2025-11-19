@@ -213,7 +213,7 @@ const CartPage = () => {
   const hasItems = items.length > 0;
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4">
       <h1 className="text-3xl font-bold mb-8">Giỏ hàng của bạn</h1>
 
       {items.length === 0 ? (

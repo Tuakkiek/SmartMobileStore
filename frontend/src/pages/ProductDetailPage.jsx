@@ -294,22 +294,9 @@ const ProductDetailPage = () => {
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
-      {/* Breadcrumb */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center text-sm text-gray-600">
-            <span className="hover:text-red-600 cursor-pointer">Trang chủ</span>
-            <ChevronRight className="w-4 h-4 mx-1" />
-            <span className="hover:text-red-600 cursor-pointer">
-              {categoryInfo.model}
-            </span>
-            <ChevronRight className="w-4 h-4 mx-1" />
-            <span className="text-gray-900">{product.name}</span>
-          </div>
-        </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-6">
+
+      <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* LEFT: Image Gallery - 7 cols */}
           <div className="lg:col-span-7 h-96">
@@ -801,7 +788,7 @@ const ProductDetailPage = () => {
       </div>
 
       {/* Reviews Section - Độc lập */}
-      <div className="mt-8 bg-white rounded-lg p-8">
+      <div className="mt-8 bg-white rounded-lg p-8 px-24">
         <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
         <ReviewsTab productId={product._id} product={product} />
       </div>

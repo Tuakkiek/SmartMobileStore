@@ -2,7 +2,6 @@ import React from "react";
 import { useLocation, Link } from "react-router-dom";
 import { ChevronRight, Home } from "lucide-react";
 
-// Từ điển ánh xạ URL sang tên hiển thị tiếng Việt
 const routeMapping = {
   // Public
   products: "Sản phẩm",
@@ -39,28 +38,69 @@ const routeMapping = {
 const Breadcrumb = () => {
   const location = useLocation();
 
-  // Không hiện breadcrumb ở trang chủ
-  if (location.pathname === "/") return null;
+  // ✅ LOG 1: Kiểm tra pathname
+  console.log("🔍 [Breadcrumb] Pathname:", location.pathname);
+
+  // Không hiển thị breadcrumb ở các trang cần ẩn
+  const pathsToHide = ["/", "/login", "/register"];
+  if (pathsToHide.includes(location.pathname)) {
+    console.log(
+      "❌ [Breadcrumb] Ẩn breadcrumb - pathname nằm trong pathsToHide"
+    );
+    return null;
+  }
 
   // Tách URL thành mảng
   const pathnames = location.pathname.split("/").filter((x) => x);
+  console.log("📍 [Breadcrumb] Pathnames array:", pathnames);
 
+  // Hàm format tên breadcrumb
   const formatBreadcrumbText = (text) => {
-    if (routeMapping[text]) return routeMapping[text];
-    // Nếu là ID dài (số + chữ), hiển thị rút gọn
-    if (text.length > 20 && /\d/.test(text)) return "Chi tiết";
-    // Format text thường: "iphone-15" -> "Iphone 15"
-    return text.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    console.log(`  📝 [formatBreadcrumbText] Input: "${text}"`);
+
+    // Kiểm tra routeMapping trước
+    if (routeMapping[text]) {
+      const mapped = routeMapping[text];
+      console.log(`    ✅ Tìm thấy trong routeMapping: "${mapped}"`);
+      return mapped;
+    }
+
+    // Kiểm tra ID (MongoDB ObjectId hoặc UUID)
+    if (text.match(/^[a-f0-9]{24}$/) || text.match(/^[a-f0-9-]{36}$/)) {
+      console.log(`    ✅ Là ID: trả về "Chi tiết"`);
+      return "Chi tiết";
+    }
+
+    // Nếu là số nguyên (trang, số thứ tự)
+    if (/^\d+$/.test(text)) {
+      const result = `Trang ${text}`;
+      console.log(`    ✅ Là số: trả về "${result}"`);
+      return result;
+    }
+
+    // Format chung: "iphone-15" → "Iphone 15"
+    const formatted = text
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (l) => l.toUpperCase());
+    console.log(`    ✅ Format chung: "${formatted}"`);
+    return formatted;
   };
 
+  console.log("🎯 [Breadcrumb] Render breadcrumb items:");
+
   return (
-    <nav aria-label="Breadcrumb" className="w-full py-2 mb-4">
+    <nav
+      aria-label="Breadcrumb"
+      className="w-full bg-slate-50 pl-24 mt-6 items-center py-3 shadow-sm relative top-16 z-40"
+    >
+      {/* ✅ LOG 2: Thêm background để dễ nhìn thấy component */}
       <ol className="flex flex-wrap items-center text-sm text-gray-500">
         {/* Home Icon */}
         <li>
           <Link
             to="/"
             className="flex items-center hover:text-primary transition-colors"
+            title="Trang chủ"
           >
             <Home className="w-4 h-4" />
           </Link>
@@ -70,6 +110,10 @@ const Breadcrumb = () => {
           const isLast = index === pathnames.length - 1;
           const to = `/${pathnames.slice(0, index + 1).join("/")}`;
           const displayName = formatBreadcrumbText(value);
+
+          console.log(
+            `  Item ${index}: value="${value}", to="${to}", displayName="${displayName}", isLast=${isLast}`
+          );
 
           return (
             <React.Fragment key={to}>

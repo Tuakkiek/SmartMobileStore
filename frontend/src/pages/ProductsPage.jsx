@@ -10,6 +10,7 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 import ProductCard from "@/components/shared/ProductCard";
+import ProductFilters from "@/components/shared/ProductFilters"; // Assuming this path for the component
 
 // ============================================
 // API MAPPING - Chuẩn hóa category với API
@@ -101,7 +102,7 @@ const ProductsPage = () => {
   // Dynamic filters based on category
   const [filters, setFilters] = useState({});
   const [expandedSections, setExpandedSections] = useState({});
-  
+
   // Price filter state
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
@@ -121,7 +122,7 @@ const ProductsPage = () => {
 
     setFilters(newFilters);
     setExpandedSections(newExpanded);
-    
+
     // Initialize price range from URL
     const minPrice = searchParams.get("minPrice");
     const maxPrice = searchParams.get("maxPrice");
@@ -168,8 +169,11 @@ const ProductsPage = () => {
       // ============================================
       // CLIENT-SIDE FILTERING (vì backend chưa hỗ trợ)
       // ============================================
-      if (Object.keys(filters).some((key) => filters[key]?.length > 0) || 
-          priceRange.min || priceRange.max) {
+      if (
+        Object.keys(filters).some((key) => filters[key]?.length > 0) ||
+        priceRange.min ||
+        priceRange.max
+      ) {
         fetchedProducts = fetchedProducts.filter((product) => {
           // Filter by storage
           if (filters.storage?.length > 0) {
@@ -203,14 +207,16 @@ const ProductsPage = () => {
           // Filter by price range
           if (priceRange.min || priceRange.max) {
             const minPrice = priceRange.min ? parseFloat(priceRange.min) : 0;
-            const maxPrice = priceRange.max ? parseFloat(priceRange.max) : Infinity;
-            
+            const maxPrice = priceRange.max
+              ? parseFloat(priceRange.max)
+              : Infinity;
+
             // Check if any variant falls within price range
             const hasMatchingPrice = product.variants?.some((variant) => {
               const variantPrice = variant.price || 0;
               return variantPrice >= minPrice && variantPrice <= maxPrice;
             });
-            
+
             if (!hasMatchingPrice) return false;
           }
 
@@ -283,31 +289,15 @@ const ProductsPage = () => {
   // ============================================
   // PRICE FILTER HANDLERS
   // ============================================
-  const handlePricePresetClick = (preset) => {
-    setSelectedPricePreset(preset.label);
-    const newPriceRange = {
-      min: preset.min === 0 ? "" : preset.min.toString(),
-      max: preset.max === Infinity ? "" : preset.max.toString(),
-    };
-    setPriceRange(newPriceRange);
-    updateURLWithFilters(filters, newPriceRange);
-    setPage(1);
-  };
-
-  const handleCustomPriceChange = (field, value) => {
-    setSelectedPricePreset(null);
-    const newPriceRange = { ...priceRange, [field]: value };
-    setPriceRange(newPriceRange);
-  };
-
-  const applyCustomPrice = () => {
-    updateURLWithFilters(filters, priceRange);
+  const handlePriceChange = (newRange) => {
+    setPriceRange(newRange);
+    updateURLWithFilters(filters, newRange);
     setPage(1);
   };
 
   const updateURLWithFilters = (currentFilters, currentPriceRange) => {
     const params = new URLSearchParams(searchParams);
-    
+
     // Update filter params
     Object.keys(currentFilters).forEach((key) => {
       if (currentFilters[key].length > 0) {
@@ -316,20 +306,20 @@ const ProductsPage = () => {
         params.delete(key);
       }
     });
-    
+
     // Update price params
     if (currentPriceRange.min) {
       params.set("minPrice", currentPriceRange.min);
     } else {
       params.delete("minPrice");
     }
-    
+
     if (currentPriceRange.max) {
       params.set("maxPrice", currentPriceRange.max);
     } else {
       params.delete("maxPrice");
     }
-    
+
     params.set("page", "1");
     navigate(`?${params.toString()}`, { replace: true });
   };
@@ -353,10 +343,11 @@ const ProductsPage = () => {
   // ============================================
   // COMPUTED VALUES
   // ============================================
-  const activeFiltersCount = Object.values(filters).reduce(
-    (count, arr) => count + (arr?.length || 0),
-    0
-  ) + (priceRange.min || priceRange.max ? 1 : 0);
+  const activeFiltersCount =
+    Object.values(filters).reduce(
+      (count, arr) => count + (arr?.length || 0),
+      0
+    ) + (priceRange.min || priceRange.max ? 1 : 0);
 
   const categoryLabel = {
     iPhone: "iPhone",
@@ -383,9 +374,7 @@ const ProductsPage = () => {
               : categoryLabel}
           </h1>
           {searchQuery && (
-            <p className="text-sm text-gray-600">
-              Danh mục: {categoryLabel}
-            </p>
+            <p className="text-sm text-gray-600">Danh mục: {categoryLabel}</p>
           )}
         </div>
 
@@ -394,149 +383,15 @@ const ProductsPage = () => {
           {/* SIDEBAR FILTERS */}
           {/* ============================================ */}
           <aside className="hidden lg:block w-64 flex-shrink-0">
-            <div className="bg-white rounded-lg shadow-sm p-4 sticky top-4">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b">
-                <h2 className="font-semibold text-base flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4" /> Bộ lọc
-                </h2>
-                {activeFiltersCount > 0 && (
-                  <button
-                    onClick={clearFilters}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    Xóa ({activeFiltersCount})
-                  </button>
-                )}
-              </div>
-
-              {Object.entries(availableFilters).map(([key, options]) => (
-                <div key={key} className="mb-4">
-                  <button
-                    onClick={() => toggleSection(key)}
-                    className="flex items-center justify-between w-full mb-3"
-                  >
-                    <span className="font-medium text-sm">
-                      {FILTER_LABELS[key] || key}
-                    </span>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${
-                        expandedSections[key] ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {expandedSections[key] && (
-                    <div className="space-y-2 pl-1">
-                      {options.map((opt) => (
-                        <label
-                          key={opt}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filters[key]?.includes(opt) || false}
-                            onChange={() => handleFilterToggle(key, opt)}
-                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-2 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-gray-700">
-                            {key === "condition"
-                              ? CONDITION_LABELS[opt] || opt
-                              : opt}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="border-t mt-4"></div>
-                </div>
-              ))}
-
-              {/* ============================================ */}
-              {/* PRICE FILTER SECTION */}
-              {/* ============================================ */}
-              <div className="mb-4">
-                <button
-                  onClick={() => toggleSection("price")}
-                  className="flex items-center justify-between w-full mb-3"
-                >
-                  <span className="font-medium text-sm">Khoảng giá</span>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform ${
-                      expandedSections.price ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {expandedSections.price !== false && (
-                  <div className="space-y-3 pl-1">
-                    {/* Price presets */}
-                    <div className="space-y-2">
-                      {PRICE_RANGES.map((preset) => (
-                        <button
-                          key={preset.label}
-                          onClick={() => handlePricePresetClick(preset)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                            selectedPricePreset === preset.label
-                              ? "bg-blue-100 text-blue-700 font-medium"
-                              : "hover:bg-gray-50 text-gray-700"
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Custom price input */}
-                    <div className="pt-3 border-t">
-                      <p className="text-xs text-gray-500 mb-2">
-                        Hoặc nhập khoảng giá (VNĐ)
-                      </p>
-                      <div className="space-y-2">
-                        <input
-                          type="number"
-                          placeholder="Giá từ"
-                          value={priceRange.min}
-                          onChange={(e) =>
-                            handleCustomPriceChange("min", e.target.value)
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Giá đến"
-                          value={priceRange.max}
-                          onChange={(e) =>
-                            handleCustomPriceChange("max", e.target.value)
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        <button
-                          onClick={applyCustomPrice}
-                          disabled={!priceRange.min && !priceRange.max}
-                          className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Áp dụng
-                        </button>
-                      </div>
-                      
-                      {/* Current price range display */}
-                      {(priceRange.min || priceRange.max) && (
-                        <div className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded">
-                          {priceRange.min && priceRange.max
-                            ? `${formatPrice(priceRange.min)} - ${formatPrice(
-                                priceRange.max
-                              )} VNĐ`
-                            : priceRange.min
-                            ? `Từ ${formatPrice(priceRange.min)} VNĐ`
-                            : `Đến ${formatPrice(priceRange.max)} VNĐ`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <ProductFilters
+              filters={filters}
+              onFilterChange={handleFilterToggle}
+              priceRange={priceRange}
+              onPriceChange={handlePriceChange}
+              availableFilters={availableFilters}
+              onClearFilters={clearFilters}
+              activeFiltersCount={activeFiltersCount}
+            />
           </aside>
 
           {/* ============================================ */}
@@ -546,8 +401,7 @@ const ProductsPage = () => {
             {/* Top bar */}
             <div className="mb-4 flex items-center justify-between">
               <p className="text-sm text-gray-600">
-                Tìm thấy <span className="font-semibold">{total}</span> sản
-                phẩm
+                Tìm thấy <span className="font-semibold">{total}</span> sản phẩm
               </p>
               <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
                 <SlidersHorizontal className="w-4 h-4" />

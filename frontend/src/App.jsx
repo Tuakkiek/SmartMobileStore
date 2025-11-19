@@ -35,6 +35,7 @@ import POSDashboard from "@/pages/pos-staff/POSDashboard";
 import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory";
 import CASHIERDashboard from "@/pages/CASHIER/CASHIERDashboard";
 import VATInvoicesPage from "@/pages/CASHIER/VATInvoicesPage";
+import Breadcrumb from "@/components/shared/Breadcrumb";
 
 // ✅ THÊM 1: Import trang 404
 import Page404 from "@/pages/Page404";
@@ -84,7 +85,7 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-
+      <Breadcrumb />
       <Routes>
         {/* ========================================
             PUBLIC ROUTES
