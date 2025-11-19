@@ -7,10 +7,22 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
 *.local
+
+# Environment variables - QUAN TRỌNG
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build files
+build/
+.cache/
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +34,43 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Vite
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional npm cache
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Parcel cache
+.parcel-cache
+
+# Storybook
+storybook-static/
