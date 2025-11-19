@@ -509,7 +509,7 @@ const CartPage = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 ">
+    <div className="container mx-auto px-4 pb-16">
       <h1 className="text-3xl font-bold mb-8">Giỏ hàng của bạn</h1>
 
       {items.length === 0 ? (
@@ -570,7 +570,7 @@ const CartPage = () => {
                     <CardContent className="p-4">
                       <div className="flex gap-4">
                         {/* CHECKBOX – DÙNG SHADCN + CN */}
-                        <div className="flex items-start mt-1 mt-14">
+                        <div className="flex items-start mt-14">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() =>
