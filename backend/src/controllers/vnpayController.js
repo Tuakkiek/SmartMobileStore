@@ -98,11 +98,19 @@ export const createPaymentUrl = async (req, res) => {
     }
 
     // Lấy IP address
-    const ipAddr =
+    let ipAddr =
       req.headers["x-forwarded-for"] ||
       req.connection.remoteAddress ||
       req.socket.remoteAddress ||
       "127.0.0.1";
+
+    // VNPay chỉ chấp nhận 1 IP, nếu có nhiều IP thì lấy IP đầu tiên
+    if (ipAddr.includes(",")) {
+      ipAddr = ipAddr.split(",")[0].trim();
+    }
+
+    // Loại bỏ IPv6 prefix nếu có
+    ipAddr = ipAddr.replace("::ffff:", "");
 
     console.log("Client IP:", ipAddr);
 
@@ -164,10 +172,11 @@ export const createPaymentUrl = async (req, res) => {
     vnp_Params["vnp_SecureHash"] = signed;
 
     // ✅ TẠO PAYMENT URL
-    const paymentUrl =
-      vnpayConfig.vnp_Url +
-      "?" +
-      querystring.stringify(vnp_Params, { encode: false });
+    const queryParams = Object.keys(vnp_Params)
+      .map((key) => `${key}=${encodeURIComponent(vnp_Params[key])}`)
+      .join("&");
+
+    const paymentUrl = `${vnpayConfig.vnp_Url}?${queryParams}`;
 
     console.log("\n--- Payment URL ---");
     console.log("Full URL length:", paymentUrl.length);
