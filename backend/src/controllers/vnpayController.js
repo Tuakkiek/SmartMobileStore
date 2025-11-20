@@ -176,7 +176,11 @@ export const createPaymentUrl = async (req, res) => {
       .map((key) => `${key}=${encodeURIComponent(vnp_Params[key])}`)
       .join("&");
 
-    const paymentUrl = `${vnpayConfig.vnp_Url}?${queryParams}`;
+    // ✅ TẠO PAYMENT URL (SỬ DỤNG querystring.stringify)
+    const paymentUrl =
+      vnpayConfig.vnp_Url +
+      "?" +
+      querystring.stringify(vnp_Params, { encode: false });
 
     console.log("\n--- Payment URL ---");
     console.log("Full URL length:", paymentUrl.length);
@@ -240,11 +244,14 @@ export const vnpayIPN = async (req, res) => {
     console.log(JSON.stringify(vnp_Params, null, 2));
 
     // ✅ TẠO SIGN DATA
-    const signData = querystring.stringify(vnp_Params, { encode: false });
-    console.log("\n--- Sign Data ---");
+    const signData = Object.keys(vnp_Params)
+      .map((key) => `${key}=${vnp_Params[key]}`)
+      .join("&");
+
+    console.log("\n--- Sign Data (for hash) ---");
     console.log(signData);
 
-    // ✅ TÍNH HASH
+    // ✅ TẠO HASH
     const hmac = crypto.createHmac("sha512", vnpayConfig.vnp_HashSecret);
     const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
