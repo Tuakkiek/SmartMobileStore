@@ -157,9 +157,7 @@ export const createPaymentUrl = async (req, res) => {
     console.log(JSON.stringify(vnp_Params, null, 2));
 
     // ✅ TẠO SECURE HASH
-    const signData = Object.keys(vnp_Params)
-      .map((key) => `${key}=${vnp_Params[key]}`)
-      .join("&");
+    const signData = querystring.stringify(vnp_Params, { encode: false });
     console.log("\n--- Sign Data (for hash) ---");
     console.log(signData);
 
@@ -180,7 +178,16 @@ export const createPaymentUrl = async (req, res) => {
     const paymentUrl =
       vnpayConfig.vnp_Url +
       "?" +
-      querystring.stringify(vnp_Params, { encode: false });
+      Object.keys(vnp_Params)
+        .map((key) => {
+          const value = vnp_Params[key];
+          return `${key}=${encodeURIComponent(value)}`;
+        })
+        .join("&");
+
+    console.log("\n--- Payment URL ---");
+    console.log("Full URL length:", paymentUrl.length);
+    console.log("Full URL:", paymentUrl); // In toàn bộ URL để check
 
     console.log("\n--- Payment URL ---");
     console.log("Full URL length:", paymentUrl.length);
