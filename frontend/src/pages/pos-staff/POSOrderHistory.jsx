@@ -58,7 +58,9 @@ const POSOrderHistory = () => {
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/64?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+    return `${import.meta.env.VITE_API_URL}${
+      path.startsWith("/") ? "" : "/"
+    }${path}`;
   };
 
   // Load đơn hàng
@@ -106,7 +108,7 @@ const POSOrderHistory = () => {
     setShowDetailDialog(true);
 
     try {
-console.log("Đang lấy chi tiết đơn hàng:", orderId);
+      console.log("Đang lấy chi tiết đơn hàng:", orderId);
       const response = await posAPI.getOrderById(orderId);
 
       if (!response?.data?.data?.order) {
@@ -117,8 +119,8 @@ console.log("Đang lấy chi tiết đơn hàng:", orderId);
     } catch (error) {
       console.error("Lỗi khi lấy chi tiết:", error);
       toast.error(
-        error.response?.data?.message || 
-        "Không thể tải chi tiết đơn hàng. Vui lòng thử lại."
+        error.response?.data?.message ||
+          "Không thể tải chi tiết đơn hàng. Vui lòng thử lại."
       );
       setShowDetailDialog(false);
     } finally {
@@ -158,19 +160,25 @@ console.log("Đang lấy chi tiết đơn hàng:", orderId);
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {stats.pending}
+            </div>
             <p className="text-sm text-muted-foreground">Chờ thanh toán</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{stats.paid}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {stats.paid}
+            </div>
             <p className="text-sm text-muted-foreground">Đã thanh toán</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{stats.cancelled}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {stats.cancelled}
+            </div>
             <p className="text-sm text-muted-foreground">Đã hủy</p>
           </CardContent>
         </Card>
@@ -194,7 +202,7 @@ console.log("Đang lấy chi tiết đơn hàng:", orderId);
             </div>
             <Input
               type="date"
-value={dateFilter.startDate}
+              value={dateFilter.startDate}
               onChange={(e) => {
                 setDateFilter({ ...dateFilter, startDate: e.target.value });
                 setPagination((prev) => ({ ...prev, currentPage: 1 }));
@@ -225,7 +233,11 @@ value={dateFilter.startDate}
           orders.map((order) => {
             const isPending = order.status === "PENDING_PAYMENT";
             const isPaid = order.paymentStatus === "PAID";
-            const StatusIcon = isPending ? Clock : isPaid ? CheckCircle : XCircle;
+            const StatusIcon = isPending
+              ? Clock
+              : isPaid
+              ? CheckCircle
+              : XCircle;
 
             const statusColorClass = getStatusColor(order.status || "UNKNOWN");
             const bgColor = statusColorClass.includes("bg-")
@@ -246,25 +258,39 @@ value={dateFilter.startDate}
                         </div>
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-3 flex-wrap">
-                            <h3 className="font-semibold text-lg">#{order.orderNumber}</h3>
-                            <Badge className={getStatusColor(order.status || "UNKNOWN")}>
-                              {isPending 
-                                ? "Chờ thanh toán" 
-                                : getStatusText(order.paymentStatus || order.status)}
+                            <h3 className="font-semibold text-lg">
+                              #{order.orderNumber}
+                            </h3>
+                            <Badge
+                              className={getStatusColor(
+                                order.status || "UNKNOWN"
+                              )}
+                            >
+                              {isPending
+                                ? "Chờ thanh toán"
+                                : getStatusText(
+                                    order.paymentStatus || order.status
+                                  )}
                             </Badge>
                             {order.posInfo?.receiptNumber && (
-                              <Badge variant="outline">Phiếu: {order.posInfo.receiptNumber}</Badge>
+                              <Badge variant="outline">
+                                Phiếu: {order.posInfo.receiptNumber}
+                              </Badge>
                             )}
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-<div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                               <User className="w-4 h-4 text-muted-foreground" />
-                              <span>{order.shippingAddress?.fullName || "Khách lẻ"}</span>
+                              <span>
+                                {order.shippingAddress?.fullName || "Khách lẻ"}
+                              </span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Phone className="w-4 h-4 text-muted-foreground" />
-                              <span>{order.shippingAddress?.phoneNumber || "N/A"}</span>
+                              <span>
+                                {order.shippingAddress?.phoneNumber || "N/A"}
+                              </span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Clock className="w-4 h-4 text-muted-foreground" />
@@ -310,11 +336,12 @@ value={dateFilter.startDate}
                               className="w-16 h-16 object-cover rounded"
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.src = "https://via.placeholder.com/64?text=No+Image";
+                                e.target.src =
+                                  "https://via.placeholder.com/64?text=No+Image";
                               }}
                             />
                             <div className="flex-1 min-w-0">
-<p className="text-xs font-medium line-clamp-2 mb-1">
+                              <p className="text-xs font-medium line-clamp-2 mb-1">
                                 {item.productName}
                               </p>
                               <p className="text-xs text-muted-foreground">
@@ -353,7 +380,10 @@ value={dateFilter.startDate}
             variant="outline"
             disabled={pagination.currentPage === 1 || isLoading}
             onClick={() =>
-              setPagination((prev) => ({ ...prev, currentPage: prev.currentPage - 1 }))
+              setPagination((prev) => ({
+                ...prev,
+                currentPage: prev.currentPage - 1,
+              }))
             }
           >
             Trước
@@ -363,9 +393,14 @@ value={dateFilter.startDate}
           </span>
           <Button
             variant="outline"
-            disabled={pagination.currentPage === pagination.totalPages || isLoading}
+            disabled={
+              pagination.currentPage === pagination.totalPages || isLoading
+            }
             onClick={() =>
-              setPagination((prev) => ({ ...prev, currentPage: prev.currentPage + 1 }))
+              setPagination((prev) => ({
+                ...prev,
+                currentPage: prev.currentPage + 1,
+              }))
             }
           >
             Sau
@@ -387,8 +422,10 @@ value={dateFilter.startDate}
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <AlertCircle className="w-8 h-8 mx-auto mb-2 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Đang tải chi tiết...</p>
-</div>
+                <p className="text-sm text-muted-foreground">
+                  Đang tải chi tiết...
+                </p>
+              </div>
             </div>
           ) : selectedOrder ? (
             <div className="space-y-6">
@@ -397,14 +434,18 @@ value={dateFilter.startDate}
                 <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
                 <div className="space-y-3">
                   {selectedOrder.items?.map((item, idx) => (
-                    <div key={item._id || idx} className="flex gap-4 p-4 border rounded-lg">
+                    <div
+                      key={item._id || idx}
+                      className="flex gap-4 p-4 border rounded-lg"
+                    >
                       <img
                         src={getImageUrl(item.images?.[0])}
                         alt={item.productName}
                         className="w-20 h-20 object-cover rounded"
                         onError={(e) => {
                           e.target.onerror = null;
-                          e.target.src = "https://via.placeholder.com/64?text=No+Image";
+                          e.target.src =
+                            "https://via.placeholder.com/64?text=No+Image";
                         }}
                       />
                       <div className="flex-1">
@@ -443,7 +484,7 @@ value={dateFilter.startDate}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {selectedOrder.shippingAddress?.detailAddress
-                    ? `${selectedOrder.shippingAddress.detailAddress}, ${selectedOrder.shippingAddress.commune}, ${selectedOrder.shippingAddress.district}, ${selectedOrder.shippingAddress.province}`
+                    ? `${selectedOrder.shippingAddress.detailAddress}, ${selectedOrder.shippingAddress.ward}, ${selectedOrder.shippingAddress.province}`
                     : "Mua tại cửa hàng"}
                 </p>
               </div>
@@ -452,7 +493,11 @@ value={dateFilter.startDate}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
                   <span>Tạm tính:</span>
-<span>{formatPrice(selectedOrder.subtotal || selectedOrder.totalAmount)}</span>
+                  <span>
+                    {formatPrice(
+                      selectedOrder.subtotal || selectedOrder.totalAmount
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Phí ship:</span>
@@ -475,11 +520,23 @@ value={dateFilter.startDate}
               {/* POS INFO (nếu có) */}
               {selectedOrder.posInfo && (
                 <div className="p-4 bg-blue-50 rounded-lg text-sm">
-                  <p><strong>Thu ngân:</strong> {selectedOrder.posInfo.cashierName}</p>
-                  <p><strong>Tiền khách đưa:</strong> {formatPrice(selectedOrder.posInfo.paymentReceived)}</p>
-                  <p><strong>Tiền thối:</strong> {formatPrice(selectedOrder.posInfo.changeGiven || 0)}</p>
+                  <p>
+                    <strong>Thu ngân:</strong>{" "}
+                    {selectedOrder.posInfo.cashierName}
+                  </p>
+                  <p>
+                    <strong>Tiền khách đưa:</strong>{" "}
+                    {formatPrice(selectedOrder.posInfo.paymentReceived)}
+                  </p>
+                  <p>
+                    <strong>Tiền thối:</strong>{" "}
+                    {formatPrice(selectedOrder.posInfo.changeGiven || 0)}
+                  </p>
                   {selectedOrder.posInfo.receiptNumber && (
-                    <p><strong>Số phiếu:</strong> {selectedOrder.posInfo.receiptNumber}</p>
+                    <p>
+                      <strong>Số phiếu:</strong>{" "}
+                      {selectedOrder.posInfo.receiptNumber}
+                    </p>
                   )}
                 </div>
               )}
@@ -491,7 +548,10 @@ value={dateFilter.startDate}
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowDetailDialog(false)}
+            >
               Đóng
             </Button>
           </DialogFooter>

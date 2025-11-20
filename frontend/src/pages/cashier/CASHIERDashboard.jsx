@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
 import axios from "axios";
+import EditInvoiceDialog from "@/components/pos/EditInvoiceDialog";
 
 const CASHIERDashboard = () => {
   // ============================================
@@ -46,6 +47,8 @@ const CASHIERDashboard = () => {
     taxCode: "",
     companyAddress: "",
   });
+  const [showEditInvoice, setShowEditInvoice] = useState(false);
+  const [orderToPrint, setOrderToPrint] = useState(null);
 
   // Auto-refresh mỗi 10 giây
   useEffect(() => {
@@ -114,14 +117,330 @@ const CASHIERDashboard = () => {
       setShowPaymentDialog(false);
       fetchPendingOrders();
 
-      // In hóa đơn
-      printInvoice(selectedOrder, received);
+      // ✅ MỞ DIALOG CHỈNH SỬA THAY VÌ IN TRỰC TIẾP
+      setOrderToPrint(selectedOrder);
+      setShowEditInvoice(true);
     } catch (error) {
       console.error("Lỗi thanh toán:", error);
       toast.error(error.response?.data?.message || "Thanh toán thất bại");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ============================================
+  // HÀM IN VỚI DỮ LIỆU ĐÃ CHỈNH SỬA
+  // ============================================
+  const handlePrintInvoice = (editableData) => {
+    const printWindow = window.open("", "", "width=800,height=1000");
+
+    const invoiceHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Hóa đơn - ${editableData.orderNumber}</title>
+      <style>
+        @page {
+          size: A4;
+          margin: 0;
+        }
+        
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          width: 210mm;
+          height: 297mm;
+          padding: 15mm;
+          font-size: 11px;
+          line-height: 1.3;
+        }
+        
+        .header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+        
+        .header-left {
+          flex: 1;
+        }
+        
+        .header-left h1 {
+          font-size: 18px;
+          margin-bottom: 5px;
+        }
+        
+        .header-left p {
+          font-size: 10px;
+          line-height: 1.4;
+        }
+        
+        .title {
+          text-align: center;
+          margin-bottom: 10px;
+        }
+        
+        .title h2 {
+          font-size: 14px;
+          margin-bottom: 3px;
+        }
+        
+        .title p {
+          font-size: 10px;
+        }
+        
+        .customer-info {
+          margin-bottom: 10px;
+          font-size: 11px;
+        }
+        
+        .customer-info p {
+          margin-bottom: 2px;
+        }
+        
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 10px;
+          font-size: 11px;
+        }
+        
+        th, td {
+          border: 1px solid black;
+          padding: 5px;
+        }
+        
+        th {
+          font-weight: bold;
+          text-align: left;
+        }
+        
+        .warranty-box {
+          border: 1px solid black;
+          padding: 8px;
+          margin-bottom: 10px;
+          font-size: 10px;
+        }
+        
+        .warranty-box p {
+          margin-bottom: 3px;
+        }
+        
+        .warranty-box ul {
+          margin-left: 15px;
+          margin-top: 5px;
+        }
+        
+        .warranty-box li {
+          margin-bottom: 2px;
+          line-height: 1.3;
+        }
+        
+        .totals {
+          border: 1px solid black;
+          font-size: 11px;
+          margin-bottom: 10px;
+        }
+        
+        .totals-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 5px;
+          border-bottom: 1px solid black;
+        }
+        
+        .totals-row:last-child {
+          border-bottom: none;
+        }
+        
+        .totals-highlight {
+          background-color: #fef9c3;
+          font-weight: bold;
+        }
+        
+        .warning {
+          text-align: center;
+          margin: 8px 0;
+          font-size: 11px;
+          font-weight: bold;
+          font-style: italic;
+        }
+        
+        .signatures {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 10px;
+          font-size: 11px;
+        }
+        
+        .signature-box {
+          text-align: center;
+        }
+        
+        .signature-space {
+          height: 60px;
+        }
+        
+        .footer {
+          text-align: center;
+          font-size: 9px;
+          border-top: 1px solid black;
+          padding-top: 8px;
+        }
+        
+        .footer p {
+          margin-bottom: 3px;
+        }
+        
+        @media print {
+          body {
+            width: 210mm;
+            height: 297mm;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left">
+          <h1>Ninh Kiều iSTORE</h1>
+          <p>Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
+          <p>Hotline: 0917.755.765 - Khánh sửa: 0981.774.710</p>
+        </div>
+      </div>
+
+      <!-- Title -->
+      <div class="title">
+        <h2>HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH</h2>
+        <p>Ngày lúc ${new Date(editableData.createdAt).toLocaleString(
+          "vi-VN"
+        )}</p>
+      </div>
+
+      <!-- Customer Info -->
+      <div class="customer-info">
+        <p><strong>Tên khách hàng:</strong> ${editableData.customerName}</p>
+        <p><strong>Địa chỉ:</strong> ${editableData.customerAddress}</p>
+        <p><strong>Số điện thoại:</strong> ${editableData.customerPhone}</p>
+      </div>
+
+      <!-- Products Table -->
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50%">TÊN MÁY</th>
+            <th style="width: 30%; text-align: center">IMEI</th>
+            <th style="width: 20%; text-align: right">ĐƠN GIÁ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${editableData.items
+            .map(
+              (item) => `
+            <tr>
+              <td>
+                ${item.productName}<br>
+                <span style="font-size: 9px; color: #666;">
+                  ${item.variantColor}${
+                item.variantStorage ? " - " + item.variantStorage : ""
+              }
+                </span>
+              </td>
+              <td style="text-align: center">${item.imei || "N/A"}</td>
+              <td style="text-align: right; font-weight: bold">
+                ${(item.price * item.quantity).toLocaleString("vi-VN")} ₫
+              </td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+
+      <!-- Warranty Terms -->
+      <div class="warranty-box">
+        <p><strong>GÓI BẢO HÀNH CƠ BẢN Ninh Kieu iSTORE Care</strong></p>
+        <p><strong>LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH</strong></p>
+        <ul>
+          <li>Mất tem máy, rách tem</li>
+          <li>Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi ra khỏi shop sẽ không bảo hành)</li>
+          <li>Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài khoản icloud</li>
+          <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
+        </ul>
+      </div>
+
+      <!-- Totals -->
+      <div class="totals">
+        <div class="totals-row">
+          <span><strong>Tiền sản phẩm:</strong></span>
+          <span><strong>${editableData.totalAmount.toLocaleString(
+            "vi-VN"
+          )} ₫</strong></span>
+        </div>
+        <div class="totals-row">
+          <span>Voucher:</span>
+          <span>0</span>
+        </div>
+        <div class="totals-row totals-highlight">
+          <span><strong>Thành tiền:</strong></span>
+          <span><strong>${editableData.totalAmount.toLocaleString(
+            "vi-VN"
+          )} ₫</strong></span>
+        </div>
+        <div class="totals-row">
+          <span><strong>Tiền đã đưa:</strong></span>
+          <span><strong>${editableData.paymentReceived.toLocaleString(
+            "vi-VN"
+          )} ₫</strong></span>
+        </div>
+        <div class="totals-row">
+          <span>Khoản vay còn lại:</span>
+          <span>0</span>
+        </div>
+      </div>
+
+      <!-- Warning -->
+      <div class="warning">
+        CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
+      </div>
+
+      <!-- Signatures -->
+      <div class="signatures">
+        <div class="signature-box">
+          <p><strong>NHÂN VIÊN</strong></p>
+          <div class="signature-space"></div>
+          <p>${editableData.staffName}</p>
+        </div>
+        <div class="signature-box">
+          <p><strong>KHÁCH HÀNG</strong></p>
+          <div class="signature-space"></div>
+          <p>${editableData.customerName}</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p><strong>BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)</strong></p>
+        <p>Xem thêm các điều khoản bảo hành tại <strong>https://itnstore.com/bao-hanh</strong></p>
+      </div>
+    </body>
+    </html>
+  `;
+
+    printWindow.document.write(invoiceHTML);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+      setShowEditInvoice(false);
+    }, 500);
   };
 
   // ============================================
@@ -195,149 +514,6 @@ const CASHIERDashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // ============================================
-  // IN HÓA ĐƠN
-  // ============================================
-  const printInvoice = (order, paymentReceived) => {
-    const changeGiven = Math.max(0, paymentReceived - order.totalAmount);
-
-    // ✅ FALLBACK cho cashierName
-    const cashierName =
-      order.posInfo?.cashierName ||
-      order.paymentInfo?.processedBy?.fullName ||
-      order.posInfo?.staffName ||
-      "Thu ngân";
-    const printWindow = window.open("", "", "width=800,height=600");
-    const invoiceHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Hóa đơn - ${order.orderNumber}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
-          .header h1 { font-size: 24px; margin-bottom: 10px; }
-          .info-section { margin: 20px 0; }
-          .info-row { display: flex; justify-content: space-between; margin: 8px 0; }
-          .info-label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th { background: #f5f5f5; padding: 12px; text-align: left; border: 1px solid #ddd; }
-          td { padding: 10px; border: 1px solid #ddd; }
-          .text-right { text-align: right; }
-          .total-section { margin-top: 20px; float: right; width: 300px; }
-          .total-row { display: flex; justify-content: space-between; margin: 8px 0; }
-          .grand-total { border-top: 2px solid #000; padding-top: 10px; font-size: 18px; font-weight: bold; }
-          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <!-- Header -->
-        <div class="header">
-          <h1>HÓA ĐƠN BÁN HÀNG</h1>
-          <p>Ninh Kiều iStore</p>
-          <p>Địa chỉ: Xuân Khánh, Ninh Kiều, Cần Thơ | Hotline: 1900.xxxx</p>
-        </div>
-
-        <!-- Order Info -->
-        <div class="info-section">
-          <div class="info-row">
-            <span class="info-label">Số đơn hàng:</span>
-            <span>${order.orderNumber}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Ngày:</span>
-            <span>${formatDate(new Date())}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Nhân viên bán:</span>
-            <span>${order.posInfo?.staffName || "N/A"}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Thu ngân:</span>
-            <span>${cashierName}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Khách hàng:</span>
-            <span>${order.shippingAddress.fullName} - ${
-      order.shippingAddress.phoneNumber
-    }</span>
-          </div>
-        </div>
-
-        <!-- Items Table -->
-        <table>
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Sản phẩm</th>
-              <th class="text-right">SL</th>
-              <th class="text-right">Đơn giá</th>
-              <th class="text-right">Thành tiền</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.items
-              .map(
-                (item, idx) => `
-              <tr>
-                <td>${idx + 1}</td>
-                <td>
-                  ${item.productName}<br>
-                  <small>${item.variantColor}${
-                  item.variantStorage ? " • " + item.variantStorage : ""
-                }</small>
-                </td>
-                <td class="text-right">${item.quantity}</td>
-                <td class="text-right">${formatPrice(item.price)}</td>
-                <td class="text-right">${formatPrice(item.total)}</td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-        </table>
-
-        <!-- Total Section -->
-        <div class="total-section">
-          <div class="total-row">
-            <span>Tạm tính:</span>
-            <span>${formatPrice(order.totalAmount)}</span>
-          </div>
-          <div class="total-row grand-total">
-            <span>Tổng cộng:</span>
-            <span>${formatPrice(order.totalAmount)}</span>
-          </div>
-          <div class="total-row">
-            <span>Tiền khách đưa:</span>
-            <span>${formatPrice(paymentReceived)}</span>
-          </div>
-          <div class="total-row" style="color: green;">
-            <span>Tiền thối lại:</span>
-            <span>${formatPrice(changeGiven)}</span>
-          </div>
-        </div>
-
-        <div style="clear: both;"></div>
-
-        <!-- Footer -->
-        <div class="footer">
-          <p>Cảm ơn quý khách đã mua hàng!</p>
-          <p>Bảo hành 12 tháng chính hãng Apple | Đổi trả trong 30 ngày</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(invoiceHTML);
-    printWindow.document.close();
-    printWindow.focus();
-
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
   };
 
   // ============================================
@@ -665,6 +841,14 @@ const CASHIERDashboard = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditInvoiceDialog
+        open={showEditInvoice}
+        onOpenChange={setShowEditInvoice}
+        order={orderToPrint}
+        onPrint={handlePrintInvoice}
+        isLoading={isLoading}
+      />
     </div>
   );
 };
