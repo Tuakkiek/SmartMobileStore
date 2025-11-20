@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+import cookie from "cookie";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
@@ -25,7 +26,9 @@ import appleWatchRoutes from "./routes/appleWatchRoutes.js";
 import accessoryRoutes from "./routes/accessoryRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
-import posRoutes from "./routes/posRoutes.js"; // ✅ MỚI
+import posRoutes from "./routes/posRoutes.js";
+
+import vnpayRoutes from "./routes/vnpayRoutes.js";
 
 dotenv.config();
 
@@ -37,37 +40,18 @@ const app = express();
 const __dirname = path.resolve();
 
 // ================================
-// 🔹 Khởi động server (di chuyển lên trước)
-// ================================
-const PORT = config.port || process.env.PORT || 5000;
-
-const startServer = () => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📍 Environment: ${config.nodeEnv}`);
-    console.log(
-      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
-    );
-    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
-    console.log(
-      `⏰ Current time: ${new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Ho_Chi_Minh",
-      })}`
-    );
-  });
-};
-
-// ================================
 // 🔹 Middleware
 // ================================
-if (process.env.NODE_ENV !== "production") {
-  app.use(
-    cors({
-      origin: process.env.CLIENT_URL || "http://localhost:5173",
-      credentials: true,
-    })
-  );
-}
+app.use(
+  cors({
+    origin: [
+      process.env.CLIENT_URL || "http://localhost:5173",
+      "https://sandbox.vnpayment.vn",
+      "https://vnpayment.vn",
+    ],
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -101,7 +85,9 @@ app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/accessories", accessoryRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/sales", salesRoutes);
-app.use("/api/pos", posRoutes); // ✅ MỚI - POS Routes
+app.use("/api/pos", posRoutes);
+
+app.use("/api/payment/vnpay", vnpayRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint
@@ -160,5 +146,26 @@ mongoose.connection.on("error", (err) => {
 });
 
 mongoose.connection.once("open", startServer);
+
+// ================================
+// 🔹 Khởi động server (di chuyển lên trước)
+// ================================
+const PORT = config.port || process.env.PORT || 5000;
+
+const startServer = () => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📍 Environment: ${config.nodeEnv}`);
+    console.log(
+      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
+    );
+    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
+    console.log(
+      `⏰ Current time: ${new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      })}`
+    );
+  });
+};
 
 export default app;

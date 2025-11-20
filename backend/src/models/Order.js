@@ -97,14 +97,21 @@ const posInfoSchema = new mongoose.Schema(
 // ✅ Schema thanh toán (Thu ngân xử lý)
 const paymentInfoSchema = new mongoose.Schema(
   {
-    processedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
+    processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     processedAt: { type: Date },
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
-    invoiceNumber: { type: String, trim: true }, // Số hóa đơn chính thức
+    invoiceNumber: { type: String, trim: true },
+
+    // ✅ THÊM PHẦN NÀY
+    vnpayTxnRef: { type: String, trim: true },
+    vnpayTransactionNo: { type: String, trim: true },
+    vnpayBankCode: { type: String, trim: true },
+    vnpayCardType: { type: String, trim: true },
+    vnpayPaidAt: { type: Date },
+    vnpayCreatedAt: { type: Date },
+    vnpayFailed: { type: Boolean, default: false },
+    vnpayFailReason: { type: String },
   },
   { _id: false }
 );

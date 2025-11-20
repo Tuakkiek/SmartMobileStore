@@ -277,6 +277,14 @@ export const handleApiError = (error) => {
   }
 };
 
+// ============================================
+// VNPAY API
+// ============================================
+export const vnpayAPI = {
+  createPaymentUrl: (data) => api.post("/payment/vnpay/create-payment-url", data),
+  returnHandler: (params) => api.get("/payment/vnpay/return", { params })
+};
+
 
 // ============================================
 // EXPORT DEFAULT

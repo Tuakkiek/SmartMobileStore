@@ -44,6 +44,8 @@ import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
 import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
 
+import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
+
 // ============================================
 // SCROLL TO TOP
 // ============================================
@@ -252,6 +254,8 @@ function App() {
         >
           <Route path="/shipper/dashboard" element={<ShipperDashboard />} />
         </Route>
+
+        <Route path="/payment/vnpay/return" element={<VNPayReturnPage />} />
 
         {/* ========================================
             404 - NOT FOUND

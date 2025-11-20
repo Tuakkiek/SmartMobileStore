@@ -22,7 +22,7 @@ import {
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { Loading } from "@/components/shared/Loading";
 import { useCartStore } from "@/store/cartStore";
-import { orderAPI, promotionAPI, userAPI } from "@/lib/api";
+import { orderAPI, promotionAPI, userAPI, vnpayAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
@@ -54,6 +54,7 @@ const CheckoutPage = () => {
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
+  const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
 
   useEffect(() => {
     if (user?.addresses?.length > 0) {
@@ -231,17 +232,45 @@ const CheckoutPage = () => {
       };
 
       const response = await orderAPI.create(orderData);
-      toast.success("Đặt hàng thành công!");
+      const createdOrder = response.data.data.order;
 
-      // XÓA DANH SÁCH ĐÃ CHỌN SAU KHI ĐẶT HÀNG
       setSelectedForCheckout([]);
 
-      navigate(`/orders/${response.data.data.order._id}`);
+      // ✅ NẾU CHỌN VNPAY → Xử lý redirect
+      if (formData.paymentMethod === "VNPAY") {
+        setIsRedirectingToPayment(true);
+
+        try {
+          const vnpayResponse = await vnpayAPI.createPaymentUrl({
+            orderId: createdOrder._id,
+            amount: createdOrder.totalAmount,
+            orderDescription: `Thanh toan don hang ${createdOrder.orderNumber}`,
+            language: "vn",
+          });
+
+          if (vnpayResponse.data.success) {
+            // Redirect sang VNPay
+            window.location.href = vnpayResponse.data.data.paymentUrl;
+          } else {
+            throw new Error("Không thể tạo link thanh toán");
+          }
+        } catch (error) {
+          setIsRedirectingToPayment(false);
+          toast.error("Lỗi khi tạo link thanh toán VNPay");
+          console.error(error);
+        }
+      } else {
+        // COD / BANK_TRANSFER - redirect bình thường
+        toast.success("Đặt hàng thành công!");
+        navigate(`/orders/${createdOrder._id}`);
+      }
     } catch (error) {
       setError(error.response?.data?.message || "Đặt hàng thất bại");
       toast.error("Đặt hàng thất bại");
     } finally {
-      setIsLoading(false);
+      if (formData.paymentMethod !== "VNPAY") {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -355,6 +384,23 @@ const CheckoutPage = () => {
                     <p className="font-medium">Chuyển khoản ngân hàng</p>
                     <p className="text-sm text-muted-foreground">
                       Chuyển khoản trước khi nhận hàng
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="VNPAY"
+                    checked={formData.paymentMethod === "VNPAY"}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <div>
+                    <p className="font-medium">Thanh toán VNPay</p>
+                    <p className="text-sm text-muted-foreground">
+                      Thanh toán qua ATM, Visa, MasterCard, JCB
                     </p>
                   </div>
                 </label>
@@ -506,10 +552,17 @@ const CheckoutPage = () => {
                   className="w-full"
                   size="lg"
                   disabled={
-                    isLoading || checkoutItems.length === 0 || finalTotal <= 0
+                    isLoading ||
+                    checkoutItems.length === 0 ||
+                    finalTotal <= 0 ||
+                    isRedirectingToPayment
                   }
                 >
-                  {isLoading ? "Đang xử lý..." : "Đặt hàng"}
+                  {isRedirectingToPayment
+                    ? "Đang chuyển đến cổng thanh toán..."
+                    : isLoading
+                    ? "Đang xử lý..."
+                    : "Đặt hàng"}
                 </Button>
               </CardContent>
             </Card>
