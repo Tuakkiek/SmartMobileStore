@@ -259,25 +259,21 @@ export const getPendingOrders = async (req, res) => {
 // XỬ LÝ THANH TOÁN (Thu ngân)
 // ============================================
 export const processPayment = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+  // ✅ XÓA session - không dùng transaction ở đây
   try {
     const { orderId } = req.params;
     const { paymentReceived } = req.body;
 
     if (!paymentReceived || paymentReceived < 0) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Số tiền thanh toán không hợp lệ",
       });
     }
 
-    const order = await Order.findById(orderId).session(session);
+    const order = await Order.findById(orderId);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy đơn hàng",
@@ -285,7 +281,6 @@ export const processPayment = async (req, res) => {
     }
 
     if (order.status !== "PENDING_PAYMENT") {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Đơn hàng không ở trạng thái chờ thanh toán",
@@ -293,7 +288,6 @@ export const processPayment = async (req, res) => {
     }
 
     if (paymentReceived < order.totalAmount) {
-      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Số tiền thanh toán không đủ",
@@ -302,13 +296,49 @@ export const processPayment = async (req, res) => {
 
     const changeGiven = Math.max(0, paymentReceived - order.totalAmount);
 
+    order.posInfo = order.posInfo || {};
     order.posInfo.paymentReceived = paymentReceived;
     order.posInfo.changeGiven = changeGiven;
     order.posInfo.cashierName = req.user.fullName;
 
-    await order.processPayment(req.user._id, paymentReceived);
+    // ✅ TẠO THÔNG TIN THANH TOÁN
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
 
-    await session.commitTransaction();
+    const lastInvoice = await Order.findOne({
+      "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
+    }).sort({ "paymentInfo.invoiceNumber": -1 });
+
+    let sequence = 1;
+    if (lastInvoice?.paymentInfo?.invoiceNumber) {
+      const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
+      if (!isNaN(lastSeq)) sequence = lastSeq + 1;
+    }
+
+    const invoiceNumber = `INV${year}${month}${sequence
+      .toString()
+      .padStart(6, "0")}`;
+
+    order.paymentInfo = {
+      processedBy: req.user._id,
+      processedAt: new Date(),
+      paymentReceived,
+      changeGiven,
+      invoiceNumber,
+    };
+
+    order.paymentStatus = "PAID";
+    order.status = "DELIVERED";
+
+    order.statusHistory.push({
+      status: "DELIVERED",
+      updatedBy: req.user._id,
+      updatedAt: new Date(),
+      note: `Đã thanh toán - Hóa đơn ${invoiceNumber}`,
+    });
+
+    await order.save();
 
     console.log("✅ Payment processed:", order.orderNumber);
 
@@ -318,17 +348,13 @@ export const processPayment = async (req, res) => {
       data: { order },
     });
   } catch (error) {
-    await session.abortTransaction();
     console.error("PROCESS PAYMENT ERROR:", error);
     res.status(400).json({
       success: false,
-      message: error.message,
+      message: error.message || "Lỗi thanh toán",
     });
-  } finally {
-    session.endSession();
   }
 };
-
 // ============================================
 // HỦY ĐƠN (Thu ngân) - ✅ FIXED: RESTORE STOCK & SALES
 // ============================================

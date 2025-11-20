@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-// Import Label bị xóa vì không còn dùng trong form
 import {
   Dialog,
   DialogContent,
@@ -21,13 +20,11 @@ import {
   Receipt,
   Search,
   Eye,
-  // Calendar, // Xóa
   DollarSign,
   TrendingUp,
   ShoppingBag,
   FileText,
   Download,
-  // Filter, // Xóa
   X,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
@@ -162,135 +159,243 @@ const VATInvoicesPage = () => {
   };
 
   // ============================================
-  // PRINT RECEIPT (Giữ nguyên)
+  // PRINT RECEIPT (ĐÃ SỬA THEO MẪU MỚI)
   // ============================================
   const handleReprintReceipt = (order) => {
-    const paymentReceived =
-      order.posInfo?.paymentReceived ||
-      order.paymentInfo?.paymentReceived ||
-      order.totalAmount;
+    const editableData = {
+      customerName: order.shippingAddress?.fullName || "",
+      customerPhone: order.shippingAddress?.phoneNumber || "",
+      customerAddress: `${order.shippingAddress?.detailAddress || ""}, ${
+        order.shippingAddress?.ward || ""
+      }, ${order.shippingAddress?.province || ""}`.trim(),
+      items: order.items,
+      totalAmount: order.totalAmount,
+      paymentReceived: order.posInfo?.paymentReceived || order.totalAmount,
+      changeGiven: order.posInfo?.changeGiven || 0,
+      orderNumber: order.orderNumber,
+      createdAt: order.createdAt, // ← Ngày mua hàng
+      staffName: order.posInfo?.staffName || "N/A",
+      cashierName: order.posInfo?.cashierName || "Thu ngân",
+    };
 
-    const changeGiven =
-      order.posInfo?.changeGiven || order.paymentInfo?.changeGiven || 0;
+    const printWindow = window.open("", "", "width=800,height=1000");
 
-    const cashierName =
-      order.posInfo?.cashierName ||
-      order.paymentInfo?.processedBy?.fullName ||
-      order.posInfo?.staffName ||
-      "Thu ngân";
-
-    const printWindow = window.open("", "", "width=800,height=600");
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Hóa đơn - ${order.orderNumber}</title>
+        <title>Hóa đơn - ${editableData.orderNumber}</title>
         <style>
+          @page { size: A4; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
-          .header h1 { font-size: 24px; margin-bottom: 10px; }
-          .info-section { margin: 20px 0; }
-          .info-row { display: flex; justify-content: space-between; margin: 8px 0; }
-          .info-label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th { background: #f5f5f5; padding: 12px; text-align: left; border: 1px solid #ddd; }
-          td { padding: 10px; border: 1px solid #ddd; }
+          body { font-family: Arial, sans-serif; width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
+          .flex { display: flex; }
+          .justify-between { justify-content: space-between; }
+          .items-start { align-items: flex-start; }
+          .mb-3 { margin-bottom: 0.75rem; }
+          .flex-1 { flex: 1; }
+          .text-lg { font-size: 1.125rem; }
+          .font-bold { font-weight: bold; }
+          .mb-1 { margin-bottom: 0.25rem; }
+          .text-xs { font-size: 0.75rem; }
+          .leading-tight { line-height: 1.25; }
+          .w-16 { width: 4rem; }
+          .h-16 { height: 4rem; }
+          .border { border-width: 1px; }
+          .border-black { border-color: black; }
+          .items-center { align-items: center; }
+          .justify-center { justify-content: center; }
+          .text-[8px] { font-size: 0.5rem; }
+          .text-center { text-align: center; }
+          .text-base { font-size: 1rem; }
+          .space-y-0.5 > * + * { margin-top: 0.125rem; }
+          .font-semibold { font-weight: 600; }
+          .w-full { width: 100%; }
+          .border-b { border-bottom-width: 1px; }
+          .border-b-2 { border-bottom-width: 2px; }
+          .border-r { border-right-width: 1px; }
+          .p-1.5 { padding: 0.375rem; }
+          .text-left { text-align: left; }
           .text-right { text-align: right; }
-          .total-section { margin-top: 20px; float: right; width: 300px; }
-          .total-row { display: flex; justify-content: space-between; margin: 8px 0; }
-          .grand-total { border-top: 2px solid #000; padding-top: 10px; font-size: 18px; font-weight: bold; }
-          .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
+          .text-center { text-align: center; }
+          .w-32 { width: 8rem; }
+          .w-24 { width: 6rem; }
+          .text-[10px] { font-size: 0.625rem; }
+          .text-gray-600 { color: #4b5563; }
+          .p-2 { padding: 0.5rem; }
+          .list-disc { list-style-type: disc; }
+          .ml-4 { margin-left: 1rem; }
+          .space-y-0.5 > * + * { margin-top: 0.125rem; }
+          .bg-yellow-50 { background-color: #fdfce5; }
+          .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+          .italic { font-style: italic; }
+          .mb-12 { margin-bottom: 3rem; }
+          .border-t { border-top-width: 1px; }
+          .pt-2 { padding-top: 0.5rem; }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>HÓA ĐƠN BÁN HÀNG</h1>
-          <p>Ninh Kiều iStore</p>
-          <p>Địa chỉ: Ninh Kiều, Cần Thơ | Hotline: 1900.9999</p>
-        </div>
+        <div class="bg-white mx-auto">
+          <!-- Header -->
+          <div class="flex justify-between items-start mb-3">
+            <div class="flex-1">
+              <h1 class="text-lg font-bold mb-1">Ninh Kiều iSTORE</h1>
+              <p class="text-xs leading-tight">Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
+              <p class="text-xs">
+                Hotline: 0917.755.765 - Khánh sửa: 0981.774.710
+              </p>
+            </div>
+            <div class="w-16 h-16 border border-black flex items-center justify-center flex-shrink-0">
+            </div>
+          </div>
 
-        <div class="info-section">
-          <div class="info-row">
-            <span class="info-label">Số đơn hàng:</span>
-            <span>${order.orderNumber}</span>
+          <!-- Title -->
+          <div class="text-center mb-3">
+            <h2 class="text-base font-bold">
+              HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH
+            </h2>
+            <p class="text-xs">Ngày lúc ${formatDate(
+              editableData.createdAt
+            )}</p>
           </div>
-          <div class="info-row">
-            <span class="info-label">Ngày:</span>
-            <span>${formatDate(new Date())}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Nhân viên bán:</span>
-            <span>${order.posInfo?.staffName || "N/A"}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Thu ngân:</span>
-            <span>${cashierName}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Khách hàng:</span>
-            <span>${order.shippingAddress.fullName} - ${
-      order.shippingAddress.phoneNumber
-    }</span>
-          </div>
-        </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Sản phẩm</th>
-              <th class="text-right">SL</th>
-              <th class="text-right">Đơn giá</th>
-              <th class="text-right">Thành tiền</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.items
-              .map(
-                (item, idx) => `
-              <tr>
-                <td>${idx + 1}</td>
-                <td>
-                  ${item.productName}<br>
-                  <small>${item.variantColor}${
-                  item.variantStorage ? " • " + item.variantStorage : ""
-                }</small>
-                </td>
-                <td class="text-right">${item.quantity}</td>
-                <td class="text-right">${formatPrice(item.price)}</td>
-                <td class="text-right">${formatPrice(item.total)}</td>
+          <!-- Customer Info -->
+          <div class="mb-3 space-y-0.5 text-xs">
+            <p>
+              <span class="font-semibold">Tên khách hàng:</span> ${
+                editableData.customerName
+              }
+            </p>
+            <p>
+              <span class="font-semibold">Địa chỉ:</span> ${
+                editableData.customerAddress
+              }
+            </p>
+            <p>
+              <span class="font-semibold">Số điện thoại:</span> ${
+                editableData.customerPhone
+              }
+            </p>
+          </div>
+
+          <!-- Products Table -->
+          <table class="w-full border border-black mb-3 text-xs">
+            <thead>
+              <tr class="border-b border-black">
+                <th class="border-r border-black p-1.5 text-left font-bold">
+                  TÊN MÁY
+                </th>
+                <th class="border-r border-black p-1.5 text-center font-bold w-32">
+                  IMEI
+                </th>
+                <th class="p-1.5 text-right font-bold w-24">ĐƠN GIÁ</th>
               </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${editableData.items
+                .map(
+                  (item, index) => `
+                <tr class="border-b border-black">
+                  <td class="border-r border-black p-1.5">
+                    <div>${item.productName}</div>
+                    <div class="text-[10px] text-gray-600">
+                      ${item.variantColor}${
+                    item.variantStorage ? ` - ${item.variantStorage}` : ""
+                  }
+                    </div>
+                  </td>
+                  <td class="border-r border-black p-1.5 text-center">
+                    ${item.imei || "N/A"}
+                  </td>
+                  <td class="p-1.5 text-right font-semibold">
+                    ${formatPrice(item.price * item.quantity)}
+                  </td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
 
-        <div class="total-section">
-          <div class="total-row">
-            <span>Tạm tính:</span>
-            <span>${formatPrice(order.totalAmount)}</span>
+          <!-- Warranty Terms - COMPACT -->
+          <div class="border border-black p-2 mb-3 text-xs">
+            <p class="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
+            <p class="font-bold mb-1">
+              LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH
+            </p>
+            <ul class="list-disc ml-4 text-[10px] space-y-0.5 leading-tight">
+              <li>Mất tem máy, rách tem</li>
+              <li>
+                Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi
+                ra khỏi shop sẽ không bảo hành)
+              </li>
+              <li>
+                Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài
+                khoản icloud
+              </li>
+              <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
+            </ul>
           </div>
-          <div class="total-row grand-total">
-            <span>Tổng cộng:</span>
-            <span>${formatPrice(order.totalAmount)}</span>
-          </div>
-          <div class="total-row">
-            <span>Tiền khách đưa:</span>
-            <span>${formatPrice(paymentReceived)}</span>
-          </div>
-          <div class="total-row" style="color: green;">
-            <span>Tiền thối lại:</span>
-            <span>${formatPrice(changeGiven)}</span>
-          </div>
-        </div>
 
-        <div style="clear: both;"></div>
+          <!-- Totals - COMPACT -->
+          <div class="border border-black text-xs mb-3">
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span class="font-bold">Tiền sản phẩm:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.totalAmount
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span>Voucher:</span>
+              <span>0</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black bg-yellow-50">
+              <span class="font-bold">Thành tiền:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.totalAmount
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span class="font-bold">Tiền đã đưa:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.paymentReceived
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5">
+              <span>Khoản vay còn lại:</span>
+              <span>0</span>
+            </div>
+          </div>
 
-        <div class="footer">
-          <p>Cảm ơn quý khách đã mua hàng!</p>
-          <p>Bảo hành 12 tháng chính hãng Apple | Đổi trả trong 30 ngày</p>
+          <!-- Warning -->
+          <div class="text-center my-2">
+            <p class="font-bold italic text-xs">
+              CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
+            </p>
+          </div>
+
+          <!-- Signatures -->
+          <div class="flex justify-between mb-3">
+            <div class="text-center text-xs">
+              <p class="font-bold mb-12">NHÂN VIÊN</p>
+              <p>${editableData.staffName}</p>
+            </div>
+            <div class="text-center text-xs">
+              <p class="font-bold mb-12">KHÁCH HÀNG</p>
+              <p>${editableData.customerName}</p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="text-center text-[10px] border-t border-black pt-2">
+            <p class="font-bold">
+              BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)
+            </p>
+            <p>
+              Xem thêm các điều khoản bảo hành tại 
+              <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span>
+            </p>
+          </div>
         </div>
       </body>
       </html>
@@ -299,11 +404,10 @@ const VATInvoicesPage = () => {
     printWindow.document.write(invoiceHTML);
     printWindow.document.close();
     printWindow.focus();
-
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
-    }, 250);
+    }, 500);
   };
 
   // ============================================
@@ -418,9 +522,6 @@ const VATInvoicesPage = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Advanced Filters (ĐÃ BỊ XÓA) */}
-      {/* {showFilters && ( ... )} */}
 
       {/* Orders List (Giữ nguyên) */}
       <Card>

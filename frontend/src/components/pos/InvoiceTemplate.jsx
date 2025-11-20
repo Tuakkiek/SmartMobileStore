@@ -25,16 +25,16 @@ const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
   } = editableData;
 
   return (
-    <div 
-      className="bg-white mx-auto" 
-      style={{ 
-        fontFamily: 'Arial, sans-serif',
-        width: '210mm',
-        minHeight: '297mm',
-        maxHeight: '297mm',
-        padding: '15mm 15mm',
-        fontSize: '11px',
-        lineHeight: '1.3'
+    <div
+      className="bg-white mx-auto"
+      style={{
+        fontFamily: "Arial, sans-serif",
+        width: "210mm",
+        minHeight: "297mm",
+        maxHeight: "297mm",
+        padding: "15mm 15mm",
+        fontSize: "11px",
+        lineHeight: "1.3",
       }}
     >
       {/* Header */}
@@ -47,7 +47,6 @@ const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
           </p>
         </div>
         <div className="w-16 h-16 border border-black flex items-center justify-center flex-shrink-0">
-          <span className="text-[8px] text-center">QR Code</span>
         </div>
       </div>
 
@@ -108,7 +107,9 @@ const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
 
       {/* Warranty Terms - COMPACT */}
       <div className="border border-black p-2 mb-3 text-xs">
-        <p className="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
+        <p className="font-bold mb-1">
+          GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care
+        </p>
         <p className="font-bold mb-1">
           LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH
         </p>

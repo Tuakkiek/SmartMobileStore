@@ -83,7 +83,7 @@ const EditInvoiceDialog = ({
   if (showPreview) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[900px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Xem trước hóa đơn</DialogTitle>
           </DialogHeader>
@@ -109,7 +109,7 @@ const EditInvoiceDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Chỉnh sửa hóa đơn</DialogTitle>
           <DialogDescription>
@@ -227,7 +227,10 @@ const EditInvoiceDialog = ({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)} // ← Đơn giản, không hỏi confirm
+          >
             Hủy
           </Button>
           <Button onClick={handlePreview}>Xem trước & In</Button>

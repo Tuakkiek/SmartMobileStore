@@ -100,7 +100,7 @@ const CASHIERDashboard = () => {
       const authStorage = localStorage.getItem("auth-storage");
       const token = authStorage ? JSON.parse(authStorage).state.token : null;
 
-      await axios.post(
+      const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/pos/process-payment/${
           selectedOrder._id
         }`,
@@ -117,8 +117,9 @@ const CASHIERDashboard = () => {
       setShowPaymentDialog(false);
       fetchPendingOrders();
 
-      // ✅ MỞ DIALOG CHỈNH SỬA THAY VÌ IN TRỰC TIẾP
-      setOrderToPrint(selectedOrder);
+      // ✅ SỬA: Set orderToPrint với data từ response (có paymentReceived)
+      // Thay vì dùng selectedOrder cũ
+      setOrderToPrint(response.data.data.order); // ← THAY ĐỔI NÀY
       setShowEditInvoice(true);
     } catch (error) {
       console.error("Lỗi thanh toán:", error);
@@ -131,315 +132,300 @@ const CASHIERDashboard = () => {
   // ============================================
   // HÀM IN VỚI DỮ LIỆU ĐÃ CHỈNH SỬA
   // ============================================
-  const handlePrintInvoice = (editableData) => {
-    const printWindow = window.open("", "", "width=800,height=1000");
-
+  const handlePrintInvoice = async (editableData) => {
+    // ✅ BƯỚC 1: Tạo HTML hóa đơn
     const invoiceHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Hóa đơn - ${editableData.orderNumber}</title>
-      <style>
-        @page {
-          size: A4;
-          margin: 0;
-        }
-        
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        
-        body {
-          font-family: Arial, sans-serif;
-          width: 210mm;
-          height: 297mm;
-          padding: 15mm;
-          font-size: 11px;
-          line-height: 1.3;
-        }
-        
-        .header {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 10px;
-        }
-        
-        .header-left {
-          flex: 1;
-        }
-        
-        .header-left h1 {
-          font-size: 18px;
-          margin-bottom: 5px;
-        }
-        
-        .header-left p {
-          font-size: 10px;
-          line-height: 1.4;
-        }
-        
-        .title {
-          text-align: center;
-          margin-bottom: 10px;
-        }
-        
-        .title h2 {
-          font-size: 14px;
-          margin-bottom: 3px;
-        }
-        
-        .title p {
-          font-size: 10px;
-        }
-        
-        .customer-info {
-          margin-bottom: 10px;
-          font-size: 11px;
-        }
-        
-        .customer-info p {
-          margin-bottom: 2px;
-        }
-        
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 10px;
-          font-size: 11px;
-        }
-        
-        th, td {
-          border: 1px solid black;
-          padding: 5px;
-        }
-        
-        th {
-          font-weight: bold;
-          text-align: left;
-        }
-        
-        .warranty-box {
-          border: 1px solid black;
-          padding: 8px;
-          margin-bottom: 10px;
-          font-size: 10px;
-        }
-        
-        .warranty-box p {
-          margin-bottom: 3px;
-        }
-        
-        .warranty-box ul {
-          margin-left: 15px;
-          margin-top: 5px;
-        }
-        
-        .warranty-box li {
-          margin-bottom: 2px;
-          line-height: 1.3;
-        }
-        
-        .totals {
-          border: 1px solid black;
-          font-size: 11px;
-          margin-bottom: 10px;
-        }
-        
-        .totals-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 5px;
-          border-bottom: 1px solid black;
-        }
-        
-        .totals-row:last-child {
-          border-bottom: none;
-        }
-        
-        .totals-highlight {
-          background-color: #fef9c3;
-          font-weight: bold;
-        }
-        
-        .warning {
-          text-align: center;
-          margin: 8px 0;
-          font-size: 11px;
-          font-weight: bold;
-          font-style: italic;
-        }
-        
-        .signatures {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 10px;
-          font-size: 11px;
-        }
-        
-        .signature-box {
-          text-align: center;
-        }
-        
-        .signature-space {
-          height: 60px;
-        }
-        
-        .footer {
-          text-align: center;
-          font-size: 9px;
-          border-top: 1px solid black;
-          padding-top: 8px;
-        }
-        
-        .footer p {
-          margin-bottom: 3px;
-        }
-        
-        @media print {
-          body {
-            width: 210mm;
-            height: 297mm;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <!-- Header -->
-      <div class="header">
-        <div class="header-left">
-          <h1>Ninh Kiều iSTORE</h1>
-          <p>Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
-          <p>Hotline: 0917.755.765 - Khánh sửa: 0981.774.710</p>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Hóa đơn - ${editableData.orderNumber}</title>
+        <style>
+          @page { size: A4; margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
+          .flex { display: flex; }
+          .justify-between { justify-content: space-between; }
+          .items-start { align-items: flex-start; }
+          .mb-3 { margin-bottom: 0.75rem; }
+          .flex-1 { flex: 1; }
+          .text-lg { font-size: 1.125rem; }
+          .font-bold { font-weight: bold; }
+          .mb-1 { margin-bottom: 0.25rem; }
+          .text-xs { font-size: 0.75rem; }
+          .leading-tight { line-height: 1.25; }
+          .w-16 { width: 4rem; }
+          .h-16 { height: 4rem; }
+          .border { border-width: 1px; }
+          .border-black { border-color: black; }
+          .items-center { align-items: center; }
+          .justify-center { justify-content: center; }
+          .text-[8px] { font-size: 0.5rem; }
+          .text-center { text-align: center; }
+          .text-base { font-size: 1rem; }
+          .space-y-0.5 > * + * { margin-top: 0.125rem; }
+          .font-semibold { font-weight: 600; }
+          .w-full { width: 100%; }
+          .border-b { border-bottom-width: 1px; }
+          .border-b-2 { border-bottom-width: 2px; }
+          .border-r { border-right-width: 1px; }
+          .p-1.5 { padding: 0.375rem; }
+          .text-left { text-align: left; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .w-32 { width: 8rem; }
+          .w-24 { width: 6rem; }
+          .text-[10px] { font-size: 0.625rem; }
+          .text-gray-600 { color: #4b5563; }
+          .p-2 { padding: 0.5rem; }
+          .list-disc { list-style-type: disc; }
+          .ml-4 { margin-left: 1rem; }
+          .space-y-0.5 > * + * { margin-top: 0.125rem; }
+          .bg-yellow-50 { background-color: #fdfce5; }
+          .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+          .italic { font-style: italic; }
+          .mb-12 { margin-bottom: 3rem; }
+          .border-t { border-top-width: 1px; }
+          .pt-2 { padding-top: 0.5rem; }
+        </style>
+      </head>
+      <body>
+        <div class="bg-white mx-auto">
+          <!-- Header -->
+          <div class="flex justify-between items-start mb-3">
+            <div class="flex-1">
+              <h1 class="text-lg font-bold mb-1">Ninh Kiều iSTORE</h1>
+              <p class="text-xs leading-tight">Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
+              <p class="text-xs">
+                Hotline: 0917.755.765 - Khánh sửa: 0981.774.710
+              </p>
+            </div>
+            <div class="w-16 h-16 border border-black flex items-center justify-center flex-shrink-0">
+            </div>
+          </div>
 
-      <!-- Title -->
-      <div class="title">
-        <h2>HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH</h2>
-        <p>Ngày lúc ${new Date(editableData.createdAt).toLocaleString(
-          "vi-VN"
-        )}</p>
-      </div>
+          <!-- Title -->
+          <div class="text-center mb-3">
+            <h2 class="text-base font-bold">
+              HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH
+            </h2>
+            <p class="text-xs">Ngày lúc ${formatDate(
+              editableData.createdAt
+            )}</p>
+          </div>
 
-      <!-- Customer Info -->
-      <div class="customer-info">
-        <p><strong>Tên khách hàng:</strong> ${editableData.customerName}</p>
-        <p><strong>Địa chỉ:</strong> ${editableData.customerAddress}</p>
-        <p><strong>Số điện thoại:</strong> ${editableData.customerPhone}</p>
-      </div>
-
-      <!-- Products Table -->
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 50%">TÊN MÁY</th>
-            <th style="width: 30%; text-align: center">IMEI</th>
-            <th style="width: 20%; text-align: right">ĐƠN GIÁ</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${editableData.items
-            .map(
-              (item) => `
-            <tr>
-              <td>
-                ${item.productName}<br>
-                <span style="font-size: 9px; color: #666;">
-                  ${item.variantColor}${
-                item.variantStorage ? " - " + item.variantStorage : ""
+          <!-- Customer Info -->
+          <div class="mb-3 space-y-0.5 text-xs">
+            <p>
+              <span class="font-semibold">Tên khách hàng:</span> ${
+                editableData.customerName
               }
-                </span>
-              </td>
-              <td style="text-align: center">${item.imei || "N/A"}</td>
-              <td style="text-align: right; font-weight: bold">
-                ${(item.price * item.quantity).toLocaleString("vi-VN")} ₫
-              </td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      </table>
+            </p>
+            <p>
+              <span class="font-semibold">Địa chỉ:</span> ${
+                editableData.customerAddress
+              }
+            </p>
+            <p>
+              <span class="font-semibold">Số điện thoại:</span> ${
+                editableData.customerPhone
+              }
+            </p>
+          </div>
 
-      <!-- Warranty Terms -->
-      <div class="warranty-box">
-        <p><strong>GÓI BẢO HÀNH CƠ BẢN Ninh Kieu iSTORE Care</strong></p>
-        <p><strong>LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH</strong></p>
-        <ul>
-          <li>Mất tem máy, rách tem</li>
-          <li>Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi ra khỏi shop sẽ không bảo hành)</li>
-          <li>Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài khoản icloud</li>
-          <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
-        </ul>
-      </div>
+          <!-- Products Table -->
+          <table class="w-full border border-black mb-3 text-xs">
+            <thead>
+              <tr class="border-b border-black">
+                <th class="border-r border-black p-1.5 text-left font-bold">
+                  TÊN MÁY
+                </th>
+                <th class="border-r border-black p-1.5 text-center font-bold w-32">
+                  IMEI
+                </th>
+                <th class="p-1.5 text-right font-bold w-24">ĐƠN GIÁ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${editableData.items
+                .map(
+                  (item, index) => `
+                <tr class="border-b border-black">
+                  <td class="border-r border-black p-1.5">
+                    <div>${item.productName}</div>
+                    <div class="text-[10px] text-gray-600">
+                      ${item.variantColor}${
+                    item.variantStorage ? ` - ${item.variantStorage}` : ""
+                  }
+                    </div>
+                  </td>
+                  <td class="border-r border-black p-1.5 text-center">
+                    ${item.imei || "N/A"}
+                  </td>
+                  <td class="p-1.5 text-right font-semibold">
+                    ${formatPrice(item.price * item.quantity)}
+                  </td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
 
-      <!-- Totals -->
-      <div class="totals">
-        <div class="totals-row">
-          <span><strong>Tiền sản phẩm:</strong></span>
-          <span><strong>${editableData.totalAmount.toLocaleString(
-            "vi-VN"
-          )} ₫</strong></span>
-        </div>
-        <div class="totals-row">
-          <span>Voucher:</span>
-          <span>0</span>
-        </div>
-        <div class="totals-row totals-highlight">
-          <span><strong>Thành tiền:</strong></span>
-          <span><strong>${editableData.totalAmount.toLocaleString(
-            "vi-VN"
-          )} ₫</strong></span>
-        </div>
-        <div class="totals-row">
-          <span><strong>Tiền đã đưa:</strong></span>
-          <span><strong>${editableData.paymentReceived.toLocaleString(
-            "vi-VN"
-          )} ₫</strong></span>
-        </div>
-        <div class="totals-row">
-          <span>Khoản vay còn lại:</span>
-          <span>0</span>
-        </div>
-      </div>
+          <!-- Warranty Terms - COMPACT -->
+          <div class="border border-black p-2 mb-3 text-xs">
+            <p class="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
+            <p class="font-bold mb-1">
+              LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH
+            </p>
+            <ul class="list-disc ml-4 text-[10px] space-y-0.5 leading-tight">
+              <li>Mất tem máy, rách tem</li>
+              <li>
+                Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi
+                ra khỏi shop sẽ không bảo hành)
+              </li>
+              <li>
+                Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài
+                khoản icloud
+              </li>
+              <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
+            </ul>
+          </div>
 
-      <!-- Warning -->
-      <div class="warning">
-        CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
-      </div>
+          <!-- Totals - COMPACT -->
+          <div class="border border-black text-xs mb-3">
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span class="font-bold">Tiền sản phẩm:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.totalAmount
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span>Voucher:</span>
+              <span>0</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black bg-yellow-50">
+              <span class="font-bold">Thành tiền:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.totalAmount
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5 border-b border-black">
+              <span class="font-bold">Tiền đã đưa:</span>
+              <span class="font-bold">${formatPrice(
+                editableData.paymentReceived
+              )}</span>
+            </div>
+            <div class="flex justify-between p-1.5">
+              <span>Khoản vay còn lại:</span>
+              <span>0</span>
+            </div>
+          </div>
 
-      <!-- Signatures -->
-      <div class="signatures">
-        <div class="signature-box">
-          <p><strong>NHÂN VIÊN</strong></p>
-          <div class="signature-space"></div>
-          <p>${editableData.staffName}</p>
-        </div>
-        <div class="signature-box">
-          <p><strong>KHÁCH HÀNG</strong></p>
-          <div class="signature-space"></div>
-          <p>${editableData.customerName}</p>
-        </div>
-      </div>
+          <!-- Warning -->
+          <div class="text-center my-2">
+            <p class="font-bold italic text-xs">
+              CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
+            </p>
+          </div>
 
-      <!-- Footer -->
-      <div class="footer">
-        <p><strong>BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)</strong></p>
-        <p>Xem thêm các điều khoản bảo hành tại <strong>https://itnstore.com/bao-hanh</strong></p>
-      </div>
-    </body>
-    </html>
-  `;
+          <!-- Signatures -->
+          <div class="flex justify-between mb-3">
+            <div class="text-center text-xs">
+              <p class="font-bold mb-12">NHÂN VIÊN</p>
+              <p>${editableData.staffName}</p>
+            </div>
+            <div class="text-center text-xs">
+              <p class="font-bold mb-12">KHÁCH HÀNG</p>
+              <p>${editableData.customerName}</p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="text-center text-[10px] border-t border-black pt-2">
+            <p class="font-bold">
+              BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)
+            </p>
+            <p>
+              Xem thêm các điều khoản bảo hành tại 
+              <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // ✅ BƯỚC 2: Mở window in
+    const printWindow = window.open("", "", "width=800,height=1000");
+    if (!printWindow) {
+      toast.error("Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.");
+      return;
+    }
 
     printWindow.document.write(invoiceHTML);
     printWindow.document.close();
     printWindow.focus();
 
+    // ✅ BƯỚC 3: Xử lý sau khi in xong
+    // const handleAfterPrint = async () => {
+    //   try {
+    //     // Đóng window in
+    //     if (printWindow && !printWindow.closed) {
+    //       printWindow.close();
+    //     }
+
+    //     // ✅ HOÀN TẤT ĐƠN HÀNG
+    //     setIsLoading(true);
+
+    //     const authStorage = localStorage.getItem("auth-storage");
+    //     const token = authStorage ? JSON.parse(authStorage).state.token : null;
+
+    //     if (!token) {
+    //       throw new Error("Token không hợp lệ");
+    //     }
+
+    //     console.log("Gọi API hoàn tất đơn:", orderToPrint._id);
+
+    //     await axios.put(
+    //       `${import.meta.env.VITE_API_URL}/orders/${orderToPrint._id}/status`,
+    //       {
+    //         status: "DELIVERED",
+    //         note: "Thu ngân hoàn tất đơn hàng - In hóa đơn thành công",
+    //       },
+    //       {
+    //         headers: {
+    //           Authorization: `Bearer ${token}`,
+    //           "Content-Type": "application/json",
+    //         },
+    //       }
+    //     );
+
+    //     console.log("✅ Hoàn tất đơn thành công");
+
+    //     toast.success("Đơn hàng đã hoàn tất!");
+
+    //     // ĐÓNG DIALOG & REFRESH
+    //     setShowEditInvoice(false);
+    //     setOrderToPrint(null);
+    //     await fetchPendingOrders();
+    //   } catch (error) {
+    //     console.error("❌ Lỗi hoàn tất đơn:", error);
+    //     // ✅ CHỈ TOAST LỖI, KHÔNG BLOCK USER
+    //     toast.error("Lỗi hoàn tất đơn. Vui lòng thử lại sau.");
+    //     // Vẫn đóng dialog để user tiếp tục công việc khác
+    //     setShowEditInvoice(false);
+    //     setOrderToPrint(null);
+    //   } finally {
+    //     setIsLoading(false);
+    //   }
+    // };
+
+    // ✅ BƯỚC 4: Gán event listener cho afterprint
+    // printWindow.addEventListener("afterprint", handleAfterPrint);
+
+    // ✅ BƯỚC 5: Trigger print dialog
     setTimeout(() => {
       printWindow.print();
-      setShowEditInvoice(false);
     }, 500);
   };
 
@@ -844,7 +830,7 @@ const CASHIERDashboard = () => {
 
       <EditInvoiceDialog
         open={showEditInvoice}
-        onOpenChange={setShowEditInvoice}
+        onOpenChange={setShowEditInvoice} // ← Đơn giản hóa thành này
         order={orderToPrint}
         onPrint={handlePrintInvoice}
         isLoading={isLoading}
