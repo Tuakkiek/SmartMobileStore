@@ -67,7 +67,7 @@ export const createPaymentUrl = async (req, res) => {
     console.log("Client IP:", ipAddr);
 
     const createDate = moment().format("YYYYMMDDHHmmss");
-    const orderId_vnp = `${order._id}_${createDate}`;
+    const orderId_vnp = `${order._id}${moment().format("YYYYMMDDHHmmss")}`;
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
