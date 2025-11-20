@@ -24,6 +24,7 @@
     "morgan": "^1.10.1",
     "querystring": "^0.2.1",
     "smartmobilestore": "file:..",
+    "vnpay": "^2.4.4",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
