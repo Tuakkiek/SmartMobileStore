@@ -4,7 +4,6 @@ import moment from "moment";
 import { vnpayConfig } from "../config/vnpay.js";
 import Order from "../models/Order.js";
 import { vnpay } from "../server.js";
-import moment from "moment";
 
 // Hàm sort object theo alphabet
 // function sortObject(obj) {
