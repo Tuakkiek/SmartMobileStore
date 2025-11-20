@@ -240,6 +240,13 @@ const CheckoutPage = () => {
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
 
+        console.log("=== Creating VNPay Payment ===");
+        console.log("Order:", {
+          id: createdOrder._id,
+          number: createdOrder.orderNumber,
+          amount: createdOrder.totalAmount,
+        });
+
         try {
           const vnpayResponse = await vnpayAPI.createPaymentUrl({
             orderId: createdOrder._id,
@@ -248,16 +255,22 @@ const CheckoutPage = () => {
             language: "vn",
           });
 
+          console.log("VNPay API Response:", vnpayResponse.data);
+
           if (vnpayResponse.data.success) {
-            // Redirect sang VNPay
+            console.log(
+              "✅ Redirecting to:",
+              vnpayResponse.data.data.paymentUrl
+            );
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
           }
         } catch (error) {
+          console.error("❌ VNPay Error:", error);
+          console.error("Response:", error.response?.data);
           setIsRedirectingToPayment(false);
           toast.error("Lỗi khi tạo link thanh toán VNPay");
-          console.error(error);
         }
       } else {
         // COD / BANK_TRANSFER - redirect bình thường
