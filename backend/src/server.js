@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import { VNPay } from "vnpay";
+// import { VNPay } from "vnpay";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
@@ -57,16 +57,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const vnpay = new VNPay({
-  tmnCode: process.env.VNP_TMN_CODE,
-  secureSecret: process.env.VNP_HASH_SECRET, // ← Must be secureSecret (not secretKey)
-  vnpayHost: process.env.VNPAY_HOST || "https://sandbox.vnpayment.vn", // ← Base host only
-  hashAlgorithm: "SHA512", // Optional but good to keep
-  testMode: true, // Optional: Enables extra logging/validation in sandbox
-});
+// const vnpay = new VNPay({
+//   tmnCode: process.env.VNP_TMN_CODE,
+//   secureSecret: process.env.VNP_HASH_SECRET, // ← Must be secureSecret (not secretKey)
+//   vnpayHost: process.env.VNPAY_HOST || "https://sandbox.vnpayment.vn", // ← Base host only
+//   hashAlgorithm: "SHA512", // Optional but good to keep
+//   testMode: true, // Optional: Enables extra logging/validation in sandbox
+// });
 
 // Export vnpay instance để sử dụng trong controllers
-export { vnpay };
+// export { vnpay };
 
 // Serve static files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
