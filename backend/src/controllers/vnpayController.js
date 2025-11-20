@@ -149,7 +149,9 @@ export const createPaymentUrl = async (req, res) => {
     console.log(JSON.stringify(vnp_Params, null, 2));
 
     // ✅ TẠO SECURE HASH
-    const signData = querystring.stringify(vnp_Params, { encode: false });
+    const signData = Object.keys(vnp_Params)
+      .map((key) => `${key}=${vnp_Params[key]}`)
+      .join("&");
     console.log("\n--- Sign Data (for hash) ---");
     console.log(signData);
 
