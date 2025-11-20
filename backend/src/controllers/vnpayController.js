@@ -56,6 +56,7 @@ export const createPaymentUrl = async (req, res) => {
 
     let ipAddr =
       req.headers["x-forwarded-for"] ||
+      req.headers["x-real-ip"] ||
       req.connection.remoteAddress ||
       "127.0.0.1";
 
