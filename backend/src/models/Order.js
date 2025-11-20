@@ -346,5 +346,10 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ orderSource: 1, createdAt: -1 });
 orderSchema.index({ "posInfo.staffId": 1 });
 orderSchema.index({ "paymentInfo.processedBy": 1 });
+// THÊM DÒNG NÀY:
+orderSchema.index(
+  { "paymentInfo.vnpayTxnRef": 1 },
+  { sparse: true, unique: true }
+);
 
 export default mongoose.model("Order", orderSchema);

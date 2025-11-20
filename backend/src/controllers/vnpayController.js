@@ -108,7 +108,7 @@ export const createPaymentUrl = async (req, res) => {
 
     // Tạo các tham số
     const createDate = moment().format("YYYYMMDDHHmmss");
-    const orderId_vnp = moment().format("DDHHmmss"); // Unique order ID for VNPay
+    const orderId_vnp = `${order._id}_${moment().format("YYYYMMDDHHmmss")}`;
 
     console.log("\n--- VNPay Transaction Info ---");
     console.log("createDate:", createDate);
@@ -257,7 +257,12 @@ export const vnpayIPN = async (req, res) => {
       console.log("vnp_BankCode:", vnp_Params["vnp_BankCode"]);
 
       // ✅ TÌM ORDER
-      const order = await Order.findOne({ "paymentInfo.vnpayTxnRef": orderId });
+      const order = await Order.findOne({
+        $or: [
+          { "paymentInfo.vnpayTxnRef": orderId },
+          { _id: orderId.split("_")[0] }, // Tìm bằng orderId nếu có format orderId_timestamp
+        ],
+      });
 
       if (!order) {
         console.error("❌ Order not found with vnpayTxnRef:", orderId);

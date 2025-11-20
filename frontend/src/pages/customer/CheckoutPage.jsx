@@ -262,6 +262,22 @@ const CheckoutPage = () => {
               "✅ Redirecting to:",
               vnpayResponse.data.data.paymentUrl
             );
+
+            // THÊM DÒNG NÀY ĐỂ CLEAR CART TRƯỚC KHI REDIRECT:
+            await getCart();
+
+            window.location.href = vnpayResponse.data.data.paymentUrl;
+          } else {
+            throw new Error("Không thể tạo link thanh toán");
+          }
+
+          console.log("VNPay API Response:", vnpayResponse.data);
+
+          if (vnpayResponse.data.success) {
+            console.log(
+              "✅ Redirecting to:",
+              vnpayResponse.data.data.paymentUrl
+            );
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
