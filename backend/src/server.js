@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import cookie from "cookie";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
@@ -145,8 +144,6 @@ mongoose.connection.on("error", (err) => {
   process.exit(1);
 });
 
-mongoose.connection.once("open", startServer);
-
 // ================================
 // 🔹 Khởi động server (di chuyển lên trước)
 // ================================
@@ -167,5 +164,7 @@ const startServer = () => {
     );
   });
 };
+
+mongoose.connection.once("open", startServer);
 
 export default app;
