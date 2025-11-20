@@ -34,6 +34,7 @@ export const formatDate = (date) => {
 export const getStatusColor = (status) => {
   const map = {
     PENDING: "bg-yellow-100 text-yellow-800",
+    PENDING_PAYMENT: "bg-orange-100 text-orange-800",
     CONFIRMED: "bg-blue-100 text-blue-800",
     SHIPPING: "bg-indigo-100 text-indigo-800",
     DELIVERED: "bg-green-100 text-green-800",
@@ -48,6 +49,7 @@ export const getStatusColor = (status) => {
 export const getStatusText = (status) => {
   const map = {
     PENDING: "Chờ xác nhận",
+    PENDING_PAYMENT: "Chờ thanh toán",
     CONFIRMED: "Chờ lấy hàng",
     SHIPPING: "Đang giao hàng",
     DELIVERED: "Đã giao hàng",
@@ -57,9 +59,13 @@ export const getStatusText = (status) => {
     UNPAID: "Chưa thanh toán",
     COD: "Thanh toán khi nhận hàng",
     BANK_TRANSFER: "Chuyển khoản",
+    VNPAY: "Thanh toán VNPay", // ✅ THÊM
+    CASH: "Tiền mặt",
+    CARD: "Thẻ",
   };
   return map[status] || status;
 };
+
 // Function to fetch all products across all categories
 export const fetchAllProducts = async (params = {}) => {
   try {
@@ -94,14 +100,14 @@ export const fetchAllProducts = async (params = {}) => {
 // Lấy chữ viết tắt từ 2 từ cuối của tên
 export const getNameInitials = (fullName) => {
   if (!fullName) return "U";
-  
+
   const words = fullName.trim().split(/\s+/);
-  
+
   if (words.length === 1) {
     return words[0].charAt(0).toUpperCase();
   }
-  
+
   // Lấy 2 chữ cuối
   const lastTwo = words.slice(-2);
-  return lastTwo.map(word => word.charAt(0).toUpperCase()).join("");
+  return lastTwo.map((word) => word.charAt(0).toUpperCase()).join("");
 };

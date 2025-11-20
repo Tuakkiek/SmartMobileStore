@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// ✅ CẬP NHẬT: Thêm orderSource để phân biệt online/offline
+// ✅ FIXED: Thêm VNPAY vào paymentMethod enum
 // ============================================
 
 import mongoose from "mongoose";
@@ -42,7 +42,7 @@ const addressSchema = new mongoose.Schema(
     fullName: { type: String, required: true, trim: true },
     phoneNumber: { type: String, required: true, trim: true },
     province: { type: String, required: true, trim: true },
-    ward: { type: String, required: true, trim: true }, // Chỉ giữ ward
+    ward: { type: String, required: true, trim: true },
     detailAddress: { type: String, required: true, trim: true },
   },
   { _id: false }
@@ -54,7 +54,7 @@ const statusHistorySchema = new mongoose.Schema(
       type: String,
       enum: [
         "PENDING",
-        "PENDING_PAYMENT", // ✅ MỚI: Chờ thanh toán (POS)
+        "PENDING_PAYMENT",
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -74,7 +74,6 @@ const statusHistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ Schema thông tin POS
 const posInfoSchema = new mongoose.Schema(
   {
     staffId: {
@@ -83,18 +82,15 @@ const posInfoSchema = new mongoose.Schema(
       required: true,
     },
     staffName: { type: String, trim: true },
-    cashierName: { type: String, trim: true }, // ✅ THÊM - Tên thu ngân (dùng khi in)
+    cashierName: { type: String, trim: true },
     storeLocation: { type: String, trim: true },
-    receiptNumber: { type: String, trim: true }, // Số phiếu tạm
-
-    // ✅ THÊM - Thông tin thanh toán nhanh (để in hóa đơn)
+    receiptNumber: { type: String, trim: true },
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
   },
   { _id: false }
 );
 
-// ✅ Schema thanh toán (Thu ngân xử lý)
 const paymentInfoSchema = new mongoose.Schema(
   {
     processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -103,7 +99,7 @@ const paymentInfoSchema = new mongoose.Schema(
     changeGiven: { type: Number, min: 0 },
     invoiceNumber: { type: String, trim: true },
 
-    // ✅ THÊM PHẦN NÀY
+    // VNPay fields
     vnpayTxnRef: { type: String, trim: true },
     vnpayTransactionNo: { type: String, trim: true },
     vnpayBankCode: { type: String, trim: true },
@@ -116,7 +112,6 @@ const paymentInfoSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ Schema hóa đơn VAT
 const vatInvoiceSchema = new mongoose.Schema(
   {
     invoiceNumber: { type: String, trim: true },
@@ -136,10 +131,9 @@ const orderSchema = new mongoose.Schema(
   {
     orderNumber: { type: String, unique: true, trim: true },
 
-    // ✅ MỚI: Phân biệt nguồn đơn hàng
     orderSource: {
       type: String,
-      enum: ["ONLINE", "IN_STORE"], // ONLINE = Web, IN_STORE = Tại cửa hàng
+      enum: ["ONLINE", "IN_STORE"],
       default: "ONLINE",
       required: true,
     },
@@ -169,7 +163,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: [
         "PENDING",
-        "PENDING_PAYMENT", // ✅ Chờ thanh toán (POS chuyển sang Thu ngân)
+        "PENDING_PAYMENT",
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -179,9 +173,10 @@ const orderSchema = new mongoose.Schema(
       default: "PENDING",
     },
 
+    // ✅ FIXED: Thêm VNPAY vào enum
     paymentMethod: {
       type: String,
-      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD"],
+      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD", "VNPAY"], // ← THÊM VNPAY
       required: true,
     },
 
@@ -200,13 +195,8 @@ const orderSchema = new mongoose.Schema(
       discountAmount: { type: Number },
     },
 
-    // ✅ Thông tin POS (chỉ có khi orderSource = IN_STORE)
     posInfo: posInfoSchema,
-
-    // ✅ Thông tin thanh toán (Thu ngân xử lý)
     paymentInfo: paymentInfoSchema,
-
-    // ✅ Hóa đơn VAT (nếu khách yêu cầu)
     vatInvoice: vatInvoiceSchema,
   },
   { timestamps: true }
@@ -216,7 +206,6 @@ const orderSchema = new mongoose.Schema(
 // HOOKS
 // ============================================
 
-// Tạo mã đơn hàng tự động
 orderSchema.pre("validate", async function (next) {
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
@@ -224,7 +213,6 @@ orderSchema.pre("validate", async function (next) {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
 
-    // ✅ Prefix theo nguồn đơn
     const prefix = this.orderSource === "IN_STORE" ? "POS" : "ORD";
 
     const lastOrder = await mongoose
@@ -245,7 +233,6 @@ orderSchema.pre("validate", async function (next) {
   next();
 });
 
-// Thêm trạng thái ban đầu vào lịch sử
 orderSchema.pre("save", function (next) {
   if (this.isNew && this.statusHistory.length === 0) {
     this.statusHistory.push({
@@ -299,7 +286,6 @@ orderSchema.methods.cancel = async function (userId, note) {
   return this.save();
 };
 
-// ✅ MỚI: Xử lý thanh toán (Thu ngân)
 orderSchema.methods.processPayment = async function (
   CASHIERId,
   paymentReceived
@@ -310,7 +296,6 @@ orderSchema.methods.processPayment = async function (
 
   const changeGiven = Math.max(0, paymentReceived - this.totalAmount);
 
-  // Tạo số hóa đơn chính thức
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -341,7 +326,7 @@ orderSchema.methods.processPayment = async function (
   };
 
   this.paymentStatus = "PAID";
-  this.status = "DELIVERED"; // Đơn tại cửa hàng = giao ngay
+  this.status = "DELIVERED";
 
   this.statusHistory.push({
     status: "DELIVERED",
