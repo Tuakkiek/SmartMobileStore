@@ -528,7 +528,7 @@ const CartPage = () => {
       ) : (
         <div className="space-y-6">
           {/* HEADER: CHỌN TẤT CẢ + XÓA NHIỀU */}
-          <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg">
+          <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <Checkbox
                 checked={hasItems && selectedItems.length === items.length}
@@ -568,9 +568,9 @@ const CartPage = () => {
                     className={isSelected ? "ring-2 ring-primary" : ""}
                   >
                     <CardContent className="p-4">
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4">
                         {/* CHECKBOX – DÙNG SHADCN + CN */}
-                        <div className="flex items-start mt-14">
+                        <div className="flex items-start mt-2 sm:mt-0 order-1 sm:order-none self-start sm:self-center">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() =>
@@ -591,25 +591,25 @@ const CartPage = () => {
                           className="w-24 h-24 object-cover rounded-md flex-shrink-0"
                         />
 
-                        <div className="flex-1">
+                        <div className="flex-1 flex flex-col justify-between">
                           {/* TÊN SẢN PHẨM */}
                           <h3 className="font-semibold mb-1">
                             {item.productName}
                           </h3>
 
                           {/* VARIANT INFO */}
-                          <div className="flex gap-3 text-sm text-muted-foreground mb-2">
+                          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-2">
                             {item.variantColor && (
                               <span>Màu: {item.variantColor}</span>
                             )}
                             {item.variantStorage && (
-                              <span>• {item.variantStorage}</span>
+                              <span>{item.variantStorage}</span>
                             )}
                             {item.variantConnectivity && (
-                              <span>• {item.variantConnectivity}</span>
+                              <span>{item.variantConnectivity}</span>
                             )}
                             {item.variantName && (
-                              <span>• {item.variantName}</span>
+                              <span>{item.variantName}</span>
                             )}
                           </div>
 
@@ -637,9 +637,9 @@ const CartPage = () => {
                           </div>
 
                           {/* SỐ LƯỢNG + TỔNG + HÀNH ĐỘNG */}
-                          <div className="flex items-center justify-between mt-4">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-4 sm:gap-0">
                             {/* LEFT: QUANTITY + STORAGE + COLOR */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               {/* Quantity Controls */}
                               <div className="flex items-center border rounded-md">
                                 <Button
@@ -687,7 +687,7 @@ const CartPage = () => {
                                 }
                                 disabled={loadingVariants[item.productId]}
                               >
-                                <SelectTrigger className="w-[120px]">
+                                <SelectTrigger className="w-[120px] sm:w-[140px]">
                                   <SelectValue placeholder="Dung lượng" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -711,7 +711,7 @@ const CartPage = () => {
                                 }
                                 disabled={loadingVariants[item.productId]}
                               >
-                                <SelectTrigger className="w-[140px]">
+                                <SelectTrigger className="w-[120px] sm:w-[140px]">
                                   <SelectValue placeholder="Màu sắc" />
                                 </SelectTrigger>
                                 <SelectContent>
