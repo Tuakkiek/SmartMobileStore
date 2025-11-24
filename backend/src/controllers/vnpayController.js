@@ -26,6 +26,13 @@ function sortObject(obj) {
 // TẠO PAYMENT URL - Manual theo mẫu VNPAY chính thức
 // ============================================
 export const createPaymentUrl = async (req, res) => {
+  console.log("\n=== ENVIRONMENT CHECK ===");
+  console.log("NODE_ENV:", process.env.NODE_ENV);
+  console.log("VNP_TMN_CODE:", process.env.VNP_TMN_CODE);
+  console.log("VNP_HASH_SECRET (full):", process.env.VNP_HASH_SECRET); // ← XÓA SAU KHI TEST
+  console.log("VNP_URL:", process.env.VNP_URL);
+  
+  console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("Request body:", JSON.stringify(req.body, null, 2));
 
