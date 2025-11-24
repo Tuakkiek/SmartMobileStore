@@ -98,6 +98,16 @@ const CheckoutPage = () => {
     }
   }, []); // Chỉ chạy khi mount
 
+  useEffect(() => {
+    // Bắt lỗi JavaScript từ VNPay Sandbox
+    window.addEventListener("error", (event) => {
+      if (event.message.includes("timer is not defined")) {
+        console.warn("⚠️ VNPay Sandbox bug detected - ignoring");
+        event.preventDefault();
+      }
+    });
+  }, []);
+
   const handleChange = (e) => {
     setError("");
     setFormData({
