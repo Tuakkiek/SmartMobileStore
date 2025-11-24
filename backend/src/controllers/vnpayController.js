@@ -79,6 +79,19 @@ export const createPaymentUrl = async (req, res) => {
     console.log("VNP_URL:", process.env.VNP_URL);
     console.log("VNP_RETURN_URL:", process.env.VNP_RETURN_URL);
 
+    console.log("=== SECRET KEY CHECK ===");
+    console.log("Secret length:", process.env.VNP_HASH_SECRET?.length);
+    console.log(
+      "Secret first 10 chars:",
+      process.env.VNP_HASH_SECRET?.substring(0, 10)
+    );
+    console.log(
+      "Secret last 10 chars:",
+      process.env.VNP_HASH_SECRET?.substring(
+        process.env.VNP_HASH_SECRET.length - 10
+      )
+    );
+
     const createDate = moment().format("YYYYMMDDHHmmss");
     const orderId_vnp = `${order._id}${moment().format("YYYYMMDDHHmmss")}`;
 
@@ -112,6 +125,10 @@ export const createPaymentUrl = async (req, res) => {
 
     vnp_Params = sortObject(vnp_Params);
 
+    console.log("\n=== BEFORE SIGNING ===");
+    console.log("vnp_ReturnUrl (raw):", returnUrl);
+    console.log("vnp_ReturnUrl (in params):", vnp_Params["vnp_ReturnUrl"]);
+
     console.log("\n--- VNP Params (after sort & encode) ---");
     console.log(JSON.stringify(vnp_Params, null, 2));
 
@@ -126,7 +143,7 @@ export const createPaymentUrl = async (req, res) => {
 
     vnp_Params["vnp_SecureHash"] = signed;
 
-    const vnpUrl = process.env.VNP_URL || vnpayConfig.vnp_Url;
+    const vnpUrl = "https://sandbox.vnpayment.vn/merchant_webapi/merchant.html";
     const paymentUrl =
       vnpUrl + "?" + qs.stringify(vnp_Params, { encode: false });
 
