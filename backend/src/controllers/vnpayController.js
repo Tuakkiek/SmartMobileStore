@@ -144,7 +144,9 @@ export const createPaymentUrl = async (req, res) => {
 
     vnp_Params["vnp_SecureHash"] = signed;
 
-    const vnpUrl = "https://sandbox.vnpayment.vn/merchant_webapi/merchant.html";
+    const vnpUrl =
+      process.env.VNP_URL ||
+      "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
     const paymentUrl =
       vnpUrl + "?" + qs.stringify(vnp_Params, { encode: false });
 
