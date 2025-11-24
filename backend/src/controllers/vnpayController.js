@@ -31,7 +31,7 @@ export const createPaymentUrl = async (req, res) => {
   console.log("VNP_TMN_CODE:", process.env.VNP_TMN_CODE);
   console.log("VNP_HASH_SECRET (full):", process.env.VNP_HASH_SECRET); // ← XÓA SAU KHI TEST
   console.log("VNP_URL:", process.env.VNP_URL);
-  
+
   console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("Request body:", JSON.stringify(req.body, null, 2));
@@ -212,16 +212,22 @@ export const vnpayIPN = async (req, res) => {
   console.log("Match:", secureHash === signed ? "✅ YES" : "❌ NO");
 
   if (secureHash === signed) {
-    const orderId = vnp_Params["vnp_TxnRef"];
+    const vnpTxnRef = vnp_Params["vnp_TxnRef"];
     const rspCode = vnp_Params["vnp_ResponseCode"];
     const amount = parseInt(vnp_Params["vnp_Amount"]) / 100;
 
+    console.log("\n=== FINDING ORDER ===");
+    console.log("vnp_TxnRef:", vnpTxnRef);
+    console.log("Extract ObjectId:", vnpTxnRef.substring(0, 24));
+
+    // ✅ EXTRACT ObjectId từ vnp_TxnRef (24 ký tự đầu)
+    const orderId = vnpTxnRef.substring(0, 24);
+
     const order = await Order.findOne({
-      $or: [
-        { "paymentInfo.vnpayTxnRef": orderId },
-        { _id: orderId.split("_")[0] },
-      ],
+      $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
     });
+
+    console.log("Found order:", order?._id);
 
     if (!order) {
       console.error("❌ Không tìm thấy order");
@@ -256,6 +262,9 @@ export const vnpayIPN = async (req, res) => {
       }
 
       await order.save();
+
+      console.log("✅ Order updated successfully:", order._id);
+
       return res
         .status(200)
         .json({ RspCode: "00", Message: "Confirm Success" });
@@ -295,16 +304,27 @@ export const vnpayReturn = async (req, res) => {
   const hmac = crypto.createHmac("sha512", process.env.VNP_HASH_SECRET);
   const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
-  console.log("\n--- Hash Verification ---");
+  console.log("\n--- Return Hash Verification ---");
   console.log("Expected:", signed);
   console.log("Received:", secureHash);
   console.log("Match:", secureHash === signed ? "✅ YES" : "❌ NO");
 
   if (secureHash === signed) {
-    const orderId = vnp_Params["vnp_TxnRef"];
+    const vnpTxnRef = vnp_Params["vnp_TxnRef"];
     const rspCode = vnp_Params["vnp_ResponseCode"];
 
-    const order = await Order.findOne({ "paymentInfo.vnpayTxnRef": orderId });
+    console.log("\n=== FINDING ORDER (RETURN) ===");
+    console.log("vnp_TxnRef:", vnpTxnRef);
+    console.log("Extract ObjectId:", vnpTxnRef.substring(0, 24));
+
+    // ✅ EXTRACT ObjectId
+    const orderId = vnpTxnRef.substring(0, 24);
+
+    const order = await Order.findOne({
+      $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
+    });
+
+    console.log("Found order:", order?._id);
 
     res.json({
       success: rspCode === "00",
