@@ -67,6 +67,18 @@ export const createPaymentUrl = async (req, res) => {
 
     console.log("Client IP:", ipAddr);
 
+    console.log("\n=== VNPAY CONFIG CHECK ===");
+    console.log(
+      "VNP_TMN_CODE:",
+      process.env.VNP_TMN_CODE?.substring(0, 4) + "***"
+    );
+    console.log(
+      "VNP_HASH_SECRET:",
+      process.env.VNP_HASH_SECRET ? "EXISTS" : "MISSING"
+    );
+    console.log("VNP_URL:", process.env.VNP_URL);
+    console.log("VNP_RETURN_URL:", process.env.VNP_RETURN_URL);
+
     const createDate = moment().format("YYYYMMDDHHmmss");
     const orderId_vnp = `${order._id}${moment().format("YYYYMMDDHHmmss")}`;
 
@@ -114,12 +126,17 @@ export const createPaymentUrl = async (req, res) => {
 
     vnp_Params["vnp_SecureHash"] = signed;
 
-    const vnpUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+    const vnpUrl = process.env.VNP_URL || vnpayConfig.vnp_Url;
     const paymentUrl =
       vnpUrl + "?" + qs.stringify(vnp_Params, { encode: false });
 
-    console.log("\n--- Payment URL ---");
-    console.log(paymentUrl);
+    console.log("\n--- Testing Payment URL ---");
+    console.log("Full URL Length:", paymentUrl.length);
+    console.log(
+      "Contains vnp_SecureHash:",
+      paymentUrl.includes("vnp_SecureHash=")
+    );
+    console.log("First 200 chars:", paymentUrl.substring(0, 200));
 
     order.paymentInfo = {
       ...order.paymentInfo,

@@ -78,6 +78,19 @@ connectDB()
   .then(() => console.log("✅ MongoDB connected successfully"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
+// Thêm sau dòng connectDB()
+if (!process.env.VNP_TMN_CODE || !process.env.VNP_HASH_SECRET) {
+  console.error("❌ MISSING VNPAY CONFIGURATION");
+  console.error(
+    "VNP_TMN_CODE:",
+    process.env.VNP_TMN_CODE ? "EXISTS" : "MISSING"
+  );
+  console.error(
+    "VNP_HASH_SECRET:",
+    process.env.VNP_HASH_SECRET ? "EXISTS" : "MISSING"
+  );
+}
+
 // ================================
 // 🔹 Đăng ký tất cả routes
 // ================================
