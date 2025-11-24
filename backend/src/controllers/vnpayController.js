@@ -98,7 +98,9 @@ export const createPaymentUrl = async (req, res) => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const expireDate = moment(tomorrow).format("YYYYMMDDHHmmss");
-
+    const returnUrl =
+      process.env.VNP_RETURN_URL ||
+      "http://localhost:5173/payment/vnpay/return";
     let vnp_Params = {
       vnp_Version: "2.1.0",
       vnp_Command: "pay",
@@ -109,8 +111,8 @@ export const createPaymentUrl = async (req, res) => {
       vnp_OrderInfo:
         orderDescription || `Thanh toan don hang ${order.orderNumber}`,
       vnp_OrderType: "other",
-      vnp_Amount: amount * 100, // Nhân 100 thủ công (VNPAY yêu cầu)
-      vnp_ReturnUrl: process.env.VNP_RETURN_URL,
+      vnp_Amount: amount * 100,
+      vnp_ReturnUrl: returnUrl, // ← ĐỔI THÀNH NÀY
       vnp_IpAddr: ipAddr,
       vnp_CreateDate: createDate,
       vnp_ExpireDate: expireDate,
@@ -126,7 +128,6 @@ export const createPaymentUrl = async (req, res) => {
     vnp_Params = sortObject(vnp_Params);
 
     console.log("\n=== BEFORE SIGNING ===");
-    console.log("vnp_ReturnUrl (raw):", returnUrl);
     console.log("vnp_ReturnUrl (in params):", vnp_Params["vnp_ReturnUrl"]);
 
     console.log("\n--- VNP Params (after sort & encode) ---");
