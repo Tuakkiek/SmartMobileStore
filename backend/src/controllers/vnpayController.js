@@ -234,9 +234,7 @@ export const vnpayIPN = async (req, res) => {
   }
 };
 
-// ============================================
 // RETURN URL - Manual theo mẫu VNPAY
-// ============================================
 export const vnpayReturn = async (req, res) => {
   console.log("\n=== VNPAY RETURN URL ===");
   console.log("Query params:", JSON.stringify(req.query, null, 2));
