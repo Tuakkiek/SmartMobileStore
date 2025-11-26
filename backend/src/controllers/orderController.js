@@ -615,6 +615,8 @@ export const updateOrderStatus = async (req, res) => {
     // Xác thực chuyển trạng thái
     const validTransitions = {
       PENDING: ["CONFIRMED", "CANCELLED"],
+      PENDING_PAYMENT: ["PAYMENT_VERIFIED", "CANCELLED"],
+      PAYMENT_VERIFIED: ["CONFIRMED", "CANCELLED"],
       CONFIRMED: ["SHIPPING", "CANCELLED"],
       SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
       DELIVERED: ["RETURNED"],
