@@ -215,12 +215,15 @@ export const vnpayIPN = async (req, res) => {
     const vnpTxnRef = vnp_Params["vnp_TxnRef"];
     const rspCode = vnp_Params["vnp_ResponseCode"];
     const amount = parseInt(vnp_Params["vnp_Amount"]) / 100;
+    const transactionNo = vnp_Params["vnp_TransactionNo"];
+    const bankCode = vnp_Params["vnp_BankCode"];
+    const cardType = vnp_Params["vnp_CardType"];
 
     console.log("\n=== FINDING ORDER ===");
     console.log("vnp_TxnRef:", vnpTxnRef);
     console.log("Extract ObjectId:", vnpTxnRef.substring(0, 24));
 
-    // ✅ EXTRACT ObjectId từ vnp_TxnRef (24 ký tự đầu)
+    // ✅ EXTRACT ObjectId từ vnp_TxnRef
     const orderId = vnpTxnRef.substring(0, 24);
 
     const order = await Order.findOne({
@@ -242,42 +245,63 @@ export const vnpayIPN = async (req, res) => {
     }
 
     if (rspCode === "00") {
+      // ✅ THÀNH CÔNG
       order.paymentStatus = "PAID";
+      order.status = "PAYMENT_VERIFIED"; // ✅ NÂNG CẤP: Status mới
+
       order.paymentInfo = {
         ...order.paymentInfo,
-        vnpayTransactionNo: vnp_Params["vnp_TransactionNo"],
-        vnpayBankCode: vnp_Params["vnp_BankCode"],
-        vnpayCardType: vnp_Params["vnp_CardType"],
+        vnpayTransactionNo: transactionNo,
+        vnpayBankCode: bankCode,
+        vnpayCardType: cardType,
         vnpayPaidAt: new Date(),
+        vnpayVerified: true, // ✅ THÊM: Xác nhận IPN
+        vnpayVerifiedAt: new Date(), // ✅ THÊM: Thời gian xác nhận
+        vnpayAmount: amount,
+        vnpayResponseCode: rspCode,
       };
 
-      if (order.status === "PENDING") {
-        order.status = "CONFIRMED";
-        order.statusHistory.push({
-          status: "CONFIRMED",
-          updatedBy: order.customerId,
-          updatedAt: new Date(),
-          note: "Thanh toán VNPay thành công",
-        });
-      }
+      // ✅ THÊM: Lịch sử trạng thái
+      order.statusHistory.push({
+        status: "PAYMENT_VERIFIED",
+        updatedBy: order.customerId,
+        updatedAt: new Date(),
+        note: `Thanh toán VNPay xác nhận - Transaction: ${transactionNo}`,
+      });
 
       await order.save();
 
-      console.log("✅ Order updated successfully:", order._id);
+      console.log("✅ Order updated:", order._id);
+      console.log(`   - Status: ${order.status}`);
+      console.log(`   - Payment: PAID`);
+      console.log(`   - VNPay Verified: ${order.paymentInfo.vnpayVerified}`);
 
       return res
         .status(200)
         .json({ RspCode: "00", Message: "Confirm Success" });
     } else {
+      // ❌ THẤT BẠI
       order.paymentInfo = {
         ...order.paymentInfo,
         vnpayFailed: true,
         vnpayFailReason: rspCode,
+        vnpayResponseCode: rspCode,
       };
+
+      // ✅ THÊM: Ghi nhận thất bại vào lịch sử
+      order.statusHistory.push({
+        status: "PENDING",
+        updatedBy: order.customerId,
+        updatedAt: new Date(),
+        note: `Thanh toán VNPay thất bại - Code: ${rspCode}`,
+      });
+
       await order.save();
+
+      console.log("❌ Payment failed with code:", rspCode);
       return res
         .status(200)
-        .json({ RspCode: "00", Message: "Confirm Success" }); // Vẫn success để dừng retry VNPAY
+        .json({ RspCode: "00", Message: "Confirm Success" });
     }
   } else {
     console.error("❌ Chữ ký không hợp lệ");
@@ -286,7 +310,6 @@ export const vnpayIPN = async (req, res) => {
       .json({ RspCode: "97", Message: "Invalid signature" });
   }
 };
-
 // RETURN URL - Manual theo mẫu VNPAY
 export const vnpayReturn = async (req, res) => {
   console.log("\n=== VNPAY RETURN URL ===");
@@ -315,9 +338,7 @@ export const vnpayReturn = async (req, res) => {
 
     console.log("\n=== FINDING ORDER (RETURN) ===");
     console.log("vnp_TxnRef:", vnpTxnRef);
-    console.log("Extract ObjectId:", vnpTxnRef.substring(0, 24));
 
-    // ✅ EXTRACT ObjectId
     const orderId = vnpTxnRef.substring(0, 24);
 
     const order = await Order.findOne({
@@ -325,14 +346,27 @@ export const vnpayReturn = async (req, res) => {
     });
 
     console.log("Found order:", order?._id);
+    console.log("Order status:", order?.status);
+    console.log("Payment status:", order?.paymentStatus);
+
+    // ✅ NÂNG CẤP: Trả về thông tin chi tiết
+    const paymentVerified =
+      order?.paymentInfo?.vnpayVerified || order?.paymentStatus === "PAID";
 
     res.json({
       success: rspCode === "00",
       code: rspCode,
       message:
-        rspCode === "00" ? "Thanh toán thành công" : "Thanh toán thất bại",
+        rspCode === "00"
+          ? "Thanh toán thành công"
+          : `Thanh toán thất bại - Code: ${rspCode}`,
       orderId: order?._id,
       orderNumber: order?.orderNumber,
+      orderStatus: order?.status,
+      paymentStatus: order?.paymentStatus,
+      paymentVerified: paymentVerified, // ✅ THÊM: Xác nhận thanh toán
+      totalAmount: order?.totalAmount,
+      transactionNo: order?.paymentInfo?.vnpayTransactionNo,
     });
   } else {
     res.json({

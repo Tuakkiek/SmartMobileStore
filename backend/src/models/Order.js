@@ -93,14 +93,15 @@ const posInfoSchema = new mongoose.Schema(
 
 const paymentInfoSchema = new mongoose.Schema(
   {
+    // Thanh toán chung
     processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     processedAt: { type: Date },
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
     invoiceNumber: { type: String, trim: true },
 
-    // VNPay fields
-    vnpayTxnRef: { type: String, trim: true },
+    // VNPay fields - ĐÃ NÂNG CẤP
+    vnpayTxnRef: { type: String, trim: true, index: true },
     vnpayTransactionNo: { type: String, trim: true },
     vnpayBankCode: { type: String, trim: true },
     vnpayCardType: { type: String, trim: true },
@@ -108,6 +109,12 @@ const paymentInfoSchema = new mongoose.Schema(
     vnpayCreatedAt: { type: Date },
     vnpayFailed: { type: Boolean, default: false },
     vnpayFailReason: { type: String },
+
+    // ✅ THÊM: Xác nhận thanh toán VNPay
+    vnpayVerified: { type: Boolean, default: false }, // Đã xác nhận IPN?
+    vnpayVerifiedAt: { type: Date }, // Khi nào xác nhận
+    vnpayAmount: { type: Number, min: 0 }, // Số tiền VNPay gửi về
+    vnpayResponseCode: { type: String }, // "00" = success
   },
   { _id: false }
 );
@@ -159,24 +166,25 @@ const orderSchema = new mongoose.Schema(
     shippingFee: { type: Number, default: 0, min: 0 },
     pointsUsed: { type: Number, default: 0, min: 0 },
 
+    // ✅ NÂNG CẤP Status
     status: {
       type: String,
       enum: [
-        "PENDING",
-        "PENDING_PAYMENT",
-        "CONFIRMED",
-        "SHIPPING",
-        "DELIVERED",
-        "RETURNED",
-        "CANCELLED",
+        "PENDING", // Chờ thanh toán (COD/Transfer)
+        "PAYMENT_VERIFIED", // ✅ Thanh toán VNPay đã xác nhận
+        "CONFIRMED", // Đã xác nhận
+        "PROCESSING", // Đang chuẩn bị hàng
+        "SHIPPING", // Đang giao hàng
+        "DELIVERED", // Đã giao
+        "RETURNED", // Trả hàng
+        "CANCELLED", // Đã hủy
       ],
       default: "PENDING",
     },
 
-    // ✅ FIXED: Thêm VNPAY vào enum
     paymentMethod: {
       type: String,
-      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD", "VNPAY"], // ← THÊM VNPAY
+      enum: ["COD", "BANK_TRANSFER", "CASH", "CARD", "VNPAY"],
       required: true,
     },
 
@@ -198,6 +206,14 @@ const orderSchema = new mongoose.Schema(
     posInfo: posInfoSchema,
     paymentInfo: paymentInfoSchema,
     vatInvoice: vatInvoiceSchema,
+
+    // ✅ THÊM: Ghi chú giao hàng
+    shippingNote: { type: String, trim: true },
+    shippingProof: {
+      photoUrl: { type: String }, // Ảnh giao hàng
+      signature: { type: String }, // Chữ ký điện tử
+      completedAt: { type: Date },
+    },
   },
   { timestamps: true }
 );
@@ -347,9 +363,8 @@ orderSchema.index({ orderSource: 1, createdAt: -1 });
 orderSchema.index({ "posInfo.staffId": 1 });
 orderSchema.index({ "paymentInfo.processedBy": 1 });
 // THÊM DÒNG NÀY:
-orderSchema.index(
-  { "paymentInfo.vnpayTxnRef": 1 },
-  { sparse: true, unique: true }
-);
+
+orderSchema.index({ paymentMethod: 1, paymentStatus: 1 });
+orderSchema.index({ "paymentInfo.vnpayVerified": 1 });
 
 export default mongoose.model("Order", orderSchema);
