@@ -1,6 +1,7 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// ✅ FIXED: Thêm VNPAY vào paymentMethod enum
+// ✅ FIXED: Added PAYMENT_VERIFIED to status enum
+// ✅ ADDED: Better tracking for VNPay payments
 // ============================================
 
 import mongoose from "mongoose";
@@ -55,6 +56,7 @@ const statusHistorySchema = new mongoose.Schema(
       enum: [
         "PENDING",
         "PENDING_PAYMENT",
+        "PAYMENT_VERIFIED", // ✅ ADDED
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -93,14 +95,13 @@ const posInfoSchema = new mongoose.Schema(
 
 const paymentInfoSchema = new mongoose.Schema(
   {
-    // Thanh toán chung
     processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     processedAt: { type: Date },
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
     invoiceNumber: { type: String, trim: true },
 
-    // VNPay fields - ĐÃ NÂNG CẤP
+    // ✅ ENHANCED VNPay tracking
     vnpayTxnRef: { type: String, trim: true, index: true },
     vnpayTransactionNo: { type: String, trim: true },
     vnpayBankCode: { type: String, trim: true },
@@ -109,12 +110,10 @@ const paymentInfoSchema = new mongoose.Schema(
     vnpayCreatedAt: { type: Date },
     vnpayFailed: { type: Boolean, default: false },
     vnpayFailReason: { type: String },
-
-    // ✅ THÊM: Xác nhận thanh toán VNPay
-    vnpayVerified: { type: Boolean, default: false }, // Đã xác nhận IPN?
-    vnpayVerifiedAt: { type: Date }, // Khi nào xác nhận
-    vnpayAmount: { type: Number, min: 0 }, // Số tiền VNPay gửi về
-    vnpayResponseCode: { type: String }, // "00" = success
+    vnpayVerified: { type: Boolean, default: false },
+    vnpayVerifiedAt: { type: Date },
+    vnpayAmount: { type: Number, min: 0 },
+    vnpayResponseCode: { type: String },
   },
   { _id: false }
 );
@@ -130,6 +129,16 @@ const vatInvoiceSchema = new mongoose.Schema(
       ref: "User",
     },
     issuedAt: { type: Date },
+  },
+  { _id: false }
+);
+
+// ✅ NEW: Invoice tracking for online orders
+const onlineInvoiceSchema = new mongoose.Schema(
+  {
+    invoiceNumber: { type: String, trim: true },
+    issuedAt: { type: Date },
+    downloadUrl: { type: String }, // For future PDF storage
   },
   { _id: false }
 );
@@ -166,18 +175,19 @@ const orderSchema = new mongoose.Schema(
     shippingFee: { type: Number, default: 0, min: 0 },
     pointsUsed: { type: Number, default: 0, min: 0 },
 
-    // ✅ NÂNG CẤP Status
+    // ✅ UPDATED: Added PAYMENT_VERIFIED
     status: {
       type: String,
       enum: [
-        "PENDING", // Chờ thanh toán (COD/Transfer)
-        "PAYMENT_VERIFIED", // ✅ Thanh toán VNPay đã xác nhận
-        "CONFIRMED", // Đã xác nhận
-        "PROCESSING", // Đang chuẩn bị hàng
-        "SHIPPING", // Đang giao hàng
-        "DELIVERED", // Đã giao
-        "RETURNED", // Trả hàng
-        "CANCELLED", // Đã hủy
+        "PENDING",
+        "PENDING_PAYMENT",
+        "PAYMENT_VERIFIED", // ✅ VNPay confirmed payment
+        "CONFIRMED",
+        "PROCESSING",
+        "SHIPPING",
+        "DELIVERED",
+        "RETURNED",
+        "CANCELLED",
       ],
       default: "PENDING",
     },
@@ -206,12 +216,12 @@ const orderSchema = new mongoose.Schema(
     posInfo: posInfoSchema,
     paymentInfo: paymentInfoSchema,
     vatInvoice: vatInvoiceSchema,
+    onlineInvoice: onlineInvoiceSchema, // ✅ NEW
 
-    // ✅ THÊM: Ghi chú giao hàng
     shippingNote: { type: String, trim: true },
     shippingProof: {
-      photoUrl: { type: String }, // Ảnh giao hàng
-      signature: { type: String }, // Chữ ký điện tử
+      photoUrl: { type: String },
+      signature: { type: String },
       completedAt: { type: Date },
     },
   },
@@ -258,6 +268,8 @@ orderSchema.pre("save", function (next) {
       note:
         this.orderSource === "IN_STORE"
           ? "Đơn hàng tại cửa hàng - Chờ thanh toán"
+          : this.paymentMethod === "VNPAY"
+          ? "Đơn hàng đã tạo - Chờ thanh toán VNPay"
           : "Đơn hàng được tạo",
     });
   }
@@ -302,15 +314,15 @@ orderSchema.methods.cancel = async function (userId, note) {
   return this.save();
 };
 
-orderSchema.methods.processPayment = async function (
-  CASHIERId,
-  paymentReceived
-) {
-  if (this.status !== "PENDING_PAYMENT") {
-    throw new Error("Order is not in pending payment status");
+// ✅ NEW: Issue online invoice
+orderSchema.methods.issueOnlineInvoice = async function () {
+  if (this.onlineInvoice?.invoiceNumber) {
+    throw new Error("Invoice already issued");
   }
 
-  const changeGiven = Math.max(0, paymentReceived - this.totalAmount);
+  if (this.paymentStatus !== "PAID") {
+    throw new Error("Order must be paid first");
+  }
 
   const date = new Date();
   const year = date.getFullYear();
@@ -319,13 +331,13 @@ orderSchema.methods.processPayment = async function (
   const lastInvoice = await mongoose
     .model("Order")
     .findOne({
-      "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
+      "onlineInvoice.invoiceNumber": new RegExp(`^INV${year}${month}`),
     })
-    .sort({ "paymentInfo.invoiceNumber": -1 });
+    .sort({ "onlineInvoice.invoiceNumber": -1 });
 
   let sequence = 1;
-  if (lastInvoice?.paymentInfo?.invoiceNumber) {
-    const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
+  if (lastInvoice?.onlineInvoice?.invoiceNumber) {
+    const lastSeq = parseInt(lastInvoice.onlineInvoice.invoiceNumber.slice(-6));
     if (!isNaN(lastSeq)) sequence = lastSeq + 1;
   }
 
@@ -333,23 +345,10 @@ orderSchema.methods.processPayment = async function (
     .toString()
     .padStart(6, "0")}`;
 
-  this.paymentInfo = {
-    processedBy: CASHIERId,
-    processedAt: new Date(),
-    paymentReceived,
-    changeGiven,
+  this.onlineInvoice = {
     invoiceNumber,
+    issuedAt: new Date(),
   };
-
-  this.paymentStatus = "PAID";
-  this.status = "DELIVERED";
-
-  this.statusHistory.push({
-    status: "DELIVERED",
-    updatedBy: CASHIERId,
-    updatedAt: new Date(),
-    note: `Đã thanh toán - Hóa đơn ${invoiceNumber}`,
-  });
 
   return await this.save();
 };
@@ -362,9 +361,8 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ orderSource: 1, createdAt: -1 });
 orderSchema.index({ "posInfo.staffId": 1 });
 orderSchema.index({ "paymentInfo.processedBy": 1 });
-// THÊM DÒNG NÀY:
-
 orderSchema.index({ paymentMethod: 1, paymentStatus: 1 });
 orderSchema.index({ "paymentInfo.vnpayVerified": 1 });
+orderSchema.index({ "paymentInfo.vnpayTxnRef": 1 }); // ✅ For faster lookup
 
 export default mongoose.model("Order", orderSchema);

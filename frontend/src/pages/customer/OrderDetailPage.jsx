@@ -1,18 +1,31 @@
-// src/pages/customer/OrderDetailPage.jsx
-import React, { useEffect, useState } from "react";
+// ============================================
+// FILE: frontend/src/pages/customer/OrderDetailPage.jsx
+// ✅ ADDED: Invoice export button for paid orders
+// ✅ FIXED: Show VNPay payment status clearly
+// ============================================
+
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loading } from "@/components/shared/Loading";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   MapPin,
   CreditCard,
   Package,
   XCircle,
-  AlertTriangle,
   RotateCcw,
+  Download,
+  CheckCircle2,
+  Printer,
 } from "lucide-react";
 import { orderAPI } from "@/lib/api";
 import {
@@ -22,6 +35,8 @@ import {
   getStatusText,
 } from "@/lib/utils";
 import { toast } from "sonner";
+import InvoiceTemplate from "@/components/pos/InvoiceTemplate";
+// ✅ No external library needed for printing
 
 const PlaceholderImg = "https://via.placeholder.com/80?text=No+Image";
 
@@ -31,6 +46,8 @@ const OrderDetailPage = () => {
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const invoiceRef = useRef();
 
   useEffect(() => {
     fetchOrder();
@@ -63,6 +80,27 @@ const OrderDetailPage = () => {
     }
   };
 
+  const handlePrint = () => {
+    const printContent = invoiceRef.current;
+    const winPrint = window.open("", "", "width=900,height=650");
+    winPrint.document.write("<html><head><title>Invoice</title>");
+    winPrint.document.write(
+      "<style>body { font-family: Arial, sans-serif; }</style>"
+    );
+    winPrint.document.write("</head><body>");
+    winPrint.document.write(printContent.innerHTML);
+    winPrint.document.write("</body></html>");
+    winPrint.document.close();
+    winPrint.focus();
+    winPrint.print();
+    winPrint.close();
+    toast.success("Đã in hóa đơn thành công");
+  };
+
+  const handleExportInvoice = () => {
+    setShowInvoiceDialog(true);
+  };
+
   if (isLoading) return <Loading />;
   if (!order) {
     return (
@@ -92,9 +130,30 @@ const OrderDetailPage = () => {
     return parts.length > 0 ? parts.join(" • ") : null;
   };
 
-  // ✅ Kiểm tra trạng thái đơn hủy/trả
   const isCancelled = order.status === "CANCELLED";
   const isReturned = order.status === "RETURNED";
+  const isPaymentVerified =
+    order.status === "PAYMENT_VERIFIED" || order.paymentInfo?.vnpayVerified;
+  const canExportInvoice =
+    order.paymentStatus === "PAID" && order.orderSource === "ONLINE";
+
+  // ✅ Prepare invoice data
+  const invoiceData = {
+    customerName: order.shippingAddress?.fullName,
+    customerPhone: order.shippingAddress?.phoneNumber,
+    customerAddress: `${order.shippingAddress?.detailAddress}, ${order.shippingAddress?.ward}, ${order.shippingAddress?.province}`,
+    items: order.items.map((item) => ({
+      ...item,
+      imei: item.imei || "N/A",
+    })),
+    totalAmount: order.totalAmount,
+    paymentReceived: order.totalAmount,
+    changeGiven: 0,
+    orderNumber: order.orderNumber,
+    createdAt: order.createdAt,
+    staffName: "Hệ thống",
+    cashierName: order.paymentMethod === "VNPAY" ? "VNPay" : "N/A",
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -107,7 +166,43 @@ const OrderDetailPage = () => {
         Quay lại
       </Button>
 
-      {/* ✅ BANNER CẢNH BÁO KHI ĐƠN BỊ HỦY/TRẢ */}
+      {/* ✅ PAYMENT VERIFIED BANNER */}
+      {isPaymentVerified && !isCancelled && !isReturned && (
+        <div className="mb-6 rounded-lg border-2 bg-green-50 border-green-200 p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-green-100">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold mb-2 text-green-900">
+                Thanh toán VNPay thành công
+              </h3>
+              <p className="text-sm text-green-700">
+                Đơn hàng đã được thanh toán qua VNPay. Chúng tôi sẽ xử lý và
+                giao hàng trong thời gian sớm nhất.
+              </p>
+              {order.paymentInfo?.vnpayTransactionNo && (
+                <div className="mt-3 p-3 bg-white border border-green-200 rounded-md">
+                  <p className="text-sm font-medium text-gray-700">
+                    Mã giao dịch VNPay:
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1 font-mono">
+                    {order.paymentInfo.vnpayTransactionNo}
+                  </p>
+                </div>
+              )}
+              {order.paymentInfo?.vnpayPaidAt && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Thời gian thanh toán:{" "}
+                  {formatDate(order.paymentInfo.vnpayPaidAt)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CANCELLED/RETURNED BANNER */}
       {(isCancelled || isReturned) && (
         <div
           className={`mb-6 rounded-lg border-2 p-6 ${
@@ -144,31 +239,18 @@ const OrderDetailPage = () => {
                 }`}
               >
                 {isCancelled
-                  ? "Đơn hàng này đã bị hủy và không thể khôi phục. Nếu bạn vẫn muốn mua sản phẩm, vui lòng đặt hàng mới."
-                  : "Đơn hàng đã được hoàn trả. Số tiền sẽ được hoàn lại trong 3-5 ngày làm việc."}
+                  ? "Đơn hàng này đã bị hủy và không thể khôi phục."
+                  : "Đơn hàng đã được hoàn trả."}
               </p>
-              {order.cancelReason && (
-                <div className="mt-3 p-3 bg-white border border-gray-200 rounded-md">
-                  <p className="text-sm font-medium text-gray-700">Lý do:</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {order.cancelReason}
-                  </p>
-                </div>
-              )}
-              {order.cancelledAt && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Thời gian: {formatDate(order.cancelledAt)}
-                </p>
-              )}
             </div>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
+        {/* MAIN CONTENT */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Order Info */}
+          {/* ORDER INFO */}
           <Card className={isCancelled || isReturned ? "opacity-75" : ""}>
             <CardHeader>
               <div className="flex items-start justify-between">
@@ -187,7 +269,7 @@ const OrderDetailPage = () => {
             </CardHeader>
           </Card>
 
-          {/* Order Items */}
+          {/* ORDER ITEMS */}
           <Card className={isCancelled || isReturned ? "opacity-75" : ""}>
             <CardHeader>
               <CardTitle>Sản phẩm</CardTitle>
@@ -204,7 +286,6 @@ const OrderDetailPage = () => {
                     key={item._id || idx}
                     className="flex gap-4 pb-4 border-b last:border-0 relative"
                   >
-                    {/* ✅ Overlay khi đơn bị hủy */}
                     {(isCancelled || isReturned) && (
                       <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10">
                         <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg font-semibold text-sm">
@@ -231,11 +312,6 @@ const OrderDetailPage = () => {
                       <p className="text-sm text-muted-foreground">
                         SL: {item.quantity} x {formatPrice(item.price)}
                       </p>
-                      {item.originalPrice > item.price && (
-                        <p className="text-xs text-muted-foreground line-through">
-                          {formatPrice(item.originalPrice)} mỗi
-                        </p>
-                      )}
                     </div>
                     <div className="text-right">
                       <p className="font-medium">
@@ -245,27 +321,10 @@ const OrderDetailPage = () => {
                   </div>
                 );
               })}
-
-              {/* PROMOTION BOX */}
-              {order.appliedPromotion && (
-                <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-green-700">
-                        Mã: {order.appliedPromotion.code}
-                      </p>
-                      <p className="text-sm text-green-600">
-                        Giảm:{" "}
-                        {formatPrice(order.appliedPromotion.discountAmount)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* Shipping Address */}
+          {/* SHIPPING ADDRESS */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -282,14 +341,12 @@ const OrderDetailPage = () => {
               </p>
               <p className="text-sm text-muted-foreground">
                 {order.shippingAddress.detailAddress},{" "}
-                {order.shippingAddress.commune},{" "}
-                {order.shippingAddress.district},{" "}
-                {order.shippingAddress.province}
+                {order.shippingAddress.ward}, {order.shippingAddress.province}
               </p>
             </CardContent>
           </Card>
 
-          {/* Payment Method */}
+          {/* PAYMENT METHOD */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -298,61 +355,18 @@ const OrderDetailPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p>
-                {order.paymentMethod === "COD"
-                  ? "Thanh toán khi nhận hàng"
-                  : "Chuyển khoản"}
-              </p>
+              <p>{getStatusText(order.paymentMethod)}</p>
+              {order.paymentMethod === "VNPAY" &&
+                order.paymentInfo?.vnpayBankCode && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Ngân hàng: {order.paymentInfo.vnpayBankCode}
+                  </p>
+                )}
             </CardContent>
           </Card>
-
-          {/* Order Timeline */}
-          {order.statusHistory?.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Package className="w-5 h-5 mr-2" />
-                  Lịch sử đơn hàng
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {order.statusHistory.map((history, index) => (
-                    <div key={index} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            index === order.statusHistory.length - 1
-                              ? isCancelled || isReturned
-                                ? "bg-red-500"
-                                : "bg-primary"
-                              : "bg-muted"
-                          }`}
-                        />
-                        {index < order.statusHistory.length - 1 && (
-                          <div className="w-0.5 h-full bg-muted mt-1" />
-                        )}
-                      </div>
-                      <div className="flex-1 pb-4">
-                        <Badge className={getStatusColor(history.status)}>
-                          {getStatusText(history.status)}
-                        </Badge>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {formatDate(history.updatedAt)}
-                        </p>
-                        {history.note && (
-                          <p className="text-sm mt-1">{history.note}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
-        {/* Sidebar */}
+        {/* SIDEBAR */}
         <div className="lg:col-span-1">
           <Card
             className={`sticky top-20 ${
@@ -366,26 +380,12 @@ const OrderDetailPage = () => {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Tạm tính</span>
-                  <span
-                    className={
-                      isCancelled || isReturned
-                        ? "line-through text-gray-400"
-                        : ""
-                    }
-                  >
-                    {formatPrice(order.subtotal)}
-                  </span>
+                  <span>{formatPrice(order.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Phí vận chuyển</span>
                   <span
-                    className={`${
-                      order.shippingFee === 0 ? "text-green-600" : ""
-                    } ${
-                      isCancelled || isReturned
-                        ? "line-through text-gray-400"
-                        : ""
-                    }`}
+                    className={order.shippingFee === 0 ? "text-green-600" : ""}
                   >
                     {order.shippingFee === 0
                       ? "Miễn phí"
@@ -395,53 +395,30 @@ const OrderDetailPage = () => {
                 {order.promotionDiscount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Giảm giá</span>
-                    <span
-                      className={
-                        isCancelled || isReturned
-                          ? "line-through text-gray-400"
-                          : ""
-                      }
-                    >
-                      -{formatPrice(order.promotionDiscount)}
-                    </span>
-                  </div>
-                )}
-                {order.pointsUsed > 0 && (
-                  <div className="flex justify-between text-sm text-blue-600">
-                    <span>Điểm thưởng</span>
-                    <span
-                      className={
-                        isCancelled || isReturned
-                          ? "line-through text-gray-400"
-                          : ""
-                      }
-                    >
-                      -{formatPrice(order.pointsUsed)}
-                    </span>
+                    <span>-{formatPrice(order.promotionDiscount)}</span>
                   </div>
                 )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
-                    <span
-                      className={
-                        isCancelled || isReturned
-                          ? "line-through text-gray-400"
-                          : "text-primary"
-                      }
-                    >
+                    <span className="text-primary">
                       {formatPrice(order.totalAmount)}
                     </span>
                   </div>
-                  {(isCancelled || isReturned) && (
-                    <p className="text-sm text-red-600 text-right mt-1 font-medium">
-                      {isCancelled
-                        ? "Đã hủy - Không thanh toán"
-                        : "Đã hoàn tiền"}
-                    </p>
-                  )}
                 </div>
               </div>
+
+              {/* ✅ EXPORT INVOICE BUTTON */}
+              {canExportInvoice && (
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleExportInvoice}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Xuất hóa đơn
+                </Button>
+              )}
 
               {order.status === "PENDING" && (
                 <Button
@@ -453,28 +430,40 @@ const OrderDetailPage = () => {
                   {isCancelling ? "Đang hủy..." : "Hủy đơn hàng"}
                 </Button>
               )}
-
-              {/* ✅ NÚT MUA LẠI KHI ĐƠN BỊ HỦY */}
-              {(isCancelled || isReturned) && (
-                <Button
-                  variant="outline"
-                  className="w-full border-primary text-primary hover:bg-primary hover:text-white"
-                  onClick={() => navigate("/products")}
-                >
-                  Mua lại sản phẩm
-                </Button>
-              )}
-
-              {order.note && (
-                <div className="border-t pt-4">
-                  <h4 className="font-medium mb-2">Ghi chú</h4>
-                  <p className="text-sm text-muted-foreground">{order.note}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* ✅ INVOICE DIALOG */}
+      <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Hóa đơn đơn hàng #{order.orderNumber}</DialogTitle>
+          </DialogHeader>
+
+          <div ref={invoiceRef}>
+            <InvoiceTemplate
+              order={order}
+              editableData={invoiceData}
+              storeInfo={{}}
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setShowInvoiceDialog(false)}
+            >
+              Đóng
+            </Button>
+            <Button onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              In hóa đơn
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

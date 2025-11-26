@@ -1,6 +1,9 @@
 // ============================================
 // FILE: src/pages/order-manager/OrderManagementPage.jsx
+// ✅ UPDATED: Handle PAYMENT_VERIFIED status
+// ✅ UPDATED: Show VNPay payment info clearly
 // ============================================
+
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,26 +63,6 @@ const OrdersPage = () => {
     totalPages: 1,
     total: 0,
   });
-  const getAllowedNextStatuses = (currentStatus) => {
-    const flow = {
-      PENDING: ["CONFIRMED", "CANCELLED"],
-      CONFIRMED: ["SHIPPING", "CANCELLED"],
-      SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
-      DELIVERED: ["RETURNED"],
-      RETURNED: [],
-      CANCELLED: [],
-    };
-    return flow[currentStatus] || [];
-  };
-  const statusButtons = [
-    { value: "all", label: "Tất cả" },
-    { value: "PENDING", label: "Chờ xác nhận" },
-    { value: "CONFIRMED", label: "Chờ lấy hàng" },
-    { value: "SHIPPING", label: "Đang giao hàng" },
-    { value: "DELIVERED", label: "Đã giao hàng" },
-    { value: "RETURNED", label: "Trả hàng" },
-    { value: "CANCELLED", label: "Đã hủy" },
-  ];
 
   const [statusUpdate, setStatusUpdate] = useState({
     status: "",
@@ -89,13 +72,51 @@ const OrdersPage = () => {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ✅ CẬP NHẬT: Thêm PAYMENT_VERIFIED vào luồng trạng thái
+  const getAllowedNextStatuses = (currentStatus) => {
+    const flow = {
+      PENDING: ["CONFIRMED", "CANCELLED"],
+      PAYMENT_VERIFIED: ["CONFIRMED", "CANCELLED"], // Cho phép chuyển sang xác nhận
+      CONFIRMED: ["SHIPPING", "CANCELLED"],
+      SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
+      DELIVERED: ["RETURNED"],
+      RETURNED: [],
+      CANCELLED: [],
+    };
+    return flow[currentStatus] || [];
+  };
+
+  // ✅ CẬP NHẬT: Thêm PAYMENT_VERIFIED vào bộ lọc
+  const statusButtons = [
+    { value: "all", label: "Tất cả" },
+    { value: "PENDING", label: "Chờ xác nhận" },
+    { value: "PAYMENT_VERIFIED", label: "Đã thanh toán" },
+    { value: "CONFIRMED", label: "Chờ lấy hàng" },
+    { value: "SHIPPING", label: "Đang giao hàng" },
+    { value: "DELIVERED", label: "Đã giao hàng" },
+    { value: "RETURNED", label: "Trả hàng" },
+    { value: "CANCELLED", label: "Đã hủy" },
+  ];
+
   // Helper function to get full image URL
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/64?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${
-      path.startsWith("/") ? "" : "/"
-    }${path}`;
+    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  };
+
+  // ✅ CẬP NHẬT: Icon cho PAYMENT_VERIFIED
+  const getStatusIcon = (status) => {
+    const icons = {
+      PENDING: Clock,
+      PAYMENT_VERIFIED: CheckCircle,
+      CONFIRMED: CheckCircle,
+      SHIPPING: Truck,
+      DELIVERED: CheckCircle,
+      RETURNED: XCircle,
+      CANCELLED: XCircle,
+    };
+    return icons[status] || Clock;
   };
 
   useEffect(() => {
@@ -127,35 +148,22 @@ const OrdersPage = () => {
   const handleViewDetail = async (orderId) => {
     try {
       const response = await orderAPI.getById(orderId);
-      console.log("Order detail from API:", response.data.data.order);
       setSelectedOrder(response.data.data.order);
       setShowDetailDialog(true);
     } catch (error) {
-      alert(
-        error.response?.data?.message || "Không thể tải thông tin đơn hàng"
-      );
+      alert(error.response?.data?.message || "Không thể tải thông tin đơn hàng");
     }
   };
 
   const handleOpenStatusDialog = (order) => {
     setSelectedOrder(order);
     setStatusUpdate({
-      status: "", // để trống, bắt chọn
+      status: "",
       note: "",
     });
     setError("");
     setShowStatusDialog(true);
   };
-
-  // const getNextStatus = (currentStatus) => {
-  //   const statusFlow = {
-  //     PENDING: "CONFIRMED",
-  //     CONFIRMED: "SHIPPING",
-  //     SHIPPING: "DELIVERED",
-  //     // DELIVERED: "RETURNED", // ✅ HOẶC BỎ DÒNG NÀY
-  //   };
-  //   return statusFlow[currentStatus] || currentStatus;
-  // };
 
   const handleUpdateStatus = async () => {
     if (!statusUpdate.status) {
@@ -177,18 +185,6 @@ const OrdersPage = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getStatusIcon = (status) => {
-    const icons = {
-      PENDING: Clock,
-      CONFIRMED: CheckCircle,
-      SHIPPING: Truck,
-      DELIVERED: CheckCircle,
-      RETURNED: XCircle, // THÊM MỚI (hoặc chọn icon khác như RotateCcw)
-      CANCELLED: XCircle,
-    };
-    return icons[status] || Clock;
   };
 
   const getOrderStats = () => {
@@ -327,12 +323,19 @@ const OrdersPage = () => {
                           <Badge className={getStatusColor(order.status)}>
                             {getStatusText(order.status)}
                           </Badge>
+
+                          {/* ✅ THÊM BADGE VNPAY */}
+                          {order.paymentMethod === "VNPAY" && order.paymentInfo?.vnpayVerified && (
+                            <Badge className="bg-green-100 text-green-800">
+                              Đã thanh toán VNPay
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-muted-foreground" />
-                            <span>{order.customerId?.fullName}</span>
+                            <span>{order.customerId?.fullName || "Khách lẻ"}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Phone className="w-4 h-4 text-muted-foreground" />
@@ -363,9 +366,7 @@ const OrdersPage = () => {
                         </p>
                         <Badge
                           variant={
-                            order.paymentStatus === "PAID"
-                              ? "default"
-                              : "secondary"
+                            order.paymentStatus === "PAID" ? "default" : "secondary"
                           }
                         >
                           {getStatusText(order.paymentStatus)}
@@ -396,7 +397,7 @@ const OrdersPage = () => {
                     </div>
                   </div>
 
-                  {/* ✅ THÊM PHẦN NÀY - Product Preview */}
+                  {/* Product Preview */}
                   <div className="border-t pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-medium text-muted-foreground">
@@ -499,15 +500,19 @@ const OrdersPage = () => {
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-6">
-              {/* THÊM PHẦN NÀY - Danh sách sản phẩm trong đơn */}
+              {/* Danh sách sản phẩm */}
               <div>
                 <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
                 <div className="space-y-3">
                   {selectedOrder.items?.map((item, idx) => (
                     <div key={idx} className="flex gap-4 p-4 border rounded-lg">
                       <img
-                        src={item.images?.[0] || "/placeholder.png"}
+                        src={getImageUrl(item.images?.[0]) || "/placeholder.png"}
+                        alt={item.productName}
                         className="w-20 h-20 object-cover rounded"
+                        onError={(e) => {
+                          e.target.src = "/placeholder.png";
+                        }}
                       />
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
@@ -532,6 +537,19 @@ const OrdersPage = () => {
                   ))}
                 </div>
               </div>
+
+              {/* ✅ THÊM: Thông tin thanh toán VNPay */}
+              {selectedOrder?.paymentMethod === "VNPAY" && selectedOrder?.paymentInfo?.vnpayTransactionNo && (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <h3 className="font-semibold mb-2 text-green-800">Thông tin thanh toán VNPay</h3>
+                  <div className="space-y-1 text-sm">
+                    <p><strong>Mã giao dịch:</strong> {selectedOrder.paymentInfo.vnpayTransactionNo}</p>
+                    <p><strong>Ngân hàng:</strong> {selectedOrder.paymentInfo.vnpayBankCode || "Không rõ"}</p>
+                    <p><strong>Thời gian thanh toán:</strong> {formatDate(selectedOrder.paymentInfo.vnpayPaidAt)}</p>
+                    <p><strong>Trạng thái:</strong> <span className="text-green-700 font-medium">Đã xác nhận</span></p>
+                  </div>
+                </div>
+              )}
 
               {/* Địa chỉ giao hàng */}
               <div className="p-4 bg-muted/50 rounded-lg">
@@ -574,10 +592,7 @@ const OrdersPage = () => {
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowDetailDialog(false)}
-            >
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
               Đóng
             </Button>
           </DialogFooter>
@@ -597,7 +612,6 @@ const OrdersPage = () => {
           <div className="space-y-4">
             {error && <ErrorMessage message={error} />}
 
-            {/* === TRẠNG THÁI HIỆN TẠI (ĐÃ SỬA) === */}
             <div className="p-3 bg-muted/50 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">
                 Trạng thái hiện tại
@@ -607,7 +621,6 @@ const OrdersPage = () => {
               </Badge>
             </div>
 
-            {/* === CHỌN TRẠNG THÁI MỚI === */}
             <div className="space-y-2">
               <Label htmlFor="status">Trạng thái mới *</Label>
               <Select
@@ -620,13 +633,11 @@ const OrdersPage = () => {
                   <SelectValue placeholder="Chọn trạng thái" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAllowedNextStatuses(selectedOrder?.status).map(
-                    (status) => (
-                      <SelectItem key={status} value={status}>
-                        {getStatusText(status)}
-                      </SelectItem>
-                    )
-                  )}
+                  {getAllowedNextStatuses(selectedOrder?.status).map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {getStatusText(status)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

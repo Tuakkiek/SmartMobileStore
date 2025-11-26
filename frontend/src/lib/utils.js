@@ -1,4 +1,8 @@
-// frontend/src/lib/utils.js
+// ============================================
+// FILE: frontend/src/lib/utils.js
+// ✅ UPDATED: Added PAYMENT_VERIFIED status
+// ============================================
+
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import {
@@ -35,6 +39,7 @@ export const getStatusColor = (status) => {
   const map = {
     PENDING: "bg-yellow-100 text-yellow-800",
     PENDING_PAYMENT: "bg-orange-100 text-orange-800",
+    PAYMENT_VERIFIED: "bg-green-100 text-green-800", // ✅ NEW
     CONFIRMED: "bg-blue-100 text-blue-800",
     SHIPPING: "bg-indigo-100 text-indigo-800",
     DELIVERED: "bg-green-100 text-green-800",
@@ -50,6 +55,7 @@ export const getStatusText = (status) => {
   const map = {
     PENDING: "Chờ xác nhận",
     PENDING_PAYMENT: "Chờ thanh toán",
+    PAYMENT_VERIFIED: "Đã thanh toán", // ✅ NEW
     CONFIRMED: "Chờ lấy hàng",
     SHIPPING: "Đang giao hàng",
     DELIVERED: "Đã giao hàng",
@@ -59,7 +65,7 @@ export const getStatusText = (status) => {
     UNPAID: "Chưa thanh toán",
     COD: "Thanh toán khi nhận hàng",
     BANK_TRANSFER: "Chuyển khoản",
-    VNPAY: "Thanh toán VNPay", // ✅ THÊM
+    VNPAY: "Thanh toán VNPay",
     CASH: "Tiền mặt",
     CARD: "Thẻ",
   };

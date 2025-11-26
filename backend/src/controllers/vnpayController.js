@@ -1,9 +1,14 @@
+// ============================================
+// FILE: backend/src/controllers/vnpayController.js
+// ✅ FIXED: IPN now updates status correctly
+// ✅ ADDED: Auto-generate invoice for online orders
+// ============================================
+
 import crypto from "crypto";
-import qs from "qs"; // Thay querystring bằng qs (tốt hơn cho stringify)
+import qs from "qs";
 import moment from "moment";
 import Order from "../models/Order.js";
 
-// Hàm sortObject chuẩn VNPAY (encode key/value, replace %20 bằng + cho space)
 function sortObject(obj) {
   let sorted = {};
   let str = [];
@@ -23,16 +28,9 @@ function sortObject(obj) {
 }
 
 // ============================================
-// TẠO PAYMENT URL - Manual theo mẫu VNPAY chính thức
+// CREATE PAYMENT URL
 // ============================================
 export const createPaymentUrl = async (req, res) => {
-  console.log("\n=== ENVIRONMENT CHECK ===");
-  console.log("NODE_ENV:", process.env.NODE_ENV);
-  console.log("VNP_TMN_CODE:", process.env.VNP_TMN_CODE);
-  console.log("VNP_HASH_SECRET (full):", process.env.VNP_HASH_SECRET); // ← XÓA SAU KHI TEST
-  console.log("VNP_URL:", process.env.VNP_URL);
-
-  console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("\n=== CREATE VNPAY PAYMENT URL ===");
   console.log("Request body:", JSON.stringify(req.body, null, 2));
 
@@ -72,42 +70,17 @@ export const createPaymentUrl = async (req, res) => {
     }
     ipAddr = ipAddr.replace("::ffff:", "");
 
-    console.log("Client IP:", ipAddr);
-
-    console.log("\n=== VNPAY CONFIG CHECK ===");
-    console.log(
-      "VNP_TMN_CODE:",
-      process.env.VNP_TMN_CODE?.substring(0, 4) + "***"
-    );
-    console.log(
-      "VNP_HASH_SECRET:",
-      process.env.VNP_HASH_SECRET ? "EXISTS" : "MISSING"
-    );
-    console.log("VNP_URL:", process.env.VNP_URL);
-    console.log("VNP_RETURN_URL:", process.env.VNP_RETURN_URL);
-
-    console.log("=== SECRET KEY CHECK ===");
-    console.log("Secret length:", process.env.VNP_HASH_SECRET?.length);
-    console.log(
-      "Secret first 10 chars:",
-      process.env.VNP_HASH_SECRET?.substring(0, 10)
-    );
-    console.log(
-      "Secret last 10 chars:",
-      process.env.VNP_HASH_SECRET?.substring(
-        process.env.VNP_HASH_SECRET.length - 10
-      )
-    );
-
     const createDate = moment().format("YYYYMMDDHHmmss");
     const orderId_vnp = `${order._id}${moment().format("YYYYMMDDHHmmss")}`;
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const expireDate = moment(tomorrow).format("YYYYMMDDHHmmss");
+
     const returnUrl =
       process.env.VNP_RETURN_URL ||
       "http://localhost:5173/payment/vnpay/return";
+
     let vnp_Params = {
       vnp_Version: "2.1.0",
       vnp_Command: "pay",
@@ -119,7 +92,7 @@ export const createPaymentUrl = async (req, res) => {
         orderDescription || `Thanh toan don hang ${order.orderNumber}`,
       vnp_OrderType: "other",
       vnp_Amount: amount * 100,
-      vnp_ReturnUrl: returnUrl, // ← ĐỔI THÀNH NÀY
+      vnp_ReturnUrl: returnUrl,
       vnp_IpAddr: ipAddr,
       vnp_CreateDate: createDate,
       vnp_ExpireDate: expireDate,
@@ -129,25 +102,11 @@ export const createPaymentUrl = async (req, res) => {
       vnp_Params["vnp_BankCode"] = bankCode;
     }
 
-    console.log("\n--- VNP Params (before sort) ---");
-    console.log(JSON.stringify(vnp_Params, null, 2));
-
     vnp_Params = sortObject(vnp_Params);
 
-    console.log("\n=== BEFORE SIGNING ===");
-    console.log("vnp_ReturnUrl (in params):", vnp_Params["vnp_ReturnUrl"]);
-
-    console.log("\n--- VNP Params (after sort & encode) ---");
-    console.log(JSON.stringify(vnp_Params, null, 2));
-
     const signData = qs.stringify(vnp_Params, { encode: false });
-    console.log("\n--- Sign Data ---");
-    console.log(signData);
-
     const hmac = crypto.createHmac("sha512", process.env.VNP_HASH_SECRET);
     const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
-    console.log("\n--- Secure Hash ---");
-    console.log(signed);
 
     vnp_Params["vnp_SecureHash"] = signed;
 
@@ -156,14 +115,6 @@ export const createPaymentUrl = async (req, res) => {
       "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
     const paymentUrl =
       vnpUrl + "?" + qs.stringify(vnp_Params, { encode: false });
-
-    console.log("\n--- Testing Payment URL ---");
-    console.log("Full URL Length:", paymentUrl.length);
-    console.log(
-      "Contains vnp_SecureHash:",
-      paymentUrl.includes("vnp_SecureHash=")
-    );
-    console.log("First 200 chars:", paymentUrl.substring(0, 200));
 
     order.paymentInfo = {
       ...order.paymentInfo,
@@ -188,7 +139,7 @@ export const createPaymentUrl = async (req, res) => {
 };
 
 // ============================================
-// IPN URL - Manual theo mẫu VNPAY
+// IPN HANDLER - ✅ FIXED
 // ============================================
 export const vnpayIPN = async (req, res) => {
   console.log("\n=== VNPAY IPN RECEIVED ===");
@@ -221,11 +172,8 @@ export const vnpayIPN = async (req, res) => {
 
     console.log("\n=== FINDING ORDER ===");
     console.log("vnp_TxnRef:", vnpTxnRef);
-    console.log("Extract ObjectId:", vnpTxnRef.substring(0, 24));
 
-    // ✅ EXTRACT ObjectId từ vnp_TxnRef
     const orderId = vnpTxnRef.substring(0, 24);
-
     const order = await Order.findOne({
       $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
     });
@@ -233,21 +181,21 @@ export const vnpayIPN = async (req, res) => {
     console.log("Found order:", order?._id);
 
     if (!order) {
-      console.error("❌ Không tìm thấy order");
+      console.error("❌ Order not found");
       return res
         .status(200)
         .json({ RspCode: "01", Message: "Order not found" });
     }
 
     if (amount !== order.totalAmount) {
-      console.error("❌ Amount không khớp");
+      console.error("❌ Amount mismatch");
       return res.status(200).json({ RspCode: "04", Message: "Invalid amount" });
     }
 
     if (rspCode === "00") {
-      // ✅ THÀNH CÔNG
+      // ✅ PAYMENT SUCCESS
       order.paymentStatus = "PAID";
-      order.status = "PAYMENT_VERIFIED"; // ✅ NÂNG CẤP: Status mới
+      order.status = "PAYMENT_VERIFIED"; // ✅ NOW VALID
 
       order.paymentInfo = {
         ...order.paymentInfo,
@@ -255,32 +203,40 @@ export const vnpayIPN = async (req, res) => {
         vnpayBankCode: bankCode,
         vnpayCardType: cardType,
         vnpayPaidAt: new Date(),
-        vnpayVerified: true, // ✅ THÊM: Xác nhận IPN
-        vnpayVerifiedAt: new Date(), // ✅ THÊM: Thời gian xác nhận
+        vnpayVerified: true,
+        vnpayVerifiedAt: new Date(),
         vnpayAmount: amount,
         vnpayResponseCode: rspCode,
       };
 
-      // ✅ THÊM: Lịch sử trạng thái
+      // ✅ ADD TO STATUS HISTORY
       order.statusHistory.push({
         status: "PAYMENT_VERIFIED",
         updatedBy: order.customerId,
         updatedAt: new Date(),
-        note: `Thanh toán VNPay xác nhận - Transaction: ${transactionNo}`,
+        note: `Thanh toán VNPay thành công - Mã giao dịch: ${transactionNo}`,
       });
 
       await order.save();
 
-      console.log("✅ Order updated:", order._id);
-      console.log(`   - Status: ${order.status}`);
-      console.log(`   - Payment: PAID`);
-      console.log(`   - VNPay Verified: ${order.paymentInfo.vnpayVerified}`);
+      // ✅ AUTO-GENERATE INVOICE
+      try {
+        await order.issueOnlineInvoice();
+        console.log(
+          "✅ Invoice auto-generated:",
+          order.onlineInvoice?.invoiceNumber
+        );
+      } catch (invoiceError) {
+        console.error("⚠️ Invoice generation failed:", invoiceError.message);
+        // Don't fail the whole payment if invoice fails
+      }
 
+      console.log("✅ Order updated successfully");
       return res
         .status(200)
         .json({ RspCode: "00", Message: "Confirm Success" });
     } else {
-      // ❌ THẤT BẠI
+      // ❌ PAYMENT FAILED
       order.paymentInfo = {
         ...order.paymentInfo,
         vnpayFailed: true,
@@ -288,12 +244,11 @@ export const vnpayIPN = async (req, res) => {
         vnpayResponseCode: rspCode,
       };
 
-      // ✅ THÊM: Ghi nhận thất bại vào lịch sử
       order.statusHistory.push({
         status: "PENDING",
         updatedBy: order.customerId,
         updatedAt: new Date(),
-        note: `Thanh toán VNPay thất bại - Code: ${rspCode}`,
+        note: `Thanh toán VNPay thất bại - Mã lỗi: ${rspCode}`,
       });
 
       await order.save();
@@ -304,13 +259,16 @@ export const vnpayIPN = async (req, res) => {
         .json({ RspCode: "00", Message: "Confirm Success" });
     }
   } else {
-    console.error("❌ Chữ ký không hợp lệ");
+    console.error("❌ Invalid signature");
     return res
       .status(200)
       .json({ RspCode: "97", Message: "Invalid signature" });
   }
 };
-// RETURN URL - Manual theo mẫu VNPAY
+
+// ============================================
+// RETURN URL
+// ============================================
 export const vnpayReturn = async (req, res) => {
   console.log("\n=== VNPAY RETURN URL ===");
   console.log("Query params:", JSON.stringify(req.query, null, 2));
@@ -330,26 +288,16 @@ export const vnpayReturn = async (req, res) => {
   console.log("\n--- Return Hash Verification ---");
   console.log("Expected:", signed);
   console.log("Received:", secureHash);
-  console.log("Match:", secureHash === signed ? "✅ YES" : "❌ NO");
 
   if (secureHash === signed) {
     const vnpTxnRef = vnp_Params["vnp_TxnRef"];
     const rspCode = vnp_Params["vnp_ResponseCode"];
 
-    console.log("\n=== FINDING ORDER (RETURN) ===");
-    console.log("vnp_TxnRef:", vnpTxnRef);
-
     const orderId = vnpTxnRef.substring(0, 24);
-
     const order = await Order.findOne({
       $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
     });
 
-    console.log("Found order:", order?._id);
-    console.log("Order status:", order?.status);
-    console.log("Payment status:", order?.paymentStatus);
-
-    // ✅ NÂNG CẤP: Trả về thông tin chi tiết
     const paymentVerified =
       order?.paymentInfo?.vnpayVerified || order?.paymentStatus === "PAID";
 
@@ -359,14 +307,15 @@ export const vnpayReturn = async (req, res) => {
       message:
         rspCode === "00"
           ? "Thanh toán thành công"
-          : `Thanh toán thất bại - Code: ${rspCode}`,
+          : `Thanh toán thất bại - Mã lỗi: ${rspCode}`,
       orderId: order?._id,
       orderNumber: order?.orderNumber,
       orderStatus: order?.status,
       paymentStatus: order?.paymentStatus,
-      paymentVerified: paymentVerified, // ✅ THÊM: Xác nhận thanh toán
+      paymentVerified: paymentVerified,
       totalAmount: order?.totalAmount,
       transactionNo: order?.paymentInfo?.vnpayTransactionNo,
+      invoiceNumber: order?.onlineInvoice?.invoiceNumber, // ✅ NEW
     });
   } else {
     res.json({

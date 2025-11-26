@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/shipper/ShipperDashboard.jsx
-// Trang quản lý giao hàng cho Shipper (ĐÃ SỬA LỖI UI FILTER)
+// ĐÃ CẬP NHẬT: Hiển thị trạng thái VNPay + Không thu tiền cho đơn đã thanh toán online
 // ============================================
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -27,12 +27,11 @@ import {
   XCircle,
   Navigation,
   Clock,
-  TrendingUp,
   AlertCircle,
-  Camera,
   FileText,
-  Filter, // ✅ Icon Bộ lọc
-  RotateCcw, // ✅ Icon Đặt lại
+  Filter,
+  RotateCcw,
+  CheckCircle2, // ĐÃ THÊM: Icon cho thanh toán thành công
 } from "lucide-react";
 import { orderAPI } from "@/lib/api";
 import {
@@ -43,10 +42,7 @@ import {
 } from "@/lib/utils";
 
 const ShipperDashboard = () => {
-  /* ------------------------------------------------------------------ */
-  /* 1. STATE – dữ liệu thô & UI */
-  /* ------------------------------------------------------------------ */
-  const [rawOrders, setRawOrders] = useState([]); // toàn bộ 3 trạng thái
+  const [rawOrders, setRawOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -58,25 +54,24 @@ const ShipperDashboard = () => {
   const [returnReason, setReturnReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ✨ FILTERS
+  // Filters
   const [showFilters, setShowFilters] = useState(false);
-  const [dateRange, setDateRange] = useState("today"); // "today", "yesterday", "week", "month", "all", "custom"
+  const [dateRange, setDateRange] = useState("today");
   const [customStartDate, setCustomStartDate] = useState(null);
   const [customEndDate, setCustomEndDate] = useState(null);
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all"); // "all", "COD", "ONLINE"
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [districtFilter, setDistrictFilter] = useState("all");
-  const [amountRangeFilter, setAmountRangeFilter] = useState("all"); // "all", "under10m", "10m-20m", "20m-50m", "over50m"
+  const [amountRangeFilter, setAmountRangeFilter] = useState("all");
 
   /* ------------------------------------------------------------------ */
-  /* 2. FETCH – chỉ gọi 1 lần (hoặc khi refresh) */
+  /* FETCH DATA */
   /* ------------------------------------------------------------------ */
   const fetchAllOrders = async () => {
     setIsLoading(true);
     try {
-      // Lấy tất cả đơn hàng không giới hạn theo ngày
       const statusList = ["SHIPPING", "DELIVERED", "RETURNED"];
-      const promises = statusList.map(
-        (status) => orderAPI.getAll({ status, limit: 1000 }) // Tăng limit lên
+      const promises = statusList.map((status) =>
+        orderAPI.getAll({ status, limit: 1000 })
       );
       const responses = await Promise.all(promises);
       const all = responses.flatMap((r) => r.data.data.orders || []);
@@ -91,8 +86,11 @@ const ShipperDashboard = () => {
 
   useEffect(() => {
     fetchAllOrders();
-  }, []); // chỉ mount 1 lần
+  }, []);
 
+  /* ------------------------------------------------------------------ */
+  /* FILTER LOGIC */
+  /* ------------------------------------------------------------------ */
   const getDateRange = () => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -100,19 +98,18 @@ const ShipperDashboard = () => {
     switch (dateRange) {
       case "today":
         return { start: today, end: new Date(today.getTime() + 86400000) };
-
-      case "yesterday":
+      case "yesterday": {
         const yesterday = new Date(today.getTime() - 86400000);
         return { start: yesterday, end: today };
-
-      case "week":
+      }
+      case "week": {
         const weekStart = new Date(today.getTime() - 7 * 86400000);
         return { start: weekStart, end: new Date(today.getTime() + 86400000) };
-
-      case "month":
+      }
+      case "month": {
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         return { start: monthStart, end: new Date(today.getTime() + 86400000) };
-
+      }
       case "custom":
         if (customStartDate && customEndDate) {
           return {
@@ -121,81 +118,62 @@ const ShipperDashboard = () => {
           };
         }
         return { start: today, end: new Date(today.getTime() + 86400000) };
-
       case "all":
       default:
-        return null; // Không lọc theo ngày
+        return null;
     }
   };
 
-  // Lấy danh sách quận/huyện duy nhất
   const districts = useMemo(() => {
-    const uniqueDistricts = [
+    const unique = [
       ...new Set(
         rawOrders.map((o) => o.shippingAddress?.district).filter(Boolean)
       ),
     ];
-    return uniqueDistricts.sort();
+    return unique.sort();
   }, [rawOrders]);
 
-  /* ------------------------------------------------------------------ */
-  /* 3. PHÂN LOẠI ĐƠN HÀNG VÀ ÁP DỤNG FILTERS */
-  /* ------------------------------------------------------------------ */
   const { pendingOrders, completedOrders, returnedOrders } = useMemo(() => {
-    const dateRangeObj = getDateRange();
-
     let filtered = rawOrders;
-
-    // Lọc theo khoảng thời gian
-    if (dateRangeObj) {
+    const range = getDateRange();
+    if (range) {
       filtered = filtered.filter((o) => {
-        const orderDate = new Date(o.createdAt);
-        return orderDate >= dateRangeObj.start && orderDate < dateRangeObj.end;
+        const d = new Date(o.createdAt);
+        return d >= range.start && d < range.end;
       });
     }
-
-    // Lọc theo phương thức thanh toán
     if (paymentMethodFilter !== "all") {
       filtered = filtered.filter(
         (o) => o.paymentMethod === paymentMethodFilter
       );
     }
-
-    // Lọc theo quận/huyện
     if (districtFilter !== "all") {
       filtered = filtered.filter(
         (o) => o.shippingAddress?.district === districtFilter
       );
     }
-
-    // Lọc theo khoảng giá
     if (amountRangeFilter !== "all") {
       filtered = filtered.filter((o) => {
-        const amount = o.totalAmount;
+        const a = o.totalAmount;
         switch (amountRangeFilter) {
           case "under10m":
-            return amount < 10000000;
+            return a < 10000000;
           case "10m-20m":
-            return amount >= 10000000 && amount < 20000000;
+            return a >= 10000000 && a < 20000000;
           case "20m-50m":
-            return amount >= 20000000 && amount < 50000000;
+            return a >= 20000000 && a < 50000000;
           case "over50m":
-            return amount >= 50000000;
+            return a >= 50000000;
           default:
             return true;
         }
       });
     }
 
-    // Phân loại theo trạng thái
-    const pending = filtered.filter((o) => o.status === "SHIPPING");
-    const completed = filtered.filter((o) => o.status === "DELIVERED");
-    const returned = filtered.filter((o) => o.status === "RETURNED");
-
     return {
-      pendingOrders: pending,
-      completedOrders: completed,
-      returnedOrders: returned,
+      pendingOrders: filtered.filter((o) => o.status === "SHIPPING"),
+      completedOrders: filtered.filter((o) => o.status === "DELIVERED"),
+      returnedOrders: filtered.filter((o) => o.status === "RETURNED"),
     };
   }, [
     rawOrders,
@@ -207,22 +185,17 @@ const ShipperDashboard = () => {
     amountRangeFilter,
   ]);
 
-  /* ------------------------------------------------------------------ */
-  /* 4. TÍNH TOÁN STATISTICS (luôn dựa trên dữ liệu đã lọc) */
-  /* ------------------------------------------------------------------ */
-  const stats = useMemo(() => {
-    return {
+  const stats = useMemo(
+    () => ({
       totalToday:
         pendingOrders.length + completedOrders.length + returnedOrders.length,
       pending: pendingOrders.length,
       completed: completedOrders.length,
       failed: returnedOrders.length,
-    };
-  }, [pendingOrders, completedOrders, returnedOrders]);
+    }),
+    [pendingOrders, completedOrders, returnedOrders]
+  );
 
-  /* ------------------------------------------------------------------ */
-  /* 5. LỌC ĐƠN HÀNG THEO TAB & SEARCH */
-  /* ------------------------------------------------------------------ */
   const currentOrders = {
     pending: pendingOrders,
     completed: completedOrders,
@@ -230,9 +203,9 @@ const ShipperDashboard = () => {
   }[activeTab];
 
   const filteredOrders = useMemo(() => {
-    if (!searchQuery) return currentOrders;
+    if (!searchQuery) return currentOrders || [];
     const q = searchQuery.toLowerCase();
-    return currentOrders.filter(
+    return (currentOrders || []).filter(
       (o) =>
         o.orderNumber?.toLowerCase().includes(q) ||
         o.shippingAddress?.fullName?.toLowerCase().includes(q) ||
@@ -240,20 +213,14 @@ const ShipperDashboard = () => {
     );
   }, [currentOrders, searchQuery]);
 
-
   /* ------------------------------------------------------------------ */
-  /* 6. HÀM XỬ LÝ HOÀN THÀNH / TRẢ HÀNG */
+  /* ACTION HANDLERS */
   /* ------------------------------------------------------------------ */
-  const refreshAfterAction = () => {
-    // chỉ reload dữ liệu của trạng thái vừa thay đổi
-    fetchAllOrders();
-  };
+  const refreshAfterAction = () => fetchAllOrders();
 
   const handleCompleteDelivery = async () => {
-    if (!completionNote.trim()) {
-      toast.error("Vui lòng nhập ghi chú giao hàng");
-      return;
-    }
+    if (!completionNote.trim())
+      return toast.error("Vui lòng nhập ghi chú giao hàng");
     setIsSubmitting(true);
     try {
       await orderAPI.updateStatus(selectedOrder._id, {
@@ -271,10 +238,8 @@ const ShipperDashboard = () => {
   };
 
   const handleReturnOrder = async () => {
-    if (!returnReason.trim()) {
-      toast.error("Vui lòng nhập lý do trả hàng");
-      return;
-    }
+    if (!returnReason.trim())
+      return toast.error("Vui lòng nhập lý do trả hàng");
     setIsSubmitting(true);
     try {
       await orderAPI.updateStatus(selectedOrder._id, {
@@ -291,13 +256,9 @@ const ShipperDashboard = () => {
     }
   };
 
-  /* ------------------------------------------------------------------ */
-  /* 7. HÀM HỖ TRỢ */
-  /* ------------------------------------------------------------------ */
   const openGoogleMaps = (addr) => {
     const full = `${addr.detailAddress}, ${addr.commune}, ${addr.district}, ${addr.province}, Vietnam`;
     window.open(
-      // Sửa lỗi cú pháp string interpolation và URL encode
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
         full
       )}`,
@@ -308,7 +269,7 @@ const ShipperDashboard = () => {
   const callCustomer = (phone) => (window.location.href = `tel:${phone}`);
 
   /* ------------------------------------------------------------------ */
-  /* 8. RENDER */
+  /* RENDER */
   /* ------------------------------------------------------------------ */
   return (
     <div className="space-y-6 p-6">
@@ -320,8 +281,9 @@ const ShipperDashboard = () => {
         </p>
       </div>
 
-      {/* Statistics Cards */}
+      {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* ... giữ nguyên 4 card thống kê ... */}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -337,7 +299,6 @@ const ShipperDashboard = () => {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -353,7 +314,6 @@ const ShipperDashboard = () => {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -369,7 +329,6 @@ const ShipperDashboard = () => {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -387,7 +346,7 @@ const ShipperDashboard = () => {
         </Card>
       </div>
 
-      {/* Search & Filter Button - ĐÃ SỬA LỖI: Di chuyển vào trong return */}
+      {/* Search & Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="flex gap-2">
@@ -397,14 +356,17 @@ const ShipperDashboard = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1"
             />
-            <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="w-4 h-4 mr-2" />
-              Bộ lọc
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="w-4 h-4 mr-2" /> Bộ lọc
             </Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Advanced Filters (giữ nguyên như cũ) */}
       {/* Advanced Filters - ĐÃ SỬA LỖI: Di chuyển vào trong return */}
       {showFilters && (
         <Card>
@@ -534,7 +496,6 @@ const ShipperDashboard = () => {
                 </select>
               </div>
             </div>
-
           </CardContent>
         </Card>
       )}
@@ -559,13 +520,6 @@ const ShipperDashboard = () => {
                 <h3 className="text-xl font-semibold mb-2">
                   Không có đơn hàng
                 </h3>
-                <p className="text-muted-foreground">
-                  {activeTab === "pending"
-                    ? "Bạn chưa có đơn hàng nào cần giao"
-                    : activeTab === "completed"
-                    ? "Chưa có đơn hàng nào đã giao"
-                    : "Chưa có đơn hàng nào bị trả"}
-                </p>
               </CardContent>
             </Card>
           ) : (
@@ -607,12 +561,12 @@ const ShipperDashboard = () => {
                     </div>
 
                     <div className="p-6 space-y-4">
-                      {/* Thông tin khách */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Thông tin giao hàng */}
                         <div className="space-y-2">
                           <h4 className="font-semibold flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-primary" />
-                            Thông tin giao hàng
+                            <MapPin className="w-4 h-4 text-primary" /> Thông
+                            tin giao hàng
                           </h4>
                           <div className="pl-6 space-y-1 text-sm">
                             <p className="font-medium">
@@ -634,12 +588,13 @@ const ShipperDashboard = () => {
                           </div>
                         </div>
 
+                        {/* Chi tiết đơn hàng + THANH TOÁN */}
                         <div className="space-y-2">
                           <h4 className="font-semibold flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-primary" />
-                            Chi tiết đơn hàng
+                            <FileText className="w-4 h-4 text-primary" /> Chi
+                            tiết đơn hàng
                           </h4>
-                          <div className="pl-6 space-y-1 text-sm">
+                          <div className="pl-6 space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">
                                 Số sản phẩm:
@@ -656,6 +611,8 @@ const ShipperDashboard = () => {
                                 {formatPrice(order.totalAmount)}
                               </span>
                             </div>
+
+                            {/* CẬP NHẬT: Hiển thị trạng thái thanh toán */}
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">
                                 Thanh toán:
@@ -666,10 +623,18 @@ const ShipperDashboard = () => {
                                     ? "default"
                                     : "secondary"
                                 }
+                                className={
+                                  order.paymentMethod === "VNPAY" &&
+                                  order.paymentInfo?.vnpayVerified
+                                    ? "bg-green-100 text-green-800"
+                                    : ""
+                                }
                               >
                                 {getStatusText(order.paymentMethod)}
                               </Badge>
                             </div>
+
+                            {/* COD → Thu tiền mặt */}
                             {order.paymentMethod === "COD" && (
                               <div className="flex justify-between items-center pt-2 border-t">
                                 <span className="text-muted-foreground font-medium">
@@ -680,6 +645,28 @@ const ShipperDashboard = () => {
                                 </span>
                               </div>
                             )}
+
+                            {/* VNPAY → Đã thanh toán online */}
+                            {order.paymentMethod === "VNPAY" &&
+                              order.paymentInfo?.vnpayVerified && (
+                                <div className="flex items-center gap-2 pt-2 border-t text-green-600">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span className="text-sm font-medium">
+                                    Đã thanh toán online
+                                  </span>
+                                </div>
+                              )}
+
+                            {/* BANK_TRANSFER → Đã thanh toán */}
+                            {order.paymentMethod === "BANK_TRANSFER" &&
+                              order.paymentStatus === "PAID" && (
+                                <div className="flex items-center gap-2 pt-2 border-t text-green-600">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span className="text-sm font-medium">
+                                    Đã thanh toán
+                                  </span>
+                                </div>
+                              )}
                           </div>
                         </div>
                       </div>
@@ -698,23 +685,20 @@ const ShipperDashboard = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() =>
-                            setSelectedOrder(order) || setShowDetailDialog(true)
-                          }
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setShowDetailDialog(true);
+                          }}
                         >
-                          <FileText className="w-4 h-4 mr-2" />
-                          Chi tiết
+                          <FileText className="w-4 h-4 mr-2" /> Chi tiết
                         </Button>
-
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => openGoogleMaps(order.shippingAddress)}
                         >
-                          <Navigation className="w-4 h-4 mr-2" />
-                          Chỉ đường
+                          <Navigation className="w-4 h-4 mr-2" /> Chỉ đường
                         </Button>
-
                         <Button
                           variant="outline"
                           size="sm"
@@ -722,34 +706,29 @@ const ShipperDashboard = () => {
                             callCustomer(order.shippingAddress.phoneNumber)
                           }
                         >
-                          <Phone className="w-4 h-4 mr-2" />
-                          Gọi khách
+                          <Phone className="w-4 h-4 mr-2" /> Gọi khách
                         </Button>
-
                         {order.status === "SHIPPING" && (
                           <>
                             <Button
                               size="sm"
                               className="bg-green-600 hover:bg-green-700"
-                              onClick={() =>
-                                setSelectedOrder(order) ||
-                                setShowCompleteDialog(true)
-                              }
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setShowCompleteDialog(true);
+                              }}
                             >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Đã giao
+                              <CheckCircle className="w-4 h-4 mr-2" /> Đã giao
                             </Button>
-
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() =>
-                                setSelectedOrder(order) ||
-                                setShowReturnDialog(true)
-                              }
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setShowReturnDialog(true);
+                              }}
                             >
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Trả hàng
+                              <XCircle className="w-4 h-4 mr-2" /> Trả hàng
                             </Button>
                           </>
                         )}
@@ -763,7 +742,7 @@ const ShipperDashboard = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Order Detail Dialog */}
+      {/* Dialog Chi tiết đơn hàng – ĐÃ THÊM phần thanh toán */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -776,29 +755,15 @@ const ShipperDashboard = () => {
           </DialogHeader>
 
           {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Trạng thái</p>
-                  <Badge className={getStatusColor(selectedOrder.status)}>
-                    {getStatusText(selectedOrder.status)}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Ngày tạo</p>
-                  <p className="font-medium">
-                    {formatDate(selectedOrder.createdAt)}
-                  </p>
-                </div>
-              </div>
-
+            <div className="space-y-6">
+              {/* Sản phẩm */}
               <div className="border-t pt-4">
                 <h4 className="font-semibold mb-3">
                   Sản phẩm ({selectedOrder.items?.length})
                 </h4>
                 <div className="space-y-3">
-                  {selectedOrder.items?.map((item, idx) => (
-                    <div key={idx} className="flex gap-3 p-3 border rounded-lg">
+                  {selectedOrder.items?.map((item, i) => (
+                    <div key={i} className="flex gap-3 p-3 border rounded-lg">
                       <img
                         src={item.images?.[0] || "/placeholder.png"}
                         alt={item.productName}
@@ -807,7 +772,7 @@ const ShipperDashboard = () => {
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {formatPrice(item.price)} x {item.quantity}
+                          {formatPrice(item.price)} × {item.quantity}
                         </p>
                       </div>
                       <div className="font-semibold">
@@ -816,6 +781,74 @@ const ShipperDashboard = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* THÔNG TIN THANH TOÁN – ĐÃ THÊM */}
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-3">Thông tin thanh toán</h4>
+
+                {selectedOrder.paymentMethod === "COD" && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="font-medium text-yellow-800">
+                      Thu tiền mặt khi giao:{" "}
+                      {formatPrice(selectedOrder.totalAmount)}
+                    </p>
+                  </div>
+                )}
+
+                {selectedOrder.paymentMethod === "VNPAY" &&
+                  selectedOrder.paymentInfo?.vnpayVerified && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-1 text-sm">
+                      <div className="flex items-center gap-2 text-green-800 font-medium mb-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Đã thanh toán qua VNPay</span>
+                      </div>
+                      <p>
+                        <strong>Mã GD:</strong>{" "}
+                        {selectedOrder.paymentInfo.vnpayTransactionNo}
+                      </p>
+                      <p>
+                        <strong>Ngân hàng:</strong>{" "}
+                        {selectedOrder.paymentInfo.vnpayBankCode ||
+                          "Không xác định"}
+                      </p>
+                      <p>
+                        <strong>Thời gian:</strong>{" "}
+                        {formatDate(selectedOrder.paymentInfo.vnpayPaidAt)}
+                      </p>
+                      <p className="text-green-700 font-medium mt-2">
+                        Không cần thu tiền - Đã thanh toán online
+                      </p>
+                    </div>
+                  )}
+
+                {selectedOrder.paymentMethod === "BANK_TRANSFER" && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm">
+                      <strong>Chuyển khoản ngân hàng</strong>
+                      {selectedOrder.paymentStatus === "PAID" && (
+                        <span className="text-green-600 ml-2">
+                          Đã thanh toán
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Địa chỉ giao hàng */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h4 className="font-semibold mb-2">Địa chỉ giao hàng</h4>
+                <p className="font-medium">
+                  {selectedOrder.shippingAddress?.fullName} -{" "}
+                  {selectedOrder.shippingAddress?.phoneNumber}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedOrder.shippingAddress?.detailAddress},{" "}
+                  {selectedOrder.shippingAddress?.commune},{" "}
+                  {selectedOrder.shippingAddress?.district},{" "}
+                  {selectedOrder.shippingAddress?.province}
+                </p>
               </div>
             </div>
           )}
@@ -837,8 +870,8 @@ const ShipperDashboard = () => {
           <DialogHeader>
             <DialogTitle>Xác nhận giao hàng thành công</DialogTitle>
             <DialogDescription>
-              Vui lòng nhập ghi chú (nếu có) trước khi xác nhận đơn hàng
-              **#{selectedOrder?.orderNumber}** đã được giao thành công.
+              Vui lòng nhập ghi chú (nếu có) trước khi xác nhận đơn hàng **#
+              {selectedOrder?.orderNumber}** đã được giao thành công.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -880,9 +913,9 @@ const ShipperDashboard = () => {
           <DialogHeader>
             <DialogTitle>Xác nhận trả hàng</DialogTitle>
             <DialogDescription>
-              Vui lòng nhập lý do trả hàng cho đơn hàng
-              **#{selectedOrder?.orderNumber}**. Đơn hàng sẽ chuyển sang trạng
-              thái **RETURNED**.
+              Vui lòng nhập lý do trả hàng cho đơn hàng **#
+              {selectedOrder?.orderNumber}**. Đơn hàng sẽ chuyển sang trạng thái
+              **RETURNED**.
             </DialogDescription>
           </DialogHeader>
           <Input
