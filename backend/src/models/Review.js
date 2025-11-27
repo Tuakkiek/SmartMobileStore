@@ -42,11 +42,17 @@ const reviewSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    unhelpful: {
-      type: Number,
-      default: 0,
-    },
-    // ✅ NEW: Admin reply
+    // ❌ REMOVED: unhelpful field
+
+    // ✅ NEW: Track users who liked this review
+    likedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    // Admin reply
     adminReply: {
       content: {
         type: String,
@@ -61,7 +67,7 @@ const reviewSchema = new mongoose.Schema(
         type: Date,
       },
     },
-    // ✅ NEW: Admin moderation
+    // Admin moderation
     isHidden: {
       type: Boolean,
       default: false,

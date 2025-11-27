@@ -11,6 +11,7 @@ import {
   Edit2,
   X,
   Check,
+  ThumbsUp, // ✅ NEW: Like icon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -298,6 +299,7 @@ export const ReviewsTab = ({ productId, product }) => {
                   isCustomer={isCustomer}
                   currentUserId={user?._id}
                   onUpdate={fetchReviews}
+                  isAuthenticated={isAuthenticated}
                 />
               ))}
             </div>
@@ -308,25 +310,33 @@ export const ReviewsTab = ({ productId, product }) => {
   );
 };
 
-// ✅ Review Item with Edit & Admin Reply
+// ✅ Review Item with Like Button
 const ReviewItem = ({
   review,
   isAdmin,
   isCustomer,
   currentUserId,
   onUpdate,
+  isAuthenticated,
 }) => {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ✅ Edit states for customer review
+  // ✅ Like state
+  const [isLiking, setIsLiking] = useState(false);
+  const [localHelpful, setLocalHelpful] = useState(review.helpful || 0);
+  const [hasLiked, setHasLiked] = useState(
+    review.likedBy?.includes(currentUserId) || false
+  );
+
+  // Edit states for customer review
   const [isEditingReview, setIsEditingReview] = useState(false);
   const [editRating, setEditRating] = useState(review.rating);
   const [editComment, setEditComment] = useState(review.comment);
   const [hoveredEditRating, setHoveredEditRating] = useState(0);
 
-  // ✅ Edit state for admin reply
+  // Edit state for admin reply
   const [isEditingReply, setIsEditingReply] = useState(false);
   const [editReplyContent, setEditReplyContent] = useState(
     review.adminReply?.content || ""
@@ -335,7 +345,38 @@ const ReviewItem = ({
   const customerName = review.customerId?.fullName || "Người dùng";
   const isOwnReview = currentUserId === review.customerId?._id;
 
-  // ✅ Handle Customer Edit Review
+  // ✅ Handle Like/Unlike
+  const handleLike = async () => {
+    if (!isAuthenticated) {
+      toast.error("Vui lòng đăng nhập để thích đánh giá");
+      return;
+    }
+
+    try {
+      setIsLiking(true);
+
+      // Optimistic update
+      setHasLiked(!hasLiked);
+      setLocalHelpful(hasLiked ? localHelpful - 1 : localHelpful + 1);
+
+      const response = await reviewAPI.likeReview(review._id);
+
+      // Update with server response
+      if (response.data.success) {
+        setLocalHelpful(response.data.data.helpful);
+        setHasLiked(response.data.data.hasLiked);
+      }
+    } catch (error) {
+      // Revert on error
+      setHasLiked(hasLiked);
+      setLocalHelpful(localHelpful);
+      toast.error(error.response?.data?.message || "Không thể thích đánh giá");
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  // Handle Customer Edit Review
   const handleUpdateReview = async () => {
     if (editRating === 0) {
       toast.error("Vui lòng chọn số sao");
@@ -362,7 +403,7 @@ const ReviewItem = ({
     }
   };
 
-  // ✅ Handle Admin Reply
+  // Handle Admin Reply
   const handleAdminReply = async () => {
     if (!replyContent.trim()) {
       toast.error("Vui lòng nhập nội dung phản hồi");
@@ -383,7 +424,7 @@ const ReviewItem = ({
     }
   };
 
-  // ✅ Handle Update Admin Reply
+  // Handle Update Admin Reply
   const handleUpdateAdminReply = async () => {
     if (!editReplyContent.trim()) {
       toast.error("Vui lòng nhập nội dung phản hồi");
@@ -567,6 +608,28 @@ const ReviewItem = ({
           </div>
         </div>
       )}
+
+      {/* ✅ Like Button */}
+      <div className="flex items-center gap-4 pt-3 border-t">
+        <button
+          onClick={handleLike}
+          disabled={isLiking}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+            hasLiked
+              ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+              : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+          } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          <ThumbsUp
+            className={`w-4 h-4 transition-all ${
+              hasLiked ? "fill-blue-600" : ""
+            }`}
+          />
+          <span className="text-sm font-medium">
+            {localHelpful > 0 ? localHelpful : ""} Hữu ích
+          </span>
+        </button>
+      </div>
 
       {/* Admin Reply Display */}
       {review.adminReply?.content && (
