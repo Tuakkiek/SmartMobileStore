@@ -1,11 +1,12 @@
 // ============================================
 // FILE: frontend/src/lib/api.js
-// FIXED + POS API + Clean & Consistent + NO ERRORS
+// FIXED: Complete reviewAPI with likeReview method
 // ============================================
 
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
 // ============================================
 // AXIOS INSTANCE
 // ============================================
@@ -46,7 +47,6 @@ api.interceptors.response.use(
       !error.config.url.includes("/auth/login")
     ) {
       localStorage.removeItem("auth-storage");
-      // ✅ Redirect về trang chủ thay vì login (theo App.jsx của bạn)
       if (window.location.pathname !== "/") {
         window.location.href = "/";
       }
@@ -54,6 +54,7 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 // ============================================
 // PRODUCT APIs (DRY)
 // ============================================
@@ -102,7 +103,7 @@ export const cartAPI = {
 };
 
 // ============================================
-// ORDER API (dùng params)
+// ORDER API
 // ============================================
 export const orderAPI = {
   create: (data) => api.post("/orders", data),
@@ -114,44 +115,36 @@ export const orderAPI = {
 };
 
 // ============================================
-// POS API (ĐÃ SỬA ROUTE ĐÚNG)
+// POS API
 // ============================================
 export const posAPI = {
-  // Lịch sử đơn của nhân viên POS
   getMyOrders: (params = {}) => api.get("/pos/my-orders", { params }),
-
-  // Chi tiết đơn POS
   getOrderById: (id) => api.get(`/pos/orders/${id}`),
-
-  // Danh sách đơn chờ thanh toán (Thu ngân)
   getPendingOrders: (params = {}) => api.get("/pos/pending-orders", { params }),
-
-  // Thanh toán đơn (Thu ngân)
   processPayment: (orderId, data) =>
     api.post(`/pos/orders/${orderId}/payment`, data),
-
-  // Hủy đơn chờ thanh toán
   cancelOrder: (orderId, data = {}) =>
     api.post(`/pos/orders/${orderId}/cancel`, data),
-
-  // Xuất hóa đơn VAT
   issueVAT: (orderId, data) => api.post(`/pos/orders/${orderId}/vat`, data),
 };
 
 // ============================================
-// REVIEW API
+// REVIEW API - ✅ COMPLETE WITH LIKE
 // ============================================
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
   create: (data) => api.post("/reviews", data),
   update: (id, data) => api.put(`/reviews/${id}`, data),
   delete: (id) => api.delete(`/reviews/${id}`),
-  // ✅ NEW: Admin functions
+
+  // ✅ LIKE/UNLIKE REVIEW
+  likeReview: (id) => api.post(`/reviews/${id}/like`),
+
+  // Admin functions
   replyToReview: (id, content) => api.post(`/reviews/${id}/reply`, { content }),
-  toggleVisibility: (id) => api.patch(`/reviews/${id}/toggle-visibility`),
-  // api.js
   updateAdminReply: (id, content) =>
     api.put(`/reviews/${id}/reply`, { content }),
+  toggleVisibility: (id) => api.patch(`/reviews/${id}/toggle-visibility`),
 };
 
 // ============================================
@@ -184,6 +177,7 @@ export const userAPI = {
     api.put(`/users/employees/${id}/avatar`, { avatar }),
   updateEmployee: (id, data) => api.put(`/users/employees/${id}`, data),
 };
+
 // ============================================
 // ANALYTICS API
 // ============================================
@@ -200,6 +194,15 @@ export const analyticsAPI = {
     }),
   getDashboard: (category = null) =>
     api.get("/analytics/dashboard", { params: { category } }),
+};
+
+// ============================================
+// VNPAY API
+// ============================================
+export const vnpayAPI = {
+  createPaymentUrl: (data) =>
+    api.post("/payment/vnpay/create-payment-url", data),
+  returnHandler: (params) => api.get("/payment/vnpay/return", { params }),
 };
 
 // ============================================
@@ -250,25 +253,22 @@ export const getTopNewProducts = async () => {
 };
 
 // ============================================
-// ERROR HANDLER (cho production)
+// ERROR HANDLER
 // ============================================
 export const handleApiError = (error) => {
   if (error.response) {
-    // Server trả về lỗi
     return {
       success: false,
       message: error.response.data?.message || "Có lỗi xảy ra",
       status: error.response.status,
     };
   } else if (error.request) {
-    // Không nhận được response
     return {
       success: false,
       message: "Không thể kết nối đến server",
       status: 0,
     };
   } else {
-    // Lỗi khác
     return {
       success: false,
       message: error.message || "Có lỗi xảy ra",
@@ -276,15 +276,6 @@ export const handleApiError = (error) => {
     };
   }
 };
-
-// ============================================
-// VNPAY API
-// ============================================
-export const vnpayAPI = {
-  createPaymentUrl: (data) => api.post("/payment/vnpay/create-payment-url", data),
-  returnHandler: (params) => api.get("/payment/vnpay/return", { params })
-};
-
 
 // ============================================
 // EXPORT DEFAULT
@@ -304,7 +295,9 @@ export default {
   promotionAPI,
   userAPI,
   analyticsAPI,
+  vnpayAPI,
   getTopSelling,
   getAllProductsForCategory,
   getTopNewProducts,
+  handleApiError,
 };

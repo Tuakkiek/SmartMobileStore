@@ -322,61 +322,49 @@ const ReviewItem = ({
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ✅ Like state
   const [isLiking, setIsLiking] = useState(false);
   const [localHelpful, setLocalHelpful] = useState(review.helpful || 0);
   const [hasLiked, setHasLiked] = useState(
     review.likedBy?.includes(currentUserId) || false
   );
-
-  // Edit states for customer review
   const [isEditingReview, setIsEditingReview] = useState(false);
   const [editRating, setEditRating] = useState(review.rating);
   const [editComment, setEditComment] = useState(review.comment);
   const [hoveredEditRating, setHoveredEditRating] = useState(0);
-
-  // Edit state for admin reply
   const [isEditingReply, setIsEditingReply] = useState(false);
   const [editReplyContent, setEditReplyContent] = useState(
     review.adminReply?.content || ""
   );
-
   const customerName = review.customerId?.fullName || "Người dùng";
   const isOwnReview = currentUserId === review.customerId?._id;
 
-  // ✅ Handle Like/Unlike
   const handleLike = async () => {
     if (!isAuthenticated) {
       toast.error("Vui lòng đăng nhập để thích đánh giá");
       return;
     }
-
     try {
       setIsLiking(true);
-
-      // Optimistic update
-      setHasLiked(!hasLiked);
-      setLocalHelpful(hasLiked ? localHelpful - 1 : localHelpful + 1);
-
+      const newHasLiked = !hasLiked;
+      const newHelpful = hasLiked ? localHelpful - 1 : localHelpful + 1;
+      setHasLiked(newHasLiked);
+      setLocalHelpful(newHelpful);
       const response = await reviewAPI.likeReview(review._id);
-
-      // Update with server response
       if (response.data.success) {
         setLocalHelpful(response.data.data.helpful);
         setHasLiked(response.data.data.hasLiked);
+        toast.success(response.data.message);
       }
     } catch (error) {
-      // Revert on error
       setHasLiked(hasLiked);
       setLocalHelpful(localHelpful);
-      toast.error(error.response?.data?.message || "Không thể thích đánh giá");
+      const errorMsg = error.response?.data?.message || "Không thể thích đánh giá";
+      toast.error(errorMsg);
     } finally {
       setIsLiking(false);
     }
   };
 
-  // Handle Customer Edit Review
   const handleUpdateReview = async () => {
     if (editRating === 0) {
       toast.error("Vui lòng chọn số sao");
@@ -386,7 +374,6 @@ const ReviewItem = ({
       toast.error("Vui lòng nhập nội dung đánh giá");
       return;
     }
-
     try {
       setIsSubmitting(true);
       await reviewAPI.update(review._id, {
@@ -403,13 +390,11 @@ const ReviewItem = ({
     }
   };
 
-  // Handle Admin Reply
   const handleAdminReply = async () => {
     if (!replyContent.trim()) {
       toast.error("Vui lòng nhập nội dung phản hồi");
       return;
     }
-
     try {
       setIsSubmitting(true);
       await reviewAPI.replyToReview(review._id, replyContent.trim());
@@ -424,13 +409,11 @@ const ReviewItem = ({
     }
   };
 
-  // Handle Update Admin Reply
   const handleUpdateAdminReply = async () => {
     if (!editReplyContent.trim()) {
       toast.error("Vui lòng nhập nội dung phản hồi");
       return;
     }
-
     try {
       setIsSubmitting(true);
       await reviewAPI.updateAdminReply(review._id, editReplyContent.trim());
@@ -462,7 +445,6 @@ const ReviewItem = ({
         review.isHidden && !isAdmin ? "hidden" : ""
       } ${review.isHidden ? "opacity-75 border-gray-300" : ""}`}
     >
-      {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-4">
           <Avatar className="w-10 h-10">
@@ -473,7 +455,6 @@ const ReviewItem = ({
               {getNameInitials(customerName)}
             </AvatarFallback>
           </Avatar>
-
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="font-semibold">{customerName}</span>
@@ -486,7 +467,6 @@ const ReviewItem = ({
                 </Badge>
               )}
             </div>
-
             {!isEditingReview ? (
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -523,10 +503,7 @@ const ReviewItem = ({
             )}
           </div>
         </div>
-
-        {/* Actions */}
         <div className="flex gap-2">
-          {/* Customer Edit Button */}
           {isCustomer && isOwnReview && !isEditingReview && (
             <Button
               variant="ghost"
@@ -536,8 +513,6 @@ const ReviewItem = ({
               <Edit2 className="w-4 h-4" />
             </Button>
           )}
-
-          {/* Admin Actions */}
           {isAdmin && (
             <>
               <Button
@@ -564,8 +539,6 @@ const ReviewItem = ({
           )}
         </div>
       </div>
-
-      {/* Comment */}
       {!isEditingReview ? (
         <p className="text-gray-700 whitespace-pre-wrap mb-4">
           {review.comment}
@@ -608,8 +581,6 @@ const ReviewItem = ({
           </div>
         </div>
       )}
-
-      {/* ✅ Like Button */}
       <div className="flex items-center gap-4 pt-3 border-t">
         <button
           onClick={handleLike}
@@ -626,12 +597,11 @@ const ReviewItem = ({
             }`}
           />
           <span className="text-sm font-medium">
-            {localHelpful > 0 ? localHelpful : ""} Hữu ích
+            {localHelpful > 0 && `${localHelpful} `}
+            Hữu ích
           </span>
         </button>
       </div>
-
-      {/* Admin Reply Display */}
       {review.adminReply?.content && (
         <div className="mt-4 ml-8 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
           <div className="flex items-start gap-3">
@@ -648,7 +618,6 @@ const ReviewItem = ({
                 )}
               </AvatarFallback>
             </Avatar>
-
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-semibold text-sm">
@@ -664,7 +633,6 @@ const ReviewItem = ({
                   </button>
                 )}
               </div>
-
               {!isEditingReply ? (
                 <>
                   <p className="text-sm text-gray-800">
@@ -715,8 +683,6 @@ const ReviewItem = ({
           </div>
         </div>
       )}
-
-      {/* Admin Reply Form */}
       {isAdmin && showReplyForm && !review.adminReply?.content && (
         <div className="mt-4 ml-8 p-4 bg-gray-50 border rounded-lg">
           <Textarea

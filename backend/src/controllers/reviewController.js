@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/reviewController.js
-// ✅ FIXED: Complete with all functions properly exported
+// ✅ FIXED: Proper named exports
 // ============================================
 
 import Review from "../models/Review.js";
@@ -18,7 +18,6 @@ const findProductAndUpdateRating = async (productId) => {
   for (const Model of models) {
     const product = await Model.findById(productId);
     if (product) {
-      // Calculate rating
       const reviews = await Review.find({ productId });
 
       if (reviews.length > 0) {
@@ -45,7 +44,6 @@ export const getProductReviews = async (req, res) => {
   try {
     const query = { productId: req.params.productId };
 
-    // Non-admin users can't see hidden reviews
     if (!req.user || req.user.role !== "ADMIN") {
       query.isHidden = false;
     }
@@ -68,9 +66,6 @@ export const createReview = async (req, res) => {
   try {
     const { productId, rating, comment, productModel } = req.body;
 
-    console.log("📥 Received review data:", req.body);
-
-    // Verify product exists
     const product = await findProductAndUpdateRating(productId);
     if (!product) {
       return res.status(404).json({
@@ -79,7 +74,6 @@ export const createReview = async (req, res) => {
       });
     }
 
-    // Create review
     const review = await Review.create({
       productId,
       productModel,
@@ -88,7 +82,6 @@ export const createReview = async (req, res) => {
       comment,
     });
 
-    // Update rating
     await findProductAndUpdateRating(productId);
 
     res.status(201).json({
@@ -134,7 +127,6 @@ export const updateReview = async (req, res) => {
     review.comment = comment;
     await review.save();
 
-    // Update product rating
     await findProductAndUpdateRating(review.productId);
 
     res.json({
@@ -171,11 +163,58 @@ export const deleteReview = async (req, res) => {
     const productId = review.productId;
     await review.deleteOne();
 
-    // Update product rating
     await findProductAndUpdateRating(productId);
 
     res.json({ success: true, message: "Xóa đánh giá thành công" });
   } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================
+// ✅ LIKE/UNLIKE REVIEW
+// ============================================
+export const likeReview = async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đánh giá",
+      });
+    }
+
+    const userId = req.user._id;
+    const hasLiked = review.likedBy.some(
+      (id) => id.toString() === userId.toString()
+    );
+
+    if (hasLiked) {
+      // Unlike
+      review.likedBy = review.likedBy.filter(
+        (id) => id.toString() !== userId.toString()
+      );
+      review.helpful = Math.max(0, review.helpful - 1);
+    } else {
+      // Like
+      review.likedBy.push(userId);
+      review.helpful += 1;
+    }
+
+    await review.save();
+
+    res.json({
+      success: true,
+      message: hasLiked ? "Đã bỏ thích" : "Đã thích đánh giá",
+      data: {
+        review,
+        hasLiked: !hasLiked,
+        helpful: review.helpful,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Like review error:", error);
     res.status(400).json({ success: false, message: error.message });
   }
 };
@@ -209,8 +248,6 @@ export const replyToReview = async (req, res) => {
     };
 
     await review.save();
-
-    // Populate để trả về đầy đủ thông tin
     await review.populate("adminReply.adminId", "fullName role avatar");
 
     res.json({
@@ -293,17 +330,4 @@ export const toggleReviewVisibility = async (req, res) => {
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
-};
-
-// ============================================
-// EXPORTS
-// ============================================
-export default {
-  getProductReviews,
-  createReview,
-  updateReview,
-  deleteReview,
-  replyToReview,
-  updateAdminReply,
-  toggleReviewVisibility,
 };
