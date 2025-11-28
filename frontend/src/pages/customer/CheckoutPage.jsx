@@ -60,6 +60,8 @@ const CheckoutPage = () => {
     if (user?.addresses?.length > 0) {
       const defaultAddr = user.addresses.find((a) => a.isDefault);
       setSelectedAddressId(defaultAddr?._id || user.addresses[0]._id);
+    } else {
+      setError("Vui lòng thêm địa chỉ nhận hàng");
     }
   }, [user]);
 
@@ -209,20 +211,23 @@ const CheckoutPage = () => {
     setIsLoading(true);
     setError("");
 
+    // ✅ 1. Kiểm tra address
     if (!selectedAddressId) {
       setError("Vui lòng chọn địa chỉ nhận hàng");
       setIsLoading(false);
       return;
     }
 
-    if (!selectedAddress) {
-      setError("Địa chỉ không hợp lệ");
+    // ✅ 2. Kiểm tra items được chọn
+    if (checkoutItems.length === 0) {
+      setError("Không có sản phẩm nào để thanh toán");
       setIsLoading(false);
       return;
     }
 
-    if (checkoutItems.length === 0) {
-      setError("Không có sản phẩm nào để thanh toán");
+    // ✅ 3. Kiểm tra phương thức thanh toán
+    if (!formData.paymentMethod) {
+      setError("Vui lòng chọn phương thức thanh toán");
       setIsLoading(false);
       return;
     }
@@ -233,14 +238,11 @@ const CheckoutPage = () => {
           fullName: selectedAddress.fullName,
           phoneNumber: selectedAddress.phoneNumber,
           province: selectedAddress.province,
-          // district: selectedAddress.ward || selectedAddress.province,
-          // commune: selectedAddress.ward || "",
           ward: selectedAddress.ward,
           detailAddress: selectedAddress.detailAddress,
         },
         paymentMethod: formData.paymentMethod,
         note: formData.note,
-        promotionCode: appliedPromotion?.code || undefined,
         items: checkoutItems.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
@@ -250,10 +252,6 @@ const CheckoutPage = () => {
 
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
-
-      // Sau khi đặt hàng thành công:
-      // ✅ XÓA THÔNG TIN SẢN PHẨM VỪA THÊM
-      set({ lastAddedItem: null });
 
       setSelectedForCheckout([]);
 
@@ -276,29 +274,8 @@ const CheckoutPage = () => {
             language: "vn",
           });
 
-          console.log("VNPay API Response:", vnpayResponse.data);
-
-          if (vnpayResponse.data.success) {
-            console.log(
-              "✅ Redirecting to:",
-              vnpayResponse.data.data.paymentUrl
-            );
-
-            // THÊM DÒNG NÀY ĐỂ CLEAR CART TRƯỚC KHI REDIRECT:
-            await getCart();
-
-            window.location.href = vnpayResponse.data.data.paymentUrl;
-          } else {
-            throw new Error("Không thể tạo link thanh toán");
-          }
-
-          console.log("VNPay API Response:", vnpayResponse.data);
-
-          if (vnpayResponse.data.success) {
-            console.log(
-              "✅ Redirecting to:",
-              vnpayResponse.data.data.paymentUrl
-            );
+          if (vnpayResponse.data?.success) {
+            await getCart(); // Clear cart
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
