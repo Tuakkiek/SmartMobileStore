@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-// import { VNPay } from "vnpay";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
@@ -57,17 +56,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-// const vnpay = new VNPay({
-//   tmnCode: process.env.VNP_TMN_CODE,
-//   secureSecret: process.env.VNP_HASH_SECRET, // ← Must be secureSecret (not secretKey)
-//   vnpayHost: process.env.VNPAY_HOST || "https://sandbox.vnpayment.vn", // ← Base host only
-//   hashAlgorithm: "SHA512", // Optional but good to keep
-//   testMode: true, // Optional: Enables extra logging/validation in sandbox
-// });
-
-// Export vnpay instance để sử dụng trong controllers
-// export { vnpay };
 
 // Serve static files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -142,7 +130,7 @@ app.use((err, req, res, next) => {
 // 🔹 Production: Serve static files & SPA
 // ================================
 if (process.env.NODE_ENV === "production") {
-  // Dùng đường dẫn tuyệt đối từ process.cwd()
+  // ✅ FIXED: Sử dụng đường dẫn đúng trên Render
   const frontendPath = path.join(process.cwd(), "../frontend/dist");
 
   console.log("📁 Current working directory:", process.cwd());
@@ -150,8 +138,14 @@ if (process.env.NODE_ENV === "production") {
 
   app.use(express.static(frontendPath));
 
-  app.get("/*", (req, res) => {
-    res.sendFile(path.join(frontendPath, "index.html"));
+  // ✅ FIXED: Thay /* bằng *
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(frontendPath, "index.html"), (err) => {
+      if (err) {
+        console.error("Error sending index.html:", err);
+        res.status(500).send("Error loading page");
+      }
+    });
   });
 } else {
   app.use((req, res) => {
@@ -171,7 +165,7 @@ mongoose.connection.on("error", (err) => {
 });
 
 // ================================
-// 🔹 Khởi động server (di chuyển lên trước)
+// 🔹 Khởi động server
 // ================================
 const PORT = config.port || process.env.PORT || 5000;
 
@@ -182,7 +176,7 @@ const startServer = () => {
     console.log(
       `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
     );
-    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`); // ✅ MỚI
+    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`);
     console.log(
       `⏰ Current time: ${new Date().toLocaleString("en-US", {
         timeZone: "Asia/Ho_Chi_Minh",
