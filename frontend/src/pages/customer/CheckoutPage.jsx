@@ -90,13 +90,20 @@ const CheckoutPage = () => {
   const finalTotal =
     subtotal + shippingFee - (appliedPromotion?.discountAmount || 0);
 
-  // === KIỂM TRA: NẾU KHÔNG CÓ SẢN PHẨM ĐƯỢC CHỌN → QUAY LẠI GIỎ HÀNG ===
+  // Thay đổi logic kiểm tra ở đầu component:
   useEffect(() => {
-    if (cart && cart.items?.length > 0 && checkoutItems.length === 0) {
-      // toast.error("Vui lòng chọn ít nhất một sản phẩm để thanh toán");
+    // ✅ CHỈ REDIRECT NẾU KHÔNG CÓ SẢN PHẨM NÀO ĐƯỢC CHỌN
+    if (selectedForCheckout.length === 0) {
+      toast.error("Vui lòng chọn sản phẩm để thanh toán");
       navigate("/cart");
+      return;
     }
-  }, []); // Chỉ chạy khi mount
+
+    // Nếu có selectedForCheckout nhưng cart chưa load → đợi
+    if (!cart) {
+      getCart();
+    }
+  }, [selectedForCheckout, cart, navigate, getCart]);
 
   useEffect(() => {
     // Bắt lỗi JavaScript từ VNPay Sandbox
@@ -243,6 +250,10 @@ const CheckoutPage = () => {
 
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
+
+      // Sau khi đặt hàng thành công:
+      // ✅ XÓA THÔNG TIN SẢN PHẨM VỪA THÊM
+      set({ lastAddedItem: null });
 
       setSelectedForCheckout([]);
 
@@ -410,7 +421,7 @@ const CheckoutPage = () => {
                   </div>
                 </label>
 
-                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
+                {/* <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
                   <input
                     type="radio"
                     name="paymentMethod"
@@ -419,13 +430,13 @@ const CheckoutPage = () => {
                     onChange={handleChange}
                     className="w-4 h-4 text-primary"
                   />
-                  <div>
-                    <p className="font-medium">Chuyển khoản ngân hàng</p>
-                    <p className="text-sm text-muted-foreground">
-                      Chuyển khoản trước khi nhận hàng
-                    </p>
-                  </div>
-                </label>
+                <div>
+                  <p className="font-medium">Chuyển khoản ngân hàng</p>
+                  <p className="text-sm text-muted-foreground">
+                    Chuyển khoản trước khi nhận hàng
+                  </p>
+                </div>
+              </label> */}
 
                 <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
                   <input

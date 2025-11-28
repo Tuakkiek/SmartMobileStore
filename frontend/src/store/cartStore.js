@@ -13,6 +13,7 @@ export const useCartStore = create((set, get) => ({
 
   // === DÙNG ARRAY THAY VÌ SET ===
   selectedForCheckout: [], // ← Mảng các variantId được chọn
+  lastAddedItem: null, // { variantId, timestamp }
 
   // Get cart
   getCart: async () => {
@@ -51,7 +52,14 @@ export const useCartStore = create((set, get) => ({
       return { success: false, message };
     }
 
-    const validTypes = ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"];
+    const validTypes = [
+      "iPhone",
+      "iPad",
+      "Mac",
+      "AirPods",
+      "AppleWatch",
+      "Accessory",
+    ];
     if (!validTypes.includes(productType)) {
       console.error("Invalid productType:", productType, "Valid:", validTypes);
       const message = `productType không hợp lệ: ${productType}`;
@@ -62,15 +70,33 @@ export const useCartStore = create((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      console.log("Sending to cartAPI.addToCart:", { variantId, quantity, productType });
-      const response = await cartAPI.addToCart({ variantId, quantity, productType });
+      console.log("Sending to cartAPI.addToCart:", {
+        variantId,
+        quantity,
+        productType,
+      });
+      const response = await cartAPI.addToCart({
+        variantId,
+        quantity,
+        productType,
+      });
       console.log("cartAPI response:", response);
 
-      set({ cart: response.data.data, isLoading: false });
+      // ✅ LƯU THÔNG TIN SẢN PHẨM VỪA THÊM
+      set({
+        cart: response.data.data,
+        isLoading: false,
+        lastAddedItem: {
+          variantId: variantId,
+          timestamp: Date.now(),
+        },
+      });
+
       return { success: true, message: response.data.message };
     } catch (error) {
       console.error("cartAPI error:", error.response?.data || error);
-      const message = error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
+      const message =
+        error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
@@ -244,4 +270,19 @@ export const useCartStore = create((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Thêm helper function kiểm tra thời gian
+  shouldAutoSelect: () => {
+    const { lastAddedItem } = get();
+    if (!lastAddedItem) return null;
+
+    const EIGHT_HOURS = 8 * 60 * 60 * 1000; // 8 giờ tính bằng milliseconds
+    const now = Date.now();
+
+    if (now - lastAddedItem.timestamp <= EIGHT_HOURS) {
+      return lastAddedItem.variantId;
+    }
+
+    return null;
+  },
 }));

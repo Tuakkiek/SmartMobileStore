@@ -54,6 +54,8 @@ const CartPage = () => {
   const [loadingVariants, setLoadingVariants] = useState({});
   const [isChangingVariant, setIsChangingVariant] = useState(false);
 
+  const { shouldAutoSelect } = useCartStore();
+
   // Dùng ref để tránh auto-select lại khi refresh hoặc re-render
   const hasAutoSelected = useRef(false);
   const items = optimisticCart?.items || cart?.items || [];
@@ -120,6 +122,31 @@ const CartPage = () => {
     }
   }, [cart?.items, isChangingVariant]); // ← THÊM isChangingVariant vào deps
   // Reset flag khi URL thay đổi (có param mới)
+
+  useEffect(() => {
+    if (cart?.items && cart.items.length > 0) {
+      const autoSelectId = shouldAutoSelect();
+
+      if (autoSelectId && !hasAutoSelected.current) {
+        const itemExists = cart.items.find(
+          (item) => item.variantId === autoSelectId
+        );
+
+        if (itemExists && !selectedItems.includes(autoSelectId)) {
+          setSelectedItems([autoSelectId]);
+
+          // Gán timestamp cho item vừa thêm
+          setItemsOrder((prev) => ({
+            ...prev,
+            [autoSelectId]: Date.now(),
+          }));
+
+          hasAutoSelected.current = true;
+        }
+      }
+    }
+  }, [cart?.items, shouldAutoSelect]);
+
   useEffect(() => {
     if (autoSelectVariantId) {
       hasAutoSelected.current = false;

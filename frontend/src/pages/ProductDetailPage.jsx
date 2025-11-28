@@ -81,7 +81,12 @@ const ProductDetailPage = () => {
   const [showSpecsPanel, setShowSpecsPanel] = useState(false);
   const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
 
-  const { addToCart, isLoading: cartLoading } = useCartStore();
+  // Dòng 14 - Thêm vào destructure
+  const {
+    addToCart,
+    isLoading: cartLoading,
+    setSelectedForCheckout,
+  } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -100,6 +105,32 @@ const ProductDetailPage = () => {
 
     // Default: variant images (logic cũ)
     return selectedVariant?.images?.filter(Boolean) || [];
+  };
+  const handleBuyNow = async () => {
+    if (!selectedVariant?._id) {
+      toast.error("Vui lòng chọn phiên bản sản phẩm");
+      return;
+    }
+
+    setIsAddingToCart(true);
+
+    try {
+      const result = await addToCart(selectedVariant._id, 1, categoryType);
+
+      if (result.success) {
+        // Set sản phẩm này làm selected
+        setSelectedForCheckout([selectedVariant._id]);
+
+        // Chuyển thẳng đến checkout
+        navigate("/checkout");
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error("Có lỗi xảy ra");
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   useEffect(() => {
@@ -197,10 +228,9 @@ const ProductDetailPage = () => {
     setActiveMediaTab("variant");
   };
 
-  const handleAddToCart = async (redirectToCheckout = false) => {
+  const handleAddToCart = async (isBuyNow = false) => {
     // ✅ KIỂM TRA ĐĂNG NHẬP TRƯỚC
     if (!isAuthenticated || !user) {
-      // Lưu URL hiện tại để redirect về sau khi đăng nhập
       const currentPath = location.pathname + location.search;
       sessionStorage.setItem("redirectAfterLogin", currentPath);
 
@@ -233,12 +263,16 @@ const ProductDetailPage = () => {
       return;
     }
 
+    // ✅ THÊM SẢN PHẨM VÀO GIỎ
     const result = await addToCart(selectedVariant._id, 1, productType);
 
     if (result.success) {
-      if (redirectToCheckout) {
-        navigate(`/cart?select=${selectedVariant._id}`);
+      if (isBuyNow) {
+        // ✅ MUA NGAY: SET SELECTED + REDIRECT ĐẾN CHECKOUT
+        setSelectedForCheckout([selectedVariant._id]);
+        navigate("/checkout");
       } else {
+        // ✅ THÊM VÀO GIỎ: HIỂN thị MODAL
         setShowAddToCartModal(true);
       }
     } else {
@@ -768,17 +802,19 @@ const ProductDetailPage = () => {
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
+                {/* NÚT THÊM VÀO GIỎ */}
                 <button
-                  onClick={() => handleAddToCart(false)}
+                  onClick={() => handleAddToCart(false)} // ← false = không phải mua ngay
                   disabled={cartLoading || selectedVariant.stock === 0}
-                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold  sm:py-4  sm:px-6 sm:text-lg py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
+                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border-2 border-red-600 shadow-lg hover:shadow-xl"
                 >
                   <ShoppingCart className="w-5 h-5" />
                   {cartLoading ? "Đang thêm..." : "Thêm vào giỏ"}
                 </button>
 
+                {/* NÚT MUA NGAY */}
                 <button
-                  onClick={() => handleAddToCart(true)}
+                  onClick={() => handleAddToCart(true)} // ← true = mua ngay
                   disabled={cartLoading || selectedVariant.stock === 0}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
                 >
