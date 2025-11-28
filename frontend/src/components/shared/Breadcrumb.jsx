@@ -15,9 +15,9 @@ const routeMapping = {
   login: "Đăng nhập",
   register: "Đăng ký",
 
-  // Customer
+  // Customer - ✅ UPDATED
   cart: "Giỏ hàng",
-  checkout: "Thanh toán",
+  checkout: "Thanh toán", // ✅ Sẽ hiển thị: Giỏ hàng > Thanh toán
   orders: "Đơn hàng",
   profile: "Tài khoản",
 
@@ -31,7 +31,7 @@ const routeMapping = {
   "order-manager": "Quản lý đơn hàng",
   pos: "POS Bán hàng",
   "vat-invoices": "Hóa đơn VAT",
-  CASHIER: "Thu ngân",
+  cashier: "Thu ngân",
   shipper: "Giao hàng",
 };
 
@@ -65,16 +65,13 @@ const Breadcrumb = () => {
     }
 
     // Format chung: "iphone-15" → "Iphone 15"
-    return text
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (l) => l.toUpperCase());
+    return text.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   // ✅ MOBILE: Chỉ hiển thị 2 item cuối cùng
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const visiblePathnames = isMobile && pathnames.length > 2 
-    ? pathnames.slice(-2) 
-    : pathnames;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const visiblePathnames =
+    isMobile && pathnames.length > 2 ? pathnames.slice(-2) : pathnames;
 
   return (
     <nav
@@ -106,9 +103,10 @@ const Breadcrumb = () => {
         )}
 
         {visiblePathnames.map((value, index) => {
-          const actualIndex = isMobile && pathnames.length > 2 
-            ? pathnames.length - 2 + index 
-            : index;
+          const actualIndex =
+            isMobile && pathnames.length > 2
+              ? pathnames.length - 2 + index
+              : index;
           const isLast = actualIndex === pathnames.length - 1;
           const to = `/${pathnames.slice(0, actualIndex + 1).join("/")}`;
           const displayName = formatBreadcrumbText(value);
@@ -118,7 +116,11 @@ const Breadcrumb = () => {
               <li className="mx-1 sm:mx-2 flex-shrink-0">
                 <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
               </li>
-              <li className={isLast ? "flex-shrink-0" : "hidden sm:block flex-shrink-0"}>
+              <li
+                className={
+                  isLast ? "flex-shrink-0" : "hidden sm:block flex-shrink-0"
+                }
+              >
                 {isLast ? (
                   <span className="font-medium text-gray-900 line-clamp-1 max-w-[120px] sm:max-w-[200px] md:max-w-[300px]">
                     {displayName}

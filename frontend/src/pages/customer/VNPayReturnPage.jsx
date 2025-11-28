@@ -18,14 +18,26 @@ const VNPayReturnPage = () => {
         const params = Object.fromEntries(searchParams.entries());
         const response = await vnpayAPI.returnHandler(params);
 
-        setStatus(response.data.code === "00" ? "success" : "failed");
-        setOrderData({
-          orderId: response.data.orderId,
-          orderNumber: response.data.orderNumber,
-          message: response.data.message,
-        });
+        if (response.data?.success) {
+          setStatus("success");
+          setOrderData({
+            orderId: response.data.orderId,
+            orderNumber: response.data.orderNumber,
+            message: response.data.message,
+          });
+        } else {
+          setStatus("failed");
+          setOrderData({
+            message: response.data?.message || "Thanh toán thất bại",
+          });
+        }
       } catch (error) {
+        console.error("VNPay return error:", error);
         setStatus("error");
+        setOrderData({
+          message:
+            error.response?.data?.message || error.message || "Lỗi hệ thống",
+        });
       }
     };
 

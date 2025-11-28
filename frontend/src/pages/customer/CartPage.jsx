@@ -833,7 +833,7 @@ const CartPage = () => {
                         return;
                       }
                       setSelectedForCheckout(selectedItems);
-                      navigate("/checkout");
+                      navigate("/cart/checkout");
                     }}
                   >
                     Tiến hành thanh toán

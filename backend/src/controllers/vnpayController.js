@@ -14,7 +14,7 @@ function sortObject(obj) {
   let str = [];
   let key;
   for (key in obj) {
-    if (obj.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
       str.push(encodeURIComponent(key));
     }
   }
@@ -192,10 +192,11 @@ export const vnpayIPN = async (req, res) => {
       return res.status(200).json({ RspCode: "04", Message: "Invalid amount" });
     }
 
+    // ✅ SAU - Tự động hoàn thành đơn
     if (rspCode === "00") {
-      // ✅ PAYMENT SUCCESS
+      // ✅ Cập nhật trạng thái thanh toán
       order.paymentStatus = "PAID";
-      order.status = "PAYMENT_VERIFIED"; // ✅ NOW VALID
+      order.status = "PAYMENT_VERIFIED";
 
       order.paymentInfo = {
         ...order.paymentInfo,
@@ -209,13 +210,31 @@ export const vnpayIPN = async (req, res) => {
         vnpayResponseCode: rspCode,
       };
 
-      // ✅ ADD TO STATUS HISTORY
+      // ✅ THÊM DÒNG NÀY: Tự động chuyển sang CONFIRMED sau 2 giây
       order.statusHistory.push({
         status: "PAYMENT_VERIFIED",
         updatedBy: order.customerId,
         updatedAt: new Date(),
         note: `Thanh toán VNPay thành công - Mã giao dịch: ${transactionNo}`,
       });
+
+      // ✅ TỰ ĐỘNG CONFIRMED (tuỳ chọn)
+      // Nếu muốn tự động chuyển sang CONFIRMED:
+      setTimeout(async () => {
+        try {
+          order.status = "CONFIRMED";
+          order.confirmedAt = new Date();
+          order.statusHistory.push({
+            status: "CONFIRMED",
+            updatedBy: order.customerId,
+            updatedAt: new Date(),
+            note: "Tự động xác nhận sau thanh toán thành công",
+          });
+          await order.save();
+        } catch (err) {
+          console.error("Error auto-confirming order:", err);
+        }
+      }, 2000); // 2 giây sau
 
       await order.save();
 
@@ -228,7 +247,6 @@ export const vnpayIPN = async (req, res) => {
         );
       } catch (invoiceError) {
         console.error("⚠️ Invoice generation failed:", invoiceError.message);
-        // Don't fail the whole payment if invoice fails
       }
 
       console.log("✅ Order updated successfully");

@@ -22,7 +22,7 @@ import { orderAPI, promotionAPI, userAPI, vnpayAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
-import { Plus, MapPin, ChevronRight } from "lucide-react";
+import { Plus, MapPin, ChevronRight, ArrowLeft } from "lucide-react";
 import AddressFormDialog from "@/components/shared/AddressFormDialog";
 
 const CheckoutPage = () => {
@@ -329,6 +329,13 @@ const CheckoutPage = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <button
+        onClick={() => navigate("/cart")}
+        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+      >
+        <ArrowLeft className="w-5 h-5" />
+        <span className="font-medium">Quay lại giỏ hàng</span>
+      </button>
       <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
 
       <form onSubmit={handleCheckout}>

@@ -16,7 +16,7 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 
 // Pages
 import HomePage from "@/pages/HomePage";
-import ProductsPage from "@/pages/ProductsPage"; // Dùng chung cho tất cả danh mục
+import ProductsPage from "@/pages/ProductsPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
@@ -93,25 +93,23 @@ function App() {
       <Routes>
         {/* ========================================
             PUBLIC ROUTES - MainLayout
-======================================== */}
+        ======================================== */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
 
-          {/* Danh mục sản phẩm - URL đẹp + dùng chung ProductsPage */}
+          {/* Danh mục sản phẩm */}
           <Route path="/dien-thoai" element={<ProductsPage />} />
           <Route path="/may-tinh-bang" element={<ProductsPage />} />
           <Route path="/macbook" element={<ProductsPage />} />
           <Route path="/tai-nghe" element={<ProductsPage />} />
           <Route path="/apple-watch" element={<ProductsPage />} />
           <Route path="/phu-kien" element={<ProductsPage />} />
-
-          {/* Route cũ vẫn giữ để tương thích (nếu cần) */}
           <Route path="/products" element={<ProductsPage />} />
 
           {/* Tìm kiếm */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
 
-          {/* Chi tiết sản phẩm - dùng slug đẹp */}
+          {/* Chi tiết sản phẩm */}
           <Route
             path="/:categorySlug/:productSlug"
             element={<ProductDetailPage />}
@@ -123,9 +121,10 @@ function App() {
         </Route>
 
         {/* ========================================
-            CUSTOMER ROUTES
+            CUSTOMER ROUTES - NESTED STRUCTURE
         ======================================== */}
         <Route element={<MainLayout />}>
+          {/* ✅ Giỏ hàng là parent route */}
           <Route
             path="/cart"
             element={
@@ -134,14 +133,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* ✅ Thanh toán là nested route của /cart */}
           <Route
-            path="/checkout"
+            path="/cart/checkout"
             element={
               <ProtectedRoute allowedRoles={["CUSTOMER"]}>
                 <CheckoutPage />
               </ProtectedRoute>
             }
           />
+
+          {/* Đơn hàng */}
           <Route
             path="/orders"
             element={
@@ -158,6 +161,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Tài khoản */}
           <Route
             path="/profile"
             element={
@@ -182,6 +187,7 @@ function App() {
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
         </Route>
+
         {/* ========================================
             WAREHOUSE STAFF
         ======================================== */}
@@ -255,6 +261,7 @@ function App() {
           <Route path="/shipper/dashboard" element={<ShipperDashboard />} />
         </Route>
 
+        {/* VNPay Return */}
         <Route path="/payment/vnpay/return" element={<VNPayReturnPage />} />
 
         {/* ========================================
