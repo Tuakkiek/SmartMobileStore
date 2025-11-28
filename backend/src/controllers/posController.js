@@ -4,6 +4,7 @@
 // ============================================
 
 import mongoose from "mongoose";
+import axios from "axios";
 import Order from "../models/Order.js";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
 import IPad, { IPadVariant } from "../models/IPad.js";
@@ -38,7 +39,8 @@ export const createPOSOrder = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { items, customerInfo, storeLocation, totalAmount } = req.body;
+    const { items, customerInfo, storeLocation, totalAmount, promotionCode } =
+      req.body;
 
     if (!items || items.length === 0) {
       await session.abortTransaction();
@@ -158,6 +160,38 @@ export const createPOSOrder = async (req, res) => {
       });
     }
 
+    // XỬ LÝ PROMOTION CODE
+    let promotionDiscount = 0;
+    let appliedPromotion = null;
+
+    if (promotionCode) {
+      try {
+        const promoResponse = await axios.post(
+          `${process.env.API_URL}/promotions/apply`,
+          {
+            code: promotionCode,
+            totalAmount: subtotal,
+          },
+          {
+            headers: {
+              Authorization: req.headers.authorization,
+            },
+          }
+        );
+
+        if (promoResponse.data.success) {
+          promotionDiscount = promoResponse.data.data.discountAmount;
+          appliedPromotion = {
+            code: promotionCode,
+            discountAmount: promotionDiscount,
+          };
+          console.log("Promotion applied:", promotionDiscount);
+        }
+      } catch (promoError) {
+        console.log("Promotion code invalid or API error:", promoError.message);
+      }
+    }
+
     // Tạo số phiếu tạm
     const date = new Date();
     const receiptNumber = `TMP${date.getTime().toString().slice(-8)}`;
@@ -183,7 +217,9 @@ export const createPOSOrder = async (req, res) => {
           status: "PENDING_PAYMENT",
           subtotal,
           shippingFee: 0,
-          totalAmount: subtotal,
+          promotionDiscount,
+          appliedPromotion,
+          totalAmount: subtotal - promotionDiscount,
           posInfo: {
             staffId: req.user._id,
             staffName: req.user.fullName,

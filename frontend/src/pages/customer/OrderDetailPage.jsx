@@ -392,12 +392,21 @@ const OrderDetailPage = () => {
                       : formatPrice(order.shippingFee)}
                   </span>
                 </div>
+
+                {/* ✅ THÊM ĐOẠN NÀY */}
                 {order.promotionDiscount > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Giảm giá</span>
-                    <span>-{formatPrice(order.promotionDiscount)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Mã giảm giá{" "}
+                      {order.appliedPromotion?.code &&
+                        `(${order.appliedPromotion.code})`}
+                    </span>
+                    <span className="text-green-600 font-medium">
+                      -{formatPrice(order.promotionDiscount)}
+                    </span>
                   </div>
                 )}
+
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
@@ -407,7 +416,6 @@ const OrderDetailPage = () => {
                   </div>
                 </div>
               </div>
-
               {/* ✅ EXPORT INVOICE BUTTON */}
               {canExportInvoice && (
                 <Button
@@ -419,7 +427,6 @@ const OrderDetailPage = () => {
                   Xuất hóa đơn
                 </Button>
               )}
-
               {order.status === "PENDING" && (
                 <Button
                   variant="destructive"

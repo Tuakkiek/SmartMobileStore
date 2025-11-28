@@ -252,6 +252,7 @@ const CheckoutPage = () => {
         },
         paymentMethod: formData.paymentMethod,
         note: formData.note,
+        promotionCode: appliedPromotion?.code || null,
         items: checkoutItems.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,

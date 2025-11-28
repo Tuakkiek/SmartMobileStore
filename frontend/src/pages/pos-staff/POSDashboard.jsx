@@ -57,6 +57,10 @@ const POSDashboard = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
 
+  const [promotionCode, setPromotionCode] = useState("");
+  const [appliedPromotion, setAppliedPromotion] = useState(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
   // ============================================
   // HELPER FOR IMAGE URL
   // ============================================
@@ -66,6 +70,44 @@ const POSDashboard = () => {
     return `${import.meta.env.VITE_API_URL}${
       path.startsWith("/") ? "" : "/"
     }${path}`;
+  };
+
+  const handleApplyPromotion = async () => {
+    if (!promotionCode.trim()) {
+      toast.error("Vui lòng nhập mã giảm giá");
+      return;
+    }
+
+    const total = getTotal();
+    if (total === 0) {
+      toast.error("Giỏ hàng trống");
+      return;
+    }
+
+    setIsApplyingPromo(true);
+    try {
+      const authStorage = localStorage.getItem("auth-storage");
+      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/promotions/apply`,
+        { code: promotionCode, totalAmount: total },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setAppliedPromotion(response.data.data);
+      toast.success("Áp dụng mã thành công!");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Mã không hợp lệ");
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
+  const handleRemovePromotion = () => {
+    setAppliedPromotion(null);
+    setPromotionCode("");
+    toast.info("Đã xóa mã giảm giá");
   };
 
   // ============================================
@@ -266,6 +308,7 @@ const POSDashboard = () => {
           },
           totalAmount,
           storeLocation: "Ninh Kiều iStore",
+          promotionCode: appliedPromotion?.code || null,
         },
         {
           headers: {
@@ -283,6 +326,8 @@ const POSDashboard = () => {
       setCart([]);
       setCustomerName("");
       setCustomerPhone("");
+      setAppliedPromotion(null);
+      setPromotionCode("");
     } catch (error) {
       console.error("Lỗi tạo đơn:", error);
       toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
@@ -295,7 +340,11 @@ const POSDashboard = () => {
   // CALCULATIONS
   // ============================================
   const getTotal = () => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+    return subtotal - (appliedPromotion?.discountAmount || 0);
   };
 
   const filteredProducts = products.filter((p) =>
@@ -503,12 +552,90 @@ const POSDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Promotion Card - THÊM MỚI */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Mã giảm giá</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!appliedPromotion ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nhập mã giảm giá"
+                    value={promotionCode}
+                    onChange={(e) =>
+                      setPromotionCode(e.target.value.toUpperCase())
+                    }
+                    disabled={isApplyingPromo || cart.length === 0}
+                    className="uppercase"
+                  />
+                  <Button
+                    onClick={handleApplyPromotion}
+                    disabled={
+                      isApplyingPromo ||
+                      !promotionCode.trim() ||
+                      cart.length === 0
+                    }
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isApplyingPromo ? "..." : "Áp dụng"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-semibold text-green-700">
+                      Mã: {appliedPromotion.code}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Giảm: {formatPrice(appliedPromotion.discountAmount)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemovePromotion}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    Xóa
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Total & Submit */}
         <Card>
           <CardContent className="p-4 space-y-3">
-            <div className="flex justify-between text-lg font-bold">
-              <span>Tổng cộng:</span>
-              <span className="text-primary">{formatPrice(getTotal())}</span>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Tạm tính:</span>
+                <span>
+                  {formatPrice(
+                    cart.reduce(
+                      (sum, item) => sum + item.price * item.quantity,
+                      0
+                    )
+                  )}
+                </span>
+              </div>
+
+              {appliedPromotion && (
+                <div className="flex justify-between text-green-600 font-medium">
+                  <span>Giảm giá ({appliedPromotion.code}):</span>
+                  <span>-{formatPrice(appliedPromotion.discountAmount)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-lg font-bold border-t pt-2">
+                <span>Tổng cộng:</span>
+                <span className="text-primary">{formatPrice(getTotal())}</span>
+              </div>
             </div>
 
             <Button
