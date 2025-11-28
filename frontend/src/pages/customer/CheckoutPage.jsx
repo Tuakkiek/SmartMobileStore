@@ -1,7 +1,6 @@
 // ============================================
 // FILE: src/pages/customer/CheckoutPage.jsx
-// COMPLETE: Checkout with promotion code, accurate calculation & UX
-// FIXED: Chỉ thanh toán sản phẩm được chọn (selectedForCheckout)
+// ĐÃ SỬA: Lưu giá final sau khi áp mã giảm giá vào DB
 // ============================================
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -16,11 +15,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ErrorMessage } from "@/components/shared/ErrorMessage";
-import { Loading } from "@/components/shared/Loading";
 import { useCartStore } from "@/store/cartStore";
 import { orderAPI, promotionAPI, userAPI, vnpayAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
@@ -65,7 +61,7 @@ const CheckoutPage = () => {
     }
   }, [user]);
 
-  // === LỌC SẢN PHẨM ĐƯỢC CHỌN ===
+  // Lọc sản phẩm được chọn
   const checkoutItems = useMemo(() => {
     if (
       !cart?.items ||
@@ -79,53 +75,95 @@ const CheckoutPage = () => {
     );
   }, [cart?.items, selectedForCheckout]);
 
-  // === TÍNH SUBTOTAL CHỈ TỪ SẢN PHẨM ĐƯỢC CHỌN ===
+  // Subtotal gốc (trước giảm giá)
   const subtotal = checkoutItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
 
-  // === PHÍ VẬN CHUYỂN ===
+  // Phí vận chuyển
   const shippingFee = subtotal >= 5000000 ? 0 : 50000;
 
-  // === TỔNG CUỐI ===
+  // Tổng cuối cùng
   const finalTotal =
     subtotal + shippingFee - (appliedPromotion?.discountAmount || 0);
 
-  // Thay đổi logic kiểm tra ở đầu component:
+  // TÍNH GIÁ FINAL CHO TỪNG SẢN PHẨM SAU KHI ÁP DỤNG KHUYẾN MÃI
+  const checkoutItemsWithFinalPrice = useMemo(() => {
+    if (checkoutItems.length === 0) return [];
+
+    const discountAmount = appliedPromotion?.discountAmount || 0;
+
+    if (discountAmount === 0) {
+      return checkoutItems.map((item) => ({
+        ...item,
+        originalPrice: item.price,
+        finalPrice: item.price,
+      }));
+    }
+
+    const totalForDiscount = subtotal;
+    let remainingDiscount = discountAmount;
+
+    const items = checkoutItems.map((item, index) => {
+      const itemSubtotal = item.price * item.quantity;
+      const ratio = itemSubtotal / totalForDiscount;
+      let itemDiscount = Math.round(ratio * discountAmount);
+
+      // Đảm bảo không vượt quá phần giảm còn lại (tránh lỗi làm tròn)
+      if (index === checkoutItems.length - 1) {
+        itemDiscount = remainingDiscount;
+      } else {
+        remainingDiscount -= itemDiscount;
+      }
+
+      const finalPricePerUnit = Math.max(
+        0,
+        item.price - Math.round(itemDiscount / item.quantity)
+      );
+
+      return {
+        ...item,
+        originalPrice: item.price,
+        finalizedPrice: finalPricePerUnit,
+      };
+    });
+
+    return items;
+  }, [checkoutItems, subtotal, appliedPromotion?.discountAmount]);
+
+  // Tính lại subtotal sau khi đã giảm giá (dùng để hiển thị)
+  const discountedSubtotal = checkoutItemsWithFinalPrice.reduce(
+    (sum, item) =>
+      sum + (item.finalizedPrice || item.originalPrice) * item.quantity,
+    0
+  );
+
+  // Kiểm tra khi mount
   useEffect(() => {
     if (selectedForCheckout.length === 0) {
       toast.error("Vui lòng chọn sản phẩm để thanh toán");
       navigate("/cart");
       return;
     }
-    if (!cart) {
-      getCart();
-    }
-  }, []); // Không deps vào selectedForCheckout
+    if (!cart) getCart();
+  }, []);
+
+  // Bỏ lỗi VNPay sandbox
   useEffect(() => {
-    // Bắt lỗi JavaScript từ VNPay Sandbox
-    window.addEventListener("error", (event) => {
-      if (event.message.includes("timer is not defined")) {
-        console.warn("⚠️ VNPay Sandbox bug detected - ignoring");
+    const handler = (event) => {
+      if (event.message?.includes("timer is not defined")) {
+        console.warn("VNPay Sandbox bug ignored");
         event.preventDefault();
       }
-    });
+    };
+    window.addEventListener("error", handler);
+    return () => window.removeEventListener("error", handler);
   }, []);
 
   const handleChange = (e) => {
     setError("");
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleCheckboxChange = (e) => {
-    setNewAddress({
-      ...newAddress,
-      [e.target.id]: e.target.checked,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   // Áp dụng mã khuyến mãi
@@ -141,7 +179,7 @@ const CheckoutPage = () => {
     try {
       const response = await promotionAPI.apply({
         code: promotionCode,
-        totalAmount: subtotal, // Dùng subtotal đã lọc
+        totalAmount: subtotal,
       });
 
       setAppliedPromotion(response.data.data);
@@ -154,7 +192,6 @@ const CheckoutPage = () => {
     }
   };
 
-  // === XÓA MÃ KHUYẾN MÃI ===
   const handleRemovePromotion = () => {
     setAppliedPromotion(null);
     setPromotionCode("");
@@ -162,16 +199,14 @@ const CheckoutPage = () => {
     toast.info("Đã xóa mã giảm giá");
   };
 
-  // Handle add or edit address
+  // Address handlers
   const handleSubmitAddress = async (formData, addressId) => {
     setIsSubmittingAddress(true);
     try {
       if (addressId) {
-        // EDIT
         await userAPI.updateAddress(addressId, formData);
         toast.success("Cập nhật địa chỉ thành công");
       } else {
-        // ADD
         await userAPI.addAddress(formData);
         toast.success("Thêm địa chỉ thành công");
       }
@@ -195,11 +230,10 @@ const CheckoutPage = () => {
     (a) => a._id === selectedAddressId
   );
 
-  const getFullAddress = (address) => {
-    return [address.detailAddress, address.ward, address.province]
-      .filter((part) => part && part.trim() !== "")
+  const getFullAddress = (address) =>
+    [address.detailAddress, address.ward, address.province]
+      .filter(Boolean)
       .join(", ");
-  };
 
   // Xử lý đặt hàng
   const handleCheckout = async (e) => {
@@ -207,54 +241,18 @@ const CheckoutPage = () => {
     setIsLoading(true);
     setError("");
 
-    // ✅ 0. Kiểm tra items trước tiên
-    if (!checkoutItems || checkoutItems.length === 0) {
-      console.error("❌ No checkout items:", {
-        checkoutItems,
-        selectedForCheckout,
-        cartItems: cart?.items?.length,
-      });
+    if (checkoutItems.length === 0) {
       setError("Không có sản phẩm nào để thanh toán");
       setIsLoading(false);
       navigate("/cart", { replace: true });
       return;
     }
 
-    // ✅ 1. Kiểm tra address
     if (!selectedAddressId) {
       setError("Vui lòng chọn địa chỉ nhận hàng");
       setIsLoading(false);
       return;
     }
-
-    // ✅ 2. Kiểm tra items được chọn
-    if (checkoutItems.length === 0) {
-      setError("Không có sản phẩm nào để thanh toán");
-      setIsLoading(false);
-      return;
-    }
-
-    // ✅ 3. Kiểm tra phương thức thanh toán
-    if (!formData.paymentMethod) {
-      setError("Vui lòng chọn phương thức thanh toán");
-      setIsLoading(false);
-      return;
-    }
-
-    console.log(
-      "📦 Checkout items before ordering:",
-      JSON.stringify(
-        checkoutItems.map((item) => ({
-          variantId: item.variantId,
-          productName: item.productName,
-          quantity: item.quantity,
-          price: item.price,
-          productType: item.productType,
-        })),
-        null,
-        2
-      )
-    );
 
     try {
       const orderData = {
@@ -268,45 +266,22 @@ const CheckoutPage = () => {
         paymentMethod: formData.paymentMethod,
         note: formData.note,
         promotionCode: appliedPromotion?.code || null,
-        items: checkoutItems.map((item) => ({
+        items: checkoutItemsWithFinalPrice.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
           productType: item.productType,
-          price: item.discountedPrice || item.price, 
+          price: item.finalizedPrice || item.originalPrice, // ← Giá đã giảm (final)
+          originalPrice: item.originalPrice, // ← Giá gốc (để đối soát)
         })),
       };
 
-      console.log(
-        "📤 Sending order data to backend:",
-        JSON.stringify(orderData, null, 2)
-      );
-
       const response = await orderAPI.create(orderData);
-      console.log(
-        "✅ Order creation response:",
-        JSON.stringify(response.data, null, 2)
-      );
-
       const createdOrder = response.data.data.order;
 
       setSelectedForCheckout([]);
 
-      console.log("✅ Order created:", {
-        orderId: createdOrder._id,
-        orderNumber: createdOrder.orderNumber,
-      });
-
-      // ✅ NẾU CHỌN VNPAY → Xử lý redirect
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
-
-        console.log("=== Creating VNPay Payment ===");
-        console.log("Order:", {
-          id: createdOrder._id,
-          number: createdOrder.orderNumber,
-          amount: createdOrder.totalAmount,
-        });
-
         try {
           const vnpayResponse = await vnpayAPI.createPaymentUrl({
             orderId: createdOrder._id,
@@ -314,42 +289,26 @@ const CheckoutPage = () => {
             orderDescription: `Thanh toan don hang ${createdOrder.orderNumber}`,
             language: "vn",
           });
-          console.log(
-            "✅ VNPay response:",
-            JSON.stringify(vnpayResponse.data, null, 2)
-          );
 
           if (vnpayResponse.data?.success) {
-            await getCart(); // Clear cart
+            await getCart();
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
           }
-        } catch (error) {
-          console.error("❌ VNPay Error:", error.message);
-          console.error("VNPay Error details:", error.response?.data);
+        } catch (err) {
           setIsRedirectingToPayment(false);
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        // COD / BANK_TRANSFER - redirect bình thường
-        console.log("✅ Order created successfully:", {
-          orderId: createdOrder._id,
-          orderNumber: createdOrder.orderNumber,
-          paymentMethod: formData.paymentMethod,
-        });
-
-        await getCart(); // Clear cart
+        await getCart();
         toast.success("Đặt hàng thành công!");
-
-        // Đợi một chút để đảm bảo toast hiển thị
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });
         }, 300);
       }
     } catch (error) {
-      console.error("❌ Order creation error:", error.message);
-      console.error("Error details:", error.response?.data);
+      console.error("Order error:", error);
       setError(error.response?.data?.message || "Đặt hàng thất bại");
       toast.error("Đặt hàng thất bại");
     } finally {
@@ -359,7 +318,6 @@ const CheckoutPage = () => {
     }
   };
 
-  // === TRƯỜNG HỢP GIỎ HÀNG TRỐNG ===
   if (!cart || cart.items?.length === 0) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
@@ -376,7 +334,7 @@ const CheckoutPage = () => {
       <form onSubmit={handleCheckout}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* 1. Địa chỉ nhận hàng */}
+            {/* Địa chỉ nhận hàng */}
             <Card>
               <CardHeader>
                 <CardTitle>Địa chỉ nhận hàng</CardTitle>
@@ -415,7 +373,7 @@ const CheckoutPage = () => {
               </CardContent>
             </Card>
 
-            {/* 2. Ghi chú (optional) */}
+            {/* Ghi chú */}
             <Card>
               <CardHeader>
                 <CardTitle>Ghi chú đơn hàng</CardTitle>
@@ -431,7 +389,7 @@ const CheckoutPage = () => {
               </CardContent>
             </Card>
 
-            {/* 3. Phương thức thanh toán */}
+            {/* Phương thức thanh toán */}
             <Card>
               <CardHeader>
                 <CardTitle>Phương thức thanh toán</CardTitle>
@@ -456,23 +414,6 @@ const CheckoutPage = () => {
                   </div>
                 </label>
 
-                {/* <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="BANK_TRANSFER"
-                    checked={formData.paymentMethod === "BANK_TRANSFER"}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-primary"
-                  />
-                <div>
-                  <p className="font-medium">Chuyển khoản ngân hàng</p>
-                  <p className="text-sm text-muted-foreground">
-                    Chuyển khoản trước khi nhận hàng
-                  </p>
-                </div>
-              </label> */}
-
                 <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
                   <input
                     type="radio"
@@ -493,7 +434,7 @@ const CheckoutPage = () => {
             </Card>
           </div>
 
-          {/* Right sidebar - Order Summary */}
+          {/* Order Summary */}
           <div className="lg:col-span-1">
             <Card className="sticky top-20">
               <CardHeader>
@@ -503,48 +444,55 @@ const CheckoutPage = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {checkoutItems.length > 0 ? (
-                    checkoutItems.map((item) => (
-                      <div
-                        key={item.variantId}
-                        className="flex gap-3 items-center"
-                      >
-                        <img
-                          src={item.images?.[0] || "/placeholder.png"}
-                          alt={item.productName}
-                          className="w-14 h-14 object-cover rounded"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {item.productName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {[
-                              item.variantColor,
-                              item.variantStorage,
-                              item.variantConnectivity,
-                              item.variantName,
-                            ]
-                              .filter(Boolean)
-                              .join(" • ")}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            SL: {item.quantity}
-                          </p>
-                        </div>
-                        <span className="text-sm font-medium">
-                          {formatPrice(item.price * item.quantity)}
-                        </span>
+                  {checkoutItemsWithFinalPrice.map((item) => (
+                    <div
+                      key={item.variantId}
+                      className="flex gap-3 items-center"
+                    >
+                      <img
+                        src={item.images?.[0] || "/placeholder.png"}
+                        alt={item.productName}
+                        className="w-14 h-14 object-cover rounded"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {item.productName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {[
+                            item.variantColor,
+                            item.variantStorage,
+                            item.variantConnectivity,
+                            item.variantName,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          SL: {item.quantity}
+                        </p>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Không có sản phẩm nào được chọn
-                    </p>
-                  )}
+                      <div className="text-right">
+                        {appliedPromotion ? (
+                          <>
+                            <p className="text-xs line-through text-muted-foreground">
+                              {formatPrice(item.originalPrice * item.quantity)}
+                            </p>
+                            <p className="text-sm font-semibold text-red-600">
+                              {formatPrice(item.finalizedPrice * item.quantity)}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-sm font-medium">
+                            {formatPrice(item.originalPrice * item.quantity)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Promotion Code */}
+                {/* Mã giảm giá */}
                 <div className="border-t pt-4">
                   <Label className="text-sm font-medium mb-2 block">
                     Mã giảm giá
@@ -575,13 +523,11 @@ const CheckoutPage = () => {
                         </Button>
                       </div>
                       {promotionError && (
-                        <p className="text-sm text-red-600 animate-fade-in">
-                          {promotionError}
-                        </p>
+                        <p className="text-sm text-red-600">{promotionError}</p>
                       )}
                     </div>
                   ) : (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between animate-fade-in">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-green-700">
                           Mã: {appliedPromotion.code}
@@ -602,11 +548,11 @@ const CheckoutPage = () => {
                   )}
                 </div>
 
-                {/* Total Calculation */}
+                {/* Tổng tiền */}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Tạm tính:</span>
-                    <span>{formatPrice(subtotal)}</span>
+                    <span>{formatPrice(discountedSubtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Phí vận chuyển:</span>
@@ -655,7 +601,7 @@ const CheckoutPage = () => {
         </div>
       </form>
 
-      {/* Dialog for selecting address */}
+      {/* Dialog chọn địa chỉ */}
       <Dialog
         open={showSelectAddressDialog}
         onOpenChange={setShowSelectAddressDialog}
@@ -690,9 +636,7 @@ const CheckoutPage = () => {
                         {address.phoneNumber.replace(/^0/, "")}
                       </span>
                       {address.isDefault && (
-                        <Badge variant="secondary" className="text-xs">
-                          Mặc định
-                        </Badge>
+                        <Badge variant="secondary">Mặc định</Badge>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground">

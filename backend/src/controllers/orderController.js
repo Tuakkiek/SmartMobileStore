@@ -23,7 +23,7 @@ const getModelsByType = (productType) => {
 };
 
 // ============================================
-// CREATE ORDER - FIXED + APPLY PROMOTION PER ITEM
+// CREATE ORDER - FIXED: LƯU ĐÚNG GIÁ FINAL SAU KHI ÁP MÃ GIẢM GIÁ
 // ============================================
 export const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -42,6 +42,8 @@ export const createOrder = async (req, res) => {
       session
     );
 
+    console.log("Cart items count:", cart?.items?.length);
+
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
       return res.status(400).json({
@@ -50,17 +52,24 @@ export const createOrder = async (req, res) => {
       });
     }
 
+    console.log("=== CREATING ORDER ===");
+    console.log("Cart items count:", cart.items.length);
+
     // === VALIDATE & POPULATE CART ITEMS ===
     const orderItems = [];
     let subtotal = 0;
-    const requestItems = req.body.items || [];
+    const requestItems = req.body.items || []; // Items từ checkout
 
     for (const reqItem of requestItems) {
-      const { variantId, productType, quantity } = reqItem;
+      const variantId = reqItem.variantId;
+      const productType = reqItem.productType;
+      const quantity = reqItem.quantity;
 
+      // Tìm item trong cart để lấy thông tin bổ sung
       const cartItem = cart.items.find(
         (ci) => ci.variantId.toString() === variantId.toString()
       );
+
       if (!cartItem) {
         await session.abortTransaction();
         return res.status(400).json({
@@ -68,6 +77,13 @@ export const createOrder = async (req, res) => {
           message: `Sản phẩm ${variantId} không có trong giỏ hàng`,
         });
       }
+
+      console.log("\n--- Processing cart item ---");
+      console.log("Cart item:", {
+        productId: reqItem.productId?.toString(),
+        variantId: variantId?.toString(),
+        productType,
+      });
 
       const models = getModelsByType(productType);
       if (!models) {
@@ -78,6 +94,7 @@ export const createOrder = async (req, res) => {
         });
       }
 
+      // STEP 1: Find variant first
       const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
         await session.abortTransaction();
@@ -87,16 +104,41 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      const product = await models.Product.findById(variant.productId).session(
+      console.log("Found variant:", {
+        _id: variant._id?.toString(),
+        productId: variant.productId?.toString(),
+        sku: variant.sku,
+      });
+
+      // STEP 2: Get productId from variant
+      const actualProductId = variant.productId;
+
+      if (!actualProductId) {
+        await session.abortTransaction();
+        return res.status(500).json({
+          success: false,
+          message: `Biến thể ${variant.sku} không có productId hợp lệ`,
+        });
+      }
+
+      // STEP 3: Find product
+      const product = await models.Product.findById(actualProductId).session(
         session
       );
+
       if (!product) {
         await session.abortTransaction();
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy sản phẩm (ID: ${variant.productId})`,
+          message: `Không tìm thấy sản phẩm (ID: ${actualProductId})`,
         });
       }
+
+      console.log("Found product:", {
+        _id: product._id?.toString(),
+        name: product.name,
+        status: product.status,
+      });
 
       // Kiểm tra tồn kho
       if (variant.stock < quantity) {
@@ -118,22 +160,29 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Cập nhật stock & salesCount
-      variant.stock -= quantity;
-      variant.salesCount = (variant.salesCount || 0) + quantity;
+      // Cập nhật variant - KHÔNG GỌI incrementSales()
+      variant.stock -= reqItem.quantity;
+      variant.salesCount = (variant.salesCount || 0) + reqItem.quantity;
       await variant.save({ session });
 
-      product.salesCount = (product.salesCount || 0) + quantity;
+      // Cập nhật product - CHỈ 1 LẦN
+      product.salesCount = (product.salesCount || 0) + reqItem.quantity;
       await product.save({ session });
 
-      // Tính tiền
-      const itemTotal = variant.price * quantity;
-      subtotal += itemTotal;
+      console.log(
+        `Updated: variant.salesCount=${variant.salesCount}, product.salesCount=${product.salesCount}`
+      );
 
+      // SỬA TẠI ĐÂY: DÙNG GIÁ FINAL TỪ FRONTEND (price đã giảm)
+      const finalPricePerUnit = reqItem.price; // ← Giá đã giảm
+      const originalPricePerUnit = reqItem.originalPrice ?? variant.price; // ← Giá gốc
+      const itemTotal = finalPricePerUnit * quantity;
+      subtotal += itemTotal;
+      // Create order item with correct productId
       orderItems.push({
         productId: product._id,
         variantId: variant._id,
-        productType,
+        productType: reqItem.productType,
         productName: product.name,
         variantSku: variant.sku,
         variantColor: variant.color,
@@ -142,21 +191,21 @@ export const createOrder = async (req, res) => {
         variantName: variant.variantName,
         variantCpuGpu: variant.cpuGpu,
         variantRam: variant.ram,
-        quantity,
-        price: variant.price,
-        originalPrice: variant.originalPrice,
+        quantity: quantity,
+        price: finalPricePerUnit, // ← Giá hiển thị (đã giảm)
+        originalPrice: originalPricePerUnit, // ← Giá gốc (gạch ngang)
         total: itemTotal,
         images: variant.images || [],
-        // Thêm sau khi apply promotion
-        discount: 0,
-        finalTotal: itemTotal,
-        finalPrice: variant.price,
       });
+
+      console.log("Item processed successfully");
     }
 
-    // ==============================
-    // XỬ LÝ PROMOTION CODE
-    // ==============================
+    console.log("\n=== ORDER ITEMS SUMMARY ===");
+    console.log("Total items:", orderItems.length);
+    console.log("Subtotal (sau giảm giá):", subtotal);
+
+    // XỬ LÝ PROMOTION CODE (vẫn verify lại cho an toàn)
     let promotionDiscount = 0;
     let appliedPromotion = null;
 
@@ -165,8 +214,15 @@ export const createOrder = async (req, res) => {
         const apiUrl = process.env.API_URL || "http://localhost:5000/api";
         const promoResponse = await axios.post(
           `${apiUrl}/promotions/apply`,
-          { code: promotionCode, totalAmount: subtotal },
-          { headers: { Authorization: req.headers.authorization } }
+          {
+            code: promotionCode,
+            totalAmount: subtotal,
+          },
+          {
+            headers: {
+              Authorization: req.headers.authorization,
+            },
+          }
         );
 
         if (promoResponse.data.success) {
@@ -175,38 +231,20 @@ export const createOrder = async (req, res) => {
             code: promotionCode,
             discountAmount: promotionDiscount,
           };
+          console.log("Promotion applied:", promotionDiscount);
         }
       } catch (promoError) {
         console.log("Promotion error:", promoError.message);
+        console.log("Promotion response:", promoError.response?.data);
+        // Không throw → vẫn cho đặt hàng, chỉ không giảm giá
       }
-    }
-
-    // ==============================
-    // PHÂN BỔ GIẢM GIÁ THEO TỶ LỆ
-    // ==============================
-    if (promotionDiscount > 0 && subtotal > 0) {
-      let remainingDiscount = promotionDiscount;
-      orderItems.forEach((item, index) => {
-        const isLast = index === orderItems.length - 1;
-        const share = item.total / subtotal;
-        const allocated = isLast
-          ? remainingDiscount
-          : Math.round(promotionDiscount * share);
-
-        item.discount = allocated;
-        item.finalTotal = item.total - allocated;
-        item.finalPrice = Math.round(item.finalTotal / item.quantity);
-
-        remainingDiscount -= allocated;
-      });
     }
 
     // Tính phí vận chuyển
     const shippingFee = subtotal >= 5000000 ? 0 : 50000;
 
     // Tổng tạm tính
-    let total =
-      orderItems.reduce((sum, item) => sum + item.finalTotal, 0) + shippingFee;
+    let total = subtotal + shippingFee - promotionDiscount;
 
     // Xử lý reward points
     let pointsUsed = 0;
@@ -217,6 +255,13 @@ export const createOrder = async (req, res) => {
       req.user.rewardPoints -= pointsUsed;
       await req.user.save({ session });
     }
+
+    console.log("\n=== FINAL CALCULATIONS ===");
+    console.log("Subtotal:", subtotal);
+    console.log("Shipping Fee:", shippingFee);
+    console.log("Promotion Discount:", promotionDiscount);
+    console.log("Points Used:", pointsUsed);
+    console.log("Total Amount:", total);
 
     // Tạo đơn hàng
     const order = await Order.create(
@@ -245,6 +290,15 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
 
+    console.log("\nORDER CREATED SUCCESSFULLY:", {
+      orderId: order[0]._id,
+      orderNumber: order[0].orderNumber,
+      status: order[0].status,
+      paymentMethod: order[0].paymentMethod,
+      totalAmount: order[0].totalAmount,
+      itemsCount: order[0].items.length,
+    });
+
     res.status(201).json({
       success: true,
       message: "Đặt hàng thành công",
@@ -255,7 +309,10 @@ export const createOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("CREATE ORDER ERROR:", error);
+    console.error("\nCREATE ORDER ERROR:", {
+      message: error.message,
+      stack: error.stack,
+    });
     res.status(400).json({
       success: false,
       message: error.message || "Lỗi khi tạo đơn hàng",
@@ -264,7 +321,6 @@ export const createOrder = async (req, res) => {
     session.endSession();
   }
 };
-
 // ============================================
 // GET MY ORDERS – ĐÃ SỬA: TRẢ VỀ ĐỦ TRƯỜNG CẦN THIẾT
 // ============================================
@@ -615,27 +671,27 @@ export const updateOrderStatus = async (req, res) => {
       !["CANCELLED", "RETURNED"].includes(order.status)
     ) {
       for (const item of order.items) {
-        const models = getModelsByType(item.productType);
+        const models = getModelsByType(reqItem.productType);
         if (models) {
-          const variant = await models.Variant.findById(item.variantId).session(
-            session
-          );
+          const variant = await models.Variant.findById(
+            reqItem.variantId
+          ).session(session);
           if (variant) {
-            variant.stock += item.quantity;
+            variant.stock += reqItem.quantity;
             variant.salesCount = Math.max(
               0,
-              (variant.salesCount || 0) - item.quantity
+              (variant.salesCount || 0) - reqItem.quantity
             );
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(item.productId).session(
-            session
-          );
+          const product = await models.Product.findById(
+            reqItem.productId
+          ).session(session);
           if (product) {
             product.salesCount = Math.max(
               0,
-              (product.salesCount || 0) - item.quantity
+              (product.salesCount || 0) - reqItem.quantity
             );
             await product.save({ session });
           }

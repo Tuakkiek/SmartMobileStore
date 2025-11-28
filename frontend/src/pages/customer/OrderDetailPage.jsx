@@ -3,7 +3,6 @@
 // ✅ ADDED: Invoice export button for paid orders
 // ✅ FIXED: Show VNPay payment status clearly
 // ============================================
-
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+// Imports mới cho AlertDialog
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   MapPin,
@@ -37,9 +47,7 @@ import {
 import { toast } from "sonner";
 import InvoiceTemplate from "@/components/pos/InvoiceTemplate";
 // ✅ No external library needed for printing
-
 const PlaceholderImg = "https://via.placeholder.com/80?text=No+Image";
-
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -47,12 +55,13 @@ const OrderDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  // === State mới cho AlertDialog ===
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  // ==================================
   const invoiceRef = useRef();
-
   useEffect(() => {
     fetchOrder();
   }, [id]);
-
   const fetchOrder = async () => {
     setIsLoading(true);
     try {
@@ -64,10 +73,11 @@ const OrderDetailPage = () => {
       setIsLoading(false);
     }
   };
-
-  const handleCancelOrder = async () => {
-    if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) return;
-
+  const handleCancelOrder = () => {
+    setShowCancelDialog(true);
+  };
+  const handleConfirmCancel = async () => {
+    setShowCancelDialog(false);
     setIsCancelling(true);
     try {
       await orderAPI.cancel(id);
@@ -79,7 +89,6 @@ const OrderDetailPage = () => {
       setIsCancelling(false);
     }
   };
-
   const handlePrint = () => {
     const printContent = invoiceRef.current;
     const winPrint = window.open("", "", "width=900,height=650");
@@ -96,11 +105,9 @@ const OrderDetailPage = () => {
     winPrint.close();
     toast.success("Đã in hóa đơn thành công");
   };
-
   const handleExportInvoice = () => {
     setShowInvoiceDialog(true);
   };
-
   if (isLoading) return <Loading />;
   if (!order) {
     return (
@@ -112,7 +119,6 @@ const OrderDetailPage = () => {
       </div>
     );
   }
-
   const getImageUrl = (path) => {
     if (!path) return PlaceholderImg;
     if (path.startsWith("http")) return path;
@@ -120,7 +126,6 @@ const OrderDetailPage = () => {
       path.startsWith("/") ? "" : "/"
     }${path}`;
   };
-
   const getVariantLabel = (item) => {
     const parts = [];
     if (item.variantColor) parts.push(item.variantColor);
@@ -129,14 +134,12 @@ const OrderDetailPage = () => {
     if (item.variantConnectivity) parts.push(item.variantConnectivity);
     return parts.length > 0 ? parts.join(" • ") : null;
   };
-
   const isCancelled = order.status === "CANCELLED";
   const isReturned = order.status === "RETURNED";
   const isPaymentVerified =
     order.status === "PAYMENT_VERIFIED" || order.paymentInfo?.vnpayVerified;
   const canExportInvoice =
     order.paymentStatus === "PAID" && order.orderSource === "ONLINE";
-
   // ✅ Prepare invoice data
   const invoiceData = {
     customerName: order.shippingAddress?.fullName,
@@ -154,7 +157,6 @@ const OrderDetailPage = () => {
     staffName: "Hệ thống",
     cashierName: order.paymentMethod === "VNPAY" ? "VNPay" : "N/A",
   };
-
   return (
     <div className="container mx-auto px-4 py-8">
       <Button
@@ -165,7 +167,6 @@ const OrderDetailPage = () => {
         <ArrowLeft className="w-4 h-4 mr-2" />
         Quay lại
       </Button>
-
       {/* ✅ PAYMENT VERIFIED BANNER */}
       {isPaymentVerified && !isCancelled && !isReturned && (
         <div className="mb-6 rounded-lg border-2 bg-green-50 border-green-200 p-6">
@@ -201,7 +202,6 @@ const OrderDetailPage = () => {
           </div>
         </div>
       )}
-
       {/* CANCELLED/RETURNED BANNER */}
       {(isCancelled || isReturned) && (
         <div
@@ -246,7 +246,6 @@ const OrderDetailPage = () => {
           </div>
         </div>
       )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* MAIN CONTENT */}
         <div className="lg:col-span-2 space-y-6">
@@ -268,7 +267,6 @@ const OrderDetailPage = () => {
               </div>
             </CardHeader>
           </Card>
-
           {/* ORDER ITEMS */}
           <Card className={isCancelled || isReturned ? "opacity-75" : ""}>
             <CardHeader>
@@ -280,7 +278,6 @@ const OrderDetailPage = () => {
                   ? getImageUrl(item.images[0])
                   : PlaceholderImg;
                 const variantLabel = getVariantLabel(item);
-
                 return (
                   <div
                     key={item._id || idx}
@@ -293,7 +290,6 @@ const OrderDetailPage = () => {
                         </div>
                       </div>
                     )}
-
                     <img
                       src={imageUrl}
                       alt={item.productName}
@@ -323,7 +319,6 @@ const OrderDetailPage = () => {
               })}
             </CardContent>
           </Card>
-
           {/* SHIPPING ADDRESS */}
           <Card>
             <CardHeader>
@@ -345,7 +340,6 @@ const OrderDetailPage = () => {
               </p>
             </CardContent>
           </Card>
-
           {/* PAYMENT METHOD */}
           <Card>
             <CardHeader>
@@ -365,7 +359,6 @@ const OrderDetailPage = () => {
             </CardContent>
           </Card>
         </div>
-
         {/* SIDEBAR */}
         <div className="lg:col-span-1">
           <Card
@@ -392,7 +385,6 @@ const OrderDetailPage = () => {
                       : formatPrice(order.shippingFee)}
                   </span>
                 </div>
-
                 {/* ✅ THÊM ĐOẠN NÀY */}
                 {order.promotionDiscount > 0 && (
                   <div className="flex justify-between text-sm">
@@ -406,7 +398,6 @@ const OrderDetailPage = () => {
                     </span>
                   </div>
                 )}
-
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Tổng cộng</span>
@@ -441,14 +432,12 @@ const OrderDetailPage = () => {
           </Card>
         </div>
       </div>
-
       {/* ✅ INVOICE DIALOG */}
       <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Hóa đơn đơn hàng #{order.orderNumber}</DialogTitle>
           </DialogHeader>
-
           <div ref={invoiceRef}>
             <InvoiceTemplate
               order={order}
@@ -456,7 +445,6 @@ const OrderDetailPage = () => {
               storeInfo={{}}
             />
           </div>
-
           <div className="flex gap-2 justify-end">
             <Button
               variant="outline"
@@ -471,8 +459,32 @@ const OrderDetailPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* === AlertDialog Xác Nhận Hủy Đơn Hàng MỚI === */}
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận hủy đơn hàng</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn hủy đơn hàng này? <br />
+              <span className="text-red-600 font-medium">
+                Hành động này sẽ không thể hoàn tác.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowCancelDialog(false)}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Xác nhận hủy
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
-
 export default OrderDetailPage;

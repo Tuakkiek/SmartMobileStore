@@ -56,7 +56,6 @@ const CartPage = () => {
   const [loadingVariants, setLoadingVariants] = useState({});
   const [isChangingVariant, setIsChangingVariant] = useState(false);
 
-
   // Dùng ref để tránh auto-select lại khi refresh hoặc re-render
   const hasAutoSelected = useRef(false);
   const items = optimisticCart?.items || cart?.items || [];
@@ -82,15 +81,17 @@ const CartPage = () => {
 
       // Nếu timestamp khác nhau → sort theo timestamp (mới hơn trước)
       if (timeA !== timeB) {
-        return timeB - timeA;
+        return timeB - timeA; // Sắp xếp mới hơn trước
       }
 
       // Nếu timestamp giống nhau → giữ nguyên thứ tự gốc
       return a.originalIndex - b.originalIndex;
     });
 
-    return sorted;
+    // Đảo ngược mảng đã sắp xếp để mới nhất ở trên
+    return sorted.reverse();
   }, [items, itemsOrder]);
+
   // Load giỏ hàng
   useEffect(() => {
     getCart();
@@ -606,6 +607,7 @@ const CartPage = () => {
                   <Card
                     key={item.variantId}
                     className={isSelected ? "ring-2 ring-primary" : ""}
+                    onClick={() => handleSelectItem(item.variantId)}
                   >
                     <CardContent className="p-4">
                       <div className="flex flex-col sm:flex-row gap-4">
