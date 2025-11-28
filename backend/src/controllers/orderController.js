@@ -64,14 +64,30 @@ export const createOrder = async (req, res) => {
     // === VALIDATE & POPULATE CART ITEMS ===
     const orderItems = [];
     let subtotal = 0;
+    // ✅ ĐÚNG - Loop qua items từ request body
+    const requestItems = req.body.items || []; // Items từ checkout
 
-    for (const item of cart.items) {
-      const variantId = item.variantId;
-      const productType = item.productType;
+    for (const reqItem of requestItems) {
+      const variantId = reqItem.variantId;
+      const productType = reqItem.productType;
+      const quantity = reqItem.quantity;
+
+      // Tìm item trong cart để lấy thông tin bổ sung
+      const cartItem = cart.items.find(
+        (ci) => ci.variantId.toString() === variantId.toString()
+      );
+
+      if (!cartItem) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Sản phẩm ${variantId} không có trong giỏ hàng`,
+        });
+      }
 
       console.log("\n--- Processing cart item ---");
       console.log("Cart item:", {
-        productId: item.productId?.toString(),
+        productId: reqItem.productId?.toString(),
         variantId: variantId?.toString(),
         productType,
       });
@@ -132,7 +148,7 @@ export const createOrder = async (req, res) => {
       });
 
       // Kiểm tra tồn kho
-      if (variant.stock < item.quantity) {
+      if (variant.stock < quantity) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
@@ -152,12 +168,12 @@ export const createOrder = async (req, res) => {
       }
 
       // ✅ FIXED: Cập nhật variant - KHÔNG GỌI incrementSales()
-      variant.stock -= item.quantity;
-      variant.salesCount = (variant.salesCount || 0) + item.quantity;
+      variant.stock -= reqItem.quantity;
+      variant.salesCount = (variant.salesCount || 0) + reqItem.quantity;
       await variant.save({ session });
 
       // ✅ FIXED: Cập nhật product - CHỈ 1 LẦN
-      product.salesCount = (product.salesCount || 0) + item.quantity;
+      product.salesCount = (product.salesCount || 0) + reqItem.quantity;
       await product.save({ session });
 
       console.log(
@@ -165,14 +181,14 @@ export const createOrder = async (req, res) => {
       );
 
       // Tính tiền
-      const itemTotal = variant.price * item.quantity;
+      const itemTotal = variant.price * quantity;
       subtotal += itemTotal;
 
       // Create order item with correct productId
       orderItems.push({
         productId: product._id,
         variantId: variant._id,
-        productType: item.productType,
+        productType: reqItem.productType,
         productName: product.name,
         variantSku: variant.sku,
         variantColor: variant.color,
@@ -181,7 +197,7 @@ export const createOrder = async (req, res) => {
         variantName: variant.variantName,
         variantCpuGpu: variant.cpuGpu,
         variantRam: variant.ram,
-        quantity: item.quantity,
+        quantity: quantity,
         price: variant.price,
         originalPrice: variant.originalPrice,
         total: itemTotal,
@@ -486,27 +502,27 @@ export const cancelOrder = async (req, res) => {
 
     // ✅ FIXED: Hoàn lại stock - KHÔNG GỌI incrementSales()
     for (const item of order.items) {
-      const models = getModelsByType(item.productType);
+      const models = getModelsByType(reqItem.productType);
       if (models) {
         const variant = await models.Variant.findById(item.variantId).session(
           session
         );
         if (variant) {
-          variant.stock += item.quantity;
+          variant.stock += reqItem.quantity;
           variant.salesCount = Math.max(
             0,
-            (variant.salesCount || 0) - item.quantity
+            (variant.salesCount || 0) - reqItem.quantity
           );
           await variant.save({ session });
         }
 
-        const product = await models.Product.findById(item.productId).session(
+        const product = await models.Product.findById(reqItem.productId).session(
           session
         );
         if (product) {
           product.salesCount = Math.max(
             0,
-            (product.salesCount || 0) - item.quantity
+            (product.salesCount || 0) - reqItem.quantity
           );
           await product.save({ session });
         }
@@ -660,27 +676,27 @@ export const updateOrderStatus = async (req, res) => {
       !["CANCELLED", "RETURNED"].includes(order.status)
     ) {
       for (const item of order.items) {
-        const models = getModelsByType(item.productType);
+        const models = getModelsByType(reqItem.productType);
         if (models) {
-          const variant = await models.Variant.findById(item.variantId).session(
+          const variant = await models.Variant.findById(reqItem.variantId).session(
             session
           );
           if (variant) {
-            variant.stock += item.quantity;
+            variant.stock += reqItem.quantity;
             variant.salesCount = Math.max(
               0,
-              (variant.salesCount || 0) - item.quantity
+              (variant.salesCount || 0) - reqItem.quantity
             );
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(item.productId).session(
+          const product = await models.Product.findById(reqItem.productId).session(
             session
           );
           if (product) {
             product.salesCount = Math.max(
               0,
-              (product.salesCount || 0) - item.quantity
+              (product.salesCount || 0) - reqItem.quantity
             );
             await product.save({ session });
           }
