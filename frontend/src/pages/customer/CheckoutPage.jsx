@@ -272,6 +272,7 @@ const CheckoutPage = () => {
           variantId: item.variantId,
           quantity: item.quantity,
           productType: item.productType,
+          price: item.discountedPrice || item.price, 
         })),
       };
 
