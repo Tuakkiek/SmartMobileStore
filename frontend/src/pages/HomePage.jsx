@@ -328,7 +328,7 @@ const HomePage = () => {
               .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
               .slice(0, 1);
             const topSellerIds = topSellingProducts.map((p) => p._id);
-            allProducts[cat] = productsWithCategory.slice(0, 8); // Hiển thị 8 sản phẩm
+            allProducts[cat] = productsWithCategory.slice(0, 10); // Hiển thị 8 sản phẩm
             topSellers[cat] = topSellerIds; // ← Lưu IDs của top 10 bán chạy
           } catch (error) {
             console.error(`Error fetching ${cat}:`, error);
@@ -343,7 +343,7 @@ const HomePage = () => {
       const sortedNewArrivals = [...allProductsList]
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 10); // ← Top 10 mới nhất
-      setNewArrivals(sortedNewArrivals.slice(0, 10)); // Hiển thị 8
+      setNewArrivals(sortedNewArrivals.slice(0, 10)); // Hiển thị 10
 
       // ✅ TOP SẢN PHẨM BÁN CHẠY TOÀN BỘ (MỚI THÊM)
       const sortedTopSellers = [...allProductsList]
