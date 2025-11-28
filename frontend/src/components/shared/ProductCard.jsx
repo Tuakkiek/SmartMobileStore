@@ -52,7 +52,7 @@ const StarRating = ({ rating, reviewCount = 0 }) => {
   return (
     // Đã thêm md:gap-[1px]
     <div className="flex items-center gap-0">
-      {[...Array(5)].map((_, i) => (
+      {[...Array(1)].map((_, i) => (
         <Star
           key={i}
           // Đã thêm md:w-3 md:h-3 (nhỏ hơn trên mobile)
@@ -121,7 +121,7 @@ const ProductCard = ({
   const displayOriginalPrice =
     current.originalPrice || product.originalPrice || 0;
   const rating = parseFloat((product.averageRating || 0).toFixed(1)); // ✅ Đảm bảo 1 chữ số thập phân
-  const reviewCount = product.reviewCount || 0;
+  const reviewCount = product.totalReviews || 0;
   const displayImage =
     current?.images?.[0] ||
     (Array.isArray(product.images) ? product.images[0] : null) ||
@@ -134,19 +134,24 @@ const ProductCard = ({
         )
       : 0;
   // ==========================================================================
-  // 3. BADGE GÓC PHẢI (Mới/Bán chạy)
+  // ✅ LOGIC BADGE GÓC PHẢI - ƯU TIÊN "BÁN CHẠY" > "MỚI"
   // ==========================================================================
   const getRightBadge = () => {
-    if (isTopNew)
+    // 1. Ưu tiên "Bán chạy" nếu là top seller
+    if (isTopSeller) {
+      return {
+        text: "Bán chạy",
+        color: "bg-orange-500 hover:bg-orange-500 text-white", // ← Đổi màu cam để phân biệt
+      };
+    }
+    // 2. Hiển thị "Mới" nếu không phải top seller nhưng là sản phẩm mới
+    if (isTopNew) {
       return {
         text: "Mới",
         color: "bg-green-500 hover:bg-green-500 text-white",
       };
-    if (isTopSeller)
-      return {
-        text: "Bán chạy",
-        color: "bg-green-500 hover:bg-green-500 text-white",
-      };
+    }
+    // 3. Không hiển thị badge
     return null;
   };
   const rightBadge = getRightBadge();
@@ -296,24 +301,43 @@ const ProductCard = ({
         )}
         {/* DEBUG UI: CHỈ ADMIN + DEV MODE */}
         {isAdmin && process.env.NODE_ENV === "development" && (
-          <div className="absolute top-12 left-3 z-50 bg-black/90 text-white text-[10px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px]">
-            <div className="truncate">
-              Base:{" "}
-              <code className="text-blue-400">
+          <div className="absolute top-12 left-3 z-10 bg-black/80 text-white text-[8px] px-1.5 py-1 rounded font-mono space-y-0.5 max-w-[140px] opacity-80 ">
+            <div className="flex justify-between gap-2">
+              <span>Base:</span>
+              <code className="text-blue-400 truncate">
                 {product.baseSlug || "NULL"}
               </code>
             </div>
-            <div className="truncate">
-              Var:{" "}
-              <code className="text-green-400">
+
+            <div className="flex justify-between gap-2">
+              <span>Var:</span>
+              <code className="text-green-400 truncate">
                 {selectedVariant?.slug || "NULL"}
               </code>
             </div>
-            <div className="truncate">
-              SKU:{" "}
-              <code className="text-yellow-400">
+
+            <div className="flex justify-between gap-2">
+              <span>SKU:</span>
+              <code className="text-yellow-400 truncate">
                 {selectedVariant?.sku || "NULL"}
               </code>
+            </div>
+
+            <div className="flex justify-between gap-2">
+              <span>Sales:</span>
+              <code className="text-yellow-400">{product.salesCount || 0}</code>
+            </div>
+
+            <div className="flex justify-between gap-2">
+              <span>IsTopSeller:</span>
+              <code className="text-orange-400">
+                {isTopSeller ? "YES" : "NO"}
+              </code>
+            </div>
+
+            <div className="flex justify-between gap-2">
+              <span>IsTopNew:</span>
+              <code className="text-green-400">{isTopNew ? "YES" : "NO"}</code>
             </div>
           </div>
         )}
@@ -341,6 +365,7 @@ const ProductCard = ({
             </div>
           </>
         )}
+        {/* ✅ BADGE GIẢM GIÁ (Góc trái) */}
         {discountPercent > 0 && (
           <div className="absolute top-3 left-3 z-20">
             <Badge className="bg-red-600 hover:bg-red-600 text-white font-bold text-xs px-2 py-1 rounded-md shadow-md">
@@ -348,6 +373,7 @@ const ProductCard = ({
             </Badge>
           </div>
         )}
+        {/* ✅ BADGE BÁN CHẠY / MỚI (Góc phải) */}
         {rightBadge && (
           <div className="absolute top-3 right-3 z-20">
             <Badge

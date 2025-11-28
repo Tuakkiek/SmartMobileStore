@@ -17,12 +17,86 @@ export const getNextSku = async () => {
  * Sinh slug từ chuỗi (giữ nguyên)
  */
 export const generateSlug = (model) => {
+  // Bản đồ chuyển đổi ký tự có dấu sang không dấu
+  const vietnameseMap = {
+    à: "a",
+    á: "a",
+    ả: "a",
+    ã: "a",
+    ạ: "a",
+    ă: "a",
+    ằ: "a",
+    ắ: "a",
+    ẳ: "a",
+    ẵ: "a",
+    ặ: "a",
+    â: "a",
+    ầ: "a",
+    ấ: "a",
+    ẩ: "a",
+    ẫ: "a",
+    ậ: "a",
+    đ: "d",
+    è: "e",
+    é: "e",
+    ẻ: "e",
+    ẽ: "e",
+    ẹ: "e",
+    ê: "e",
+    ề: "e",
+    ế: "e",
+    ể: "e",
+    ễ: "e",
+    ệ: "e",
+    ì: "i",
+    í: "i",
+    ỉ: "i",
+    ĩ: "i",
+    ị: "i",
+    ò: "o",
+    ó: "o",
+    ỏ: "o",
+    õ: "o",
+    ọ: "o",
+    ô: "o",
+    ồ: "o",
+    ố: "o",
+    ổ: "o",
+    ỗ: "o",
+    ộ: "o",
+    ơ: "o",
+    ờ: "o",
+    ớ: "o",
+    ở: "o",
+    ỡ: "o",
+    ợ: "o",
+    ù: "u",
+    ú: "u",
+    ủ: "u",
+    ũ: "u",
+    ụ: "u",
+    ư: "u",
+    ừ: "u",
+    ứ: "u",
+    ử: "u",
+    ữ: "u",
+    ự: "u",
+    ỳ: "y",
+    ý: "y",
+    ỷ: "y",
+    ỹ: "y",
+    ỵ: "y",
+  };
+
   return model
     .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .split("") // Tách thành mảng ký tự
+    .map((char) => vietnameseMap[char] || char) // Chuyển đổi ký tự
+    .join("") // Ghép lại
+    .replace(/\s+/g, "-") // Thay khoảng trắng = dấu gạch ngang
+    .replace(/[^a-z0-9-]/g, "") // Xóa ký tự đặc biệt
+    .replace(/-+/g, "-") // Gộp nhiều dấu gạch ngang
+    .replace(/^-+|-+$/g, ""); // Xóa dấu gạch ngang đầu/cuối
 };
 // Hàm sinh SKU theo format cũ (nếu cần giữ lại)
 export const generateSKU = (category, model, color, ...rest) => {

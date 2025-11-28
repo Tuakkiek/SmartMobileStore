@@ -363,6 +363,5 @@ orderSchema.index({ "posInfo.staffId": 1 });
 orderSchema.index({ "paymentInfo.processedBy": 1 });
 orderSchema.index({ paymentMethod: 1, paymentStatus: 1 });
 orderSchema.index({ "paymentInfo.vnpayVerified": 1 });
-orderSchema.index({ "paymentInfo.vnpayTxnRef": 1 }); // ✅ For faster lookup
 
 export default mongoose.model("Order", orderSchema);

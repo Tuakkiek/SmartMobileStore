@@ -1,7 +1,6 @@
 // ============================================
 // FILE: src/pages/HomePage.jsx
-// Trang chủ theo phong cách FPT Shop
-// CẬP NHẬT: Hiển thị 2 sản phẩm/hàng trên mobile để tránh vỡ layout
+// CẬP NHẬT: Logic badge bán chạy dựa trên salesCount
 // ============================================
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -30,7 +29,6 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
-  analyticsAPI,
 } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
@@ -114,7 +112,7 @@ const CategoryNav = ({ onCategoryClick, productCounts }) => {
 };
 
 // ============================================
-// NEW ARRIVALS SECTION - CẬP NHẬT GRID
+// NEW ARRIVALS SECTION - CẬP NHẬT
 // ============================================
 const NewArrivalsSection = ({
   products,
@@ -122,9 +120,20 @@ const NewArrivalsSection = ({
   onEdit,
   onDelete,
   onViewAll,
+  topSellersMap, // ← THÊM PROP
 }) => {
   if (!Array.isArray(products) || products.length === 0) return null;
-
+  // ✅ Tạo Set chứa TẤT CẢ top seller IDs từ mọi category
+  const allTopSellerIds = new Set(
+    Object.values(topSellersMap)
+      .flat()
+      .map((id) => id.toString())
+  );
+  // ✅ Top 10 sản phẩm mới nhất
+  const topNewIds = [...products]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 10)
+    .map((p) => p._id.toString());
   return (
     <section className="py-10 bg-white">
       <div className="container mx-auto px-4">
@@ -141,23 +150,19 @@ const NewArrivalsSection = ({
             Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
           </Button>
         </div>
-
-        {/* CẬP NHẬT: grid-cols-2 cho mobile để tránh vỡ layout */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
                 product={product}
-                isTopNew={true}
-                isTopSeller={false}
+                isTopNew={topNewIds.includes(product._id.toString())} // ← Top 10 mới
+                isTopSeller={allTopSellerIds.has(product._id.toString())} // ← Top 10 bán chạy
                 onEdit={isAdmin ? () => onEdit(product) : undefined}
                 onDelete={
                   isAdmin
                     ? () => onDelete(product._id, product.category)
                     : undefined
                 }
-                showVariantsBadge={true}
-                showAdminActions={isAdmin}
               />
             </div>
           ))}
@@ -168,7 +173,59 @@ const NewArrivalsSection = ({
 };
 
 // ============================================
-// CATEGORY SECTION - CẬP NHẬT GRID
+// TOP SELLERS SECTION - MỚI THÊM
+// ============================================
+const TopSellersSection = ({
+  products,
+  isAdmin,
+  onEdit,
+  onDelete,
+  onViewAll,
+  topNewIdsOverall, // ← Top new IDs toàn bộ để check badge
+}) => {
+  if (!Array.isArray(products) || products.length === 0) return null;
+  // ✅ Top 10 sản phẩm mới nhất toàn bộ (để check isTopNew)
+  const topNewIds = topNewIdsOverall.map((id) => id.toString());
+  return (
+    <section className="py-10 bg-white">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+            Sản phẩm bán chạy
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onViewAll}
+            className="hover:bg-primary hover:text-white transition-colors"
+          >
+            Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+          {products.map((product) => (
+            <div key={product._id} className="relative group">
+              <ProductCard
+                product={product}
+                isTopNew={topNewIds.includes(product._id.toString())} // ← Check top new toàn bộ
+                isTopSeller={true} // ← Tất cả ở đây đều là top seller
+                onEdit={isAdmin ? () => onEdit(product) : undefined}
+                onDelete={
+                  isAdmin
+                    ? () => onDelete(product._id, product.category)
+                    : undefined
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ============================================
+// CATEGORY SECTION - CẬP NHẬT
 // ============================================
 const CategorySection = ({
   category,
@@ -182,7 +239,6 @@ const CategorySection = ({
 }) => {
   const Icon = CATEGORY_ICONS[category] || Box;
   if (!Array.isArray(products) || products.length === 0) return null;
-
   return (
     <section className="py-10 bg-gray-50">
       <div className="container mx-auto px-4">
@@ -204,21 +260,17 @@ const CategorySection = ({
             Xem tất cả <ChevronRight className="ml-1 w-4 h-4" />
           </Button>
         </div>
-
-        {/* CẬP NHẬT: grid-cols-2 cho mobile để tránh vỡ layout */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
           {products.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
                 product={product}
-                isTopNew={topNewIds?.includes(product._id)}
-                isTopSeller={topSellerIds?.includes(product._id)}
+                isTopNew={topNewIds?.includes(product._id.toString())} // ← Top 10 mới
+                isTopSeller={topSellerIds?.includes(product._id.toString())} // ← Top 10 bán chạy
                 onEdit={isAdmin ? () => onEdit(product) : undefined}
                 onDelete={
                   isAdmin ? () => onDelete(product._id, category) : undefined
                 }
-                showVariantsBadge={true}
-                showAdminActions={isAdmin}
               />
             </div>
           ))}
@@ -239,6 +291,7 @@ const HomePage = () => {
   const [categoryProducts, setCategoryProducts] = useState({});
   const [topSellersMap, setTopSellersMap] = useState({});
   const [newArrivals, setNewArrivals] = useState([]);
+  const [topSellers, setTopSellers] = useState([]); // ← THÊM STATE CHO TOP SELLERS
   const [isLoading, setIsLoading] = useState(true);
 
   // EDIT MODAL
@@ -250,44 +303,33 @@ const HomePage = () => {
     ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user?.role);
 
   // ============================================
-  // FETCH DATA
+  // FETCH DATA - CẬP NHẬT
   // ============================================
   const fetchHomeData = useCallback(async () => {
     setIsLoading(true);
     const allProducts = {};
-    const topSellers = {};
-
+    const topSellers = {}; // ← Thay đổi: Lưu toàn bộ product IDs có salesCount cao
     try {
       await Promise.all(
         categories.map(async (cat) => {
           const api = API_MAP[cat];
           if (!api?.getAll) return;
-
           try {
-            const productsRes = await api.getAll({ limit: 8 });
+            const productsRes = await api.getAll({ limit: 100 }); // ← Tăng limit để lấy đủ data
             const products =
               productsRes.data?.data?.products || productsRes.data || [];
-
             const productsWithCategory = products.map((p) => ({
               ...p,
               category: cat,
             }));
-
-            let sellerIds = [];
-            try {
-              const sellersRes = await analyticsAPI.getTopSellers(cat, 10);
-              const data = sellersRes.data?.data || sellersRes.data;
-              sellerIds = Array.isArray(data)
-                ? data.map((s) => s.productId).filter(Boolean)
-                : [];
-            } catch (err) {
-              console.warn(`Top sellers failed for ${cat}:`, err);
-            }
-
-            allProducts[cat] = Array.isArray(productsWithCategory)
-              ? productsWithCategory
-              : [];
-            topSellers[cat] = sellerIds;
+            // ✅ SẮP XẾP THEO salesCount, LẤY TOP 10
+            const topSellingProducts = [...productsWithCategory]
+              .filter((p) => p.salesCount > 0) // Chỉ lấy sản phẩm có sales
+              .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
+              .slice(0, 1);
+            const topSellerIds = topSellingProducts.map((p) => p._id);
+            allProducts[cat] = productsWithCategory.slice(0, 8); // Hiển thị 8 sản phẩm
+            topSellers[cat] = topSellerIds; // ← Lưu IDs của top 10 bán chạy
           } catch (error) {
             console.error(`Error fetching ${cat}:`, error);
             allProducts[cat] = [];
@@ -295,13 +337,21 @@ const HomePage = () => {
           }
         })
       );
-
       const allProductsList = Object.values(allProducts).flat();
+
+      // ✅ TOP SẢN PHẨM MỚI (theo createdAt)
       const sortedNewArrivals = [...allProductsList]
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 8);
+        .slice(0, 10); // ← Top 10 mới nhất
+      setNewArrivals(sortedNewArrivals.slice(0, 10)); // Hiển thị 8
 
-      setNewArrivals(sortedNewArrivals);
+      // ✅ TOP SẢN PHẨM BÁN CHẠY TOÀN BỘ (MỚI THÊM)
+      const sortedTopSellers = [...allProductsList]
+        .filter((p) => p.salesCount > 0)
+        .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
+        .slice(0, 10); // ← Top 10 bán chạy nhất cross-category
+      setTopSellers(sortedTopSellers); // Hiển thị 10
+
       setCategoryProducts(allProducts);
       setTopSellersMap(topSellers);
     } catch (err) {
@@ -322,6 +372,16 @@ const HomePage = () => {
   const getTopNewIds = (products) => {
     if (!Array.isArray(products) || products.length === 0) return [];
     return [...products]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10) // ← Top 10 mới nhất
+      .map((p) => p._id)
+      .filter(Boolean);
+  };
+
+  // THÊM: Get top new IDs toàn bộ cho TopSellersSection
+  const getTopNewIdsOverall = () => {
+    const allProductsList = Object.values(categoryProducts).flat();
+    return [...allProductsList]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 10)
       .map((p) => p._id)
@@ -357,6 +417,11 @@ const HomePage = () => {
     }
   };
 
+  // THÊM: View all cho top sellers (sort by salesCount)
+  const handleViewAllTopSellers = () => {
+    navigate("/products?sort=salesCount");
+  };
+
   const productCounts = Object.keys(categoryProducts).reduce((acc, cat) => {
     acc[cat] = categoryProducts[cat]?.length || 0;
     return acc;
@@ -366,31 +431,35 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Hero Banner với Secondary Banners */}
       <HeroSection
         currentSlide={currentSlide}
         onSlideChange={setCurrentSlide}
       />
-
-      {/* Promo Strip */}
       <PromoStrip />
-
-      {/* Category Navigation */}
       <CategoryNav
         onCategoryClick={handleViewAll}
         productCounts={productCounts}
       />
       <DealsGridSection />
       <MagicDealsSection />
-      {/* New Arrivals */}
+      {/* ✅ TRUYỀN topSellersMap VÀO NewArrivalsSection */}
       <NewArrivalsSection
         products={newArrivals}
+        topSellersMap={topSellersMap} // ← THÊM PROP
         isAdmin={isAdmin}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onViewAll={() => handleViewAll()}
       />
-
+      {/* ✅ TOP SELLERS SECTION - MỚI THÊM, BÊN DƯỚI NEW ARRIVALS */}
+      <TopSellersSection
+        products={topSellers}
+        topNewIdsOverall={getTopNewIdsOverall()} // ← Truyền top new IDs toàn bộ
+        isAdmin={isAdmin}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onViewAll={handleViewAllTopSellers}
+      />
       {/* Category Sections */}
       {categories.map((cat) => (
         <CategorySection
@@ -398,18 +467,14 @@ const HomePage = () => {
           category={cat}
           products={categoryProducts[cat] || []}
           topNewIds={getTopNewIds(categoryProducts[cat] || [])}
-          topSellerIds={topSellersMap[cat] || []}
+          topSellerIds={topSellersMap[cat] || []} // ← Đã có sẵn
           isAdmin={isAdmin}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onViewAll={handleViewAll}
         />
       ))}
-
-      {/* iPhone Showcase */}
       {categoryProducts.iPhone?.length > 0 && <IPhoneShowcase />}
-
-      {/* Edit Modal */}
       <ProductEditModal
         open={showEditModal}
         onOpenChange={setShowEditModal}
