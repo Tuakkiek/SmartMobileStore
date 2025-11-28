@@ -297,6 +297,7 @@ export const vnpayReturn = async (req, res) => {
     const order = await Order.findOne({
       $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
     });
+    
 
     const paymentVerified =
       order?.paymentInfo?.vnpayVerified || order?.paymentStatus === "PAID";

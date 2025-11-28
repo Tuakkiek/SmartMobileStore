@@ -45,6 +45,7 @@ const __dirname = path.resolve();
 app.use(
   cors({
     origin: [
+      "http://localhost:5173",
       "https://ninhkieu-istore-ct.onrender.com",
       "https://sandbox.vnpayment.vn",
       "https://vnpayment.vn",

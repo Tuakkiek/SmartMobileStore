@@ -1,6 +1,5 @@
 // ============================================
 // FILE: frontend/src/components/shared/ProductCard.jsx
-// (Đã viết lại để responsive hoàn toàn)
 // ============================================
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";

@@ -655,7 +655,7 @@ const ReviewItem = ({
               ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
               : "bg-gray-50 text-gray-600 hover:bg-gray-100"
           } ${isLiking ? "opacity-50 cursor-not-allowed" : ""}`}
-          title={`Review ID: ${review._id}\nHas Liked: ${hasLiked}\nHelpful: ${localHelpful}`}
+        title={`Review ID: ${review._id}\nHas Liked: ${hasLiked}\nHelpful: ${localHelpful}`}
         >
           <ThumbsUp
             className={`w-4 h-4 transition-all ${
@@ -669,9 +669,9 @@ const ReviewItem = ({
         </button>
 
         {/* DEBUG INFO */}
-        <div className="text-xs text-gray-400">
+        {/* <div className="text-xs text-gray-400">
           ID: {review._id?.substring(0, 8)}...
-        </div>
+        </div> */}
       </div>
 
       {/* Admin Reply (collapsed for brevity - same as before) */}
