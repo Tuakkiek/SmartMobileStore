@@ -113,8 +113,8 @@ const OrderDetailPage = () => {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
         <p>Không tìm thấy đơn hàng</p>
-        <Button onClick={() => navigate("/orders")} className="mt-4">
-          Quay lại danh sách
+        <Button onClick={() => navigate("/profile")} className="mt-4">
+          Quay lại trang cá nhân
         </Button>
       </div>
     );
@@ -159,11 +159,7 @@ const OrderDetailPage = () => {
   };
   return (
     <div className="container mx-auto px-4 py-8">
-      <Button
-        variant="ghost"
-        onClick={() => navigate("/profile")}
-        className="mb-6"
-      >
+      <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Quay lại
       </Button>

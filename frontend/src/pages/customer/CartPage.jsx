@@ -561,7 +561,7 @@ const CartPage = () => {
             <p className="text-muted-foreground mb-6">
               Bạn chưa có sản phẩm nào trong giỏ hàng
             </p>
-            <Button onClick={() => navigate("/products")}>
+            <Button onClick={() => navigate(-1)}>
               Tiếp tục mua sắm
             </Button>
           </CardContent>
@@ -842,7 +842,7 @@ const CartPage = () => {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => navigate("/products")}
+                    onClick={() => navigate(-1)}
                   >
                     Tiếp tục mua sắm
                   </Button>

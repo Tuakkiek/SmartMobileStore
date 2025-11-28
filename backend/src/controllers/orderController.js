@@ -284,9 +284,18 @@ export const createOrder = async (req, res) => {
       { session }
     );
 
-    // Xóa giỏ hàng
-    cart.items = [];
+    // ✅ CHỈ XÓA CÁC ITEMS ĐÃ CHECKOUT
+    const checkoutVariantIds = requestItems.map((item) =>
+      item.variantId.toString()
+    );
+    cart.items = cart.items.filter(
+      (item) => !checkoutVariantIds.includes(item.variantId.toString())
+    );
     await cart.save({ session });
+
+    console.log(
+      `Removed ${requestItems.length} items from cart, ${cart.items.length} items remaining`
+    );
 
     await session.commitTransaction();
 

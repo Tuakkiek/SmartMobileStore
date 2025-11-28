@@ -22,7 +22,6 @@ import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import CartPage from "@/pages/customer/CartPage";
 import CheckoutPage from "@/pages/customer/CheckoutPage";
-import OrdersPage from "@/pages/customer/OrdersPage";
 import OrderDetailPage from "@/pages/customer/OrderDetailPage";
 import ProfilePage from "@/pages/customer/ProfilePage";
 
@@ -144,15 +143,6 @@ function App() {
             }
           />
 
-          {/* Đơn hàng */}
-          <Route
-            path="/orders"
-            element={
-              <ProtectedRoute allowedRoles={["CUSTOMER"]}>
-                <OrdersPage />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/orders/:id"
             element={

@@ -270,14 +270,21 @@ const CheckoutPage = () => {
           variantId: item.variantId,
           quantity: item.quantity,
           productType: item.productType,
-          price: item.finalizedPrice || item.originalPrice, // ← Giá đã giảm (final)
-          originalPrice: item.originalPrice, // ← Giá gốc (để đối soát)
+          price: item.finalizedPrice || item.originalPrice,
+          originalPrice: item.originalPrice,
         })),
       };
 
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
 
+      // ✅ XÓA CÁC ITEMS ĐÃ CHECKOUT KHỎI GIỎ HÀNG
+      const { removeFromCart } = useCartStore.getState();
+      for (const item of checkoutItems) {
+        await removeFromCart(item.variantId);
+      }
+
+      // ✅ RESET SELECTED ITEMS
       setSelectedForCheckout([]);
 
       if (formData.paymentMethod === "VNPAY") {
@@ -291,7 +298,7 @@ const CheckoutPage = () => {
           });
 
           if (vnpayResponse.data?.success) {
-            await getCart();
+            await getCart(); // Refresh để cập nhật UI
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
@@ -301,7 +308,7 @@ const CheckoutPage = () => {
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        await getCart();
+        await getCart(); // ✅ Refresh cart để hiển thị items còn lại
         toast.success("Đặt hàng thành công!");
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });
