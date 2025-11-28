@@ -46,6 +46,8 @@ const CartPage = () => {
     removeFromCart,
     addToCart,
     setSelectedForCheckout,
+    shouldAutoSelect,
+    selectedForCheckout, // ✅ THÊM DÒNG NÀY
   } = useCartStore();
 
   const [selectedItems, setSelectedItems] = useState([]); // Mảng variantId
@@ -54,7 +56,6 @@ const CartPage = () => {
   const [loadingVariants, setLoadingVariants] = useState({});
   const [isChangingVariant, setIsChangingVariant] = useState(false);
 
-  const { shouldAutoSelect } = useCartStore();
 
   // Dùng ref để tránh auto-select lại khi refresh hoặc re-render
   const hasAutoSelected = useRef(false);
@@ -122,6 +123,18 @@ const CartPage = () => {
     }
   }, [cart?.items, isChangingVariant]); // ← THÊM isChangingVariant vào deps
   // Reset flag khi URL thay đổi (có param mới)
+
+  useEffect(() => {
+    console.log("🛒 CartPage mounted:", {
+      hasSelectedItems: selectedForCheckout.length > 0,
+      cartItemsCount: cart?.items?.length,
+      pathname: location.pathname,
+    });
+
+    if (selectedForCheckout.length === 0 && location.pathname === "/cart") {
+      console.log("⚠️ No selected items on cart page - this is normal");
+    }
+  }, [selectedForCheckout, cart, location]);
 
   useEffect(() => {
     if (cart?.items && cart.items.length > 0) {

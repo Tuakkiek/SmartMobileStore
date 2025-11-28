@@ -269,12 +269,22 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-    console.log("\n✅ ORDER CREATED SUCCESSFULLY:", order[0]._id);
+    console.log("\n✅ ORDER CREATED SUCCESSFULLY:", {
+      orderId: order[0]._id,
+      orderNumber: order[0].orderNumber,
+      status: order[0].status,
+      paymentMethod: order[0].paymentMethod,
+      totalAmount: order[0].totalAmount,
+      itemsCount: order[0].items.length,
+    });
 
     res.status(201).json({
       success: true,
       message: "Đặt hàng thành công",
-      data: { order: order[0] },
+      data: {
+        order: order[0],
+        redirectUrl: `/orders/${order[0]._id}`, // ✅ Thêm redirect URL
+      },
     });
   } catch (error) {
     await session.abortTransaction();

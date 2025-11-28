@@ -94,19 +94,15 @@ const CheckoutPage = () => {
 
   // Thay đổi logic kiểm tra ở đầu component:
   useEffect(() => {
-    // ✅ CHỈ REDIRECT NẾU KHÔNG CÓ SẢN PHẨM NÀO ĐƯỢC CHỌN
     if (selectedForCheckout.length === 0) {
       toast.error("Vui lòng chọn sản phẩm để thanh toán");
       navigate("/cart");
       return;
     }
-
-    // Nếu có selectedForCheckout nhưng cart chưa load → đợi
     if (!cart) {
       getCart();
     }
-  }, [selectedForCheckout, cart, navigate, getCart]);
-
+  }, []); // Không deps vào selectedForCheckout
   useEffect(() => {
     // Bắt lỗi JavaScript từ VNPay Sandbox
     window.addEventListener("error", (event) => {
@@ -211,6 +207,19 @@ const CheckoutPage = () => {
     setIsLoading(true);
     setError("");
 
+    // ✅ 0. Kiểm tra items trước tiên
+    if (!checkoutItems || checkoutItems.length === 0) {
+      console.error("❌ No checkout items:", {
+        checkoutItems,
+        selectedForCheckout,
+        cartItems: cart?.items?.length,
+      });
+      setError("Không có sản phẩm nào để thanh toán");
+      setIsLoading(false);
+      navigate("/cart", { replace: true });
+      return;
+    }
+
     // ✅ 1. Kiểm tra address
     if (!selectedAddressId) {
       setError("Vui lòng chọn địa chỉ nhận hàng");
@@ -255,6 +264,11 @@ const CheckoutPage = () => {
 
       setSelectedForCheckout([]);
 
+      console.log("✅ Order created:", {
+        orderId: createdOrder._id,
+        orderNumber: createdOrder.orderNumber,
+      });
+
       // ✅ NẾU CHỌN VNPAY → Xử lý redirect
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
@@ -288,8 +302,19 @@ const CheckoutPage = () => {
         }
       } else {
         // COD / BANK_TRANSFER - redirect bình thường
+        console.log("✅ Order created successfully:", {
+          orderId: createdOrder._id,
+          orderNumber: createdOrder.orderNumber,
+          paymentMethod: formData.paymentMethod,
+        });
+
+        await getCart(); // Clear cart
         toast.success("Đặt hàng thành công!");
-        navigate(`/orders/${createdOrder._id}`);
+
+        // Đợi một chút để đảm bảo toast hiển thị
+        setTimeout(() => {
+          navigate(`/orders/${createdOrder._id}`, { replace: true });
+        }, 300);
       }
     } catch (error) {
       setError(error.response?.data?.message || "Đặt hàng thất bại");
