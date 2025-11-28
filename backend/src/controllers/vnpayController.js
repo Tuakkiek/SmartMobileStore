@@ -266,7 +266,6 @@ export const vnpayIPN = async (req, res) => {
   }
 };
 
-// ============================================
 // RETURN URL
 // ============================================
 export const vnpayReturn = async (req, res) => {
@@ -297,7 +296,6 @@ export const vnpayReturn = async (req, res) => {
     const order = await Order.findOne({
       $or: [{ "paymentInfo.vnpayTxnRef": vnpTxnRef }, { _id: orderId }],
     });
-    
 
     const paymentVerified =
       order?.paymentInfo?.vnpayVerified || order?.paymentStatus === "PAID";
