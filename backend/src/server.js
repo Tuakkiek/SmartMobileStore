@@ -130,24 +130,29 @@ app.use((err, req, res, next) => {
 // 🔹 Production: Serve static files & SPA
 // ================================
 if (process.env.NODE_ENV === "production") {
-  // ✅ FIXED: Sử dụng đường dẫn đúng trên Render
   const frontendPath = path.join(process.cwd(), "../frontend/dist");
 
   console.log("📁 Current working directory:", process.cwd());
   console.log("📁 Frontend path:", frontendPath);
 
+  // Serve static files (CSS, JS, images, etc.)
   app.use(express.static(frontendPath));
 
-  // ✅ FIXED: Thay /* bằng *
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(frontendPath, "index.html"), (err) => {
-      if (err) {
-        console.error("Error sending index.html:", err);
-        res.status(500).send("Error loading page");
-      }
-    });
+  // SPA fallback - catch all non-API routes
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api")) {
+      res.sendFile(path.join(frontendPath, "index.html"), (err) => {
+        if (err) {
+          console.error("Error sending index.html:", err);
+          res.status(500).send("Error loading page");
+        }
+      });
+    } else {
+      next();
+    }
   });
 } else {
+  // Development 404 handler
   app.use((req, res) => {
     res.status(404).json({
       success: false,
