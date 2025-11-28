@@ -26,11 +26,6 @@ const getModelsByType = (productType) => {
 // CREATE ORDER - FIXED
 // ============================================
 export const createOrder = async (req, res) => {
-  console.log("📦 CREATE ORDER REQUEST:", {
-    promotionCode,
-    cartItemsCount: cart?.items?.length,
-    userId: req.user._id,
-  });
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -43,9 +38,17 @@ export const createOrder = async (req, res) => {
       promotionCode,
     } = req.body;
 
+    // console.log("📦 CREATE ORDER REQUEST:", {
+    //   promotionCode,
+    //   cartItemsCount: cart?.items?.length,
+    //   userId: req.user._id,
+    // });
+
     const cart = await Cart.findOne({ customerId: req.user._id }).session(
       session
     );
+
+    console.log("Cart items count:", cart?.items?.length);
 
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
@@ -198,8 +201,9 @@ export const createOrder = async (req, res) => {
 
     if (promotionCode) {
       try {
+        const apiUrl = process.env.API_URL || "http://localhost:5000/api";
         const promoResponse = await axios.post(
-          `${process.env.API_URL}/promotions/apply`, // ← KIỂM TRA BIẾN MÔI TRƯỜNG
+          `${apiUrl}/promotions/apply`,
           {
             code: promotionCode,
             totalAmount: subtotal,
@@ -217,7 +221,7 @@ export const createOrder = async (req, res) => {
             code: promotionCode,
             discountAmount: promotionDiscount,
           };
-          console.log("✅ Promotion applied:", promotionDiscount); // ← THÊM LOG
+          console.log("✅ Promotion applied:", promotionDiscount);
         }
       } catch (promoError) {
         console.log("⚠️ Promotion error:", promoError.message);

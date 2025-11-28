@@ -4,10 +4,11 @@ import { protect, restrictTo } from "../middleware/authMiddleware.js";
 import {
   createOrder,
   getMyOrders,
+  getOrderById,
   cancelOrder,
   getAllOrders,
   updateOrderStatus,
-  getOrderById,
+  getOrderStatistics,
 } from "../controllers/orderController.js";
 
 const router = express.Router();

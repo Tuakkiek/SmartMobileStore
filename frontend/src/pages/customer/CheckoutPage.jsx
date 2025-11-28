@@ -241,6 +241,21 @@ const CheckoutPage = () => {
       return;
     }
 
+    console.log(
+      "📦 Checkout items before ordering:",
+      JSON.stringify(
+        checkoutItems.map((item) => ({
+          variantId: item.variantId,
+          productName: item.productName,
+          quantity: item.quantity,
+          price: item.price,
+          productType: item.productType,
+        })),
+        null,
+        2
+      )
+    );
+
     try {
       const orderData = {
         shippingAddress: {
@@ -260,7 +275,17 @@ const CheckoutPage = () => {
         })),
       };
 
+      console.log(
+        "📤 Sending order data to backend:",
+        JSON.stringify(orderData, null, 2)
+      );
+
       const response = await orderAPI.create(orderData);
+      console.log(
+        "✅ Order creation response:",
+        JSON.stringify(response.data, null, 2)
+      );
+
       const createdOrder = response.data.data.order;
 
       setSelectedForCheckout([]);
@@ -288,6 +313,10 @@ const CheckoutPage = () => {
             orderDescription: `Thanh toan don hang ${createdOrder.orderNumber}`,
             language: "vn",
           });
+          console.log(
+            "✅ VNPay response:",
+            JSON.stringify(vnpayResponse.data, null, 2)
+          );
 
           if (vnpayResponse.data?.success) {
             await getCart(); // Clear cart
@@ -296,8 +325,8 @@ const CheckoutPage = () => {
             throw new Error("Không thể tạo link thanh toán");
           }
         } catch (error) {
-          console.error("❌ VNPay Error:", error);
-          console.error("Response:", error.response?.data);
+          console.error("❌ VNPay Error:", error.message);
+          console.error("VNPay Error details:", error.response?.data);
           setIsRedirectingToPayment(false);
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
@@ -318,6 +347,8 @@ const CheckoutPage = () => {
         }, 300);
       }
     } catch (error) {
+      console.error("❌ Order creation error:", error.message);
+      console.error("Error details:", error.response?.data);
       setError(error.response?.data?.message || "Đặt hàng thất bại");
       toast.error("Đặt hàng thất bại");
     } finally {
