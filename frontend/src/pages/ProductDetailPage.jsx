@@ -270,7 +270,7 @@ const ProductDetailPage = () => {
       if (isBuyNow) {
         // ✅ MUA NGAY: SET SELECTED + REDIRECT ĐẾN CHECKOUT
         setSelectedForCheckout([selectedVariant._id]);
-        navigate("/checkout");
+        navigate("/cart/checkout");
       } else {
         // ✅ THÊM VÀO GIỎ: HIỂN thị MODAL
         setShowAddToCartModal(true);
