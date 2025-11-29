@@ -22,7 +22,7 @@ export const useDashboardData = (timeRange) => {
     setError(null);
 
     try {
-      // Fetch all data in parallel
+      // Fetch all data in parallel .
       const [
         ordersRes,
         deliveredRes,
