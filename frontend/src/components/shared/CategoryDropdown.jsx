@@ -16,6 +16,8 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 
+import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
+
 const API_MAP = {
   iPhone: iPhoneAPI,
   iPad: iPadAPI,
@@ -58,12 +60,20 @@ const CATEGORY_DISPLAY_MAP = {
 
 // Map tên danh mục → URL param
 const CATEGORY_PARAM_MAP = {
-  iPhone: "iPhone",
-  iPad: "iPad",
-  Mac: "Mac",
-  AirPods: "AirPods",
-  "Apple Watch": "AppleWatch",
-  "Phụ Kiện": "Accessories",
+  iPhone: "dien-thoai",
+  iPad: "may-tinh-bang",
+  Mac: "macbook",
+  AppleWatch: "apple-watch",
+  AirPods: "tai-nghe",
+  Accessories: "phu-kien",
+};
+const CATEGORY_TO_PATH = {
+  iPhone: "/dien-thoai",
+  iPad: "/may-tinh-bang",
+  Mac: "/macbook",
+  AirPods: "/tai-nghe",
+  "Apple Watch": "/apple-watch",
+  "Phụ Kiện": "/phu-kien",
 };
 
 const CategoryDropdown = () => {
@@ -73,6 +83,8 @@ const CategoryDropdown = () => {
   const [categoryData, setCategoryData] = useState({});
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
+  const { getTopRecent } = useRecentlyViewed();
+  const recentProducts = getTopRecent(4);
 
   // ============================================
   // LOGIC (Giữ nguyên)
@@ -213,34 +225,82 @@ const CategoryDropdown = () => {
   const handleCategoryClick = (name, idx) => {
     setSelectedCategory(idx);
     fetchCategoryData(name);
-    // Trên Desktop, KHÔNG điều hướng ngay, chỉ hover
-    // Trên Mobile, ta muốn điều hướng
-    const isMobile = window.innerWidth < 768; // md breakpoint
+
+    const isMobile = window.innerWidth < 768;
     if (isMobile) {
-      const param = CATEGORY_PARAM_MAP[name];
-      navigate(`/products?category=${encodeURIComponent(param)}`);
+      const path = CATEGORY_TO_PATH[name];
+      if (path) {
+        navigate(path); // VD: /dien-thoai
+      } else {
+        const param = CATEGORY_PARAM_MAP[name];
+        navigate(`/products?category=${encodeURIComponent(param)}`);
+      }
       setIsOpen(false);
     }
   };
-
   // Hàm này dùng cho nút "Xem tất cả" hoặc click category
   const navigateToCategory = (name) => {
-    const param = CATEGORY_PARAM_MAP[name];
-    navigate(`/products?category=${encodeURIComponent(param)}`);
-    setIsOpen(false); // Đóng dropdown
+    const path = CATEGORY_TO_PATH[name];
+    if (path) {
+      navigate(path); // VD: /dien-thoai
+    } else {
+      // Fallback cho trường hợp không có URL đẹp
+      const param = CATEGORY_PARAM_MAP[name];
+      navigate(`/products?category=${encodeURIComponent(param)}`);
+    }
+    setIsOpen(false);
   };
-
   const handleModelClick = (model) => {
-    const catParam = CATEGORY_PARAM_MAP[categories[selectedCategory]];
-    navigate(
-      `/products?category=${encodeURIComponent(
-        catParam
-      )}&model=${encodeURIComponent(model)}`
-    );
+    const categoryName = categories[selectedCategory];
+    const path = CATEGORY_TO_PATH[categoryName];
+
+    if (path) {
+      // Sử dụng URL đẹp + query param model
+      navigate(`${path}?model=${encodeURIComponent(model)}`);
+      // VD: /dien-thoai?model=iPhone%2015%20Pro
+    } else {
+      // Fallback
+      const catParam = CATEGORY_PARAM_MAP[categoryName];
+      navigate(
+        `/products?category=${encodeURIComponent(
+          catParam
+        )}&model=${encodeURIComponent(model)}`
+      );
+    }
     setIsOpen(false);
   };
 
   const currentData = categoryData[categories[selectedCategory]];
+
+  const navigateToProductDetail = (product) => {
+    const catParam =
+      CATEGORY_PARAM_MAP[product.category || categories[selectedCategory]];
+    const slug = product.slug || generateSlug(product.model || product.name);
+
+    const variant =
+      product.variants?.find((v) => v.stock > 0) || product.variants?.[0];
+
+    const targetUrl = variant?.sku
+      ? `/${catParam}/${slug}?sku=${variant.sku}`
+      : `/${catParam}/${slug}`;
+
+    setIsOpen(false);
+
+    // ✅ LUÔN RELOAD KHI CHỌN TỪ DROPDOWN
+    window.location.href = targetUrl;
+  };
+
+  // Helper function tạo slug (nếu chưa có)
+  const generateSlug = (text) => {
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
 
   // ============================================
   // RENDER (Đã cập nhật responsive)
@@ -353,35 +413,59 @@ const CategoryDropdown = () => {
                 <>
                   {/* Gợi ý */}
                   <div className="mb-6">
-                    <h3 className="text-lg text-black font-bold flex items-center gap-2 mb-4 md:text-xl">
+                    <h3 className="text-lg text-black font-bold flex items-center gap-2 mb-4">
                       Gợi ý cho bạn
                     </h3>
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                      {currentData.allProducts
-                        .sort(() => 0.5 - Math.random())
-                        .slice(0, 4)
-                        .map((p, i) => (
-                          <button
-                            key={i}
-                            onClick={() => handleModelClick(p.model || p.name)}
-                            className="group text-center flex flex-col justify-start"
-                          >
-                            <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
-                              <img
-                                src={
-                                  p.images?.[0] ||
-                                  p.variants?.[0]?.images?.[0] ||
-                                  ""
-                                }
-                                alt={p.name}
-                                className="w-full h-full object-contain group-hover:scale-110 transition-transform"
-                              />
-                            </div>
-                            <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
-                              {p.name}
-                            </p>
-                          </button>
-                        ))}
+                      {recentProducts.length > 0
+                        ? recentProducts.map((p, i) => (
+                            <button
+                              key={p._id}
+                              onClick={() => navigateToProductDetail(p)}
+                              className="group text-center flex flex-col justify-start"
+                            >
+                              <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
+                                <img
+                                  src={
+                                    p.images?.[0] ||
+                                    p.variants?.[0]?.images?.[0] ||
+                                    ""
+                                  }
+                                  alt={p.name}
+                                  className="w-full h-full object-contain group-hover:scale-110 transition-transform"
+                                />
+                              </div>
+                              <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
+                                {p.name}
+                              </p>
+                            </button>
+                          ))
+                        : // Fallback khi chưa có lịch sử xem
+                          currentData.allProducts
+                            .sort(() => 0.5 - Math.random())
+                            .slice(0, 4)
+                            .map((p, i) => (
+                              <button
+                                key={i}
+                                onClick={() => navigateToProductDetail(p)}
+                                className="group text-center flex flex-col justify-start"
+                              >
+                                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
+                                  <img
+                                    src={
+                                      p.images?.[0] ||
+                                      p.variants?.[0]?.images?.[0] ||
+                                      ""
+                                    }
+                                    alt={p.name}
+                                    className="w-full h-full object-contain group-hover:scale-110 transition-transform"
+                                  />
+                                </div>
+                                <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
+                                  {p.name}
+                                </p>
+                              </button>
+                            ))}
                     </div>
                   </div>
 
@@ -393,7 +477,9 @@ const CategoryDropdown = () => {
                     {currentData.series.map((series, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleModelClick(series.seriesName)}
+                        onClick={() =>
+                          navigateToCategory(categories[selectedCategory])
+                        }
                         className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
                       >
                         <div className="flex gap-3 items-start mb-3">
@@ -421,8 +507,8 @@ const CategoryDropdown = () => {
                             <p
                               key={i}
                               onClick={(e) => {
-                                e.stopPropagation();
-                                handleModelClick(p.model || p.name);
+                                e.stopPropagation(); // ← Quan trọng: ngăn bubble lên card
+                                navigateToProductDetail(p); // ← Thay đổi
                               }}
                               className="hover:text-black cursor-pointer pl-1"
                             >
