@@ -116,7 +116,8 @@ export const getAllEmployees = async (req, res) => {
 // Tạo nhân viên mới
 export const createEmployee = async (req, res) => {
   try {
-    const { fullName, phoneNumber, email, province, password, role } = req.body;
+    const { fullName, phoneNumber, email, province, password, role, avatar } = req.body;
+
     const user = await User.create({
       fullName,
       phoneNumber,
@@ -124,9 +125,8 @@ export const createEmployee = async (req, res) => {
       province,
       password,
       role,
-      avatar,
+      avatar: avatar || "", // Nếu không có thì để rỗng
     });
-
     res.status(201).json({
       success: true,
       message: "Tạo nhân viên thành công",

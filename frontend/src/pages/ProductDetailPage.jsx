@@ -709,7 +709,7 @@ const ProductDetailPage = () => {
                         }`}
                       >
                         {/* Color Image */}
-                        <div className="w-12 h-12 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden">
+                        <div className="w-12 h-12 flex-shrink-0 bg-white rounded-lg overflow-hidden">
                           {sampleImage && (
                             <img
                               src={sampleImage}

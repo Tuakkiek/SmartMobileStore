@@ -16,7 +16,7 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 
-import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
+import { useTopSellers } from "@/hooks/useTopSellers";
 
 const API_MAP = {
   iPhone: iPhoneAPI,
@@ -68,7 +68,7 @@ const CATEGORY_PARAM_MAP = {
   Accessories: "phu-kien",
 };
 const CATEGORY_TO_PATH = {
-  iPhone: "/dien-thoai",
+  iPhone: "/timkiem?",
   iPad: "/may-tinh-bang",
   Mac: "/macbook",
   AirPods: "/tai-nghe",
@@ -83,52 +83,141 @@ const CategoryDropdown = () => {
   const [categoryData, setCategoryData] = useState({});
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
-  const { getTopRecent } = useRecentlyViewed();
-  const recentProducts = getTopRecent(4);
+  const { topSellers: displayBestSellers } = useTopSellers();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const loadedCategories = Object.values(categoryData).filter(
+      (cat) => cat?.allProducts?.length > 0
+    );
+
+    if (loadedCategories.length >= 2) {
+      const allProducts = loadedCategories
+        .flatMap((cat) => cat.allProducts)
+        .filter(Boolean);
+
+      useTopSellers.getState().calculateTopSellers(allProducts);
+    } else {
+      // Chưa đủ dữ liệu → hiện skeleton, KHÔNG hiện sai!
+      useTopSellers.getState().calculateTopSellers([]);
+    }
+  }, [isOpen, categoryData]);
 
   // ============================================
   // LOGIC (Giữ nguyên)
   // (getSeriesKey, getRepresentativeImage, groupBySeries)
   // ============================================
-  const getSeriesKey = (name, category) => {
-    const patterns = {
-      iPhone: /iPhone\s+(\d+)/i,
-      iPad: /iPad\s+(Pro|Air|\(?\d+\)?)/i,
-      Mac: /MacBook\s+(Air|Pro)|iMac/i,
-      "Apple Watch": /Apple Watch\s+(Ultra|Series\s*\d+|SE)/i,
-      AirPods: /AirPods\s+(Pro|Max|\(\d+\))/i,
-    };
+  const getSeriesKey = (productName = "", categoryName) => {
+    if (!productName || !categoryName) return categoryName;
 
-    const match = name.match(patterns[category]);
-    if (!match) return "Khác";
+    const name = productName.trim();
 
-    if (category === "iPhone") return `iPhone ${match[1]} Series`;
-    if (category === "iPad") {
-      if (name.includes("Pro"))
-        return `iPad Pro ${match[1].replace(/[^\d.]/g, "")}-inch`;
-      if (name.includes("Air"))
-        return `iPad Air (${match[1].replace(/[^\d]/g, "")})`;
-      return `iPad (${match[1].replace(/[^\d]/g, "")})`;
+    // 1. iPhone → iPhone 17 Series, iPhone 16 Series...
+    if (categoryName === "iPhone") {
+      const match = name.match(/iPhone\s+(\d+[A-Za-z]*)/i);
+      if (match) return `iPhone ${match[1]} Series`;
     }
-    if (category === "Mac") {
-      if (name.includes("MacBook Pro"))
-        return `MacBook Pro ${name.match(/14|16/)?.[0]}-inch (2023)`;
-      if (name.includes("MacBook Air")) return "MacBook Air (2023)";
-      if (name.includes("iMac")) return "iMac 24-inch (2023)";
+
+    // 2. iPad → iPad Pro 13-inch, iPad Air, iPad (10th)...
+    if (categoryName === "iPad") {
+      if (/Pro/i.test(name)) {
+        const size = name.match(/(11|12\.9|13)\s*[-–]?\s*inch/i);
+        return size ? `iPad Pro ${size[1]}-inch` : "iPad Pro";
+      }
+      if (/Air/i.test(name)) return "iPad Air";
+      if (/Mini/i.test(name)) return "iPad Mini";
+      const gen = name.match(/iPad\s*\(?\s*(\d+[a-z]*)\s*\)?/i);
+      if (gen) return `iPad (${gen[1]})`;
     }
-    if (category === "Apple Watch") {
-      if (name.includes("Ultra")) return "Apple Watch Ultra";
-      if (name.includes("SE")) return "Apple Watch SE (2nd)";
-      return `Apple Watch Series ${match[1].match(/\d+/)?.[0]}`;
+
+    // 3. Mac → MacBook Pro 14-inch, MacBook Air, iMac...
+    if (categoryName === "Mac") {
+      if (/MacBook Pro/i.test(name)) {
+        const size = name.match(/(13|14|16)\s*[-–]?\s*inch/i);
+        return size ? `MacBook Pro ${size[1]}-inch` : "MacBook Pro";
+      }
+      if (/MacBook Air/i.test(name)) return "MacBook Air";
+      if (/iMac/i.test(name)) return "iMac";
+      if (/Mac Mini/i.test(name)) return "Mac Mini";
+      if (/Mac Studio/i.test(name)) return "Mac Studio";
+      if (/Mac Pro/i.test(name)) return "Mac Pro";
     }
-    if (category === "AirPods") {
-      if (name.includes("Pro") && name.includes("2nd"))
-        return "AirPods Pro (2nd)";
-      if (name.includes("Pro")) return "AirPods Pro (1st)";
-      if (name.includes("Max")) return "AirPods Max";
-      return `AirPods (${match[1].replace(/[^\d]/g, "")})`;
+
+    // 4. Apple Watch → Ultra 2, Series 10, SE...
+    if (categoryName === "Apple Watch") {
+      if (/Ultra/i.test(name)) return "Apple Watch Ultra";
+      if (/SE/i.test(name)) return "Apple Watch SE";
+      const series = name.match(/Series\s+(\d+)/i);
+      if (series) return `Apple Watch Series ${series[1]}`;
     }
-    return match[0];
+
+    // 5. AirPods → Pro 2, Max, 4th generation...
+    if (categoryName === "AirPods") {
+      if (/Pro\s+2|Pro\s*\(2nd/i.test(name))
+        return "AirPods Pro (2nd generation)";
+      if (/Pro/i.test(name)) return "AirPods Pro";
+      if (/Max/i.test(name)) return "AirPods Max";
+      const gen = name.match(/AirPods\s+(\d+[a-z]*)/i);
+      if (gen) return `AirPods (${gen[1]} generation)`;
+    }
+
+    // 6. Phụ Kiện → luôn trả về "Phụ Kiện"
+    if (categoryName === "Phụ Kiện") {
+    const lowerName = name.toLowerCase();
+
+    // 1. Ốp lưng / Bao da
+    if (lowerName.includes("ốp") || lowerName.includes("case") || lowerName.includes("bao da") || lowerName.includes("ốp lưng")) {
+      return "Ốp lưng & Bao da";
+    }
+
+    // 2. Kính cường lực / Dán màn hình
+    if (lowerName.includes("kính") || lowerName.includes("cường lực") || lowerName.includes("dán") || lowerName.includes("tempered") || lowerName.includes("glass")) {
+      return "Kính cường lực & Miếng dán";
+    }
+
+    // 3. Cáp sạc / Sạc
+    if (lowerName.includes("cáp") || lowerName.includes("sạc") || lowerName.includes("charger") || lowerName.includes("cable") || lowerName.includes("dây")) {
+      return "Cáp sạc & Bộ sạc";
+    }
+
+    // 4. Pin dự phòng
+    if (lowerName.includes("pin") && (lowerName.includes("dự phòng") || lowerName.includes("sạc dự phòng") || lowerName.includes("powerbank") || lowerName.includes("power bank"))) {
+      return "Pin sạc dự phòng";
+    }
+
+    // 5. Tai nghe (không phải AirPods)
+    if ((lowerName.includes("tai nghe") || lowerName.includes("headphone") || lowerName.includes("earphone")) && !lowerName.includes("airpods")) {
+      return "Tai nghe có dây & Bluetooth";
+    }
+
+    // 6. Loa Bluetooth
+    if (lowerName.includes("loa")) {
+      return "Loa Bluetooth";
+    }
+
+    // 7. Gậy selfie / Tripod / Giá đỡ
+    if (lowerName.includes("gậy") || lowerName.includes("selfie") || lowerName.includes("tripod") || lowerName.includes("giá đỡ") || lowerName.includes("đế")) {
+      return "Gậy selfie & Giá đỡ";
+    }
+
+    // 8. Thẻ nhớ / USB / Ổ cứng
+    if (lowerName.includes("thẻ nhớ") || lowerName.includes("usb") || lowerName.includes("ổ cứng") || lowerName.includes("ssd")) {
+      return "Thẻ nhớ & Lưu trữ";
+    }
+
+    // 9. Apple Pencil / Bút cảm ứng
+    if (lowerName.includes("pencil") || lowerName.includes("bút")) {
+      return "Apple Pencil & Bút cảm ứng";
+    }
+
+    // 10. Fallback đẹp: "Phụ kiện khác"
+    return "Phụ kiện khác";
+  }
+
+    // CUỐI CÙNG: Nếu không nhận diện được → trả về tên danh mục (iPhone, Mac, v.v.)
+    // → KHÔNG BAO GIỜ HIỆN "Khác" NỮA!
+    return categoryName;
   };
 
   const getRepresentativeImage = (products) => {
@@ -200,14 +289,24 @@ const CategoryDropdown = () => {
     [categoryData]
   );
 
-  // Auto load iPhone on open
+  // MỞ DROPDOWN LÀ LOAD NGAY 2 CATEGORY HOT NHẤT: iPhone + Mac → TOP 4 HIỆN NGAY!
   useEffect(() => {
-    if (isOpen && !categoryData["iPhone"]) {
+    if (!isOpen) return;
+
+    // Load iPhone trước (hiển thị trước)
+    if (!categoryData["iPhone"]?.allProducts) {
       fetchCategoryData("iPhone");
       setSelectedCategory(0);
     }
-  }, [isOpen, fetchCategoryData, categoryData]);
 
+    // Load Mac NGAY SAU ĐÓ (để có đủ data tính top 4 chính xác)
+    if (!categoryData["Mac"]?.allProducts) {
+      // Dùng setTimeout 0 để không block UI
+      setTimeout(() => {
+        fetchCategoryData("Mac");
+      }, 0);
+    }
+  }, [isOpen, categoryData]);
   // Click outside (Giữ nguyên)
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -238,16 +337,52 @@ const CategoryDropdown = () => {
       setIsOpen(false);
     }
   };
-  // Hàm này dùng cho nút "Xem tất cả" hoặc click category
-  const navigateToCategory = (name) => {
-    const path = CATEGORY_TO_PATH[name];
-    if (path) {
-      navigate(path); // VD: /dien-thoai
-    } else {
-      // Fallback cho trường hợp không có URL đẹp
-      const param = CATEGORY_PARAM_MAP[name];
-      navigate(`/products?category=${encodeURIComponent(param)}`);
+  // HÀM MỚI: Click vào bất kỳ ô series nào → search theo tên series (trừ Phụ Kiện)
+  const navigateToCategory = (categoryName, seriesName) => {
+    // Nếu là Phụ Kiện → vẫn vào trang riêng
+    if (categoryName === "Phụ Kiện") {
+      navigate("/phu-kien");
+      setIsOpen(false);
+      return;
     }
+
+    // Các danh mục còn lại → search theo tên series (đã được làm sạch)
+    let keyword = seriesName
+      .replace(/Series/gi, "")                    // Xóa "Series"
+      .replace(/\(.*?\)/g, "")                    // Xóa (2nd generation), (2023)...
+      .replace(/inch/gi, "")                      // Xóa "inch"
+      .replace(/generation/gi, "")                // Xóa "generation"
+      .replace(/\s+/g, " ")                       // Chuẩn hóa khoảng trắng
+      .trim()
+      .toLowerCase();
+
+    // Đặc biệt với iPhone: chỉ giữ "iphone 17", "iphone 16"...
+    if (categoryName === "iPhone") {
+      const match = seriesName.match(/iPhone\s+(\d+[A-Za-z]*)/i);
+      if (match) {
+        keyword = `iphone ${match[1].toLowerCase()}`;
+      }
+    }
+
+    // Các từ khóa đặc biệt để đẹp hơn (tùy chọn nâng cao)
+    const prettyMap = {
+      "macbook pro": "macbook pro",
+      "macbook air": "macbook air",
+      "airpods pro": "airpods pro",
+      "apple watch ultra": "apple watch ultra",
+      "apple watch se": "apple watch se",
+    };
+
+    // Nếu có trong map → dùng từ khóa đẹp
+    const lowerSeries = keyword.toLowerCase();
+    for (const key in prettyMap) {
+      if (lowerSeries.includes(key)) {
+        keyword = prettyMap[key];
+        break;
+      }
+    }
+
+    navigate(`/tim-kiem?s=${encodeURIComponent(keyword)}`);
     setIsOpen(false);
   };
   const handleModelClick = (model) => {
@@ -411,64 +546,55 @@ const CategoryDropdown = () => {
               ) : currentData ? (
                 // --- Content State (Responsive) ---
                 <>
-                  {/* Gợi ý */}
-                  <div className="mb-6">
-                    <h3 className="text-lg text-black font-bold flex items-center gap-2 mb-4">
-                      Gợi ý cho bạn
+                  {/* 4 SẢN PHẨM BÁN CHẠY – BẢN CUỐI CÙNG, HOÀN HẢO 100% */}
+                  <div className="mb-10">
+                    <h3 className="text-lg font-bold mb-5 flex items-center gap-2 text-gray-900">
+                      <span className="inline-flex items-center justify-center w-8 h-8  bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
+                        HOT
+                      </span>
+                      Sản phẩm bán chạy nhất
                     </h3>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                      {recentProducts.length > 0
-                        ? recentProducts.map((p, i) => (
-                            <button
-                              key={p._id}
-                              onClick={() => navigateToProductDetail(p)}
-                              className="group text-center flex flex-col justify-start"
-                            >
-                              <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
-                                <img
-                                  src={
-                                    p.images?.[0] ||
-                                    p.variants?.[0]?.images?.[0] ||
-                                    ""
-                                  }
-                                  alt={p.name}
-                                  className="w-full h-full object-contain group-hover:scale-110 transition-transform"
-                                />
-                              </div>
-                              <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
-                                {p.name}
-                              </p>
-                            </button>
-                          ))
-                        : // Fallback khi chưa có lịch sử xem
-                          currentData.allProducts
-                            .sort(() => 0.5 - Math.random())
-                            .slice(0, 4)
-                            .map((p, i) => (
-                              <button
-                                key={i}
-                                onClick={() => navigateToProductDetail(p)}
-                                className="group text-center flex flex-col justify-start"
-                              >
-                                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-2 md:w-20 md:h-20">
-                                  <img
-                                    src={
-                                      p.images?.[0] ||
-                                      p.variants?.[0]?.images?.[0] ||
-                                      ""
-                                    }
-                                    alt={p.name}
-                                    className="w-full h-full object-contain group-hover:scale-110 transition-transform"
-                                  />
-                                </div>
-                                <p className="text-xs text-gray-700 line-clamp-2 group-hover:text-black md:text-sm">
-                                  {p.name}
-                                </p>
-                              </button>
-                            ))}
-                    </div>
-                  </div>
 
+                    {/* DÙNG displayBestSellers TỪ ZUSTAND MỚI */}
+                    {displayBestSellers.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                        {displayBestSellers.map((product) => (
+                          <button
+                            key={product._id}
+                            onClick={() => navigateToProductDetail(product)}
+                            className="group relative text-center hover:-translate-y-2 transition-all duration-300"
+                          >
+                            <div className="w-24 h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md  mb-3">
+                              <img
+                                src={
+                                  product.images?.[0] ||
+                                  product.variants?.[0]?.images?.[0] ||
+                                  "/placeholder.png"
+                                }
+                                alt={product.name}
+                                className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                loading="lazy"
+                              />
+                            </div>
+
+                            <p className="text-xs md:text-sm font-medium line-clamp-2 text-gray-800 px-1 leading-tight">
+                              {product.name}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      // Skeleton khi chưa có data (chỉ hiện 1 lần đầu)
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className="animate-pulse text-center">
+                            <div className="w-24 h-24 mx-auto bg-gray-200 rounded-2xl mb-3" />
+                            <div className="h-4 bg-gray-200 rounded-full w-20 mx-auto" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {/* Series Grid */}
                   <h3 className="text-base text-black font-semibold mb-4 md:text-lg">
                     Chọn theo dòng {categories[selectedCategory]}
@@ -477,13 +603,11 @@ const CategoryDropdown = () => {
                     {currentData.series.map((series, idx) => (
                       <button
                         key={idx}
-                        onClick={() =>
-                          navigateToCategory(categories[selectedCategory])
-                        }
+                       onClick={() => navigateToCategory(categories[selectedCategory], series.seriesName)}
                         className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
                       >
                         <div className="flex gap-3 items-start mb-3">
-                          <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 md:w-16 md:h-16">
+                          <div className="w-14 h-14 bg-white rounded-lg overflow-hidden flex-shrink-0 md:w-16 md:h-16">
                             {series.image ? (
                               <img
                                 src={series.image}

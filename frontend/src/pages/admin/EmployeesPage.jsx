@@ -312,6 +312,30 @@ const EmployeesPage = () => {
                     <option value="ADMIN">Quản trị viên</option>
                   </select>
                 </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="edit-avatar">URL ảnh đại diện</Label>
+                  <Input
+                    id="edit-avatar"
+                    name="avatar"
+                    type="url"
+                    placeholder="https://example.com/avatar.jpg"
+                    value={formData.avatar}
+                    onChange={handleChange}
+                  />
+                  {formData.avatar && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <Avatar className="w-16 h-16">
+                        <AvatarImage src={formData.avatar} />
+                        <AvatarFallback>Preview</AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm text-muted-foreground">
+                        Xem trước ảnh đại diện
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+
               </div>
 
               <Button type="submit" disabled={isSubmitting}>

@@ -136,7 +136,6 @@ const SEARCH_CATEGORIES = [
 ];
 
 const QUICK_LINKS = [
-  { name: "Tìm cửa hàng", path: "/stores" },
   { name: "iPhone", path: "/dien-thoai" },
   { name: "iPad", path: "/may-tinh-bang" },
   { name: "Mac", path: "/macbook" },
