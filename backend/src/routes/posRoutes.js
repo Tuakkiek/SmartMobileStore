@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/routes/posRoutes.js
-// ĐÃ SỬA: DÙNG LẠI getOrderById + QUYỀN CHO POS_STAFF
+// FINAL VERSION – ĐỒNG BỘ 100% VỚI posController.js (đã bỏ promotion backend)
 // ============================================
 
 import express from "express";
@@ -14,68 +14,52 @@ import {
   getPOSOrderHistory,
 } from "../controllers/posController.js";
 
-// ✅ IMPORT getOrderById TỪ ORDER CONTROLLER (TÁI SỬ DỤNG)
+// DÙNG LẠI getOrderById từ orderController (đã có kiểm tra quyền + populate đầy đủ)
 import { getOrderById } from "../controllers/orderController.js";
 
 const router = express.Router();
 
-// ✅ TẤT CẢ ROUTES REQUIRE AUTHENTICATION
+// TẤT CẢ ROUTES ĐỀU YÊU CẦU ĐĂNG NHẬP
 router.use(protect);
 
 // ============================================
-// POS STAFF ROUTES
+// ROUTES CHO POS STAFF
 // ============================================
 
-// Tạo đơn hàng POS
+// 1. Tạo đơn hàng tại quầy
 router.post("/create-order", restrictTo("POS_STAFF", "ADMIN"), createPOSOrder);
 
-// Lấy lịch sử đơn của mình (danh sách)
-router.get(
-  "/my-orders",
-  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
-  getPOSOrderHistory
-);
+// 2. POS Staff xem lịch sử đơn của chính mình
+router.get("/my-orders", restrictTo("POS_STAFF", "ADMIN"), getPOSOrderHistory);
 
-// LẤY CHI TIẾT ĐƠN HÀNG (DÙNG LẠI TỪ ORDER CONTROLLER)
-router.get(
-  "/orders/:id",
-  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
-  getOrderById // ← TÁI SỬ DỤNG, ĐÃ CÓ KIỂM TRA QUYỀN
-);
+// 3. Xem chi tiết 1 đơn hàng bất kỳ (POS Staff xem được đơn của mình + đơn đã thanh toán)
+router.get("/orders/:id", restrictTo("POS_STAFF", "CASHIER", "ADMIN"), getOrderById);
 
 // ============================================
-// CASHIER ROUTES
+// ROUTES CHO CASHIER & ADMIN
 // ============================================
 
-// Lấy danh sách đơn chờ thanh toán
+// 4. Thu ngân xem danh sách đơn chờ thanh toán
 router.get("/pending-orders", restrictTo("CASHIER", "ADMIN"), getPendingOrders);
 
-// Xử lý thanh toán
-router.post(
-  "/process-payment/:orderId",
-  restrictTo("CASHIER", "ADMIN"),
-  processPayment
-);
+// 5. Thu ngân xử lý thanh toán
+router.post("/orders/:orderId/payment", restrictTo("CASHIER", "ADMIN"), processPayment);
 
-// Hủy đơn chờ thanh toán
-router.post(
-  "/cancel-order/:orderId",
-  restrictTo("CASHIER", "ADMIN"),
-  cancelPendingOrder
-);
+// 6. Thu ngân hủy đơn chờ thanh toán
+router.post("/orders/:orderId/cancel", restrictTo("CASHIER", "ADMIN"), cancelPendingOrder);
 
-// Xuất hóa đơn VAT
-router.post(
-  "/issue-vat/:orderId",
-  restrictTo("CASHIER", "ADMIN"),
-  issueVATInvoice
-);
+// 7. Thu ngân xuất hóa đơn VAT
+router.post("/orders/:orderId/vat", restrictTo("CASHIER", "ADMIN"), issueVATInvoice);
 
-// Lấy lịch sử đơn đã thanh toán
-router.get(
-  "/orders",
-  restrictTo("POS_STAFF", "CASHIER", "ADMIN"),
-  getPOSOrderHistory
-);
+// 8. Thu ngân / Admin xem toàn bộ lịch sử đơn POS (tất cả nhân viên)
+router.get("/history", restrictTo("CASHIER", "ADMIN","POS_STAFF"), getPOSOrderHistory);
+
+// ============================================
+// ROUTE CHUNG: Tìm kiếm + lọc lịch sử (dùng chung cho cả POS_STAFF và CASHIER)
+// ============================================
+
+// POS Staff: chỉ thấy đơn của mình
+// Cashier/Admin: thấy tất cả
+router.get("/history/all", restrictTo("POS_STAFF", "CASHIER", "ADMIN"), getPOSOrderHistory);
 
 export default router;

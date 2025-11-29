@@ -115,17 +115,35 @@ export const orderAPI = {
 };
 
 // ============================================
-// POS API
+// POS API - ĐÃ ĐỒNG BỘ 100% VỚI posController.js
 // ============================================
 export const posAPI = {
-  getMyOrders: (params = {}) => api.get("/pos/my-orders", { params }),
-  getOrderById: (id) => api.get(`/pos/orders/${id}`),
-  getPendingOrders: (params = {}) => api.get("/pos/pending-orders", { params }),
+  // Tạo đơn hàng tại quầy (POS Staff dùng)
+  createOrder: (data) => api.post("/pos/create-order", data),
+
+  // Lấy danh sách đơn chờ thanh toán (Thu ngân xem)
+  getPendingOrders: (params = {}) =>
+    api.get("/pos/pending-orders", { params }),
+
+  // Thu ngân xử lý thanh toán cho đơn POS
   processPayment: (orderId, data) =>
     api.post(`/pos/orders/${orderId}/payment`, data),
+
+  // Thu ngân hủy đơn đang chờ thanh toán (có hoàn lại kho + giảm salesCount)
   cancelOrder: (orderId, data = {}) =>
     api.post(`/pos/orders/${orderId}/cancel`, data),
-  issueVAT: (orderId, data) => api.post(`/pos/orders/${orderId}/vat`, data),
+
+  // Thu ngân xuất hóa đơn VAT cho đơn đã thanh toán
+  issueVAT: (orderId, data) =>
+    api.post(`/pos/orders/${orderId}/vat`, data),
+
+  // Xem lịch sử đơn hàng POS (POS Staff chỉ thấy của mình, Cashier/Admin thấy tất cả)
+  getHistory: (params = {}) =>
+    api.get("/pos/history/", { params }),
+
+  // (Tùy chọn) Lấy chi tiết 1 đơn POS
+  getOrderById: (orderId) =>
+    api.get(`/pos/orders/${orderId}`),
 };
 
 // ============================================
