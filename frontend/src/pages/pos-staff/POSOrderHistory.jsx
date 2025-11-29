@@ -79,7 +79,7 @@ const POSOrderHistory = () => {
         endDate: dateFilter.endDate || undefined,
       };
 
-      const response = await posAPI.getMyOrders(params);
+      const response = await posAPI.getHistory(params);
       const { orders = [], pagination: pag = {} } = response.data.data || {};
 
       setOrders(orders);

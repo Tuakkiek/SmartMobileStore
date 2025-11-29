@@ -1,9 +1,9 @@
 // ============================================
 // FILE: frontend/src/pages/pos-staff/POSDashboard.jsx
-// ✅ V2: Chọn sản phẩm → Tạo đơn → Chuyển Thu ngân
+// ✅ V3: Fixed - Chọn sản phẩm → Tạo đơn → Chuyển Thu ngân
 // ============================================
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,6 @@ import {
   Plus,
   Trash2,
   User,
-  Phone,
   ArrowRight,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
@@ -28,8 +27,9 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
+  promotionAPI,
+  posAPI, // ✅ ĐẢM BẢO CÓ DÒNG NÀY
 } from "@/lib/api";
-import axios from "axios";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +57,7 @@ const POSDashboard = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
 
+  // Promotion state
   const [promotionCode, setPromotionCode] = useState("");
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
@@ -67,38 +68,101 @@ const POSDashboard = () => {
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/128?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${
-      path.startsWith("/") ? "" : "/"
-    }${path}`;
+    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
   };
 
+  // ============================================
+  // TÍNH TOÁN GIẢM GIÁ THEO TỶ LỆ
+  // ============================================
+  const checkoutItemsWithFinalPrice = useMemo(() => {
+    if (cart.length === 0) return [];
+
+    const discountAmount = appliedPromotion?.discountAmount || 0;
+
+    if (discountAmount === 0) {
+      return cart.map((item) => ({
+        ...item,
+        originalPrice: item.price,
+        finalizedPrice: item.price,
+      }));
+    }
+
+    const subtotal = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+    let remainingDiscount = discountAmount;
+
+    return cart.map((item, index) => {
+      const itemSubtotal = item.price * item.quantity;
+      const ratio = itemSubtotal / subtotal;
+      let itemDiscount = Math.round(ratio * discountAmount);
+
+      if (index === cart.length - 1) {
+        itemDiscount = remainingDiscount;
+      } else {
+        remainingDiscount -= itemDiscount;
+      }
+
+      const finalPricePerUnit = Math.max(
+        0,
+        item.price - Math.round(itemDiscount / item.quantity)
+      );
+
+      return {
+        ...item,
+        originalPrice: item.price,
+        finalizedPrice: finalPricePerUnit,
+      };
+    });
+  }, [cart, appliedPromotion?.discountAmount]);
+
+  // ============================================
+  // CALCULATIONS
+  // ============================================
+  const getTotal = () => {
+    return checkoutItemsWithFinalPrice.reduce(
+      (sum, item) =>
+        sum + (item.finalizedPrice || item.originalPrice) * item.quantity,
+      0
+    );
+  };
+
+  // ============================================
+  // PROMOTION HANDLERS
+  // ============================================
   const handleApplyPromotion = async () => {
     if (!promotionCode.trim()) {
       toast.error("Vui lòng nhập mã giảm giá");
       return;
     }
 
-    const total = getTotal();
-    if (total === 0) {
+    const subtotal = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
+    if (subtotal === 0) {
       toast.error("Giỏ hàng trống");
       return;
     }
 
     setIsApplyingPromo(true);
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/promotions/apply`,
-        { code: promotionCode, totalAmount: total },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await promotionAPI.apply({
+        code: promotionCode.trim().toUpperCase(),
+        totalAmount: subtotal,
+      });
 
       setAppliedPromotion(response.data.data);
-      toast.success("Áp dụng mã thành công!");
+      toast.success(
+        `Áp dụng mã thành công! Giảm ${formatPrice(
+          response.data.data.discountAmount
+        )}`
+      );
     } catch (error) {
-      toast.error(error.response?.data?.message || "Mã không hợp lệ");
+      toast.error(error.response?.data?.message || "Mã giảm giá không hợp lệ");
+      console.error("Lỗi áp dụng mã:", error);
     } finally {
       setIsApplyingPromo(false);
     }
@@ -145,8 +209,7 @@ const POSDashboard = () => {
           response = await iPhoneAPI.getAll({ limit: 50 });
       }
 
-      const productData =
-        response?.data?.data?.products || response?.data || [];
+      const productData = response?.data?.data?.products || response?.data || [];
       setProducts(
         Array.isArray(productData)
           ? productData.map((p) => ({ ...p, category: selectedCategory }))
@@ -180,7 +243,6 @@ const POSDashboard = () => {
       return;
     }
 
-    // Check if variant already in cart
     const existingIndex = cart.findIndex(
       (item) => item.variantId === selectedVariant._id
     );
@@ -252,100 +314,74 @@ const POSDashboard = () => {
   const clearCart = () => {
     if (window.confirm("Xóa tất cả sản phẩm?")) {
       setCart([]);
+      setAppliedPromotion(null);
+      setPromotionCode("");
       toast.success("Đã xóa giỏ hàng");
     }
   };
 
-  // ============================================
-  // CREATE ORDER
-  // ============================================
-  const handleCreateOrder = async () => {
-    // Validation
-    if (cart.length === 0) {
-      toast.error("Giỏ hàng trống");
-      return;
-    }
+// ============================================
+// CREATE ORDER
+// ============================================
+const handleCreateOrder = async () => {
+  if (cart.length === 0) {
+    toast.error("Giỏ hàng trống");
+    return;
+  }
 
-    if (!customerName.trim()) {
-      toast.error("Vui lòng nhập tên khách hàng");
-      return;
-    }
+  if (!customerName.trim()) {
+    toast.error("Vui lòng nhập tên khách hàng");
+    return;
+  }
 
-    if (!customerPhone.trim()) {
-      toast.error("Vui lòng nhập số điện thoại");
-      return;
-    }
+  if (!customerPhone.trim()) {
+    toast.error("Vui lòng nhập số điện thoại");
+    return;
+  }
 
-    setIsLoading(true);
-    try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-      const user = authStorage ? JSON.parse(authStorage).state.user : null;
-
-      if (!token) {
-        toast.error("Vui lòng đăng nhập lại");
-        return;
-      }
-
-      const totalAmount = cart.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/pos/create-order`,
-        {
-          orderSource: "IN_STORE",
-          items: cart.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId,
-            productType: item.productType,
-            quantity: item.quantity,
-          })),
-          customerInfo: {
-            fullName: customerName.trim(),
-            phoneNumber: customerPhone.trim(),
-          },
-          totalAmount,
-          storeLocation: "Ninh Kiều iStore",
-          promotionCode: appliedPromotion?.code || null,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      toast.success(
-        "Tạo đơn thành công! Đơn hàng đã được chuyển sang Thu ngân."
-      );
-
-      // Reset form
-      setCart([]);
-      setCustomerName("");
-      setCustomerPhone("");
-      setAppliedPromotion(null);
-      setPromotionCode("");
-    } catch (error) {
-      console.error("Lỗi tạo đơn:", error);
-      toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ============================================
-  // CALCULATIONS
-  // ============================================
-  const getTotal = () => {
-    const subtotal = cart.reduce(
-      (sum, item) => sum + item.price * item.quantity,
+  setIsLoading(true);
+  try {
+    const totalAmount = checkoutItemsWithFinalPrice.reduce(
+      (sum, item) =>
+        sum + (item.finalizedPrice || item.originalPrice) * item.quantity,
       0
     );
-    return subtotal - (appliedPromotion?.discountAmount || 0);
-  };
+
+    // ✅ SỬA: Dùng posAPI.createOrder thay vì axios.post
+    const response = await posAPI.createOrder({
+      orderSource: "IN_STORE",
+      items: checkoutItemsWithFinalPrice.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        productType: item.productType,
+        quantity: item.quantity,
+        price: item.finalizedPrice || item.originalPrice,
+        originalPrice: item.originalPrice,
+      })),
+      customerInfo: {
+        fullName: customerName.trim(),
+        phoneNumber: customerPhone.trim(),
+      },
+      totalAmount,
+      storeLocation: "Ninh Kiều iStore",
+      promotionCode: appliedPromotion?.code || null,
+    });
+
+    toast.success("Tạo đơn thành công! Đơn hàng đã được chuyển sang Thu ngân.");
+
+    // Reset form
+    setCart([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setAppliedPromotion(null);
+    setPromotionCode("");
+  } catch (error) {
+    console.error("Lỗi tạo đơn:", error);
+    toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const filteredProducts = products.filter((p) =>
     p.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -365,14 +401,7 @@ const POSDashboard = () => {
           <CardContent>
             {/* Category Tabs */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-              {[
-                "iPhone",
-                "iPad",
-                "Mac",
-                "AirPods",
-                "AppleWatch",
-                "Accessory",
-              ].map((cat) => (
+              {["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"].map((cat) => (
                 <Button
                   key={cat}
                   size="sm"
@@ -399,9 +428,7 @@ const POSDashboard = () => {
             {isLoading ? (
               <p className="text-center py-8">Đang tải...</p>
             ) : filteredProducts.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">
-                Không có sản phẩm
-              </p>
+              <p className="text-center py-8 text-muted-foreground">Không có sản phẩm</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {filteredProducts.map((product) => (
@@ -412,15 +439,12 @@ const POSDashboard = () => {
                   >
                     <CardContent className="p-3">
                       <div className="relative pb-[125%] mb-2">
-                        {" "}
-                        {/* Aspect ratio for tall images */}
                         <img
                           src={getImageUrl(product.variants?.[0]?.images?.[0])}
                           alt={product.name}
                           className="absolute top-0 left-0 w-full h-full object-contain rounded"
                           onError={(e) => {
-                            e.target.src =
-                              "https://via.placeholder.com/128?text=No+Image";
+                            e.target.src = "https://via.placeholder.com/128?text=No+Image";
                           }}
                         />
                       </div>
@@ -486,40 +510,46 @@ const POSDashboard = () => {
           </CardHeader>
           <CardContent className="space-y-3 max-h-80 overflow-y-auto">
             {cart.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Chưa có sản phẩm
-              </p>
+              <p className="text-center text-muted-foreground py-8">Chưa có sản phẩm</p>
             ) : (
-              cart.map((item) => (
+              checkoutItemsWithFinalPrice.map((item) => (
                 <div key={item.variantId} className="flex gap-3 border-b pb-3">
                   <img
                     src={getImageUrl(item.image)}
                     alt={item.productName}
                     className="w-16 h-16 object-contain rounded"
                     onError={(e) => {
-                      e.target.src =
-                        "https://via.placeholder.com/64?text=No+Image";
+                      e.target.src = "https://via.placeholder.com/64?text=No+Image";
                     }}
                   />
                   <div className="flex-1">
-                    <p className="font-medium text-sm line-clamp-1">
-                      {item.productName}
-                    </p>
+                    <p className="font-medium text-sm line-clamp-1">{item.productName}</p>
                     <p className="text-xs text-muted-foreground">
                       {item.variantColor}
                       {item.variantStorage && ` • ${item.variantStorage}`}
                     </p>
-                    <p className="text-sm font-bold text-primary">
-                      {formatPrice(item.price)}
-                    </p>
+
+                    {appliedPromotion ? (
+                      <div>
+                        <p className="text-xs line-through text-muted-foreground">
+                          {formatPrice(item.originalPrice)}
+                        </p>
+                        <p className="text-sm font-bold text-red-600">
+                          {formatPrice(item.finalizedPrice)}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-bold text-primary">
+                        {formatPrice(item.price)}
+                      </p>
+                    )}
+
                     <div className="flex items-center gap-2 mt-1">
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-6 px-2"
-                        onClick={() =>
-                          updateQuantity(item.variantId, item.quantity - 1)
-                        }
+                        onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
                       >
                         -
                       </Button>
@@ -530,9 +560,7 @@ const POSDashboard = () => {
                         size="sm"
                         variant="outline"
                         className="h-6 px-2"
-                        onClick={() =>
-                          updateQuantity(item.variantId, item.quantity + 1)
-                        }
+                        onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
                       >
                         +
                       </Button>
@@ -552,7 +580,7 @@ const POSDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Promotion Card - THÊM MỚI */}
+        {/* Promotion Card */}
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Mã giảm giá</CardTitle>
@@ -564,19 +592,14 @@ const POSDashboard = () => {
                   <Input
                     placeholder="Nhập mã giảm giá"
                     value={promotionCode}
-                    onChange={(e) =>
-                      setPromotionCode(e.target.value.toUpperCase())
-                    }
+                    onChange={(e) => setPromotionCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === "Enter" && handleApplyPromotion()}
                     disabled={isApplyingPromo || cart.length === 0}
                     className="uppercase"
                   />
                   <Button
                     onClick={handleApplyPromotion}
-                    disabled={
-                      isApplyingPromo ||
-                      !promotionCode.trim() ||
-                      cart.length === 0
-                    }
+                    disabled={isApplyingPromo || !promotionCode.trim() || cart.length === 0}
                     variant="outline"
                     size="sm"
                   >
@@ -617,10 +640,7 @@ const POSDashboard = () => {
                 <span>Tạm tính:</span>
                 <span>
                   {formatPrice(
-                    cart.reduce(
-                      (sum, item) => sum + item.price * item.quantity,
-                      0
-                    )
+                    cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
                   )}
                 </span>
               </div>
@@ -656,9 +676,7 @@ const POSDashboard = () => {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chọn phiên bản sản phẩm</DialogTitle>
-            <DialogDescription>
-              Vui lòng chọn màu sắc và cấu hình
-            </DialogDescription>
+            <DialogDescription>Vui lòng chọn màu sắc và cấu hình</DialogDescription>
           </DialogHeader>
 
           {selectedProduct && (
