@@ -500,7 +500,7 @@ const ProductCard = ({
       </AlertDialog>
 
       {/* CSS: Tên sản phẩm luôn 2 dòng */}
-      <style jsx>{`
+      <style>{`
         .product-title {
           display: -webkit-box;
           -webkit-line-clamp: 2;

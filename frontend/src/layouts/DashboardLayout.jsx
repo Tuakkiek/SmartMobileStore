@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Layout } from "lucide-react";
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
@@ -56,6 +57,7 @@ const DashboardLayout = () => {
         { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
+        { path: "/admin/homepage-editor", icon: Layout, label: "Giao diện trang chủ" },
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
         { path: "/shipper/dashboard", icon: Truck, label: "Giao hàng" },

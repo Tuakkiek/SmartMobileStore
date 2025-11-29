@@ -26,6 +26,8 @@ import accessoryRoutes from "./routes/accessoryRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import posRoutes from "./routes/posRoutes.js";
+import homePageRoutes from "./routes/homePageRoutes.js";
+
 
 import vnpayRoutes from "./routes/vnpayRoutes.js";
 
@@ -101,6 +103,8 @@ app.use("/api/sales", salesRoutes);
 app.use("/api/pos", posRoutes);
 
 app.use("/api/payment/vnpay", vnpayRoutes);
+
+app.use("/api/homepage", homePageRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

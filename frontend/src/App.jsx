@@ -44,6 +44,7 @@ import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
 
 import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
+import HomePageEditor from "@/pages/admin/HomePageEditor";
 
 // ============================================
 // SCROLL TO TOP
@@ -176,6 +177,8 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
+
+          <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
         </Route>
 
         {/* ========================================

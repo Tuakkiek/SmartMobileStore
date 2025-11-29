@@ -101,25 +101,25 @@ const HeroBanner = ({
 // ============================================
 // COMPONENT: HeroBannerCarousel (Giữ nguyên)
 // ============================================
-const HeroBannerCarousel = ({ onSlideChange }) => {
-  // Dữ liệu banners
-  const banners = [
-    {
-      imageSrc: "/ip17pm.png",
-      alt: "iPhone 17 Pro Max",
-      ctaLink: "/dien-thoai/iphone-17-pro-256gb?sku=00000279",
-    },
-    {
-      imageSrc: "/ipAir.png",
-      alt: "iPhone Air",
-      ctaLink: "/dien-thoai/iphone-air-256gb?sku=00000425",
-    },
-    {
-      imageSrc: "/ip17.png",
-      alt: "iPhone 17",
-      ctaLink: "/dien-thoai/iphone-17-256gb?sku=00000300",
-    },
-  ]; // State cho carousel
+const HeroBannerCarousel = ({ banners, onSlideChange }) => {
+  // // Dữ liệu banners
+  // const banners = [
+  //   {
+  //     imageSrc: "/ip17pm.png",
+  //     alt: "iPhone 17 Pro Max",
+  //     ctaLink: "/dien-thoai/iphone-17-pro-256gb?sku=00000279",
+  //   },
+  //   {
+  //     imageSrc: "/ipAir.png",
+  //     alt: "iPhone Air",
+  //     ctaLink: "/dien-thoai/iphone-air-256gb?sku=00000425",
+  //   },
+  //   {
+  //     imageSrc: "/ip17.png",
+  //     alt: "iPhone 17",
+  //     ctaLink: "/dien-thoai/iphone-17-256gb?sku=00000300",
+  //   },
+  // ]; // State cho carousel
 
   const [api, setApi] = useState(null);
   const [current, setCurrent] = useState(0);
@@ -167,6 +167,27 @@ const HeroBannerCarousel = ({ onSlideChange }) => {
       player.play();
     }
   };
+
+  const defaultBanners = [
+    {
+      imageSrc: "/ip17pm.png",
+      alt: "iPhone 17 Pro Max",
+      ctaLink: "/dien-thoai/iphone-17-pro-256gb?sku=00000279",
+    },
+    {
+      imageSrc: "/ipAir.png",
+      alt: "iPhone Air",
+      ctaLink: "/dien-thoai/iphone-air-256gb?sku=00000425",
+    },
+    {
+      imageSrc: "/ip17.png",
+      alt: "iPhone 17",
+      ctaLink: "/dien-thoai/iphone-17-256gb?sku=00000300",
+    },
+  ];
+
+  const displayBanners =
+    banners && banners.length > 0 ? banners : defaultBanners;
 
   const goToSlide = (index) => {
     api?.scrollTo(index);
