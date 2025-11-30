@@ -50,21 +50,28 @@ const VARIANT_KEY_FIELD = {
 // ============================================================================
 const StarRating = ({ rating, reviewCount = 0 }) => {
   const roundedRating = Math.round(rating);
-  const totalReviewsText = `(${reviewCount || 0} đánh giá)`;
-
+  const totalReviews = `(${reviewCount || 0})`;
   return (
-    <div className="flex items-center gap-[1px]">
+    // Đã thêm md:gap-[1px]
+    <div className="flex items-center gap-0">
       {[...Array(1)].map((_, i) => (
         <Star
           key={i}
-          className={`w-3 h-3 ${
+          // Đã thêm md:w-3 md:h-3 (nhỏ hơn trên mobile)
+          className={`w-2 h-2 md:w-3 md:h-3 ${
             i < roundedRating
               ? "fill-yellow-400 text-yellow-400"
               : "text-gray-300"
           }`}
         />
       ))}
-      <span className="text-xs text-gray-500 ml-1">{totalReviewsText}</span>
+      <span className="text-[10px] font-semibold ml-1">
+        {rating.toFixed(1)}
+      </span>
+      {/* Đã thêm md:text-xs (nhỏ hơn trên mobile) */}
+      <span className="text-[10px] text-gray-500 ml-1 md:text-xs">
+        {totalReviews}
+      </span>
     </div>
   );
 };
@@ -442,7 +449,7 @@ const ProductCard = ({
           </div>
 
           <div className="mt-3">
-            <StarRating rating={rating} reviewCount={reviewCount} />
+            <StarRating rating={product.averageRating} reviewCount={product.totalReviews} />
             <div className="mt-2 border-b border-gray-200"></div>
           </div>
 

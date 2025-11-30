@@ -1,10 +1,12 @@
 // ============================================
 // FILE: backend/src/routes/reviewRoutes.js
-// ✅ COMPLETE & VERIFIED
+// ✅ UPDATED: Added canReview endpoint
 // ============================================
 
 import express from "express";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
 import {
+  canReviewProduct,
   getProductReviews,
   createReview,
   updateReview,
@@ -14,38 +16,36 @@ import {
   updateAdminReply,
   toggleReviewVisibility,
 } from "../controllers/reviewController.js";
-import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// ============================================
-// PUBLIC ROUTES
-// ============================================
-// Get reviews for a product (no auth required for viewing)
+// ✅ NEW: Check if user can review product
+router.get(
+  "/can-review/:productId",
+  protect,
+  restrictTo("CUSTOMER"),
+  canReviewProduct
+);
+
+// Public route
 router.get("/product/:productId", getProductReviews);
 
-// ============================================
-// PROTECTED ROUTES (require authentication)
-// ============================================
-router.use(protect); // All routes below require authentication
+// Customer routes
+router.use(protect);
+router.use(restrictTo("CUSTOMER", "ADMIN"));
 
-// ============================================
-// CUSTOMER ROUTES
-// ============================================
-router.post("/", restrictTo("CUSTOMER"), createReview);
-router.put("/:id", restrictTo("CUSTOMER"), updateReview);
-router.delete("/:id", restrictTo("CUSTOMER"), deleteReview);
-
-// ============================================
-// ✅ LIKE/UNLIKE ROUTE (any authenticated user)
-// ============================================
+router.post("/", createReview);
+router.put("/:id", updateReview);
+router.delete("/:id", deleteReview);
 router.post("/:id/like", likeReview);
 
-// ============================================
-// ADMIN ROUTES
-// ============================================
+// Admin routes
 router.post("/:id/reply", restrictTo("ADMIN"), replyToReview);
 router.put("/:id/reply", restrictTo("ADMIN"), updateAdminReply);
-router.patch("/:id/toggle-visibility", restrictTo("ADMIN"), toggleReviewVisibility);
+router.patch(
+  "/:id/toggle-visibility",
+  restrictTo("ADMIN"),
+  toggleReviewVisibility
+);
 
 export default router;

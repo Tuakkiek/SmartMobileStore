@@ -20,7 +20,6 @@ iPhoneVariantSchema.add({
 });
 
 
-
 export const IPhoneVariant = mongoose.model(
   "IPhoneVariant",
   iPhoneVariantSchema,

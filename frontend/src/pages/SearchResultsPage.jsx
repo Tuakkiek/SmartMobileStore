@@ -35,6 +35,161 @@ const SEARCH_AVAILABLE_FILTERS = {
 
 const ITEMS_PER_PAGE = 12;
 
+// Copy các functions từ SearchOverlay
+const TYPO_MAPPINGS = {
+  // iPhone
+  ip: "iphone",
+  ifone: "iphone",
+  iphon: "iphone",
+  iphoen: "iphone",
+  ipone: "iphone",
+  "ai phôn": "iphone",
+  "dt ip": "iphone",
+  ip15: "iphone 15",
+  ip14: "iphone 14",
+  ip13: "iphone 13",
+  "15pm": "iphone 15 pro max",
+
+  // THÊM MỚI - Các biến thể phổ biến
+  plus: "plus",
+  pls: "plus",
+  pluss: "plus",
+  pro: "pro",
+  promax: "pro max",
+  "pro max": "pro max",
+  max: "max",
+  mini: "mini",
+
+  // Màu sắc
+  den: "đen",
+  trang: "trắng",
+  xanh: "xanh",
+  do: "đỏ",
+
+  // Dung lượng
+  "128gb": "128gb",
+  "256gb": "256gb",
+  "512gb": "512gb",
+  "1tb": "1tb",
+
+  // iPad
+  iapd: "ipad",
+  pad: "ipad",
+  taplet: "ipad",
+  "may tinh bang": "ipad",
+  // Mac
+  mac: "macbook",
+  macbok: "macbook",
+  macboo: "macbook",
+  "lap top": "macbook",
+  mb: "macbook",
+  mba: "macbook air",
+  mbp: "macbook pro",
+  // AirPods
+  airpod: "airpods",
+  aripod: "airpods",
+  "tai nghe": "airpods",
+  ap2: "airpods 2",
+  ap3: "airpods 3",
+  // Watch
+  wach: "apple watch",
+  wacth: "apple watch",
+  "dong ho": "apple watch",
+  aw: "apple watch",
+  // Accessories
+  sac: "sạc",
+  cap: "cáp",
+  "op lung": "ốp lưng",
+  chuot: "chuột",
+  "ban phim": "bàn phím",
+};
+const correctTypos = (input) => {
+  if (!input) return "";
+  let corrected = input.toLowerCase().trim();
+  // Check khớp từ chính xác
+  if (TYPO_MAPPINGS[corrected]) return TYPO_MAPPINGS[corrected];
+  // Check thay thế từ trong câu
+  Object.keys(TYPO_MAPPINGS).forEach((key) => {
+    const regex = new RegExp(`\\b${key}\\b`, "gi");
+    if (regex.test(corrected)) {
+      corrected = corrected.replace(regex, TYPO_MAPPINGS[key]);
+    }
+  });
+  return corrected;
+};
+/**
+ * Tách query thành các tokens có ý nghĩa
+ */
+const tokenizeQuery = (query) => {
+  if (!query) return [];
+
+  const corrected = correctTypos(query);
+  const tokens = corrected.toLowerCase().trim().split(/\s+/);
+
+  // Lọc bỏ stop words (từ không quan trọng)
+  const stopWords = ["the", "a", "an", "and", "or", "của", "cho", "với"];
+  return tokens.filter(
+    (token) => !stopWords.includes(token) && token.length > 0
+  );
+};
+const calculateRelevanceScore = (productName, query) => {
+  const name = productName.toLowerCase();
+  const queryTokens = tokenizeQuery(query);
+
+  if (queryTokens.length === 0) return 0;
+
+  let score = 0;
+  let matchedTokens = 0;
+
+  // Khớp chính xác toàn bộ query
+  if (name === query.toLowerCase()) {
+    return 100;
+  }
+
+  // Tính điểm cho từng token
+  queryTokens.forEach((token) => {
+    // Khớp chính xác từ độc lập (word boundary)
+    const wordBoundaryRegex = new RegExp(`\\b${token}\\b`, "i");
+    if (wordBoundaryRegex.test(name)) {
+      matchedTokens++;
+      score += 30; // Điểm cao cho khớp chính xác
+
+      // Thêm điểm nếu token xuất hiện ở đầu
+      if (name.startsWith(token)) {
+        score += 15;
+      }
+    }
+    // Khớp một phần từ
+    else if (name.includes(token)) {
+      matchedTokens++;
+      score += 15; // Điểm thấp hơn cho khớp một phần
+    }
+  });
+
+  // Tính tỷ lệ khớp
+  const matchRatio = matchedTokens / queryTokens.length;
+
+  // Thêm điểm bonus nếu khớp nhiều từ
+  if (matchRatio >= 0.8) {
+    score += 20;
+  } else if (matchRatio >= 0.5) {
+    score += 10;
+  }
+
+  // Thêm điểm nếu query xuất hiện liên tiếp trong name
+  if (name.includes(query.toLowerCase())) {
+    score += 25;
+  }
+
+  // Penalty nếu tên sản phẩm quá dài so với query
+  const lengthDiff = Math.abs(name.length - query.length);
+  if (lengthDiff > 20) {
+    score -= 5;
+  }
+
+  return Math.min(score, 100); // Cap tối đa 100 điểm
+};
+
 const SearchResultsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -58,23 +213,62 @@ const SearchResultsPage = () => {
     const fetchAll = async () => {
       setIsLoading(true);
       try {
+        const correctedQuery = correctTypos(searchQuery);
+        const queryTokens = tokenizeQuery(correctedQuery);
+
         const promises = SEARCH_CATEGORIES.map(async (cat) => {
           try {
-            const res = await cat.api.getAll({
-              search: searchQuery,
+            // Tìm với query gốc
+            const mainRes = await cat.api.getAll({
+              search: correctedQuery,
               limit: 50,
             });
-            return (res.data?.data?.products || []).map((p) => ({
+
+            let products = mainRes.data?.data?.products || [];
+
+            // Nếu ít kết quả, tìm thêm với tokens
+            if (products.length < 10 && queryTokens.length > 1) {
+              const tokenSearches = await Promise.all(
+                queryTokens
+                  .slice(0, 2)
+                  .map((token) =>
+                    cat.api
+                      .getAll({ search: token, limit: 20 })
+                      .catch(() => ({ data: { data: { products: [] } } }))
+                  )
+              );
+
+              tokenSearches.forEach((res) => {
+                const tokenProducts = res.data?.data?.products || [];
+                tokenProducts.forEach((p) => {
+                  if (!products.find((existing) => existing._id === p._id)) {
+                    products.push(p);
+                  }
+                });
+              });
+            }
+
+            return products.map((p) => ({
               ...p,
               _category: cat.route,
               _categoryName: cat.name,
+              _score: calculateRelevanceScore(
+                p.name || p.model,
+                correctedQuery
+              ),
             }));
           } catch {
             return [];
           }
         });
+
         const results = await Promise.all(promises);
-        setAllProducts(results.flat());
+        let allProducts = results.flat();
+
+        // Sắp xếp theo điểm
+        allProducts.sort((a, b) => b._score - a._score);
+
+        setAllProducts(allProducts);
       } catch (err) {
         console.error(err);
         setAllProducts([]);
@@ -131,7 +325,8 @@ const SearchResultsPage = () => {
         return next;
       });
     }
-  }, [filters, priceRange, pageParam, setSearchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, priceRange]); // ← CHỈ theo dõi filters và priceRange, BỎ pageParam
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const currentProducts = filteredProducts.slice(
@@ -261,11 +456,15 @@ const SearchResultsPage = () => {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                   {currentProducts.map((product) => (
-                    <ProductCard
-                      key={product._id}
-                      product={product}
-                      showVariantsBadge={true}
-                    />
+                    <div key={product._id} className="relative">
+                      <ProductCard product={product} showVariantsBadge={true} />
+                      {/* THÊM DEBUG BADGE - XÓA SAU KHI TEST XONG */}
+                      {product._score > 0 && (
+                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                          {product._score}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
 
