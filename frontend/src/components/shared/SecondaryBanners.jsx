@@ -9,9 +9,31 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel"; // Giả định bạn có các component này
 
-const SecondaryBanners = () => {
+const SecondaryBanners = ({ banners }) => {
   // 1. Dữ liệu banners
-  const banners = [
+  // const banners = [
+  //   {
+  //     imageSrc: "/ip16e.png",
+  //     link: "/products?category=Accessories",
+  //     alt: "iPhone 16",
+  //   },
+  //   {
+  //     imageSrc: "/cpuA19.png",
+  //     link: "/products?category=AppleWatch",
+  //     alt: "Apple A19 Pro",
+  //   },
+  //   {
+  //     imageSrc: "/macpro14.png",
+  //     link: "/products?category=AirPods",
+  //     alt: "MacBook Pro",
+  //   },
+  //   {
+  //     imageSrc: "/banner_phu_ip17pro.png",
+  //     link: "/products?category=iPhone",
+  //     alt: "iPhone 17 Pro",
+  //   },
+  // ];
+  const defaultBanners = [
     {
       imageSrc: "/ip16e.png",
       link: "/products?category=Accessories",
@@ -33,6 +55,9 @@ const SecondaryBanners = () => {
       alt: "iPhone 17 Pro",
     },
   ];
+
+  const displayBanners =
+    banners && banners.length > 0 ? banners : defaultBanners;
 
   // 2. State và Cấu hình
   const [api, setApi] = useState(null);

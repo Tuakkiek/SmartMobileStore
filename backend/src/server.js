@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
+import fs from "fs";  // Import fs module
 
 // ================================
 // 🔹 Import tất cả routes
@@ -26,6 +27,7 @@ import accessoryRoutes from "./routes/accessoryRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import posRoutes from "./routes/posRoutes.js";
+import homePageRoutes from "./routes/homePageRoutes.js";
 
 import vnpayRoutes from "./routes/vnpayRoutes.js";
 
@@ -45,6 +47,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
+      "http://localhost:5000",
       "https://ninhkieu-istore-ct.onrender.com",
       "https://sandbox.vnpayment.vn",
       "https://vnpayment.vn",
@@ -57,8 +60,28 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Serve static files
+// ================================
+// 🔹 Serve Static Files
+// ================================
+
+// Serve uploads
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// Serve backend public folder
+const backendPublicPath = path.join(process.cwd(), "public");
+if (fs.existsSync(backendPublicPath)) {
+  app.use(express.static(backendPublicPath));
+  console.log("📁 Backend public:", backendPublicPath);
+}
+
+// Serve frontend public folder (cho dev)
+if (process.env.NODE_ENV !== "production") {
+  const frontendPublicPath = path.join(process.cwd(), "../frontend/public");
+  if (fs.existsSync(frontendPublicPath)) {
+    app.use(express.static(frontendPublicPath));
+    console.log("📁 Frontend public:", frontendPublicPath);
+  }
+}
 
 // ================================
 // 🔹 Kết nối MongoDB
@@ -101,6 +124,8 @@ app.use("/api/sales", salesRoutes);
 app.use("/api/pos", posRoutes);
 
 app.use("/api/payment/vnpay", vnpayRoutes);
+
+app.use("/api/homepage", homePageRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint
