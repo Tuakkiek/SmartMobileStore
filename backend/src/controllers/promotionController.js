@@ -4,28 +4,23 @@ import PromotionUsage from "../models/PromotionUsage.js";
 import mongoose from "mongoose";
 
 /* ========================================
-   HELPER: Tính giảm giá
-   ======================================== */
-const calculateDiscount = (totalAmount, type, value) => {
-  if (type === "PERCENTAGE") {
-    return Math.min((totalAmount * value) / 100, totalAmount);
-  }
-  return Math.min(value, totalAmount);
-};
-
-/* ========================================
-   1. LẤY TẤT CẢ MÃ (ADMIN) – BỎ status
+   1. LẤY TẤT CẢ MÃ (ADMIN)
    ======================================== */
 export const getAllPromotions = async (req, res) => {
   try {
     const promotions = await Promotion.find()
       .populate("createdBy", "fullName email")
       .select(
-        "name code discountType discountValue startDate endDate usageLimit usedCount minOrderValue createdAt"
+        "name code discountType discountValue maxDiscountAmount startDate endDate usageLimit usedCount minOrderValue isActive createdAt"
       )
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, data: { promotions } });
+    const data = promotions.map((p) => ({
+      ...p.toObject(),
+      displayText: p.getDisplayText(),
+    }));
+
+    res.json({ success: true, data: { promotions: data } });
   } catch (error) {
     console.error("getAllPromotions error:", error);
     res.status(500).json({ success: false, message: "Lỗi hệ thống" });
@@ -33,23 +28,29 @@ export const getAllPromotions = async (req, res) => {
 };
 
 /* ========================================
-   2. LẤY MÃ ĐANG HOẠT ĐỘNG (PUBLIC) – BỎ status
+   2. LẤY MÃ ĐANG HOẠT ĐỘNG (PUBLIC)
    ======================================== */
 export const getActivePromotions = async (req, res) => {
   try {
     const now = new Date();
 
     const promotions = await Promotion.find({
+      isActive: true,
       startDate: { $lte: now },
       endDate: { $gte: now },
       $expr: { $lt: ["$usedCount", "$usageLimit"] },
     })
       .select(
-        "name code discountType discountValue minOrderValue usageLimit usedCount endDate"
+        "name code discountType discountValue maxDiscountAmount minOrderValue usageLimit usedCount endDate"
       )
       .sort({ endDate: 1 });
 
-    res.json({ success: true, data: { promotions } });
+    const data = promotions.map((p) => ({
+      ...p.toObject(),
+      displayText: p.getDisplayText(),
+    }));
+
+    res.json({ success: true, data: { promotions: data } });
   } catch (error) {
     console.error("getActivePromotions error:", error);
     res.status(500).json({ success: false, message: "Lỗi hệ thống" });
@@ -57,7 +58,7 @@ export const getActivePromotions = async (req, res) => {
 };
 
 /* ========================================
-   3. TẠO MÃ KHUYẾN MÃI – Validate đầy đủ
+   3. TẠO MÃ KHUYẾN MÃI
    ======================================== */
 export const createPromotion = async (req, res) => {
   try {
@@ -66,57 +67,55 @@ export const createPromotion = async (req, res) => {
       code,
       discountType,
       discountValue,
+      maxDiscountAmount,
       startDate,
       endDate,
       usageLimit,
       minOrderValue = 0,
+      isActive = true,
     } = req.body;
 
-    // === VALIDATE ===
-    if (!code?.trim()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Mã code là bắt buộc" });
-    }
+    // Validate cơ bản
+    if (!code?.trim()) return res.status(400).json({ success: false, message: "Mã code là bắt buộc" });
     if (!["PERCENTAGE", "FIXED"].includes(discountType)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Loại giảm giá không hợp lệ" });
+      return res.status(400).json({ success: false, message: "Loại giảm giá không hợp lệ" });
     }
-    if (!Number.isFinite(discountValue) || discountValue < 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Giá trị giảm không hợp lệ" });
+
+    const val = Number(discountValue);
+    if (!Number.isFinite(val) || val <= 0 || (discountType === "PERCENTAGE" && val > 100)) {
+      return res.status(400).json({ success: false, message: "Giá trị giảm không hợp lệ" });
     }
-    if (discountType === "PERCENTAGE" && discountValue > 100) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Phần trăm không được vượt 100%" });
-    }
+
     if (!usageLimit || usageLimit < 1) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Giới hạn lượt dùng phải ≥ 1" });
+      return res.status(400).json({ success: false, message: "Giới hạn lượt dùng phải ≥ 1" });
+    }
+
+    // Xử lý maxDiscountAmount
+    let maxVal = null;
+    if (discountType === "PERCENTAGE" && maxDiscountAmount !== undefined) {
+      maxVal = Number(maxDiscountAmount);
+      if (!Number.isFinite(maxVal) || maxVal < 0) {
+        return res.status(400).json({ success: false, message: "Số tiền giảm tối đa không hợp lệ" });
+      }
     }
 
     const normalizedCode = code.toUpperCase().trim();
-
     const existing = await Promotion.findOne({ code: normalizedCode });
     if (existing) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Mã code đã tồn tại" });
+      return res.status(400).json({ success: false, message: "Mã code đã tồn tại" });
     }
 
     const promotion = await Promotion.create({
       name: name?.trim(),
       code: normalizedCode,
       discountType,
-      discountValue: Number(discountValue),
+      discountValue: val,
+      maxDiscountAmount: maxVal,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       usageLimit: Number(usageLimit),
       minOrderValue: Number(minOrderValue),
+      isActive: Boolean(isActive),
       createdBy: req.user._id,
     });
 
@@ -127,9 +126,7 @@ export const createPromotion = async (req, res) => {
     });
   } catch (error) {
     if (error.code === 11000) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Mã code đã tồn tại" });
+      return res.status(400).json({ success: false, message: "Mã code đã tồn tại" });
     }
     console.error("createPromotion error:", error);
     res.status(400).json({ success: false, message: error.message });
@@ -137,7 +134,7 @@ export const createPromotion = async (req, res) => {
 };
 
 /* ========================================
-   4. CẬP NHẬT MÃ – Validate + Không cho sửa code đã dùng
+   4. CẬP NHẬT MÃ
    ======================================== */
 export const updatePromotion = async (req, res) => {
   try {
@@ -146,45 +143,44 @@ export const updatePromotion = async (req, res) => {
 
     const promotion = await Promotion.findById(id);
     if (!promotion) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy mã khuyến mãi" });
+      return res.status(404).json({ success: false, message: "Không tìm thấy mã khuyến mãi" });
     }
 
     // Không cho sửa code nếu đã dùng
     if (updates.code && updates.code.toUpperCase().trim() !== promotion.code) {
       const hasBeenUsed = await PromotionUsage.exists({ promotion: id });
       if (hasBeenUsed) {
-        return res.status(400).json({
-          success: false,
-          message: "Không thể thay đổi mã đã được sử dụng",
-        });
+        return res.status(400).json({ success: false, message: "Không thể thay đổi mã đã được sử dụng" });
       }
       updates.code = updates.code.toUpperCase().trim();
     }
 
-    // Validate discount
-    if (
-      updates.discountType &&
-      !["PERCENTAGE", "FIXED"].includes(updates.discountType)
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Loại giảm giá không hợp lệ" });
-    }
+    // Validate discountValue
     if (updates.discountValue !== undefined) {
       const val = Number(updates.discountValue);
-      if (!Number.isFinite(val) || val < 0) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Giá trị giảm không hợp lệ" });
-      }
-      if (updates.discountType === "PERCENTAGE" && val > 100) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Phần trăm không được vượt 100%" });
+      const type = updates.discountType || promotion.discountType;
+      if (!Number.isFinite(val) || val <= 0 || (type === "PERCENTAGE" && val > 100)) {
+        return res.status(400).json({ success: false, message: "Giá trị giảm không hợp lệ" });
       }
       updates.discountValue = val;
+    }
+
+    // Validate maxDiscountAmount
+    if (updates.maxDiscountAmount !== undefined) {
+      const type = updates.discountType || promotion.discountType;
+      if (type === "PERCENTAGE") {
+        const maxVal = Number(updates.maxDiscountAmount);
+        if (!Number.isFinite(maxVal) || maxVal < 0) {
+          return res.status(400).json({ success: false, message: "Số tiền giảm tối đa không hợp lệ" });
+        }
+        updates.maxDiscountAmount = maxVal;
+      } else {
+        updates.maxDiscountAmount = null;
+      }
+    }
+
+    if (updates.isActive !== undefined) {
+      updates.isActive = Boolean(updates.isActive);
     }
 
     Object.assign(promotion, updates);
@@ -202,25 +198,19 @@ export const updatePromotion = async (req, res) => {
 };
 
 /* ========================================
-   5. XÓA MÃ – Không cho xóa nếu đã dùng
+   5. XÓA MÃ
    ======================================== */
 export const deletePromotion = async (req, res) => {
   try {
     const { id } = req.params;
-
     const promotion = await Promotion.findById(id);
     if (!promotion) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy mã khuyến mãi" });
+      return res.status(404).json({ success: false, message: "Không tìm thấy mã khuyến mãi" });
     }
 
     const hasUsage = await PromotionUsage.exists({ promotion: id });
     if (hasUsage) {
-      return res.status(400).json({
-        success: false,
-        message: "Không thể xóa mã đã được sử dụng",
-      });
+      return res.status(400).json({ success: false, message: "Không thể xóa mã đã được sử dụng" });
     }
 
     await Promotion.findByIdAndDelete(id);
@@ -232,57 +222,49 @@ export const deletePromotion = async (req, res) => {
 };
 
 /* ========================================
-   6. ÁP DỤNG MÃ – TRANSACTION + ATOMIC + DÙNG isActive()
+   6. ÁP DỤNG MÃ – ĐÃ SỬA DÙNG canBeUsed()
    ======================================== */
 export const applyPromotion = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const { code, totalAmount } = req.body;
+    const { code, totalAmount, orderId } = req.body;
     const userId = req.user._id;
 
-    // === VALIDATE INPUT ===
     if (!code?.trim()) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Mã khuyến mãi là bắt buộc" });
+      return res.status(400).json({ success: false, message: "Mã khuyến mãi là bắt buộc" });
     }
     if (!Number.isFinite(totalAmount) || totalAmount < 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Tổng tiền không hợp lệ" });
+      return res.status(400).json({ success: false, message: "Tổng tiền không hợp lệ" });
     }
 
     const normalizedCode = code.toUpperCase().trim();
-    const now = new Date();
-
-    // === TÌM PROMOTION VỚI ĐIỀU KIỆN NGHIÊM NGẶT ===
-    const promotion = await Promotion.findOne({
-      code: normalizedCode,
-      startDate: { $lte: now },
-      endDate: { $gte: now },
-      $expr: { $lt: ["$usedCount", "$usageLimit"] },
-    }).session(session);
+    const promotion = await Promotion.findOne({ code: normalizedCode }).session(session);
 
     if (!promotion) {
       await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Mã khuyến mãi không hợp lệ, đã hết hạn hoặc hết lượt",
-      });
+      return res.status(400).json({ success: false, message: "Mã khuyến mãi không tồn tại" });
     }
 
-    // === DÙNG isActive() TRONG MODEL ===
-    if (!promotion.isActive(totalAmount)) {
+    // ĐÃ SỬA: dùng canBeUsed() thay vì isActive()
+    if (!promotion.canBeUsed(totalAmount)) {
       await session.abortTransaction();
+      const reasons = [];
+      if (!promotion.isActive) reasons.push("đã bị tắt");
+      const now = new Date();
+      if (now < promotion.startDate || now > promotion.endDate) reasons.push("ngoài thời gian");
+      if (promotion.usedCount >= promotion.usageLimit) reasons.push("hết lượt dùng");
+      if (totalAmount < promotion.minOrderValue) {
+        reasons.push(`đơn tối thiểu ${promotion.minOrderValue.toLocaleString()}₫`);
+      }
       return res.status(400).json({
         success: false,
-        message: `Đơn hàng phải từ ${promotion.minOrderValue.toLocaleString()}₫`,
+        message: `Mã không dùng được: ${reasons.join(", ")}`,
       });
     }
 
-    // === KIỂM TRA USER ĐÃ DÙNG CHƯA ===
+    // Kiểm tra user đã dùng chưa
     const alreadyUsed = await PromotionUsage.findOne({
       promotion: promotion._id,
       user: userId,
@@ -290,48 +272,30 @@ export const applyPromotion = async (req, res) => {
 
     if (alreadyUsed) {
       await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Bạn đã sử dụng mã này rồi!",
-      });
+      return res.status(400).json({ success: false, message: "Bạn đã sử dụng mã này rồi!" });
     }
 
-    // === TĂNG usedCount NGUYÊN TỬ ===
-    const updated = await Promotion.findOneAndUpdate(
-      {
-        _id: promotion._id,
-        usedCount: { $lt: promotion.usageLimit },
-      },
-      { $inc: { usedCount: 1 } },
-      { new: true, session }
-    );
+    // Tăng lượt dùng + tính giảm giá
+    await promotion.incrementUsage(session);
+    const discountedTotal = promotion.applyDiscount(totalAmount);
+    const discountAmount = totalAmount - discountedTotal;
 
-    if (!updated) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Mã khuyến mãi đã hết lượt sử dụng!",
-      });
-    }
-
-    // === TÍNH GIẢM GIÁ ===
-    const discountAmount = calculateDiscount(
-      totalAmount,
-      promotion.discountType,
-      promotion.discountValue
-    );
-    const discountedTotal = totalAmount - discountAmount;
-
-    // === LƯU LỊCH SỬ ===
+    // Lưu lịch sử
     await PromotionUsage.create(
-      [
-        {
-          promotion: promotion._id,
-          user: userId,
-          orderTotal: totalAmount,
-          discountAmount,
+      [{
+        promotion: promotion._id,
+        user: userId,
+        order: orderId || null,
+        orderTotal: totalAmount,
+        discountAmount,
+        snapshot: {
+          code: promotion.code,
+          name: promotion.name,
+          discountType: promotion.discountType,
+          discountValue: promotion.discountValue,
+          maxDiscountAmount: promotion.maxDiscountAmount,
         },
-      ],
+      }],
       { session }
     );
 
@@ -344,54 +308,45 @@ export const applyPromotion = async (req, res) => {
         discountAmount,
         discountedTotal,
         code: promotion.code,
+        displayText: promotion.getDisplayText(),
       },
     });
   } catch (error) {
     await session.abortTransaction();
     console.error("applyPromotion error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Lỗi hệ thống, vui lòng thử lại" });
+    res.status(500).json({ success: false, message: "Lỗi hệ thống, vui lòng thử lại" });
   } finally {
     session.endSession();
   }
 };
 
 /* ========================================
-   7. LỊCH SỬ SỬ DỤNG MÃ (ADMIN) – Ai đã dùng mã này
+   7 & 8. LỊCH SỬ SỬ DỤNG (giữ nguyên – đã ổn)
    ======================================== */
 export const getPromotionUsageHistory = async (req, res) => {
   try {
     const { id } = req.params;
-
     const usages = await PromotionUsage.find({ promotion: id })
       .populate("user", "fullName email phone")
       .populate("promotion", "code name")
       .populate("order", "orderNumber totalAmount status")
-      .select("user promotion order orderTotal discountAmount usedAt createdAt")
+      .select("user promotion order orderTotal discountAmount snapshot usedAt createdAt")
       .sort({ usedAt: -1 });
 
-    res.json({
-      success: true,
-      data: { usages, total: usages.length },
-    });
+    res.json({ success: true, data: { usages, total: usages.length } });
   } catch (error) {
     console.error("getPromotionUsageHistory error:", error);
     res.status(500).json({ success: false, message: "Lỗi hệ thống" });
   }
 };
 
-/* ========================================
-   8. LỊCH SỬ MÃ CỦA TÔI (CUSTOMER) – Mã mình đã dùng
-   ======================================== */
 export const getMyPromotionUsage = async (req, res) => {
   try {
     const userId = req.user._id;
-
     const usages = await PromotionUsage.find({ user: userId })
-      .populate("promotion", "code name discountType discountValue endDate")
+      .populate("promotion", "code name discountType discountValue maxDiscountAmount endDate")
       .populate("order", "orderNumber totalAmount status")
-      .select("promotion order orderTotal discountAmount usedAt")
+      .select("promotion order orderTotal discountAmount snapshot usedAt")
       .sort({ usedAt: -1 });
 
     res.json({

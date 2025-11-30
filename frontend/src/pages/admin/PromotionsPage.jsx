@@ -22,37 +22,31 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// === THÊM REACT-DATEPICKER + LOCALE VIỆT NAM ===
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { vi } from "date-fns/locale";
 import { registerLocale } from "react-datepicker";
-
-// Đăng ký locale Việt Nam
 registerLocale("vi", vi);
 
-/**
- * TRANG QUẢN LÝ KHUYẾN MÃI
- * - Tạo, sửa, xóa mã giảm giá
- * - Phân loại: Đang hoạt động / Sắp diễn ra / Đã hết hạn
- * - NHẬP NGÀY THEO KIỂU VIỆT NAM: dd/MM/yyyy (100% chính xác)
- */
 const PromotionsPage = () => {
-  // === STATE QUẢN LÝ DỮ LIỆU ===
   const [promotions, setPromotions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // Thêm trường maxDiscountAmount
   const [formData, setFormData] = useState({
     name: "",
     code: "",
     discountType: "PERCENTAGE",
     discountValue: "",
+    maxDiscountAmount: "",   // ← mới
     startDate: "",
     endDate: "",
     usageLimit: "",
     minOrderValue: "",
   });
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [deletingPromotion, setDeletingPromotion] = useState(null);
@@ -60,7 +54,6 @@ const PromotionsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
 
-  // === LẤY DANH SÁCH KHUYẾN MÃI ===
   useEffect(() => {
     fetchPromotions();
   }, []);
@@ -69,26 +62,20 @@ const PromotionsPage = () => {
     try {
       setIsLoading(true);
       const res = await promotionAPI.getAll();
-      const promotionsData = res.data?.data?.promotions || [];
-      setPromotions(promotionsData);
-    } catch (error) {
-      console.error("Lỗi khi lấy danh sách khuyến mãi:", error);
-      setError(
-        error.response?.data?.message || "Lấy danh sách khuyến mãi thất bại"
-      );
-      setPromotions([]);
+      setPromotions(res.data?.data?.promotions || []);
+    } catch (err) {
+      setError("Không thể tải danh sách mã giảm giá");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // === XỬ LÝ THAY ĐỔI INPUT ===
   const handleChange = (e) => {
-    setError("");
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setError("");
   };
-  // === XỬ LÝ GỬI FORM ===
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -97,18 +84,23 @@ const PromotionsPage = () => {
     try {
       const startDate = new Date(formData.startDate);
       startDate.setHours(0, 0, 0, 0);
-
       const endDate = new Date(formData.endDate);
       endDate.setHours(23, 59, 59, 999);
 
       const payload = {
-        ...formData,
+        name: formData.name.trim(),
         code: formData.code.toUpperCase().trim(),
+        discountType: formData.discountType,
         discountValue: Number(formData.discountValue),
-        usageLimit: Number(formData.usageLimit),
-        minOrderValue: Number(formData.minOrderValue) || 0,
+        // Chỉ gửi maxDiscountAmount khi là phần trăm và có giá trị
+        maxDiscountAmount:
+          formData.discountType === "PERCENTAGE" && formData.maxDiscountAmount
+            ? Number(formData.maxDiscountAmount)
+            : null,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
+        usageLimit: Number(formData.usageLimit),
+        minOrderValue: Number(formData.minOrderValue) || 0,
       };
 
       if (editingId) {
@@ -119,39 +111,36 @@ const PromotionsPage = () => {
 
       await fetchPromotions();
       resetForm();
-    } catch (error) {
-      setError(error.response?.data?.message || "Thao tác thất bại");
+    } catch (err) {
+      setError(err.response?.data?.message || "Thao tác thất bại");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // === CHỈNH SỬA ===
-  const handleEdit = (promotion) => {
-    const start = new Date(promotion.startDate).toISOString().split("T")[0];
-    const end = new Date(promotion.endDate).toISOString().split("T")[0];
-
+  const handleEdit = (p) => {
     setFormData({
-      name: promotion.name,
-      code: promotion.code,
-      discountType: promotion.discountType,
-      discountValue: promotion.discountValue.toString(),
-      startDate: start,
-      endDate: end,
-      usageLimit: promotion.usageLimit.toString(),
-      minOrderValue: promotion.minOrderValue.toString(),
+      name: p.name || "",
+      code: p.code || "",
+      discountType: p.discountType || "PERCENTAGE",
+      discountValue: p.discountValue?.toString() || "",
+      maxDiscountAmount: p.maxDiscountAmount ? p.maxDiscountAmount.toString() : "",
+      startDate: new Date(p.startDate).toISOString().split("T")[0],
+      endDate: new Date(p.endDate).toISOString().split("T")[0],
+      usageLimit: p.usageLimit?.toString() || "",
+      minOrderValue: p.minOrderValue?.toString() || "",
     });
-    setEditingId(promotion._id);
+    setEditingId(p._id);
     setShowForm(true);
   };
 
-  // === RESET FORM ===
   const resetForm = () => {
     setFormData({
       name: "",
       code: "",
       discountType: "PERCENTAGE",
       discountValue: "",
+      maxDiscountAmount: "",
       startDate: "",
       endDate: "",
       usageLimit: "",
@@ -161,27 +150,23 @@ const PromotionsPage = () => {
     setShowForm(false);
   };
 
-  // === XÓA ===
-  const openDeleteDialog = (id, promotion) => {
-    setDeletingId(id);
+  const openDeleteDialog = ( promotion) => {
+    setDeletingId(promotion._id);
     setDeletingPromotion(promotion);
     setShowDeleteDialog(true);
   };
 
   const confirmDelete = async () => {
-    if (!deletingId) return;
     try {
       await promotionAPI.delete(deletingId);
       await fetchPromotions();
       setShowDeleteDialog(false);
-      setDeletingId(null);
-      setDeletingPromotion(null);
-    } catch (error) {
-      setError(error.response?.data?.message || "Xóa thất bại");
+    } catch (err) {
+      setError("Không thể xóa mã đã được sử dụng");
     }
   };
 
-  // === TRẠNG THÁI ===
+  // Trạng thái hiển thị
   const getPromotionStatus = (p) => {
     const now = new Date();
     const start = new Date(p.startDate);
@@ -191,38 +176,23 @@ const PromotionsPage = () => {
     return "ACTIVE";
   };
 
-  const getStatusText = (status) =>
-    ({
-      ACTIVE: "Đang hoạt động",
-      EXPIRED: "Đã hết hạn",
-      UPCOMING: "Sắp diễn ra",
-    }[status]);
+  const getStatusText = (s) => ({ ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", UPCOMING: "Sắp diễn ra" }[s]);
+  const getStatusColor = (s) => ({ ACTIVE: "bg-green-100 text-green-800", EXPIRED: "bg-red-100 text-red-800", UPCOMING: "bg-blue-100 text-blue-800" }[s]);
 
-  const getStatusColor = (status) =>
-    ({
-      ACTIVE: "bg-green-100 text-green-800",
-      EXPIRED: "bg-red-100 text-red-800",
-      UPCOMING: "bg-blue-100 text-blue-800",
-    }[status]);
+  const activePromotions = promotions.filter(p => getPromotionStatus(p) === "ACTIVE");
+  const upcomingPromotions = promotions.filter(p => getPromotionStatus(p) === "UPCOMING");
+  const expiredPromotions = promotions.filter(p => getPromotionStatus(p) === "EXPIRED");
 
-  const activePromotions = promotions.filter(
-    (p) => getPromotionStatus(p) === "ACTIVE"
-  );
-  const expiredPromotions = promotions.filter(
-    (p) => getPromotionStatus(p) === "EXPIRED"
-  );
-  const upcomingPromotions = promotions.filter(
-    (p) => getPromotionStatus(p) === "UPCOMING"
-  );
+  // Hiển thị giảm giá trong card
+  const getDiscountDisplay = (p) => {
+    if (p.discountType === "FIXED") return `-${p.discountValue.toLocaleString()}₫`;
+    if (p.maxDiscountAmount) return `-${p.discountValue}% (tối đa ${p.maxDiscountAmount.toLocaleString()}₫)`;
+    return `-${p.discountValue}%`;
+  };
 
-  // === GRID COMPONENT ===
   const PromotionGrid = ({ promotions, emptyMessage }) => {
     if (promotions.length === 0) {
-      return (
-        <p className="col-span-full text-center text-muted-foreground py-8">
-          {emptyMessage}
-        </p>
-      );
+      return <p className="col-span-full text-center text-muted-foreground py-8">{emptyMessage}</p>;
     }
 
     return (
@@ -237,31 +207,23 @@ const PromotionsPage = () => {
                     <h3 className="font-bold text-lg">{p.name}</h3>
                     <p className="text-sm text-primary font-mono">{p.code}</p>
                   </div>
-                  <Badge className={getStatusColor(status)}>
-                    {getStatusText(status)}
-                  </Badge>
+                  <Badge className={getStatusColor(status)}>{getStatusText(status)}</Badge>
                 </div>
 
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Giảm:</span>
-                    <span className="font-semibold text-green-600">
-                      {p.discountType === "PERCENTAGE"
-                        ? `-${p.discountValue}%`
-                        : `-${p.discountValue.toLocaleString()}₫`}
-                    </span>
+                    <span className="font-semibold text-green-600">{getDiscountDisplay(p)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Đơn tối thiểu:
-                    </span>
-                    <span>{p.minOrderValue.toLocaleString()}₫</span>
-                  </div>
+                  {p.minOrderValue > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Đơn tối thiểu:</span>
+                      <span>{p.minOrderValue.toLocaleString()}₫</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Lượt dùng:</span>
-                    <span>
-                      {p.usedCount} / {p.usageLimit}
-                    </span>
+                    <span>{p.usedCount} / {p.usageLimit}</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span>{formatDate(p.startDate)}</span>
@@ -270,17 +232,13 @@ const PromotionsPage = () => {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleEdit(p)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => handleEdit(p)}>
                     <Edit className="w-4 h-4 mr-1" /> Sửa
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => openDeleteDialog(p._id, p)}
+                    onClick={() => openDeleteDialog(p)}
                     disabled={p.usedCount > 0}
                     title={p.usedCount > 0 ? "Không thể xóa mã đã dùng" : ""}
                   >
@@ -307,49 +265,31 @@ const PromotionsPage = () => {
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           {showForm ? (
-            <>
-              <X className="w-4 h-4 mr-2" /> Hủy
-            </>
+            <> <X className="w-4 h-4 mr-2" /> Hủy</>
           ) : (
-            <>
-              <Plus className="w-4 h-4 mr-2" /> Thêm mã mới
-            </>
+            <> <Plus className="w-4 h-4 mr-2" /> Thêm mã mới</>
           )}
         </Button>
       </div>
 
       {error && <ErrorMessage message={error} />}
 
-      {/* FORM – DÙNG REACT-DATEPICKER ĐỂ ĐẢM BẢO dd/MM/yyyy */}
+      {/* FORM */}
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle>
-              {editingId ? "Chỉnh sửa mã" : "Tạo mã khuyến mãi"}
-            </CardTitle>
+            <CardTitle>{editingId ? "Chỉnh sửa mã" : "Tạo mã khuyến mãi"}</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Tên khuyến mãi *</Label>
-                  <Input
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                  />
+                  <Input name="name" value={formData.name} onChange={handleChange} required />
                 </div>
-
                 <div>
                   <Label>Mã code *</Label>
-                  <Input
-                    name="code"
-                    value={formData.code}
-                    onChange={handleChange}
-                    placeholder="SALE20"
-                    required
-                  />
+                  <Input name="code" value={formData.code} onChange={handleChange} placeholder="SALE20" required />
                 </div>
 
                 <div>
@@ -366,30 +306,41 @@ const PromotionsPage = () => {
                 </div>
 
                 <div>
-                  <Label>
-                    Giá trị giảm{" "}
-                    {formData.discountType === "PERCENTAGE" ? "(%)" : "(VNĐ)"}
-                  </Label>
+                  <Label>Giá trị giảm *</Label>
                   <Input
-                    name="discountValue"
                     type="number"
-                    min="1"
-                    max={
-                      formData.discountType === "PERCENTAGE" ? "100" : undefined
-                    }
+                    name="discountValue"
                     value={formData.discountValue}
                     onChange={handleChange}
+                    min="1"
+                    max={formData.discountType === "PERCENTAGE" ? 100 : undefined}
                     required
                   />
                 </div>
 
-                {/* NGÀY BẮT ĐẦU – dd/MM/yyyy */}
+                {/* Ô INPUT GIẢM TỐI ĐA – CHỈ HIỆN KHI LÀ % */}
+                {formData.discountType === "PERCENTAGE" && (
+                  <div className="md:col-span-2">
+                    <Label>
+                      Giảm tối đa (VNĐ) <span className="text-xs text-muted-foreground">(không bắt buộc)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      name="maxDiscountAmount"
+                      value={formData.maxDiscountAmount}
+                      onChange={handleChange}
+                      placeholder="500000"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Ví dụ: Giảm 30% nhưng tối đa chỉ giảm 300.000₫
+                    </p>
+                  </div>
+                )}
+
                 <div>
-                  <Label> Ngày bắt đầu </Label>
+                  <Label>Ngày bắt đầu *</Label>
                   <DatePicker
-                    selected={
-                      formData.startDate ? new Date(formData.startDate) : null
-                    }
+                    selected={formData.startDate ? new Date(formData.startDate) : null}
                     onChange={(date) =>
                       setFormData((prev) => ({
                         ...prev,
@@ -404,13 +355,10 @@ const PromotionsPage = () => {
                   />
                 </div>
 
-                {/* NGÀY KẾT THÚC */}
                 <div>
-                  <Label>Ngày kết thúc </Label>
+                  <Label>Ngày kết thúc *</Label>
                   <DatePicker
-                    selected={
-                      formData.endDate ? new Date(formData.endDate) : null
-                    }
+                    selected={formData.endDate ? new Date(formData.endDate) : null}
                     onChange={(date) =>
                       setFormData((prev) => ({
                         ...prev,
@@ -427,36 +375,18 @@ const PromotionsPage = () => {
 
                 <div>
                   <Label>Giới hạn lượt dùng *</Label>
-                  <Input
-                    name="usageLimit"
-                    type="number"
-                    min="1"
-                    value={formData.usageLimit}
-                    onChange={handleChange}
-                    required
-                  />
+                  <Input type="number" name="usageLimit" value={formData.usageLimit} onChange={handleChange} min="1" required />
                 </div>
 
                 <div>
                   <Label>Đơn tối thiểu (VNĐ)</Label>
-                  <Input
-                    name="minOrderValue"
-                    type="number"
-                    min="0"
-                    value={formData.minOrderValue}
-                    onChange={handleChange}
-                    placeholder="0"
-                  />
+                  <Input type="number" name="minOrderValue" value={formData.minOrderValue} onChange={handleChange} placeholder="0" />
                 </div>
               </div>
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting
-                    ? "Đang xử lý..."
-                    : editingId
-                    ? "Cập nhật"
-                    : "Tạo mã"}
+                  {isSubmitting ? "Đang xử lý..." : editingId ? "Cập nhật" : "Tạo mã"}
                 </Button>
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Hủy
@@ -467,83 +397,61 @@ const PromotionsPage = () => {
         </Card>
       )}
 
-      {/* TABS + DANH SÁCH */}
+      {/* TABS */}
       <div className="mt-6">
         <div className="border-b border-border">
           <div className="flex space-x-8">
             <button
               onClick={() => setActiveTab("active")}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "active"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                activeTab === "active" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Đang hoạt động
-              <span className="ml-2 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs">
-                {activePromotions.length}
-              </span>
+              <span className="ml-2 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs">{activePromotions.length}</span>
             </button>
             <button
               onClick={() => setActiveTab("upcoming")}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "upcoming"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                activeTab === "upcoming" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Sắp diễn ra
-              <span className="ml-2 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs">
-                {upcomingPromotions.length}
-              </span>
+              <span className="ml-2 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs">{upcomingPromotions.length}</span>
             </button>
             <button
               onClick={() => setActiveTab("expired")}
               className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "expired"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                activeTab === "expired" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Đã hết hạn
-              <span className="ml-2 rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs">
-                {expiredPromotions.length}
-              </span>
+              <span className="ml-2 rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs">{expiredPromotions.length}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-6">
           {activeTab === "active" && (
-            <PromotionGrid
-              promotions={activePromotions}
-              emptyMessage="Không có mã nào đang hoạt động."
-            />
+            <PromotionGrid promotions={activePromotions} emptyMessage="Không có mã nào đang hoạt động." />
           )}
           {activeTab === "upcoming" && (
-            <PromotionGrid
-              promotions={upcomingPromotions}
-              emptyMessage="Không có mã nào sắp diễn ra."
-            />
+            <PromotionGrid promotions={upcomingPromotions} emptyMessage="Không có mã nào sắp diễn ra." />
           )}
           {activeTab === "expired" && (
-            <PromotionGrid
-              promotions={expiredPromotions}
-              emptyMessage="Không có mã nào đã hết hạn."
-            />
+            <PromotionGrid promotions={expiredPromotions} emptyMessage="Không có mã nào đã hết hạn." />
           )}
         </div>
       </div>
 
-      {/* XÓA */}
+      {/* XÓA DIALOG */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận xóa mã khuyến mãi</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc chắn muốn xóa mã{" "}
-              <strong>{deletingPromotion?.code}</strong> (
-              <em>{deletingPromotion?.name}</em>) không? <br />
+              Bạn có chắc chắn muốn xóa mã <strong>{deletingPromotion?.code}</strong> (
+              <em>{deletingPromotion?.name}</em>) không?<br />
               <span className="text-red-600 font-medium">
                 {deletingPromotion?.usedCount > 0
                   ? "Mã đã được sử dụng → Không thể xóa."
@@ -558,9 +466,7 @@ const PromotionsPage = () => {
               className="bg-red-600 hover:bg-red-700"
               disabled={deletingPromotion?.usedCount > 0}
             >
-              {deletingPromotion?.usedCount > 0
-                ? "Không thể xóa"
-                : "Xóa vĩnh viễn"}
+              {deletingPromotion?.usedCount > 0 ? "Không thể xóa" : "Xóa vĩnh viễn"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
