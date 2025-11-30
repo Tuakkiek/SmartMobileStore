@@ -45,13 +45,11 @@ const ImageUploader = ({ images = [], onChange }) => {
 
   const handleRemove = async (index) => {
     const imagePath = images[index];
-
-    // Remove from list immediately
     const newImages = images.filter((_, i) => i !== index);
     onChange(newImages);
 
-    // Delete from server if it's an uploaded file
-    if (imagePath?.startsWith("/uploads/")) {
+    // Kiểm tra nếu là uploaded file (không phải URL từ ngoài)
+    if (imagePath?.startsWith("/uploads/banners/")) {
       await deleteBanner(imagePath);
     }
   };
@@ -77,6 +75,7 @@ const ImageUploader = ({ images = [], onChange }) => {
               alt={`Banner ${index + 1}`}
               className="w-full h-full object-cover"
               onError={(e) => {
+                console.error(`Failed to load image: ${image}`);
                 e.target.src = "/placeholder.png";
               }}
             />

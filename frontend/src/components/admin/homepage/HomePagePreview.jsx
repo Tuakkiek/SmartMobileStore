@@ -52,21 +52,27 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
         );
 
       case "category-nav":
+        const categories = [
+          "iPhone",
+          "iPad",
+          "Mac",
+          "AirPods",
+          "Apple Watch",
+          "Phụ Kiện",
+        ];
         return (
           <div className="grid grid-cols-3 gap-2">
-            {["iPhone", "iPad", "Mac"].map((cat, i) => (
+            {categories.map((cat, i) => (
               <div
                 key={i}
-                className="bg-gray-100 rounded-lg p-3 text-center text-xs font-medium"
+                className="bg-gray-100 rounded-lg p-3 text-center text-xs font-medium hover:bg-gray-200 transition-colors"
               >
                 {cat}
               </div>
             ))}
           </div>
         );
-
       case "deals-grid":
-      case "magic-deals":
         return (
           <div className="grid grid-cols-2 gap-2">
             {(section.config.dealImages || []).slice(0, 4).map((img, i) => (
@@ -80,13 +86,50 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
           </div>
         );
 
+      case "magic-deals":
+        return (
+          <div className="bg-gray-100 rounded-lg p-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {/* Left banner */}
+              <div className="md:col-span-2">
+                <div className="aspect-[21/9] bg-gray-200 rounded-lg overflow-hidden">
+                  <img
+                    src={section.config.images?.[0] || "/placeholder.png"}
+                    alt="Magic Deal"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* Right categories */}
+              <div className="md:col-span-2">
+                <div className="grid grid-cols-2 gap-2 h-full">
+                  {(section.config.images || []).slice(1, 5).map((img, i) => (
+                    <div
+                      key={i}
+                      className="aspect-square bg-gray-200 rounded-lg overflow-hidden"
+                    >
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       case "products-new":
       case "products-topSeller":
       case "category-section":
+        const categoryName = section.config?.categoryFilter || "Category";
         return (
           <div>
             <h3 className="text-sm font-semibold mb-2">
-              {section.title || section.type}
+              {section.title || categoryName}
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {[1, 2, 3, 4].map((i) => (
@@ -102,7 +145,6 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
             </div>
           </div>
         );
-
       case "iphone-showcase":
         return (
           <div className="flex gap-2 overflow-x-auto">

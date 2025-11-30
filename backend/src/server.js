@@ -28,7 +28,6 @@ import salesRoutes from "./routes/salesRoutes.js";
 import posRoutes from "./routes/posRoutes.js";
 import homePageRoutes from "./routes/homePageRoutes.js";
 
-
 import vnpayRoutes from "./routes/vnpayRoutes.js";
 
 dotenv.config();
@@ -61,6 +60,7 @@ app.use(cookieParser());
 
 // Serve static files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use(express.static(path.join(process.cwd(), "public"))); // Nếu có folder public
 
 // ================================
 // 🔹 Kết nối MongoDB

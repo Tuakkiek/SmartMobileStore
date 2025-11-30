@@ -99,32 +99,36 @@ const SectionEditorModal = ({ section, open, onClose }) => {
           <>
             <div className="space-y-4">
               <div>
-                <Label>Deal Images</Label>
+                <Label>
+                  {section.type === "deals-grid"
+                    ? "Deal Images"
+                    : "Magic Deal Images"}
+                </Label>
                 <ImageUploader
-                  images={formData.config.dealImages || []}
-                  onChange={(dealImages) =>
+                  images={formData.config.images || []}
+                  onChange={(images) =>
                     setFormData({
                       ...formData,
-                      config: { ...formData.config, dealImages },
+                      config: { ...formData.config, images },
                     })
                   }
                 />
               </div>
 
               <div>
-                <Label>Deal Links (1 per line)</Label>
+                <Label>Magic Deal Links (1 per line)</Label>
                 <Textarea
-                  value={(formData.config.dealLinks || []).join("\n")}
+                  value={(formData.config.links || []).join("\n")}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
                       config: {
                         ...formData.config,
-                        dealLinks: e.target.value.split("\n").filter(Boolean),
+                        links: e.target.value.split("\n").filter(Boolean),
                       },
                     })
                   }
-                  rows={5}
+                  rows={3}
                 />
               </div>
             </div>
@@ -270,7 +274,7 @@ const SectionEditorModal = ({ section, open, onClose }) => {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Hủ<y></y>
+            Hủy
           </Button>
           <Button onClick={handleSave}>Lưu thay đổi</Button>
         </DialogFooter>

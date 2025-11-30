@@ -38,6 +38,7 @@ const DealCard = ({ deal, className = "" }) => {
 // DEALS GRID SECTION
 // ============================================
 const DealsGridSection = ({ deals }) => {
+  // ✅ FIX 1: Uncomment defaultDeals
   const defaultDeals = [
     { link: "/products?category=iPhone", image: "/banner_phu2.png" },
     { link: "/products?category=iPhone", image: "/banner_phu4.png" },
@@ -60,32 +61,39 @@ const DealsGridSection = ({ deals }) => {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 md:auto-rows-[200px]">
-          {/* Cột trái: Deal 1 + 4 gộp thành 1 ô lớn */}
+          {/* Cột trái: Deal 0 (row-span-2) */}
           <div className="md:row-span-2">
-            {dealsData[0] && dealsData[0].link && (
+            {dealsData[0]?.link && (
               <DealCard deal={dealsData[0]} className="h-full" />
             )}
           </div>
 
-          {/* Cột giữa: Deal 2 + 5 + 8 gộp thành 1 ô lớn */}
+          {/* Cột giữa: Deal 1 (row-span-3) */}
           <div className="md:row-span-3">
-            {dealsData[1] && dealsData[1].link && (
+            {dealsData[1]?.link && (
               <DealCard deal={dealsData[1]} className="h-full" />
             )}
           </div>
 
-          {/* Cột phải: Các deal lẻ (3, 6, 7, 9) */}
-          {dealsData[2] && dealsData[2].link && (
+          {/* Cột phải: Deals 2, 3, 4, 5 */}
+          {/* Row 1, Col 3 */}
+          {dealsData[2]?.link && (
             <DealCard deal={dealsData[2]} />
           )}
-          {dealsData[5] && dealsData[5].link && (
+
+          {/* Row 2, Col 3 */}
+          {dealsData[3]?.link && (
+            <DealCard deal={dealsData[3]} />
+          )}
+
+          {/* Row 3, Col 3 */}
+          {dealsData[4]?.link && (
+            <DealCard deal={dealsData[4]} />
+          )}
+
+          {/* Row 4, Col 3 - Nếu muốn 4 deals ở cột phải */}
+          {dealsData[5]?.link && (
             <DealCard deal={dealsData[5]} />
-          )}
-          {dealsData[6] && dealsData[6].link && (
-            <DealCard deal={dealsData[6]} />
-          )}
-          {dealsData[8] && dealsData[8].link && (
-            <DealCard deal={dealsData[8]} />
           )}
         </div>
       </div>
