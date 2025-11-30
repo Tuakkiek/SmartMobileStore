@@ -132,8 +132,16 @@ export const useHomeLayoutStore = create((set, get) => ({
   // ============================================
   uploadBanner: async (file) => {
     try {
+      console.log("📤 Uploading file:", file.name, file.type);
       const response = await homePageAPI.uploadBanner(file);
       const imagePath = response.data?.data?.imagePath;
+
+      console.log("✅ Upload response:", {
+        imagePath,
+        fullUrl: `${
+          import.meta.env.VITE_API_URL || "http://localhost:5000"
+        }${imagePath}`,
+      });
 
       if (imagePath) {
         toast.success("Tải ảnh lên thành công");
@@ -141,7 +149,7 @@ export const useHomeLayoutStore = create((set, get) => ({
       }
       return null;
     } catch (error) {
-      console.error("uploadBanner error:", error);
+      console.error("❌ Upload error:", error.response?.data || error);
       toast.error("Không thể tải ảnh lên");
       return null;
     }

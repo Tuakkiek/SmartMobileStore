@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/admin/homepage/HomePagePreview.jsx
-// Live preview of homepage with dynamic sections
+// Live preview of homepage with dynamic sections (no images)
 // ============================================
 
 import React from "react";
@@ -16,29 +16,23 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
       case "hero":
         return (
           <div className="aspect-[24/9] bg-gray-200 rounded-lg overflow-hidden relative">
-            {section.config.images?.[0] ? (
-              <img
-                src={section.config.images[0]}
-                alt="Hero"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                Hero Banner
-              </div>
-            )}
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              Hero Banner
+            </div>
           </div>
         );
 
       case "secondary-banners":
         return (
           <div className="grid grid-cols-2 gap-2">
-            {(section.config.images || []).slice(0, 2).map((img, i) => (
+            {[1, 2].map((i) => (
               <div
                 key={i}
                 className="aspect-[21/9] bg-gray-200 rounded-lg overflow-hidden"
               >
-                <img src={img} alt="" className="w-full h-full object-cover" />
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  Secondary Banner {i}
+                </div>
               </div>
             ))}
           </div>
@@ -46,8 +40,8 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
 
       case "promo-strip":
         return (
-          <div className="bg-red-600 text-white text-center py-2 text-xs font-medium">
-            🔥 Khuyến mãi đặc biệt • Miễn phí giao hàng
+          <div className="bg-gray-200 text-black text-center py-2 text-xs font-medium ">
+            Promo Strip
           </div>
         );
 
@@ -61,11 +55,11 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
           "Phụ Kiện",
         ];
         return (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-wrap gap-4 justify-center">
             {categories.map((cat, i) => (
               <div
                 key={i}
-                className="bg-gray-100 rounded-lg p-3 text-center text-xs font-medium hover:bg-gray-200 transition-colors"
+                className="bg-gray-100 rounded-lg p-3 text-center text-xs font-medium hover:bg-gray-200 transition-colors w-full sm:w-auto"
               >
                 {cat}
               </div>
@@ -75,12 +69,14 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
       case "deals-grid":
         return (
           <div className="grid grid-cols-2 gap-2">
-            {(section.config.dealImages || []).slice(0, 4).map((img, i) => (
+            {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
                 className="aspect-video bg-gray-200 rounded-lg overflow-hidden"
               >
-                <img src={img} alt="" className="w-full h-full object-cover" />
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  Deal {i}
+                </div>
               </div>
             ))}
           </div>
@@ -93,27 +89,23 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
               {/* Left banner */}
               <div className="md:col-span-2">
                 <div className="aspect-[21/9] bg-gray-200 rounded-lg overflow-hidden">
-                  <img
-                    src={section.config.images?.[0] || "/placeholder.png"}
-                    alt="Magic Deal"
-                    className="w-full h-full object-cover"
-                  />
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    Magic Deal
+                  </div>
                 </div>
               </div>
 
               {/* Right categories */}
               <div className="md:col-span-2">
                 <div className="grid grid-cols-2 gap-2 h-full">
-                  {(section.config.images || []).slice(1, 5).map((img, i) => (
+                  {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
                       className="aspect-square bg-gray-200 rounded-lg overflow-hidden"
                     >
-                      <img
-                        src={img}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        Magic Deal {i}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -152,7 +144,11 @@ const HomePagePreview = ({ sections, mode = "desktop" }) => {
               <div
                 key={i}
                 className="flex-shrink-0 w-32 aspect-[3/4] bg-gray-200 rounded-lg"
-              />
+              >
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  iPhone Showcase {i}
+                </div>
+              </div>
             ))}
           </div>
         );

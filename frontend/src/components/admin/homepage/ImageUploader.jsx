@@ -8,6 +8,7 @@ import { useHomeLayoutStore } from "@/store/homeLayoutStore";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { getImageUrl } from "@/lib/imageUtils";
 
 const ImageUploader = ({ images = [], onChange }) => {
   const fileInputRef = useRef(null);
@@ -17,7 +18,11 @@ const ImageUploader = ({ images = [], onChange }) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
+    console.log("📤 Files selected:", files); // ← THÊM LOG
+
     for (const file of files) {
+      console.log("📤 Processing file:", file.name, file.type, file.size); // ← THÊM LOG
+
       // Validate file type
       if (!file.type.startsWith("image/")) {
         toast.error(`${file.name} không phải là file ảnh`);
@@ -31,9 +36,10 @@ const ImageUploader = ({ images = [], onChange }) => {
       }
 
       // Upload
-      const imagePath = await uploadBanner(file);
-      if (imagePath) {
-        onChange([...images, imagePath]);
+      const result = await uploadBanner(file);
+      if (result) {
+        // uploadBanner trả về full URL từ server
+        onChange([...images, result]);
       }
     }
 
@@ -71,12 +77,27 @@ const ImageUploader = ({ images = [], onChange }) => {
             className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden border group"
           >
             <img
-              src={image}
+              src={getImageUrl(image)}
               alt={`Banner ${index + 1}`}
               className="w-full h-full object-cover"
               onError={(e) => {
-                console.error(`Failed to load image: ${image}`);
-                e.target.src = "/placeholder.png";
+                const originalSrc = e.target.src;
+                const convertedUrl = getImageUrl(image);
+
+                console.error(`❌ Failed to load image:`, {
+                  original: image,
+                  converted: convertedUrl,
+                  attempted: originalSrc,
+                  baseUrl: import.meta.env.VITE_API_URL,
+                });
+
+                // Chỉ set placeholder nếu chưa phải là placeholder
+                if (!e.target.src.includes("placeholder.png")) {
+                  e.target.src = "/placeholder.png";
+                }
+              }}
+              onLoad={(e) => {
+                console.log("✅ Image loaded successfully:", image);
               }}
             />
 

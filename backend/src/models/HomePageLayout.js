@@ -196,7 +196,19 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         enabled: true,
         order: 6,
         title: "Magic Deals",
-        config: {},
+        config: {
+          images: [
+            "/banner_chinh1.png",
+            "/iphone_17_pro_bac.png",
+            "/ipad_air_xanh.png",
+            "/mac.png",
+            "/airpods.png",
+            "/op_ip_17_pro.png",
+            "/day_deo.png",
+            "/sac_magsafe.png",
+            "/pin_magsafe.png",
+          ],
+        },
       },
       {
         id: "products-new",
@@ -239,10 +251,34 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         config: { categoryFilter: "Mac", limit: 10 },
       },
       {
+        id: "category-airpods",
+        type: "category-section",
+        enabled: true,
+        order: 12,
+        title: "AirPods",
+        config: { categoryFilter: "AirPods", limit: 10 },
+      },
+      {
+        id: "category-applewatch",
+        type: "category-section",
+        enabled: true,
+        order: 13,
+        title: "Apple Watch",
+        config: { categoryFilter: "AppleWatch", limit: 10 },
+      },
+      {
+        id: "category-accessories",
+        type: "category-section",
+        enabled: true,
+        order: 14,
+        title: "Phụ kiện",
+        config: { categoryFilter: "Accessories", limit: 10 },
+      },
+      {
         id: "iphone-showcase",
         type: "iphone-showcase",
         enabled: true,
-        order: 12,
+        order: 15, // ← Đổi từ 12 thành 15
         title: "iPhone Showcase",
         config: {
           showcaseItems: [

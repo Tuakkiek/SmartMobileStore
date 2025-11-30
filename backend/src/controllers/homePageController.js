@@ -13,7 +13,7 @@ import fs from "fs";
 export const getActiveLayout = async (req, res) => {
   try {
     let layout = await HomePageLayout.getActiveLayout();
-    
+
     if (!layout) {
       // Create default layout if none exists
       const defaultLayout = HomePageLayout.getDefaultLayout();
@@ -158,7 +158,7 @@ export const reorderSections = async (req, res) => {
 
     // Reorder sections based on sectionIds array
     const reorderedSections = [];
-    
+
     sectionIds.forEach((id, index) => {
       const section = layout.sections.find((s) => s.id === id);
       if (section) {
@@ -222,7 +222,7 @@ export const updateSectionConfig = async (req, res) => {
     if (config) {
       section.config = { ...section.config, ...config };
     }
-    
+
     if (title !== undefined) {
       section.title = title;
     }
@@ -256,8 +256,11 @@ export const uploadBannerImage = async (req, res) => {
       });
     }
 
-    // Return the file path
+    // Trả về đường dẫn tương đối, frontend sẽ tự ghép với BASE_URL
     const imagePath = `/uploads/banners/${req.file.filename}`;
+
+    // Log để debug
+    console.log("✅ Image uploaded:", imagePath);
 
     res.json({
       success: true,

@@ -94,47 +94,91 @@ const SectionEditorModal = ({ section, open, onClose }) => {
         );
 
       case "deals-grid":
-      case "magic-deals":
         return (
           <>
             <div className="space-y-4">
               <div>
-                <Label>
-                  {section.type === "deals-grid"
-                    ? "Deal Images"
-                    : "Magic Deal Images"}
-                </Label>
+                <Label>Deal Images (6 ảnh)</Label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Hiển thị trong lưới deals
+                </p>
                 <ImageUploader
-                  images={formData.config.images || []}
+                  images={
+                    formData.config.dealImages || formData.config.images || []
+                  }
                   onChange={(images) =>
                     setFormData({
                       ...formData,
-                      config: { ...formData.config, images },
+                      config: {
+                        ...formData.config,
+                        images,
+                        dealImages: images,
+                      },
                     })
                   }
                 />
               </div>
 
               <div>
-                <Label>Magic Deal Links (1 per line)</Label>
+                <Label>Deal Links (1 per line)</Label>
                 <Textarea
-                  value={(formData.config.links || []).join("\n")}
+                  value={(
+                    formData.config.dealLinks ||
+                    formData.config.links ||
+                    []
+                  ).join("\n")}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
                       config: {
                         ...formData.config,
                         links: e.target.value.split("\n").filter(Boolean),
+                        dealLinks: e.target.value.split("\n").filter(Boolean),
                       },
                     })
                   }
-                  rows={3}
+                  rows={6}
+                  placeholder="/products?category=iPhone&#10;/products?category=iPad"
                 />
               </div>
             </div>
           </>
         );
 
+      case "magic-deals":
+        return (
+          <>
+            <div className="space-y-4">
+              <div>
+                <Label>Magic Deals Images (9 ảnh)</Label>
+                <p className="text-xs text-gray-500 mb-2">
+                  1 banner chính + 8 ảnh danh mục (4+4)
+                </p>
+                <ImageUploader
+                  images={formData.config.images || []}
+                  onChange={(images) =>
+                    setFormData({
+                      ...formData,
+                      config: {
+                        ...formData.config,
+                        images,
+                      },
+                    })
+                  }
+                />
+              </div>
+
+              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                <strong>Thứ tự ảnh:</strong>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Ảnh 1: Banner chính (bên trái)</li>
+                  <li>Ảnh 2-5: Khối danh mục 1 (trên phải)</li>
+                  <li>Ảnh 6-9: Khối danh mục 2 (dưới phải)</li>
+                </ul>
+              </div>
+            </div>
+          </>
+        );
       case "products-new":
       case "products-topSeller":
         return (

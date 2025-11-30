@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
 
+import { getImageUrl } from "@/lib/imageUtils";
 // ============================================
 // COMPONENT: HeroBanner (ĐÃ SỬA NÚT BẤM)
 // ============================================
@@ -59,7 +60,7 @@ const HeroBanner = ({
       <div className="absolute inset-0">
                {" "}
         <img
-          src={imageSrc}
+          src={getImageUrl(imageSrc)}
           alt={alt}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           loading="lazy"
