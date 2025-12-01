@@ -469,12 +469,15 @@ const CartPage = () => {
                           className="w-24 h-24 object-cover rounded-md flex-shrink-0"
                         />
 
-                        <div className="flex-1 space-y-3">
-                          <h3 className="font-semibold text-lg">
+                        {/* Thông tin sản phẩm + hành động */}
+                        <div className="flex-1 min-w-0 space-y-3">
+                          {/* Tên sản phẩm */}
+                          <h3 className="font-semibold text-lg line-clamp-2">
                             {item.productName}
                           </h3>
 
-                          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                          {/* Thông tin biến thể */}
+                          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                             {item.variantColor && (
                               <span>Màu: {item.variantColor}</span>
                             )}
@@ -486,6 +489,7 @@ const CartPage = () => {
                             )}
                           </div>
 
+                          {/* Giá */}
                           <div className="flex items-center gap-3">
                             <span className="text-xl font-bold text-red-600">
                               {formatPrice(item.price)}
@@ -497,10 +501,11 @@ const CartPage = () => {
                             )}
                           </div>
 
-                          {/* Quantity + Variant + Actions */}
-                          <div className="flex flex-col sm:flex-row justify-between gap-4">
+                          {/* Quantity + Variant Selects + Tổng tiền + Xóa */}
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                            {/* Left: Quantity + 2 Select */}
                             <div className="flex flex-wrap items-center gap-3">
-                              {/* Nút tăng/giảm - NGĂN TOGGLE KHI CLICK */}
+                              {/* Số lượng */}
                               <div className="flex items-center border rounded-md">
                                 <Button
                                   variant="ghost"
@@ -535,37 +540,37 @@ const CartPage = () => {
                                 </Button>
                               </div>
 
-                              {/* Storage Select */}
+                              {/* Select Dung lượng / RAM */}
                               <Select
                                 value={
                                   item.variantStorage || item.variantName || ""
                                 }
-                                onValueChange={(v) => {
-                                  handleQuickChangeVariant(item, "storage", v);
-                                }}
+                                onValueChange={(v) =>
+                                  handleQuickChangeVariant(item, "storage", v)
+                                }
                                 disabled={loadingVariants[item.productId]}
-                                onOpenChange={(open) => open && undefined} // Không cần stopPropagation ở đây
                               >
                                 <SelectTrigger
-                                  className="w-[130px]"
+                                  className="w-[180px] overflow-hidden whitespace-nowrap text-ellipsis"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <SelectValue placeholder="Dung lượng" />
+                                  <SelectValue
+                                    placeholder="Dung lượng"
+                                    className="truncate"
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {getStorageOptions(item).map((s) => (
-                                    <SelectItem
-                                      key={s}
-                                      value={s}
-                                      onSelect={(e) => e.stopPropagation()}
-                                    >
-                                      {s}
+                                    <SelectItem key={s} value={s}>
+                                      <span className="block truncate">
+                                        {s}
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
 
-                              {/* Color Select */}
+                              {/* Select Màu sắc */}
                               <Select
                                 value={item.variantColor || ""}
                                 onValueChange={(v) =>
@@ -574,28 +579,31 @@ const CartPage = () => {
                                 disabled={loadingVariants[item.productId]}
                               >
                                 <SelectTrigger
-                                  className="w-[120px]"
+                                  className="w-[110px] overflow-hidden whitespace-nowrap text-ellipsis"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <SelectValue placeholder="Màu" />
+                                  <SelectValue
+                                    placeholder="Màu"
+                                    className="truncate"
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {getColorOptions(item).map((c) => (
-                                    <SelectItem
-                                      key={c}
-                                      value={c}
-                                      onSelect={(e) => e.stopPropagation()}
-                                    >
-                                      {c}
+                                    <SelectItem key={c} value={c}>
+                                      <span className="flex items-center gap-2">
+                                        <span className="block truncate">
+                                          {c}
+                                        </span>
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </div>
 
-                            {/* Tổng tiền + Xóa */}
-                            <div className="flex items-center gap-4">
-                              <span className="font-bold text-lg">
+                            {/* Right: Tổng tiền + Xóa */}
+                            <div className="flex items-center justify-between sm:justify-end gap-4">
+                              <span className="font-bold text-lg whitespace-nowrap">
                                 {formatPrice(item.price * item.quantity)}
                               </span>
                               <Button

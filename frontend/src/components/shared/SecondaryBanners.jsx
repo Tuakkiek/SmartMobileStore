@@ -129,7 +129,7 @@ const SecondaryBanners = ({ banners }) => {
                 />
                 {/* --- Các lớp overlay (giữ nguyên) --- */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/banner:opacity-100 transition-opacity" />
-                <div className="absolute inset-0 flex items-center justify-center p-2 md:p-4 pointer-events-none">
+                {/* <div className="absolute inset-0 flex items-center justify-center p-2 md:p-4 pointer-events-none">
                   <div className="text-center bg-black/20 group-hover/banner:bg-black/40 rounded-lg p-2 transition-all">
                     <p className="text-white text-xs md:text-sm font-semibold mb-1">
                       {banner.alt}
@@ -138,7 +138,7 @@ const SecondaryBanners = ({ banners }) => {
                       Nhấn để xem
                     </p>
                   </div>
-                </div>
+                </div> */}
               </button>
             </CarouselItem>
           ))}
