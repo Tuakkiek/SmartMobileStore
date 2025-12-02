@@ -271,6 +271,29 @@ export const vnpayIPN = async (req, res) => {
 
       await order.save();
 
+      // ✅ THÊM: XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
+      try {
+        const Cart = (await import("../models/Cart.js")).default;
+        const cart = await Cart.findOne({ customerId: order.customerId });
+
+        if (cart) {
+          const selectedVariantIds = order.items.map((item) =>
+            item.variantId.toString()
+          );
+          cart.items = cart.items.filter(
+            (item) => !selectedVariantIds.includes(item.variantId.toString())
+          );
+          await cart.save();
+          console.log(
+            `✅ Removed ${order.items.length} items from cart after VNPay payment`
+          );
+        }
+      } catch (cartErr) {
+        console.error("⚠️ Failed to clean cart:", cartErr);
+      }
+
+      console.log("✅ Order updated successfully");
+
       console.log("❌ Payment failed with code:", rspCode);
       return res
         .status(200)

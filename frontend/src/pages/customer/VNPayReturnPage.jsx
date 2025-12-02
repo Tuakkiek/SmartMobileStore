@@ -13,6 +13,8 @@ const VNPayReturnPage = () => {
   const [status, setStatus] = useState("loading");
   const [orderData, setOrderData] = useState(null);
 
+  const { getCart, setSelectedForCheckout } = useCartStore();
+
   useEffect(() => {
     const handleReturn = async () => {
       try {
@@ -27,29 +29,22 @@ const VNPayReturnPage = () => {
             message: response.data.message,
           });
 
-          // ✅ THANH TOÁN THÀNH CÔNG - XÓA GIỎ HÀNG
+          // ✅ XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
           const pendingOrder = localStorage.getItem("pending_vnpay_order");
           if (pendingOrder) {
             try {
               const { selectedItems } = JSON.parse(pendingOrder);
-              const { removeFromCart, setSelectedForCheckout, getCart } =
-                useCartStore.getState();
-
-              // Xóa sản phẩm đã thanh toán khỏi giỏ
-              for (const variantId of selectedItems) {
-                await removeFromCart(variantId);
-              }
 
               // Clear selection
               setSelectedForCheckout([]);
 
-              // Refresh cart
+              // Refresh cart để lấy dữ liệu mới từ backend (đã xóa rồi)
               await getCart();
 
               // Dọn dẹp localStorage
               localStorage.removeItem("pending_vnpay_order");
 
-              console.log("✅ Đã xóa giỏ hàng sau khi thanh toán thành công");
+              console.log("✅ Đã refresh giỏ hàng sau thanh toán VNPay");
             } catch (err) {
               console.error("Error cleaning up cart:", err);
             }
@@ -80,7 +75,6 @@ const VNPayReturnPage = () => {
     handleReturn();
   }, [searchParams]);
 
-  
   if (status === "loading") {
     return <Loading />;
   }
