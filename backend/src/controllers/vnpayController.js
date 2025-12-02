@@ -249,6 +249,33 @@ export const vnpayIPN = async (req, res) => {
         console.error("⚠️ Invoice generation failed:", invoiceError.message);
       }
 
+      // ✅ XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
+      try {
+        const Cart = (await import("../models/Cart.js")).default;
+        const cart = await Cart.findOne({ customerId: order.customerId });
+
+        if (cart && cart.items.length > 0) {
+          const selectedVariantIds = order.items.map((item) =>
+            item.variantId.toString()
+          );
+          const beforeCount = cart.items.length;
+
+          cart.items = cart.items.filter(
+            (item) => !selectedVariantIds.includes(item.variantId.toString())
+          );
+
+          await cart.save();
+          const removedCount = beforeCount - cart.items.length;
+          console.log(
+            `✅ Removed ${removedCount} items from cart after VNPay payment (${cart.items.length} remaining)`
+          );
+        } else {
+          console.log("ℹ️ Cart is empty or not found");
+        }
+      } catch (cartErr) {
+        console.error("⚠️ Failed to clean cart:", cartErr.message);
+      }
+
       console.log("✅ Order updated successfully");
       return res
         .status(200)
