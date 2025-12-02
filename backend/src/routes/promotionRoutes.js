@@ -7,27 +7,22 @@ import {
   updatePromotion,
   deletePromotion,
   applyPromotion,
-
 } from "../controllers/promotionController.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/active", getActivePromotions);
+// ==================== PUBLIC / CUSTOMER ====================
+router.get("/active", getActivePromotions);           // GET /promotions/active
+router.post("/apply", protect, applyPromotion);        // POST /promotions/apply
 
+// ==================== ADMIN ONLY ====================
+router.use(protect, restrictTo("ADMIN")); // ← Từ đây trở xuống chỉ ADMIN
 
-router.post("/apply", protect, applyPromotion);
-
-
-
-router.use(protect, restrictTo("ADMIN"));
-
-router.get("/", getAllPromotions);
-router.post("/", createPromotion);
-router.put("/:id", updatePromotion);
-router.delete("/:id", deletePromotion);
-
-
-
+// Đổi từ "/" → "/admin" để rõ ràng hơn
+router.get("/admin", getAllPromotions);        // GET /promotions/admin
+router.post("/", createPromotion);             // POST /promotions
+router.put("/:id", updatePromotion);           // PUT /promotions/:id
+router.delete("/:id", deletePromotion);        // DELETE /promotions/:id
 
 export default router;

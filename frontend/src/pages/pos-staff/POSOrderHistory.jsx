@@ -73,7 +73,7 @@ const POSOrderHistory = () => {
     try {
       const params = {
         page: pagination.currentPage,
-        limit: 20,
+        limit: 10,
         search: searchTerm || undefined,
         startDate: dateFilter.startDate || undefined,
         endDate: dateFilter.endDate || undefined,

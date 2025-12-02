@@ -28,7 +28,7 @@ import {
   appleWatchAPI,
   accessoryAPI,
   promotionAPI,
-  posAPI, // ✅ ĐẢM BẢO CÓ DÒNG NÀY
+  posAPI, 
 } from "@/lib/api";
 import {
   Dialog,

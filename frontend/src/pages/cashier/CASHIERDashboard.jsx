@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { posAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,9 +28,10 @@ import {
   DollarSign,
   Clock,
   User,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
-import axios from "axios";
 import EditInvoiceDialog from "@/components/pos/EditInvoiceDialog";
 
 const CASHIERDashboard = () => {
@@ -49,32 +51,53 @@ const CASHIERDashboard = () => {
   });
   const [showEditInvoice, setShowEditInvoice] = useState(false);
   const [orderToPrint, setOrderToPrint] = useState(null);
+  // State phân trang
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0,
+  });
 
-  // Auto-refresh mỗi 10 giây
   useEffect(() => {
-    fetchPendingOrders();
-    const interval = setInterval(fetchPendingOrders, 10000);
+    fetchPendingOrders(1);
+    const interval = setInterval(() => fetchPendingOrders(1), 10000);
     return () => clearInterval(interval);
   }, []);
 
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    if (
+      newPage >= 1 &&
+      newPage <= pagination.totalPages &&
+      newPage !== pagination.currentPage
+    ) {
+      fetchPendingOrders(newPage);
+    }
+  };
   // ============================================
   // FETCH PENDING ORDERS
   // ============================================
-  const fetchPendingOrders = async () => {
+  const fetchPendingOrders = async (page = 1) => {
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+      setIsLoading(true);
+      const response = await posAPI.getPendingOrders({
+        page,
+        limit: 20,
+      });
 
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/pending-orders`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const { orders = [], pagination: pag = {} } = response.data.data;
 
-      setPendingOrders(response.data.data.orders || []);
+      setPendingOrders(orders);
+      setPagination({
+        currentPage: pag.currentPage || 1,
+        totalPages: pag.totalPages || 1,
+        total: pag.total || 0,
+      });
     } catch (error) {
       console.error("Lỗi tải đơn:", error);
+      toast.error("Không thể tải danh sách đơn chờ");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -94,28 +117,15 @@ const CASHIERDashboard = () => {
       toast.error("Số tiền thanh toán không đủ");
       return;
     }
-
     setIsLoading(true);
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/pos/process-payment/${
-          selectedOrder._id
-        }`,
-        { paymentReceived: received },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await posAPI.processPayment(selectedOrder._id, {
+        paymentReceived: received,
+      });
 
       toast.success("Thanh toán thành công!");
       setShowPaymentDialog(false);
-      fetchPendingOrders();
+      fetchPendingOrders(pagination.currentPage);
 
       // ✅ SỬA: Set orderToPrint với data từ response (có paymentReceived)
       // Thay vì dùng selectedOrder cũ
@@ -433,30 +443,16 @@ const CASHIERDashboard = () => {
   // HỦY ĐƠN
   // ============================================
   const handleCancelOrder = async (orderId) => {
-    if (!window.confirm("Bạn có chắc muốn hủy đơn này?")) return;
+    if (!confirm("Bạn có chắc muốn hủy đơn này?")) return;
+
+    const reason = prompt("Lý do hủy đơn:");
+    if (!reason) return;
 
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-      const reason = prompt("Lý do hủy đơn:");
-      if (!reason) return;
-
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/pos/cancel-order/${orderId}`,
-        { reason },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
+      await posAPI.cancelOrder(orderId, { reason });
       toast.success("Đã hủy đơn hàng");
-      fetchPendingOrders();
+      fetchPendingOrders(pagination.currentPage);
     } catch (error) {
-      console.error("Lỗi hủy đơn:", error);
       toast.error(error.response?.data?.message || "Hủy đơn thất bại");
     }
   };
@@ -476,27 +472,12 @@ const CASHIERDashboard = () => {
       return;
     }
 
-    setIsLoading(true);
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/pos/issue-vat/${selectedOrder._id}`,
-        vatForm,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
+      await posAPI.issueVAT(selectedOrder._id, vatForm);
       toast.success("Xuất hóa đơn VAT thành công!");
       setShowVATDialog(false);
     } catch (error) {
-      console.error("Lỗi  :", error);
-      toast.error(error.response?.data?.message || "  thất bại");
+      toast.error(error.response?.data?.message || "Xuất hóa đơn thất bại");
     } finally {
       setIsLoading(false);
     }
@@ -515,7 +496,10 @@ const CASHIERDashboard = () => {
             Đơn hàng chờ thanh toán từ POS
           </p>
         </div>
-        <Button onClick={fetchPendingOrders} variant="outline">
+        <Button
+          onClick={() => fetchPendingOrders(pagination.currentPage)}
+          variant="outline"
+        >
           Làm mới
         </Button>
       </div>
@@ -529,7 +513,7 @@ const CASHIERDashboard = () => {
                 <p className="text-sm text-muted-foreground mb-1">
                   Đơn chờ xử lý
                 </p>
-                <h3 className="text-3xl font-bold">{pendingOrders.length}</h3>
+                <h3 className="text-3xl font-bold">{pagination.total}</h3>
               </div>
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
                 <Clock className="w-6 h-6 text-orange-600" />
@@ -704,6 +688,35 @@ const CASHIERDashboard = () => {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+
+          {/* Phân trang - Dạng TrangX/Y- 2 nút trước sau */}
+          {pagination.totalPages > 1 && (
+            <div className="flex justify-center items-center gap-6 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.currentPage === 1 || isLoading}
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+              >
+                Trước
+              </Button>
+
+              <span className="text-sm font-medium text-muted-foreground min-w-[120px] text-center">
+                Trang {pagination.currentPage} / {pagination.totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  pagination.currentPage === pagination.totalPages || isLoading
+                }
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+              >
+                Sau
+              </Button>
             </div>
           )}
         </CardContent>

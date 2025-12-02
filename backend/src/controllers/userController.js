@@ -92,9 +92,23 @@ export const deleteAddress = async (req, res) => {
 };
 
 // Lấy tất cả nhân viên
+// GET /api/users/employees - Lấy danh sách nhân viên (có phân trang + tìm kiếm + sắp xếp)
 export const getAllEmployees = async (req, res) => {
   try {
-    const employees = await User.find({
+    const {
+      page = 1,
+      limit = 20,
+      search = "",
+      role = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // giới hạn tối đa 100
+
+    // Điều kiện lọc
+    const filter = {
       role: {
         $in: [
           "WAREHOUSE_STAFF",
@@ -105,14 +119,54 @@ export const getAllEmployees = async (req, res) => {
           "CASHIER",
         ],
       },
-    }).select("-password");
+    };
 
-    res.json({ success: true, data: { employees } });
+    // Tìm kiếm theo tên hoặc email hoặc số điện thoại
+    if (search.trim()) {
+      filter.$or = [
+        { fullName: { $regex: search.trim(), $options: "i" } },
+        { email: { $regex: search.trim(), $options: "i" } },
+        { phoneNumber: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    // Lọc theo role cụ thể (nếu có truyền)
+    if (role && role !== "ALL") {
+      filter.role = role;
+    }
+
+    // Sắp xếp
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    // Query với phân trang
+    const employees = await User.find(filter)
+      .select("-password -__v")
+      .sort(sort)
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum)
+      .lean();
+
+    // Đếm tổng số để trả về phân trang
+    const total = await User.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        employees,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil(total / limitNum),
+          total,
+          limit: limitNum,
+        },
+      },
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error("Lỗi lấy danh sách nhân viên:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };
-
 // Tạo nhân viên mới
 export const createEmployee = async (req, res) => {
   try {
@@ -125,7 +179,7 @@ export const createEmployee = async (req, res) => {
       province,
       password,
       role,
-      avatar: avatar || "", // Nếu không có thì để rỗng
+      avatar: avatar || "", 
     });
     res.status(201).json({
       success: true,

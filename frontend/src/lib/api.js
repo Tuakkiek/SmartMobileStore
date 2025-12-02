@@ -122,8 +122,7 @@ export const posAPI = {
   createOrder: (data) => api.post("/pos/create-order", data),
 
   // Lấy danh sách đơn chờ thanh toán (Thu ngân xem)
-  getPendingOrders: (params = {}) =>
-    api.get("/pos/pending-orders", { params }),
+  getPendingOrders: (params = {}) => api.get("/pos/pending-orders", { params }),
 
   // Thu ngân xử lý thanh toán cho đơn POS
   processPayment: (orderId, data) =>
@@ -134,16 +133,13 @@ export const posAPI = {
     api.post(`/pos/orders/${orderId}/cancel`, data),
 
   // Thu ngân xuất hóa đơn VAT cho đơn đã thanh toán
-  issueVAT: (orderId, data) =>
-    api.post(`/pos/orders/${orderId}/vat`, data),
+  issueVAT: (orderId, data) => api.post(`/pos/orders/${orderId}/vat`, data),
 
   // Xem lịch sử đơn hàng POS (POS Staff chỉ thấy của mình, Cashier/Admin thấy tất cả)
-  getHistory: (params = {}) =>
-    api.get("/pos/history/", { params }),
+  getHistory: (params = {}) => api.get("/pos/history/", { params }),
 
   // (Tùy chọn) Lấy chi tiết 1 đơn POS
-  getOrderById: (orderId) =>
-    api.get(`/pos/orders/${orderId}`),
+  getOrderById: (orderId) => api.get(`/pos/orders/${orderId}`),
 };
 
 // ============================================
@@ -166,13 +162,22 @@ export const reviewAPI = {
 };
 
 // ============================================
-// PROMOTION API
+// PROMOTION API – PHIÊN BẢN HOÀN CHỈNH, CHUẨN ADMIN
 // ============================================
 export const promotionAPI = {
-  getAll: () => api.get("/promotions"),
+  // CŨ – vẫn giữ lại cho các trang customer/public dùng
+  getAll: (params = {}) => api.get("/promotions", { params }),        // ← có thể bỏ dần
+
+  // MỚI – DÀNH RIÊNG CHO ADMIN: phân trang, tìm kiếm, lọc status, sort...
+  getAllPromotions: (params = {}) => 
+    api.get("/promotions/admin", { params }),   // ← THÊM DÒNG NÀY (QUAN TRỌNG NHẤT)
+
+  // Các hàm khác (giữ nguyên)
   create: (data) => api.post("/promotions", data),
   update: (id, data) => api.put(`/promotions/${id}`, data),
   delete: (id) => api.delete(`/promotions/${id}`),
+
+  // Public / Customer
   getActive: () => api.get("/promotions/active"),
   apply: (data) => api.post("/promotions/apply", data),
 };
@@ -186,7 +191,7 @@ export const userAPI = {
   updateAddress: (addressId, data) =>
     api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
-  getAllEmployees: () => api.get("/users/employees"),
+  getAllEmployees: (params = {}) => api.get("/users/employees", { params }),
   createEmployee: (data) => api.post("/users/employees", data),
   toggleEmployeeStatus: (id) =>
     api.patch(`/users/employees/${id}/toggle-status`),

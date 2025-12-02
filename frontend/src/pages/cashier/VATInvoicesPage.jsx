@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
-import axios from "axios";
+import { posAPI } from "@/lib/api";
 
 const VATInvoicesPage = () => {
   const { user } = useAuthStore();
@@ -55,63 +55,47 @@ const VATInvoicesPage = () => {
     avgOrderValue: 0,
     totalVATInvoices: 0,
   });
+  // State phân trang
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0,
+  });
 
   // ============================================
   // FETCH ORDERS (ĐÃ ĐƠN GIẢN HÓA)
   // ============================================
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(1);
   }, [filters]); // Chỉ trigger khi 'filters' thay đổi
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (page = 1) => {
     setIsLoading(true);
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
+      const response = await posAPI.getHistory({
+        search: filters.search || undefined,
+        page,
+        limit: 20, // hoặc 30 tùy bạn
+      });
 
-      // Xóa các params không cần thiết
-      const params = {};
+      const { orders = [], pagination: pag = {} } = response.data.data;
 
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/my-orders`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params,
-        }
-      );
+      setOrders(orders);
+      setPagination({
+        currentPage: pag.currentPage || 1,
+        totalPages: pag.totalPages || 1,
+        total: pag.total || 0,
+      });
 
-      let ordersData = response.data.data.orders || [];
-
-      // Client-side filtering (Chỉ giữ lại 'search')
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        ordersData = ordersData.filter(
-          (order) =>
-            order.orderNumber?.toLowerCase().includes(searchLower) ||
-            order.posInfo?.receiptNumber?.toLowerCase().includes(searchLower) ||
-            order.shippingAddress?.fullName
-              ?.toLowerCase()
-              .includes(searchLower) ||
-            order.shippingAddress?.phoneNumber?.includes(searchLower)
-        );
-      }
-
-      setOrders(ordersData);
-
-      // Calculate statistics (Giữ nguyên)
-      const total = ordersData.length;
-      const revenue = ordersData.reduce(
-        (sum, order) => sum + order.totalAmount,
-        0
-      );
-      const vatCount = ordersData.filter(
-        (o) => o.vatInvoice?.invoiceNumber
-      ).length;
+      // Tính stats từ dữ liệu hiện tại (hoặc backend trả thêm stats nếu muốn)
+      const total = orders.length;
+      const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+      const vatCount = orders.filter((o) => o.vatInvoice?.invoiceNumber).length;
 
       setStats({
-        totalOrders: total,
+        totalOrders: pag.total || 0, // ← Dùng tổng thực từ backend
         totalRevenue: revenue,
-        avgOrderValue: total > 0 ? revenue / total : 0,
+        avgOrderValue: pag.total > 0 ? revenue / total : 0,
         totalVATInvoices: vatCount,
       });
     } catch (error) {
@@ -121,7 +105,6 @@ const VATInvoicesPage = () => {
       setIsLoading(false);
     }
   };
-
   // ============================================
   // HANDLERS MỚI CHO TÌM KIẾM
   // ============================================
@@ -133,23 +116,23 @@ const VATInvoicesPage = () => {
     setSearchInput("");
     setFilters({ search: "" });
   };
+  // Hàm xử lý chuyển trang
+  const handlePageChange = (newPage) => {
+    if (
+      newPage >= 1 &&
+      newPage <= pagination.totalPages &&
+      newPage !== pagination.currentPage
+    ) {
+      fetchOrders(newPage);
+    }
+  };
 
   // ============================================
   // VIEW DETAIL (Giữ nguyên)
   // ============================================
   const handleViewDetail = async (orderId) => {
     try {
-      const authStorage = localStorage.getItem("auth-storage");
-      const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/pos/orders/${orderId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      console.log("Order detail from API:", response.data.data.order);
+      const response = await posAPI.getOrderById(orderId);
       setSelectedOrder(response.data.data.order);
       setShowDetailDialog(true);
     } catch (error) {
@@ -157,7 +140,6 @@ const VATInvoicesPage = () => {
       toast.error("Không thể tải thông tin đơn hàng");
     }
   };
-
   // ============================================
   // PRINT RECEIPT (ĐÃ SỬA THEO MẪU MỚI)
   // ============================================
@@ -634,6 +616,34 @@ const VATInvoicesPage = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* PHÂN TRANG ĐẸP – GIỐNG CASHIER */}
+          {pagination.totalPages > 1 && (
+            <div className="flex justify-center items-center gap-6 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.currentPage === 1 || isLoading}
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+              >
+                Trước
+              </Button>
+
+              <span className="text-sm font-medium min-w-[120px] text-center">
+                Trang {pagination.currentPage} / {pagination.totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  pagination.currentPage === pagination.totalPages || isLoading
+                }
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+              >
+                Sau
+              </Button>
             </div>
           )}
         </CardContent>

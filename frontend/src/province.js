@@ -27,6 +27,7 @@ export const provinces = [
   "Lâm Đồng",
   "Đồng Nai",
   "Tây Ninh",
+  "TP. Hồ Chí Minh",
   "Cần Thơ",
   "Vĩnh Long",
   "Đồng Tháp",

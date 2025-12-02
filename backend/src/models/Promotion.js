@@ -11,7 +11,7 @@ const promotionSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
       minlength: [4, "Mã phải từ 4 ký tự"],
-      maxlength: [15, "Mã tối đa 15 ký tự"],
+      maxlength: [20, "Mã tối đa 20 ký tự"],
       match: [/^[A-Z0-9]+$/, "Chỉ chấp nhận chữ hoa và số"],
     },
     discountType: {

@@ -395,7 +395,7 @@ export const issueVATInvoice = async (req, res) => {
 // ============================================
 export const getPOSOrderHistory = async (req, res) => {
   try {
-    const { page = 1, limit = 20, startDate, endDate, search } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search } = req.query;
     const query = { orderSource: "IN_STORE" };
 
     if (req.user.role === "POS_STAFF") {

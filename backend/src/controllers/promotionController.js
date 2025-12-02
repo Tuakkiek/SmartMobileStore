@@ -3,30 +3,109 @@ import Promotion from "../models/Promotion.js";
 import PromotionUsage from "../models/PromotionUsage.js";
 import mongoose from "mongoose";
 
-/* ========================================
-   1. LẤY TẤT CẢ MÃ (ADMIN)
-   ======================================== */
+
 export const getAllPromotions = async (req, res) => {
   try {
-    const promotions = await Promotion.find()
-      .populate("createdBy", "fullName email")
-      .select(
-        "name code discountType discountValue maxDiscountAmount startDate endDate usageLimit usedCount minOrderValue isActive createdAt"
-      )
-      .sort({ createdAt: -1 });
+    const {
+      page = 1,
+      limit = 12,
+      search = "",
+      discountType = "",
+      status = "",              // ACTIVE, UPCOMING, EXPIRED
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
 
-    const data = promotions.map((p) => ({
-      ...p.toObject(),
-      displayText: p.getDisplayText(),
-    }));
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+    const now = new Date();
 
-    res.json({ success: true, data: { promotions: data } });
+    // === XÂY DỰNG FILTER ===
+    const filter = {};
+
+    if (search.trim()) {
+      filter.$or = [
+        { name: { $regex: search.trim(), $options: "i" } },
+        { code: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    if (discountType && ["PERCENTAGE", "FIXED"].includes(discountType)) {
+      filter.discountType = discountType;
+    }
+
+    // === LỌC THEO TRẠNG THÁI – CHUẨN NHẤT ===
+    if (status && ["ACTIVE", "UPCOMING", "EXPIRED"].includes(status)) {
+      if (status === "ACTIVE") {
+        filter.isActive = true;
+        filter.startDate = { $lte: now };
+        filter.endDate = { $gte: now };
+        filter.$expr = { $lt: ["$usedCount", "$usageLimit"] };
+      } else if (status === "UPCOMING") {
+        filter.startDate = { $gt: now };
+      } else if (status === "EXPIRED") {
+        filter.$or = [
+          { endDate: { $lt: now } },
+          { $expr: { $gte: ["$usedCount", "$usageLimit"] } },
+          { isActive: false },
+        ];
+      }
+    }
+
+    // === QUERY ===
+    const [total, promotions] = await Promise.all([
+      Promotion.countDocuments(filter),
+      Promotion.find(filter)
+        .populate("createdBy", "fullName email")
+        .select("-__v")
+        .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+    ]);
+
+    // === XỬ LÝ TRẠNG THÁI + DISPLAY ===
+    const processedPromotions = promotions.map((p) => {
+      const isUpcoming = new Date(p.startDate) > now;
+      const isExpired = new Date(p.endDate) < now || p.usedCount >= p.usageLimit;
+      const isActive = p.isActive && !isExpired && !isUpcoming;
+
+      let _status = "EXPIRED";
+      if (isUpcoming) _status = "UPCOMING";
+      else if (isActive) _status = "ACTIVE";
+
+      const usagePercent = p.usageLimit > 0
+        ? Math.min(100, Math.round((p.usedCount / p.usageLimit) * 100))
+        : 0;
+
+      return {
+        ...p,
+        _status,
+        usagePercent,
+        displayText: p.discountType === "PERCENTAGE"
+          ? `${p.discountValue}%${p.maxDiscountAmount ? ` (tối đa ${p.maxDiscountAmount.toLocaleString()}₫)` : ""}`
+          : `${p.discountValue.toLocaleString()}₫`,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        promotions: processedPromotions,
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil(total / limitNum),
+          total,
+          limit: limitNum,
+        },
+      },
+    });
   } catch (error) {
     console.error("getAllPromotions error:", error);
-    res.status(500).json({ success: false, message: "Lỗi hệ thống" });
+    res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };
-
 /* ========================================
    2. LẤY MÃ ĐANG HOẠT ĐỘNG (PUBLIC)
    ======================================== */
@@ -222,7 +301,8 @@ export const deletePromotion = async (req, res) => {
 };
 
 /* ========================================
-   6. ÁP DỤNG MÃ – ĐÃ SỬA DÙNG canBeUsed()
+   6. ÁP DỤNG MÃ – CHỈ CUSTOMER MỚI BỊ GIỚI HẠN & LƯU LỊCH SỬ
+   (Phiên bản chính thức – bắt buộc đăng nhập)
    ======================================== */
 export const applyPromotion = async (req, res) => {
   const session = await mongoose.startSession();
@@ -231,15 +311,23 @@ export const applyPromotion = async (req, res) => {
   try {
     const { code, totalAmount, orderId } = req.body;
     const userId = req.user._id;
+    const userRole = req.user.role;
 
+    // === Validate input ===
     if (!code?.trim()) {
       return res.status(400).json({ success: false, message: "Mã khuyến mãi là bắt buộc" });
+      await session.abortTransaction();
+      return;
     }
+
     if (!Number.isFinite(totalAmount) || totalAmount < 0) {
-      return res.status(400).json({ success: false, message: "Tổng tiền không hợp lệ" });
+      res.status(400).json({ success: false, message: "Tổng tiền không hợp lệ" });
+      await session.abortTransaction();
+      return;
     }
 
     const normalizedCode = code.toUpperCase().trim();
+
     const promotion = await Promotion.findOne({ code: normalizedCode }).session(session);
 
     if (!promotion) {
@@ -247,74 +335,97 @@ export const applyPromotion = async (req, res) => {
       return res.status(400).json({ success: false, message: "Mã khuyến mãi không tồn tại" });
     }
 
-    // ĐÃ SỬA: dùng canBeUsed() thay vì isActive()
+    // === Kiểm tra điều kiện áp dụng mã (chung cho mọi role) ===
     if (!promotion.canBeUsed(totalAmount)) {
       await session.abortTransaction();
       const reasons = [];
       if (!promotion.isActive) reasons.push("đã bị tắt");
       const now = new Date();
-      if (now < promotion.startDate || now > promotion.endDate) reasons.push("ngoài thời gian");
-      if (promotion.usedCount >= promotion.usageLimit) reasons.push("hết lượt dùng");
+      if (now < promotion.startDate) reasons.push("chưa bắt đầu");
+      if (now > promotion.endDate) reasons.push("đã hết hạn");
+      if (promotion.usedCount >= promotion.usageLimit) reasons.push("hết lượt sử dụng");
       if (totalAmount < promotion.minOrderValue) {
         reasons.push(`đơn tối thiểu ${promotion.minOrderValue.toLocaleString()}₫`);
       }
+
       return res.status(400).json({
         success: false,
-        message: `Mã không dùng được: ${reasons.join(", ")}`,
+        message: `Mã không khả dụng: ${reasons.join(", ")}`,
       });
     }
 
-    // Kiểm tra user đã dùng chưa
-    const alreadyUsed = await PromotionUsage.findOne({
-      promotion: promotion._id,
-      user: userId,
-    }).session(session);
+    const isCustomer = userRole === "CUSTOMER";
 
-    if (alreadyUsed) {
-      await session.abortTransaction();
-      return res.status(400).json({ success: false, message: "Bạn đã sử dụng mã này rồi!" });
-    }
-
-    // Tăng lượt dùng + tính giảm giá
-    await promotion.incrementUsage(session);
-    const discountedTotal = promotion.applyDiscount(totalAmount);
-    const discountAmount = totalAmount - discountedTotal;
-
-    // Lưu lịch sử
-    await PromotionUsage.create(
-      [{
+    // === CHỈ CUSTOMER MỚI BỊ GIỚI HẠN & LƯU LỊCH SỬ ===
+    if (isCustomer) {
+      // Kiểm tra đã dùng chưa
+      const alreadyUsed = await PromotionUsage.findOne({
         promotion: promotion._id,
         user: userId,
-        order: orderId || null,
-        orderTotal: totalAmount,
-        discountAmount,
-        snapshot: {
-          code: promotion.code,
-          name: promotion.name,
-          discountType: promotion.discountType,
-          discountValue: promotion.discountValue,
-          maxDiscountAmount: promotion.maxDiscountAmount,
-        },
-      }],
-      { session }
-    );
+      }).session(session);
 
+      if (alreadyUsed) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Bạn đã sử dụng mã khuyến mãi này rồi!",
+        });
+      }
+
+      // Tăng lượt dùng
+      await promotion.incrementUsage(session);
+
+      // Tính giảm giá trước khi lưu
+      const discountedTotal = promotion.applyDiscount(totalAmount);
+      const discountAmount = totalAmount - discountedTotal;
+
+      // Lưu lịch sử sử dụng
+      await PromotionUsage.create(
+        [{
+          promotion: promotion._id,
+          user: userId,
+          order: orderId || null,
+          orderTotal: totalAmount,
+          discountAmount,
+          snapshot: {
+            code: promotion.code,
+            name: promotion.name,
+            discountType: promotion.discountType,
+            discountValue: promotion.discountValue,
+            maxDiscountAmount: promotion.maxDiscountAmount,
+          },
+        }],
+        { session }
+      );
+    }
+
+    // === Tính toán giảm giá (dùng cho cả customer và staff) ===
+    const finalDiscountedTotal = promotion.applyDiscount(totalAmount);
+    const finalDiscountAmount = totalAmount - finalDiscountedTotal;
+
+    // Commit transaction
     await session.commitTransaction();
 
-    res.json({
+    // === Trả về kết quả ===
+    return res.json({
       success: true,
-      message: "Áp dụng mã thành công!",
+      message: isCustomer
+        ? "Áp dụng mã khuyến mãi thành công!"
+        : "Áp dụng mã thành công (chế độ xem trước)",
       data: {
-        discountAmount,
-        discountedTotal,
+        discountAmount: finalDiscountAmount,
+        discountedTotal: finalDiscountedTotal,
         code: promotion.code,
+        name: promotion.name,
         displayText: promotion.getDisplayText(),
+        isPreviewMode: !isCustomer,
       },
     });
+
   } catch (error) {
     await session.abortTransaction();
     console.error("applyPromotion error:", error);
-    res.status(500).json({ success: false, message: "Lỗi hệ thống, vui lòng thử lại" });
+    return res.status(500).json({ success: false, message: "Lỗi hệ thống, vui lòng thử lại" });
   } finally {
     session.endSession();
   }

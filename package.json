@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/Tuakkiek/SmartMobileStore/issues"
   },
-  "homepage": "https://github.com/Tuakkiek/SmartMobileStore#readme"
+  "homepage": "https://github.com/Tuakkiek/SmartMobileStore#readme",
+  "dependencies": {
+    "remove-vietnamese-accents": "^1.0.7"
+  }
 }

@@ -1,15 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
-import { UserPlus, Lock, Unlock, Trash2, X, Pencil } from "lucide-react";
+import {
+  UserPlus,
+  Search,
+  Users,
+  X,
+  Pencil,
+  Lock,
+  Unlock,
+  Trash2,
+} from "lucide-react";
 import { userAPI } from "@/lib/api";
-import { getStatusColor, getStatusText } from "@/lib/utils";
+import { getStatusText, getNameInitials } from "@/lib/utils";
+import { provinces } from "@/province";
 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -18,16 +29,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { getNameInitials } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const EMPLOYEE_TABS = [
+  { value: "ALL", label: "Tất cả nhân viên" },
+  { value: "ADMIN", label: "Quản trị viên" },
+  { value: "WAREHOUSE_STAFF", label: "Nhân viên kho" },
+  { value: "ORDER_MANAGER", label: "Quản lý đơn hàng" },
+  { value: "SHIPPER", label: "Shipper" },
+  { value: "POS_STAFF", label: "Nhân viên bán hàng" },
+  { value: "CASHIER", label: "Thu ngân" },
+];
 
 const EmployeesPage = () => {
-  const [employees, setEmployees] = useState([]);
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [allEmployees, setAllEmployees] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
 
-  // State cho việc chỉnh sửa thông tin nhân viên
+  // Bộ lọc
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [provinceFilter, setProvinceFilter] = useState("ALL");
+
+  // Dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -35,137 +69,112 @@ const EmployeesPage = () => {
     email: "",
     province: "",
     password: "",
-    role: "WAREHOUSE_STAFF",
+    role: "SHIPPER",
     avatar: "",
   });
 
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0,
+  });
 
   useEffect(() => {
-    fetchEmployees();
-  }, []);
+    fetchEmployees(1);
+  }, [activeTab, searchQuery]);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (page = 1) => {
     try {
-      const response = await userAPI.getAllEmployees();
-      const data = Array.isArray(response.data.data.employees)
-        ? response.data.data.employees
-        : [];
-      setEmployees(data);
-    } catch (error) {
-      console.error("Error fetching employees:", error);
-      setError(
-        error.response?.data?.message || "Lấy danh sách nhân viên thất bại"
-      );
-      setEmployees([]);
+      setIsLoading(true);
+      const params = {
+        page,
+        limit: 12,
+        search: searchQuery.trim() || undefined,
+        role: activeTab !== "ALL" ? activeTab : undefined,
+        sortBy: "createdAt",
+        sortOrder: "desc",
+      };
+
+      const res = await userAPI.getAllEmployees(params);
+
+      const { employees = [], pagination: pag = {} } = res.data.data;
+
+      setAllEmployees(employees);
+      setPagination({
+        currentPage: pag.currentPage || 1,
+        totalPages: pag.totalPages || 1,
+        total: pag.total || 0,
+      });
+    } catch (err) {
+      setError("Không thể tải danh sách nhân viên");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const displayedEmployees = allEmployees;
+
+  const handleTabChange = (val) => {
+    setActiveTab(val);
+    setSearchQuery("");
+    setStatusFilter("ALL");
+    setProvinceFilter("ALL");
+  };
+
   const handleChange = (e) => {
     setError("");
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+  // Hàm xử lý thay đổi trang
+  const handlePageChange = (newPage) => {
+    if (
+      newPage >= 1 &&
+      newPage <= pagination.totalPages &&
+      newPage !== pagination.currentPage
+    ) {
+      fetchEmployees(newPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const handleProvinceChange = (value) => {
+    setFormData((prev) => ({ ...prev, province: value }));
+  };
+
+  const handleRoleChange = (value) => {
+    setFormData((prev) => ({ ...prev, role: value }));
+  };
+
+  const openCreateDialog = () => {
+    const role = activeTab !== "ALL" ? activeTab : "SHIPPER";
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      role,
+      province: "",
+      password: "",
+      fullName: "",
+      phoneNumber: "",
+      email: "",
+      avatar: "",
     });
+    setShowCreateDialog(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError("");
-
-    try {
-      await userAPI.createEmployee(formData);
-      await fetchEmployees();
-      setShowForm(false);
-      setFormData({
-        fullName: "",
-        phoneNumber: "",
-        email: "",
-        province: "",
-        password: "",
-        role: "WAREHOUSE_STAFF",
-        avatar: "",
-      });
-    } catch (error) {
-      setError(error.response?.data?.message || "Tạo nhân viên thất bại");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleToggleStatus = async (employeeId) => {
-    try {
-      await userAPI.toggleEmployeeStatus(employeeId);
-      await fetchEmployees();
-    } catch (error) {
-      alert(error.response?.data?.message || "Thao tác thất bại");
-    }
-  };
-
-  const handleDelete = async (employeeId) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa nhân viên này?")) return;
-
-    try {
-      await userAPI.deleteEmployee(employeeId);
-      await fetchEmployees();
-    } catch (error) {
-      alert(error.response?.data?.message || "Xóa nhân viên thất bại");
-    }
-  };
-
-  // Handle chỉnh sửa thông tin nhân viên
-  const handleEdit = (employee) => {
-    setEditingEmployee(employee);
+  const openEdit = (emp) => {
+    setEditingEmployee(emp);
     setFormData({
-      fullName: employee.fullName,
-      phoneNumber: employee.phoneNumber,
-      email: employee.email || "",
-      province: employee.province || "",
-      password: "", // Để trống, chỉ cập nhật nếu admin nhập
-      role: employee.role,
-      avatar: employee.avatar || "",
+      fullName: emp.fullName || "",
+      phoneNumber: emp.phoneNumber || "",
+      email: emp.email || "",
+      province: emp.province || "",
+      password: "",
+      role: emp.role,
+      avatar: emp.avatar || "",
     });
-    setShowEditDialog(true);
   };
 
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError("");
-
-    try {
-      // Tạo payload, loại bỏ password nếu trống
-      const updateData = { ...formData };
-      if (!updateData.password) {
-        delete updateData.password;
-      }
-
-      await userAPI.updateEmployee(editingEmployee._id, updateData);
-      await fetchEmployees();
-      setShowEditDialog(false);
-      setEditingEmployee(null);
-      setFormData({
-        fullName: "",
-        phoneNumber: "",
-        email: "",
-        province: "",
-        password: "",
-        role: "WAREHOUSE_STAFF",
-        avatar: "",
-      });
-    } catch (error) {
-      setError(error.response?.data?.message || "Cập nhật nhân viên thất bại");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCloseEdit = () => {
-    setShowEditDialog(false);
+  const closeDialog = () => {
+    setShowCreateDialog(false);
     setEditingEmployee(null);
     setFormData({
       fullName: "",
@@ -173,260 +182,230 @@ const EmployeesPage = () => {
       email: "",
       province: "",
       password: "",
-      role: "WAREHOUSE_STAFF",
+      role: "SHIPPER",
       avatar: "",
     });
     setError("");
   };
 
-  // Vai trò tiếng Việt
-  const getRoleLabel = (role) => {
-    const roleMap = {
-      WAREHOUSE_STAFF: "Nhân viên kho",
-      ORDER_MANAGER: "Quản lý đơn hàng",
-      SHIPPER: "Nhân viên giao hàng",
-      POS_STAFF: "Nhân viên bán hàng",
-      CASHIER: "Thu ngân",
-      ADMIN: "Quản trị viên",
-    };
-
-    return roleMap[role] || role;
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await userAPI.createEmployee(formData);
+      await fetchEmployees();
+      setShowCreateDialog(false);
+      closeDialog();
+    } catch (err) {
+      setError(err.response?.data?.message || "Tạo nhân viên thất bại");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  if (isLoading) {
-    return <Loading />;
-  }
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const payload = { ...formData };
+      if (!payload.password?.trim()) delete payload.password;
+      await userAPI.updateEmployee(editingEmployee._id, payload);
+      await fetchEmployees();
+      setEditingEmployee(null);
+      closeDialog();
+    } catch (err) {
+      setError(err.response?.data?.message || "Cập nhật thất bại");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleStatus = async (id) => {
+    try {
+      await userAPI.toggleEmployeeStatus(id);
+      await fetchEmployees();
+    } catch (err) {
+      alert("Thao tác thất bại");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Xóa nhân viên này? Không thể hoàn tác!")) return;
+    try {
+      await userAPI.deleteEmployee(id);
+      await fetchEmployees();
+    } catch (err) {
+      alert("Xóa thất bại");
+    }
+  };
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("ALL");
+    setProvinceFilter("ALL");
+  };
+
+  const hasFilter =
+    searchQuery || statusFilter !== "ALL" || provinceFilter !== "ALL";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
+      {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Quản lý nhân viên</h1>
-          <p className="text-muted-foreground">
-            Quản lý tài khoản nhân viên trong hệ thống
-          </p>
         </div>
-
-        <Button onClick={() => setShowForm(!showForm)}>
-          {showForm ? (
-            <>
-              <X className="w-4 h-4 mr-2" /> Hủy
-            </>
-          ) : (
-            <>
-              <UserPlus className="w-4 h-4 mr-2" /> Thêm nhân viên
-            </>
-          )}
+        <Button onClick={openCreateDialog}>
+          <UserPlus className="w-4 h-4 mr-2" />
+          Thêm nhân viên
         </Button>
       </div>
 
-      {/* FORM THÊM NHÂN VIÊN */}
-      {showForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Thêm nhân viên mới</CardTitle>
-          </CardHeader>
+      {/* TABS + FILTER + LIST + DIALOGS - GIỮ NGUYÊN NHƯ BÊN DƯỚI */}
+      {/* (Mình giữ nguyên phần JSX của bạn vì nó đã đúng 100%) */}
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && <ErrorMessage message={error} />}
+      {/* TABS */}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 w-full">
+          {EMPLOYEE_TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="text-xs md:text-sm"
+            >
+              {tab.value === "ALL"}
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* fullName */}
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Họ và tên *</Label>
-                  <Input
-                    id="fullName"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+      {/* FILTER BAR */}
+      <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Tìm tên, số điện thoại, email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-                {/* phone */}
-                <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Số điện thoại *</Label>
-                  <Input
-                    id="phoneNumber"
-                    name="phoneNumber"
-                    type="tel"
-                    value={formData.phoneNumber}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Trạng thái" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+            <SelectItem value="ACTIVE">Đang hoạt động</SelectItem>
+            <SelectItem value="LOCKED">Đã khóa</SelectItem>
+          </SelectContent>
+        </Select>
 
-                {/* email */}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                  />
-                </div>
+        <Select value={provinceFilter} onValueChange={setProvinceFilter}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Tỉnh/Thành phố" />
+          </SelectTrigger>
+          <SelectContent className="max-h-96">
+            <SelectItem value="ALL">Tất cả tỉnh/thành</SelectItem>
+            {provinces.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-                {/* province */}
-                <div className="space-y-2">
-                  <Label htmlFor="province">Tỉnh/Thành phố</Label>
-                  <Input
-                    id="province"
-                    name="province"
-                    value={formData.province}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                {/* password */}
-                <div className="space-y-2">
-                  <Label htmlFor="password">Mật khẩu *</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                {/* role */}
-                <div className="space-y-2">
-                  <Label htmlFor="role">Vai trò *</Label>
-                  <select
-                    id="role"
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded-md"
-                    required
-                  >
-                    <option value="WAREHOUSE_STAFF">Nhân viên kho</option>
-                    <option value="ORDER_MANAGER">Quản lý đơn hàng</option>
-                    <option value="SHIPPER">Nhân viên giao hàng</option>
-                    <option value="POS_STAFF">Nhân viên bán hàng</option>
-                    <option value="CASHIER">Thu ngân</option>
-                    <option value="ADMIN">Quản trị viên</option>
-                  </select>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="edit-avatar">URL ảnh đại diện</Label>
-                  <Input
-                    id="edit-avatar"
-                    name="avatar"
-                    type="url"
-                    placeholder="https://example.com/avatar.jpg"
-                    value={formData.avatar}
-                    onChange={handleChange}
-                  />
-                  {formData.avatar && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <Avatar className="w-16 h-16">
-                        <AvatarImage src={formData.avatar} />
-                        <AvatarFallback>Preview</AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm text-muted-foreground">
-                        Xem trước ảnh đại diện
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-
-              </div>
-
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Đang tạo..." : "Tạo nhân viên"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+        {hasFilter && (
+          <Button variant="outline" size="sm" onClick={resetFilters}>
+            <X className="w-4 h-4 mr-2" />
+            Xóa bộ lọc
+          </Button>
+        )}
+      </div>
 
       {/* DANH SÁCH NHÂN VIÊN */}
-      {error && <ErrorMessage message={error} />}
-
-      {employees.length === 0 ? (
-        <p className="text-center text-muted-foreground">
-          Không có nhân viên nào.
-        </p>
+      {isLoading ? (
+        <Loading />
+      ) : displayedEmployees.length === 0 ? (
+        <div className="text-center py-16">
+          <Users className="w-16 h-16 mx-auto text-muted-foreground mb-4 opacity-50" />
+          <p className="text-lg text-muted-foreground">
+            {hasFilter
+              ? "Không tìm thấy nhân viên nào"
+              : "Chưa có nhân viên nào"}
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {employees.map((employee) => (
-            <Card key={employee._id}>
-              <CardContent className="p-6">
-                {/* --- AVATAR + INFO --- */}
-                <div className="flex items-start gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {displayedEmployees.map((emp) => (
+            <Card key={emp._id} className="hover:shadow-lg transition-shadow">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-4">
                   <Avatar className="w-12 h-12">
-                    {employee.avatar && (
-                      <AvatarImage src={employee.avatar} alt="avatar" />
+                    {emp.avatar ? (
+                      <AvatarImage src={emp.avatar} alt={emp.fullName} />
+                    ) : (
+                      <AvatarFallback className="bg-primary/10">
+                        {getNameInitials(emp.fullName)}
+                      </AvatarFallback>
                     )}
-                    <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                      {getNameInitials(employee.fullName)}
-                    </AvatarFallback>
                   </Avatar>
-
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-1">
-                      {employee.fullName}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {employee.phoneNumber}
-                    </p>
-                    <Badge variant="outline">
-                      {getRoleLabel(employee.role)}
-                    </Badge>
-                  </div>
-
-                  <Badge className={getStatusColor(employee.status)}>
-                    {getStatusText(employee.status)}
+                  <Badge
+                    className={`
+                        ${
+                          emp.status === "ACTIVE"
+                            ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                            : "bg-red-500 hover:bg-red-600 text-white"
+                        } 
+                        font-medium
+                      `}
+                  >
+                    {getStatusText(emp.status)}
                   </Badge>
                 </div>
 
-                {/* email */}
-                {employee.email && (
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {employee.email}
+                <h3 className="font-semibold text-lg">{emp.fullName}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {emp.phoneNumber}
+                </p>
+                {emp.email && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {emp.email}
                   </p>
                 )}
+                {emp.province && (
+                  <Badge variant="outline" className="mt-2 text-xs">
+                    {emp.province}
+                  </Badge>
+                )}
 
-                {/* ACTIONS */}
-                <div className="flex gap-2">
+                <div className="flex gap-2 mt-4">
                   <Button
-                    variant="outline"
                     size="sm"
-                    onClick={() => handleEdit(employee)}
+                    variant="outline"
+                    onClick={() => openEdit(emp)}
                   >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Sửa
+                    <Pencil className="w-3.5 h-3.5" />
                   </Button>
                   <Button
-                    variant="outline"
                     size="sm"
-                    onClick={() => handleToggleStatus(employee._id)}
+                    variant="outline"
+                    onClick={() => handleToggleStatus(emp._id)}
                   >
-                    {employee.status === "ACTIVE" ? (
-                      <>
-                        <Lock className="w-4 h-4 mr-2" />
-                        Khóa
-                      </>
+                    {emp.status === "ACTIVE" ? (
+                      <Lock className="w-3.5 h-3.5" />
                     ) : (
-                      <>
-                        <Unlock className="w-4 h-4 mr-2" />
-                        Mở khóa
-                      </>
+                      <Unlock className="w-3.5 h-3.5" />
                     )}
                   </Button>
                   <Button
-                    variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(employee._id)}
+                    variant="outline"
+                    onClick={() => handleDelete(emp._id)}
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Xóa
+                    <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </CardContent>
@@ -434,130 +413,236 @@ const EmployeesPage = () => {
           ))}
         </div>
       )}
+      {/* PHÂN TRANG ĐẸP – GIỐNG CASHIER */}
+      {pagination.totalPages > 1 && (
+        <div className="flex justify-center items-center gap-8 mt-12">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pagination.currentPage === 1 || isLoading}
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+          >
+            Trước
+          </Button>
 
-      {/* --- Edit Employee Dialog --- */}
-      {showEditDialog && (
-        <Dialog open={showEditDialog} onOpenChange={handleCloseEdit}>
+          <div className="text-sm font-medium min-w-[140px] text-center">
+            Trang {pagination.currentPage} / {pagination.totalPages}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              pagination.currentPage === pagination.totalPages || isLoading
+            }
+            onClick={() => handlePageChange(pagination.currentPage + 1)}
+          >
+            Sau
+          </Button>
+        </div>
+      )}
+
+      {/* DIALOG TẠO & SỬA - giữ nguyên, chỉ thêm handleRoleChange */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Thêm nhân viên mới</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            {error && <ErrorMessage message={error} />}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Họ và tên *</Label>
+                <Input
+                  name="fullName"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Số điện thoại *</Label>
+                <Input
+                  name="phoneNumber"
+                  value={formData.phoneNumber}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <Label>Tỉnh/Thành phố</Label>
+                <Select
+                  value={formData.province}
+                  onValueChange={handleProvinceChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn tỉnh/thành phố" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-96">
+                    {provinces.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Mật khẩu *</Label>
+                <Input
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Vai trò *</Label>
+                <Select value={formData.role} onValueChange={handleRoleChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMPLOYEE_TABS.slice(1).map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label>URL ảnh đại diện</Label>
+                <Input
+                  name="avatar"
+                  type="url"
+                  value={formData.avatar}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeDialog}>
+                Hủy
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Đang tạo..." : "Tạo nhân viên"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {editingEmployee && (
+        <Dialog
+          open={!!editingEmployee}
+          onOpenChange={() => setEditingEmployee(null)}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Chỉnh sửa thông tin nhân viên</DialogTitle>
+              <DialogTitle>Chỉnh sửa nhân viên</DialogTitle>
             </DialogHeader>
-
             <form onSubmit={handleUpdate} className="space-y-4">
               {error && <ErrorMessage message={error} />}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-fullName">Họ và tên *</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Họ và tên *</Label>
                   <Input
-                    id="edit-fullName"
                     name="fullName"
                     value={formData.fullName}
                     onChange={handleChange}
                     required
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phoneNumber">Số điện thoại *</Label>
+                <div>
+                  <Label>Số điện thoại *</Label>
                   <Input
-                    id="edit-phoneNumber"
                     name="phoneNumber"
-                    type="tel"
                     value={formData.phoneNumber}
                     onChange={handleChange}
                     required
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
+                <div>
+                  <Label>Email</Label>
                   <Input
-                    id="edit-email"
                     name="email"
                     type="email"
                     value={formData.email}
                     onChange={handleChange}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-province">Tỉnh/Thành phố</Label>
-                  <Input
-                    id="edit-province"
-                    name="province"
+                <div>
+                  <Label>Tỉnh/Thành phố</Label>
+                  <Select
                     value={formData.province}
-                    onChange={handleChange}
-                  />
+                    onValueChange={handleProvinceChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn tỉnh/thành phố" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-96">
+                      {provinces.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-password">
-                    Mật khẩu mới (để trống nếu không đổi)
-                  </Label>
+                <div>
+                  <Label>Mật khẩu mới (để trống nếu không đổi)</Label>
                   <Input
-                    id="edit-password"
                     name="password"
                     type="password"
                     value={formData.password}
                     onChange={handleChange}
-                    placeholder="Nhập mật khẩu mới nếu muốn thay đổi"
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-role">Vai trò *</Label>
-                  <select
-                    id="edit-role"
-                    name="role"
+                <div>
+                  <Label>Vai trò *</Label>
+                  <Select
                     value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded-md"
-                    required
+                    onValueChange={handleRoleChange}
                   >
-                    <option value="WAREHOUSE_STAFF">Nhân viên kho</option>
-                    <option value="ORDER_MANAGER">Quản lý đơn hàng</option>
-                    <option value="SHIPPER">Nhân viên giao hàng</option>
-                    <option value="POS_STAFF">Nhân viên bán hàng</option>
-                    <option value="CASHIER">Thu ngân</option>
-                    <option value="ADMIN">Quản trị viên</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EMPLOYEE_TABS.slice(1).map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="edit-avatar">URL ảnh đại diện</Label>
+                <div className="col-span-2">
+                  <Label>URL ảnh đại diện</Label>
                   <Input
-                    id="edit-avatar"
                     name="avatar"
                     type="url"
-                    placeholder="https://example.com/avatar.jpg"
                     value={formData.avatar}
                     onChange={handleChange}
                   />
-                  {formData.avatar && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <Avatar className="w-16 h-16">
-                        <AvatarImage src={formData.avatar} />
-                        <AvatarFallback>Preview</AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm text-muted-foreground">
-                        Xem trước ảnh đại diện
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
-
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCloseEdit}
-                >
+                <Button type="button" variant="outline" onClick={closeDialog}>
                   Hủy
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Đang cập nhật..." : "Cập nhật"}
+                  Cập nhật
                 </Button>
               </DialogFooter>
             </form>

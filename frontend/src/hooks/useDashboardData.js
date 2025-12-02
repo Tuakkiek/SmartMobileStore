@@ -44,7 +44,7 @@ export const useDashboardData = (timeRange) => {
         airPodsAPI.getAll({ limit: 1000 }),
         appleWatchAPI.getAll({ limit: 1000 }),
         accessoryAPI.getAll({ limit: 1000 }),
-        promotionAPI.getAll(),
+        promotionAPI.getAllPromotions(),
       ]);
 
       // Process data
