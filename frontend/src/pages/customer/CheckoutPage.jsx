@@ -161,10 +161,58 @@ const CheckoutPage = () => {
     return () => window.removeEventListener("error", handler);
   }, []);
 
+  // ✅ THÊM: Cảnh báo khi rời trang
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isRedirectingToPayment) {
+        return; // Cho phép redirect đến VNPay
+      }
+
+      // Nếu đang ở trang checkout và có sản phẩm
+      if (checkoutItems.length > 0 && formData.paymentMethod === "VNPAY") {
+        e.preventDefault();
+        e.returnValue =
+          "Bạn có chắc muốn rời khỏi trang? Đơn hàng chưa được hoàn tất.";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [checkoutItems.length, isRedirectingToPayment, formData.paymentMethod]);
+
   const handleChange = (e) => {
     setError("");
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  useEffect(() => {
+    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    if (pendingOrder) {
+      try {
+        const { orderId, orderNumber, timestamp } = JSON.parse(pendingOrder);
+        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
+
+        if (ageMinutes < 15) {
+          toast.warning(
+            `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
+            {
+              duration: 10000,
+              action: {
+                label: "Tiếp tục thanh toán",
+                onClick: () => navigate(`/orders/${orderId}`),
+              },
+            }
+          );
+        } else {
+          // ✅ Sau 15 phút, hủy đơn và thông báo
+          toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
+            duration: 6000,
+          });
+          localStorage.removeItem("pending_vnpay_order");
+        }
+      } catch {}
+    }
+  }, [navigate]);
 
   // Áp dụng mã khuyến mãi
   const handleApplyPromotion = async () => {
@@ -275,17 +323,23 @@ const CheckoutPage = () => {
         })),
       };
 
+      console.log("=== BEFORE ORDER CREATION ===");
+      console.log(
+        "Checkout items:",
+        checkoutItems.map((i) => ({
+          variantId: i.variantId,
+          productName: i.productName,
+        }))
+      );
+      console.log("Payment method:", formData.paymentMethod);
+
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
 
-      // ✅ XÓA CÁC ITEMS ĐÃ CHECKOUT KHỎI GIỎ HÀNG
-      const { removeFromCart } = useCartStore.getState();
-      for (const item of checkoutItems) {
-        await removeFromCart(item.variantId);
-      }
-
-      // ✅ RESET SELECTED ITEMS
-      setSelectedForCheckout([]);
+      console.log("=== AFTER ORDER CREATION ===");
+      console.log("Order ID:", createdOrder._id);
+      console.log("Order status:", createdOrder.status);
+      console.log("Should clear cart:", formData.paymentMethod !== "VNPAY");
 
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
@@ -298,18 +352,73 @@ const CheckoutPage = () => {
           });
 
           if (vnpayResponse.data?.success) {
-            await getCart(); // Refresh để cập nhật UI
+            // ✅ THÊM: Lưu thông tin chi tiết hơn
+            localStorage.setItem(
+              "pending_vnpay_order",
+              JSON.stringify({
+                orderId: createdOrder._id,
+                orderNumber: createdOrder.orderNumber, // ← THÊM
+                selectedItems: selectedForCheckout,
+                totalAmount: createdOrder.totalAmount, // ← THÊM
+                timestamp: Date.now(),
+              })
+            );
+
+            // ✅ QUAN TRỌNG: Không xóa selectedForCheckout ở đây
+            // Chỉ xóa sau khi thanh toán thành công
+
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
           }
         } catch (err) {
           setIsRedirectingToPayment(false);
+          // ✅ HỦY ĐƠN HÀNG NẾU TẠO LINK THẤT BẠI
+          await orderAPI.cancel(createdOrder._id, {
+            reason: "Không thể tạo link thanh toán VNPay",
+          });
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        await getCart(); // ✅ Refresh cart để hiển thị items còn lại
+        // ✅ COD/BANK_TRANSFER - Đảm bảo xóa giỏ hàng
+        console.log(`📦 Processing order ${createdOrder.orderNumber}`);
+
+        // Clear selection ngay lập tức
+        setSelectedForCheckout([]);
+
+        // Đợi 500ms để backend xử lý xong
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Refresh cart từ server
+        await getCart();
+
+        const remainingItems = cart?.items?.length || 0;
+        console.log(`🛒 Cart after order: ${remainingItems} items`);
+
+        // Nếu backend không xóa, xóa thủ công (fallback)
+        const selectedVariantIds = checkoutItems.map((i) => i.variantId);
+        const stillInCart =
+          cart?.items?.filter((item) =>
+            selectedVariantIds.includes(item.variantId)
+          ) || [];
+
+        if (stillInCart.length > 0) {
+          console.warn(
+            `⚠️ Backend didn't remove ${stillInCart.length} items, removing manually...`
+          );
+          for (const item of stillInCart) {
+            try {
+              await cartAPI.removeItem(item.variantId);
+            } catch (err) {
+              console.error(`Failed to remove ${item.variantId}:`, err);
+            }
+          }
+          // Refresh lại lần nữa
+          await getCart();
+        }
+
         toast.success("Đặt hàng thành công!");
+
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });
         }, 300);

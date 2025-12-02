@@ -97,14 +97,31 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
 
-          {/* Danh mục sản phẩm */}
-          <Route path="/dien-thoai" element={<ProductsPage />} />
-          <Route path="/may-tinh-bang" element={<ProductsPage />} />
-          <Route path="/macbook" element={<ProductsPage />} />
-          <Route path="/tai-nghe" element={<ProductsPage />} />
-          <Route path="/apple-watch" element={<ProductsPage />} />
-          <Route path="/phu-kien" element={<ProductsPage />} />
+          {/* ✅ ROUTE MỚI: /products với query params */}
           <Route path="/products" element={<ProductsPage />} />
+
+          {/* ✅ GIỮ LẠI CÁC ROUTE CŨ ĐỂ TƯƠNG THÍCH NGƯỢC */}
+          <Route
+            path="/dien-thoai"
+            element={<ProductsPage category="iPhone" />}
+          />
+          <Route
+            path="/may-tinh-bang"
+            element={<ProductsPage category="iPad" />}
+          />
+          <Route path="/macbook" element={<ProductsPage category="Mac" />} />
+          <Route
+            path="/tai-nghe"
+            element={<ProductsPage category="AirPods" />}
+          />
+          <Route
+            path="/apple-watch"
+            element={<ProductsPage category="AppleWatch" />}
+          />
+          <Route
+            path="/phu-kien"
+            element={<ProductsPage category="Accessories" />}
+          />
 
           {/* Tìm kiếm */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
@@ -124,7 +141,6 @@ function App() {
             CUSTOMER ROUTES - NESTED STRUCTURE
         ======================================== */}
         <Route element={<MainLayout />}>
-          {/* ✅ Giỏ hàng là parent route */}
           <Route
             path="/cart"
             element={
@@ -134,7 +150,6 @@ function App() {
             }
           />
 
-          {/* ✅ Thanh toán là nested route của /cart */}
           <Route
             path="/cart/checkout"
             element={
@@ -153,7 +168,6 @@ function App() {
             }
           />
 
-          {/* Tài khoản */}
           <Route
             path="/profile"
             element={
@@ -177,7 +191,6 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
-
           <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
         </Route>
 

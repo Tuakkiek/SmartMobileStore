@@ -2,7 +2,6 @@
 // FILE: frontend/src/components/shared/SearchOverlay.jsx
 // ✅ UPDATED: Logic Upgrade (Typo Fix + Smart Sort + Debounce) - UI Preserved
 // ============================================
-
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, X, ChevronRight } from "lucide-react";
@@ -14,7 +13,6 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
-
 // ============================================
 // 1. TYPO DICTIONARY & HELPER
 // ============================================
@@ -31,13 +29,37 @@ const TYPO_MAPPINGS = {
   ip14: "iphone 14",
   ip13: "iphone 13",
   "15pm": "iphone 15 pro max",
+
+  // THÊM MỚI - Các biến thể phổ biến
+  plus: "plus",
+  pls: "plus",
+  pluss: "plus",
+  pro: "pro",
   promax: "pro max",
+  "pro max": "pro max",
+  max: "max",
+  mini: "mini",
+
+  // Màu sắc
+  den: "đen",
+  trang: "trắng",
+  xanh: "xanh",
+  do: "đỏ",
+  tim: "tím",
+  hong: "hồng",
+
+  // Dung lượng
+  "128gb": "128gb",
+  "256gb": "256gb",
+  "512gb": "512gb",
+  "1tb": "1tb",
 
   // iPad
   iapd: "ipad",
   pad: "ipad",
   taplet: "ipad",
   "may tinh bang": "ipad",
+  air: "air",
 
   // Mac
   mac: "macbook",
@@ -68,14 +90,11 @@ const TYPO_MAPPINGS = {
   chuot: "chuột",
   "ban phim": "bàn phím",
 };
-
 const correctTypos = (input) => {
   if (!input) return "";
   let corrected = input.toLowerCase().trim();
-
   // Check khớp từ chính xác
   if (TYPO_MAPPINGS[corrected]) return TYPO_MAPPINGS[corrected];
-
   // Check thay thế từ trong câu
   Object.keys(TYPO_MAPPINGS).forEach((key) => {
     const regex = new RegExp(`\\b${key}\\b`, "gi");
@@ -85,18 +104,80 @@ const correctTypos = (input) => {
   });
   return corrected;
 };
+/**
+ * Tách query thành các tokens có ý nghĩa
+ */
+const tokenizeQuery = (query) => {
+  if (!query) return [];
 
+  const corrected = correctTypos(query);
+  const tokens = corrected.toLowerCase().trim().split(/\s+/);
+
+  // Lọc bỏ stop words
+  const stopWords = ["the", "a", "an", "and", "or", "của", "cho", "với", "và"];
+  return tokens.filter(
+    (token) => !stopWords.includes(token) && token.length > 0
+  );
+};
 // ============================================
-// 2. RELEVANCE SCORING
+// 2. RELEVANCE SCORING - THAY THẾ HOÀN TOÀN
 // ============================================
 const calculateRelevanceScore = (productName, query) => {
   const name = productName.toLowerCase();
-  const q = query.toLowerCase();
-  if (name === q) return 100;
-  if (name.startsWith(q)) return 90;
-  if (name.includes(` ${q} `)) return 80;
-  if (name.includes(q)) return 60;
-  return 0;
+  const queryTokens = tokenizeQuery(query);
+
+  if (queryTokens.length === 0) return 0;
+
+  let score = 0;
+  let matchedTokens = 0;
+
+  // Khớp chính xác toàn bộ query
+  if (name === query.toLowerCase()) {
+    return 100;
+  }
+
+  // Tính điểm cho từng token
+  queryTokens.forEach((token) => {
+    // Khớp chính xác từ độc lập (word boundary)
+    const wordBoundaryRegex = new RegExp(`\\b${token}\\b`, "i");
+    if (wordBoundaryRegex.test(name)) {
+      matchedTokens++;
+      score += 30; // Điểm cao cho khớp chính xác
+
+      // Thêm điểm nếu token xuất hiện ở đầu
+      if (name.startsWith(token)) {
+        score += 15;
+      }
+    }
+    // Khớp một phần từ
+    else if (name.includes(token)) {
+      matchedTokens++;
+      score += 15; // Điểm thấp hơn cho khớp một phần
+    }
+  });
+
+  // Tính tỷ lệ khớp
+  const matchRatio = matchedTokens / queryTokens.length;
+
+  // Thêm điểm bonus nếu khớp nhiều từ
+  if (matchRatio >= 0.8) {
+    score += 20;
+  } else if (matchRatio >= 0.5) {
+    score += 10;
+  }
+
+  // Thêm điểm nếu query xuất hiện liên tiếp trong name
+  if (name.includes(query.toLowerCase())) {
+    score += 25;
+  }
+
+  // Penalty nếu tên sản phẩm quá dài so với query
+  const lengthDiff = Math.abs(name.length - query.length);
+  if (lengthDiff > 20) {
+    score -= 5;
+  }
+
+  return Math.min(score, 100); // Cap tối đa 100 điểm
 };
 
 // ============================================
@@ -134,7 +215,6 @@ const SEARCH_CATEGORIES = [
     limit: 10,
   },
 ];
-
 const QUICK_LINKS = [
   { name: "iPhone", path: "/dien-thoai" },
   { name: "iPad", path: "/may-tinh-bang" },
@@ -142,7 +222,6 @@ const QUICK_LINKS = [
   { name: "AirPods", path: "/tai-nghe" },
   { name: "Apple Watch", path: "/apple-watch" },
 ];
-
 // ============================================
 // SEARCH SERVICE (Updated Logic)
 // ============================================
@@ -150,16 +229,45 @@ const searchProducts = async (rawQuery) => {
   if (!rawQuery?.trim()) return [];
 
   const correctedQuery = correctTypos(rawQuery);
-  // console.log(`🔍 Corrected: ${correctedQuery}`);
+  const queryTokens = tokenizeQuery(correctedQuery);
 
   try {
     const searchPromises = SEARCH_CATEGORIES.map(async (category) => {
       try {
-        const response = await category.api.getAll({
+        // Tìm với query gốc trước
+        const mainSearch = await category.api.getAll({
           search: correctedQuery,
           limit: category.limit,
         });
-        const products = response.data?.data?.products || [];
+
+        let products = mainSearch.data?.data?.products || [];
+
+        // Nếu kết quả ít, thử tìm với từng token
+        if (products.length < 3 && queryTokens.length > 1) {
+          const tokenSearches = await Promise.all(
+            queryTokens.slice(0, 2).map(
+              (
+                token // Chỉ lấy 2 token đầu
+              ) =>
+                category.api
+                  .getAll({
+                    search: token,
+                    limit: 5,
+                  })
+                  .catch(() => ({ data: { data: { products: [] } } }))
+            )
+          );
+
+          tokenSearches.forEach((res) => {
+            const tokenProducts = res.data?.data?.products || [];
+            // Merge kết quả, tránh duplicate
+            tokenProducts.forEach((p) => {
+              if (!products.find((existing) => existing._id === p._id)) {
+                products.push(p);
+              }
+            });
+          });
+        }
 
         return products.map((product) => ({
           ...product,
@@ -188,7 +296,6 @@ const searchProducts = async (rawQuery) => {
     return [];
   }
 };
-
 // ============================================
 // SEARCH RESULT ITEM COMPONENT (UI Unchanged)
 // ============================================
@@ -231,9 +338,16 @@ const SearchResultItem = ({ product, category, onClose }) => {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <h4 className="text-white font-medium text-sm group-hover:text-blue-400 transition-colors truncate">
-          {product.model || product.name}
-        </h4>
+        {/* THAY ĐỔI Ở ĐÂY - Thêm highlight */}
+        <h4
+          className="text-white font-medium text-sm group-hover:text-blue-400 transition-colors truncate"
+          dangerouslySetInnerHTML={{
+            __html: highlightMatch(
+              product.model || product.name,
+              product._searchQuery || ""
+            ),
+          }}
+        />
         <p className="text-blue-400 text-sm font-semibold mt-1">
           {new Intl.NumberFormat("vi-VN", {
             style: "currency",
@@ -247,7 +361,24 @@ const SearchResultItem = ({ product, category, onClose }) => {
     </button>
   );
 };
+// ============================================
+// HELPER FUNCTION FOR HIGHLIGHT
+// ============================================
+// THÊM MỚI - Highlight function
+const highlightMatch = (text, query) => {
+  const tokens = tokenizeQuery(query);
+  let highlighted = text;
 
+  tokens.forEach((token) => {
+    const regex = new RegExp(`(${token})`, "gi");
+    highlighted = highlighted.replace(
+      regex,
+      '<mark class="bg-blue-500/20 text-blue-400 px-0.5 rounded">$1</mark>'
+    );
+  });
+
+  return highlighted;
+};
 // ============================================
 // MAIN SEARCH OVERLAY COMPONENT
 // ============================================
@@ -257,7 +388,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef(null);
-
   // Handle View All Navigation
   const handleViewAll = () => {
     const corrected = correctTypos(searchQuery);
@@ -266,7 +396,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
       onClose();
     }
   };
-
   // Debounce Effect (500ms)
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -274,10 +403,8 @@ const SearchOverlay = ({ isOpen, onClose }) => {
       setIsSearching(false);
       return;
     }
-
     // Set loading immediately when typing starts
     setIsSearching(true);
-
     const delaySearch = setTimeout(async () => {
       if (isOpen) {
         try {
@@ -290,17 +417,14 @@ const SearchOverlay = ({ isOpen, onClose }) => {
         }
       }
     }, 500); // Chờ 500ms
-
     return () => clearTimeout(delaySearch);
   }, [searchQuery, isOpen]);
-
   // Auto Focus
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [isOpen]);
-
   // Keyboard Shortcuts (Updated with Enter)
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -311,11 +435,9 @@ const SearchOverlay = ({ isOpen, onClose }) => {
         handleViewAll();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose, searchQuery]);
-
   // Reset on Close
   useEffect(() => {
     if (!isOpen) {
@@ -323,7 +445,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
       setSearchResults([]);
     }
   }, [isOpen]);
-
   return (
     <div
       className={`fixed inset-0 z-50 transition-opacity duration-300 ${
@@ -337,7 +458,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
-
       {/* Search Container */}
       <div
         className={`absolute top-0 left-0 right-0 bg-black shadow-2xl transform transition-all duration-500 ease-out ${
@@ -368,7 +488,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                 </button>
               </div>
             </div>
-
             {/* Quick Links */}
             {!searchQuery && (
               <div className="mb-8">
@@ -392,7 +511,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                 </div>
               </div>
             )}
-
             {/* Search Results */}
             {searchQuery && (
               <div>
@@ -401,7 +519,6 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                     ? "Đang tìm kiếm..."
                     : `Kết quả cho "${correctTypos(searchQuery)}"`}
                 </h3>
-
                 {isSearching ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -420,12 +537,11 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {searchResults.map((product) => (
                         <SearchResultItem
                           key={product._id}
-                          product={product}
+                          product={{ ...product, _searchQuery: searchQuery }}
                           category={product._category}
                           onClose={onClose}
                         />
@@ -443,6 +559,39 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                     </p>
                   </div>
                 )}
+                {/* Suggestions when no results */}
+                {searchQuery && searchResults.length === 0 && !isSearching && (
+                  <div className="text-center py-12">
+                    <Search className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                    <p className="text-gray-500 text-sm mb-4">
+                      Không tìm thấy sản phẩm phù hợp với "{searchQuery}"
+                    </p>
+
+                    {/* THÊM SUGGESTIONS */}
+                    <div className="mt-6">
+                      <p className="text-xs text-gray-500 mb-3">
+                        Gợi ý tìm kiếm:
+                      </p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {[
+                          "iPhone 15 Pro",
+                          "iPhone 15 Plus",
+                          "iPad Pro",
+                          "MacBook Air",
+                          "AirPods Pro",
+                        ].map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setSearchQuery(suggestion)}
+                            className="px-3 py-1.5 bg-gray-900/30 hover:bg-gray-900/50 rounded-full text-xs text-gray-400 hover:text-white transition-colors"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -451,5 +600,4 @@ const SearchOverlay = ({ isOpen, onClose }) => {
     </div>
   );
 };
-
 export default SearchOverlay;

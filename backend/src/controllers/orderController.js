@@ -38,11 +38,31 @@ export const createOrder = async (req, res) => {
       promotionCode,
     } = req.body;
 
+    // ✅ KIỂM TRA ĐƠN HÀNG VNPAY TRÙNG LẶP - ĐẶT SAU KHI TRÍCH XUẤT paymentMethod
+    if (paymentMethod === "VNPAY") {
+      const recentOrder = await Order.findOne({
+        customerId: req.user._id,
+        paymentMethod: "VNPAY",
+        status: { $in: ["PENDING_PAYMENT", "PAYMENT_VERIFIED"] },
+        createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
+      }).session(session);
+
+      if (recentOrder) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Bạn có đơn hàng VNPay đang chờ thanh toán. Vui lòng hoàn tất hoặc hủy đơn trước.",
+          existingOrderId: recentOrder._id,
+        });
+      }
+    }
+
     const cart = await Cart.findOne({ customerId: req.user._id }).session(
       session
     );
 
-    console.log("Cart items count:", cart?.items?.length);
+    console.log("Số lượng sản phẩm trong giỏ hàng:", cart?.items?.length);
 
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
@@ -52,13 +72,13 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    console.log("=== CREATING ORDER ===");
-    console.log("Cart items count:", cart.items.length);
+    console.log("=== ĐANG TẠO ĐƠN HÀNG ===");
+    console.log("Số lượng sản phẩm trong giỏ hàng:", cart.items.length);
 
-    // === VALIDATE & POPULATE CART ITEMS ===
+    // === KIỂM TRA VÀ ĐIỀU CHỈNH CÁC MẶT HÀNG CỦA ĐƠN ===
     const orderItems = [];
     let subtotal = 0;
-    const requestItems = req.body.items || []; // Items từ checkout
+    const requestItems = req.body.items || []; // Các mặt hàng từ checkout
 
     for (const reqItem of requestItems) {
       const variantId = reqItem.variantId;
@@ -263,6 +283,10 @@ export const createOrder = async (req, res) => {
     console.log("Points Used:", pointsUsed);
     console.log("Total Amount:", total);
 
+    // ✅ XÁC ĐỊNH TRẠNG THÁI BAN ĐẦU
+    const initialStatus =
+      paymentMethod === "VNPAY" ? "PENDING_PAYMENT" : "PENDING";
+
     // Tạo đơn hàng
     const order = await Order.create(
       [
@@ -278,24 +302,29 @@ export const createOrder = async (req, res) => {
           appliedPromotion,
           pointsUsed,
           totalAmount: total,
-          status: "PENDING",
+          status: initialStatus, // ✅ ĐÚNG - PENDING_PAYMENT cho VNPay
         },
       ],
       { session }
     );
 
-    // ✅ CHỈ XÓA CÁC ITEMS ĐÃ CHECKOUT
-    const checkoutVariantIds = requestItems.map((item) =>
-      item.variantId.toString()
-    );
-    cart.items = cart.items.filter(
-      (item) => !checkoutVariantIds.includes(item.variantId.toString())
-    );
-    await cart.save({ session });
-
-    console.log(
-      `Removed ${requestItems.length} items from cart, ${cart.items.length} items remaining`
-    );
+    // ✅ CHỈ XÓA GIỎ HÀNG KHI KHÔNG PHẢI VNPAY
+    if (paymentMethod !== "VNPAY") {
+      const checkoutVariantIds = requestItems.map((item) =>
+        item.variantId.toString()
+      );
+      cart.items = cart.items.filter(
+        (item) => !checkoutVariantIds.includes(item.variantId.toString())
+      );
+      await cart.save({ session });
+      console.log(
+        `✅ Đã xóa ${requestItems.length} sản phẩm khỏi giỏ (${paymentMethod})`
+      );
+    } else {
+      console.log(
+        `⏸️ Giữ ${requestItems.length} sản phẩm trong giỏ - Chờ thanh toán VNPay`
+      );
+    }
 
     await session.commitTransaction();
 
@@ -314,6 +343,7 @@ export const createOrder = async (req, res) => {
       data: {
         order: order[0],
         redirectUrl: `/orders/${order[0]._id}`,
+        shouldClearCartImmediately: paymentMethod !== "VNPAY", // ✅ THÊM FLAG
       },
     });
   } catch (error) {
@@ -495,12 +525,28 @@ export const cancelOrder = async (req, res) => {
         message: "Bạn không có quyền hủy đơn hàng này",
       });
     }
-
-    if (order.status !== "PENDING") {
+    // ✅ CHO PHÉP HỦY CẢ PENDING VÀ PENDING_PAYMENT
+    if (!["PENDING", "PENDING_PAYMENT"].includes(order.status)) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Chỉ có thể hủy đơn hàng đang chờ xử lý",
+        message: "Chỉ có thể hủy đơn hàng đang chờ xử lý hoặc chờ thanh toán",
+      });
+    }
+
+    // ✅ THÊM: Nếu là đơn VNPay PENDING_PAYMENT, không cần kiểm tra customerId
+    // vì có thể hệ thống tự động hủy
+    const isVNPayPending =
+      order.paymentMethod === "VNPAY" && order.status === "PENDING_PAYMENT";
+
+    if (
+      !isVNPayPending &&
+      order.customerId.toString() !== req.user._id.toString()
+    ) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền hủy đơn hàng này",
       });
     }
 

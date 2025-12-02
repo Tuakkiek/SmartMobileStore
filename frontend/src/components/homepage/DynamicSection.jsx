@@ -96,7 +96,9 @@ const DynamicSection = ({
         <ProductsSection
           title={title || "Sản phẩm mới"}
           products={newProducts}
-          allProducts={allProducts}
+          showBadges={true} // ← CHỈ BẬT BADGES CHO SECTION NÀY
+          badgeType="new" // ← CHỈ ĐỊNH LOẠI BADGE
+          // allProducts={allProducts}
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -117,7 +119,8 @@ const DynamicSection = ({
         <ProductsSection
           title={title || "Sản phẩm bán chạy"}
           products={topSellers}
-          allProducts={allProducts}
+          showBadges={true} // ← CHỈ BẬT BADGES CHO SECTION NÀY
+          badgeType="seller" // ← CHỈ ĐỊNH LOẠI BADGE
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -137,6 +140,7 @@ const DynamicSection = ({
         <ProductsSection
           title={title || config.categoryFilter}
           products={categoryProducts}
+          showBadges={false}
           allProducts={allProducts}
           category={config.categoryFilter}
           isAdmin={isAdmin}

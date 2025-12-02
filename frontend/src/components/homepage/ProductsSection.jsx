@@ -1,9 +1,5 @@
-// ============================================
-// FILE: frontend/src/components/homepage/ProductsSection.jsx
-// Reusable products section with title and grid
-// ============================================
-
-import React, { useMemo } from "react";
+// frontend/src/components/homepage/ProductsSection.jsx
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
@@ -29,48 +25,17 @@ const CATEGORY_ICONS = {
 const ProductsSection = ({
   title,
   products,
-  allProducts,
+  showBadges = false, // bật badge cho section này
+  badgeType = null, // "new" | "seller" | null
   category,
-  isAdmin,
+  isAdmin = false,
   onEdit,
   onDelete,
   viewAllLink,
 }) => {
   const navigate = useNavigate();
 
-  // Calculate top 10 new products across all categories
-  const topNewIds = useMemo(() => {
-    return [...allProducts]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 10)
-      .map((p) => p._id?.toString());
-  }, [allProducts]);
-
-  // Calculate top 10 sellers per category
-  const topSellersMap = useMemo(() => {
-    const map = {};
-    ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"].forEach(
-      (cat) => {
-        const topIds = [...allProducts]
-          .filter((p) => p.category === cat && p.salesCount > 0)
-          .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
-          .slice(0, 10)
-          .map((p) => p._id?.toString());
-        map[cat] = topIds;
-      }
-    );
-    return map;
-  }, [allProducts]);
-
-  // Determine badges for each product
-  const getProductBadges = (product) => {
-    const productId = product._id?.toString();
-    const isTopNew = topNewIds.includes(productId);
-    const isTopSeller = topSellersMap[product.category]?.includes(productId);
-
-    return { isTopNew, isTopSeller };
-  };
-
+  // Nếu không có sản phẩm → không render section
   if (!products || products.length === 0) return null;
 
   const Icon = category ? CATEGORY_ICONS[category] : null;
@@ -78,6 +43,7 @@ const ProductsSection = ({
   return (
     <section className="py-10 bg-gray-50">
       <div className="container mx-auto px-4">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             {Icon && (
@@ -102,26 +68,24 @@ const ProductsSection = ({
           )}
         </div>
 
+        {/* Product Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
-          {products.map((product) => {
-            const { isTopNew, isTopSeller } = getProductBadges(product);
-
-            return (
-              <div key={product._id} className="relative group">
-                <ProductCard
-                  product={product}
-                  isTopNew={isTopNew}
-                  isTopSeller={isTopSeller}
-                  onEdit={isAdmin ? () => onEdit(product) : undefined}
-                  onDelete={
-                    isAdmin
-                      ? () => onDelete(product._id, product.category)
-                      : undefined
-                  }
-                />
-              </div>
-            );
-          })}
+          {products.map((product) => (
+            <div key={product._id} className="relative group">
+              <ProductCard
+                product={product}
+                // Chỉ hiển thị badge đúng với section này
+                isTopNew={showBadges && badgeType === "new"}
+                isTopSeller={showBadges && badgeType === "seller"}
+                onEdit={isAdmin ? () => onEdit(product) : undefined}
+                onDelete={
+                  isAdmin
+                    ? () => onDelete(product._id, product.category)
+                    : undefined
+                }
+              />
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -129,3 +93,4 @@ const ProductsSection = ({
 };
 
 export default ProductsSection;
+

@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/shared/Loading";
 import { CheckCircle, XCircle } from "lucide-react";
 import { vnpayAPI } from "@/lib/api";
+import { useCartStore } from "@/store/cartStore";
 
 const VNPayReturnPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState("loading");
   const [orderData, setOrderData] = useState(null);
+
+  const { getCart, setSelectedForCheckout } = useCartStore();
 
   useEffect(() => {
     const handleReturn = async () => {
@@ -25,11 +28,36 @@ const VNPayReturnPage = () => {
             orderNumber: response.data.orderNumber,
             message: response.data.message,
           });
+
+          // ✅ XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
+          const pendingOrder = localStorage.getItem("pending_vnpay_order");
+          if (pendingOrder) {
+            try {
+              const { selectedItems } = JSON.parse(pendingOrder);
+
+              // Clear selection
+              setSelectedForCheckout([]);
+
+              // Refresh cart để lấy dữ liệu mới từ backend (đã xóa rồi)
+              await getCart();
+
+              // Dọn dẹp localStorage
+              localStorage.removeItem("pending_vnpay_order");
+
+              console.log("✅ Đã refresh giỏ hàng sau thanh toán VNPay");
+            } catch (err) {
+              console.error("Error cleaning up cart:", err);
+            }
+          }
         } else {
           setStatus("failed");
           setOrderData({
             message: response.data?.message || "Thanh toán thất bại",
           });
+
+          // ✅ THANH TOÁN THẤT BẠI - GIỮ GIỎ HÀNG
+          localStorage.removeItem("pending_vnpay_order");
+          console.log("⚠️ Thanh toán thất bại - Giữ nguyên giỏ hàng");
         }
       } catch (error) {
         console.error("VNPay return error:", error);
@@ -38,6 +66,9 @@ const VNPayReturnPage = () => {
           message:
             error.response?.data?.message || error.message || "Lỗi hệ thống",
         });
+
+        // ✅ LỖI - GIỮ GIỎ HÀNG
+        localStorage.removeItem("pending_vnpay_order");
       }
     };
 

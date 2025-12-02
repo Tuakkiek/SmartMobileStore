@@ -1,8 +1,4 @@
-// ============================================
-// FILE: frontend/src/pages/customer/OrderDetailPage.jsx
-// ✅ ADDED: Invoice export button for paid orders
-// ✅ FIXED: Show VNPay payment status clearly
-// ============================================
+// frontend/src/pages/customer/OrderDetailPage.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-// Imports mới cho AlertDialog
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +32,7 @@ import {
   CheckCircle2,
   Printer,
 } from "lucide-react";
+
 import { orderAPI } from "@/lib/api";
 import {
   formatPrice,
@@ -46,36 +42,90 @@ import {
 } from "@/lib/utils";
 import { toast } from "sonner";
 import InvoiceTemplate from "@/components/pos/InvoiceTemplate";
-// ✅ No external library needed for printing
+
 const PlaceholderImg = "https://via.placeholder.com/80?text=No+Image";
+
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // =============== STATES ===============
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isCancellingVNPay, setIsCancellingVNPay] = useState(false);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
-  // === State mới cho AlertDialog ===
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  // ==================================
+  const [showCancelVNPayDialog, setShowCancelVNPayDialog] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(null);
+
   const invoiceRef = useRef();
+
+  // =============== FETCH ORDER ===============
   useEffect(() => {
     fetchOrder();
   }, [id]);
+
   const fetchOrder = async () => {
     setIsLoading(true);
     try {
       const response = await orderAPI.getById(id);
       setOrder(response.data.data.order);
     } catch (error) {
-      console.error("Error fetching order:", error);
+      console.error("Lỗi tải đơn hàng:", error);
+      toast.error("Không thể tải thông tin đơn hàng");
     } finally {
       setIsLoading(false);
     }
   };
-  const handleCancelOrder = () => {
-    setShowCancelDialog(true);
-  };
+
+  // =============== DERIVED VALUES (SAU KHI CÓ ORDER) ===============
+  const isCancelled = order?.status === "CANCELLED";
+  const isReturned = order?.status === "RETURNED";
+  const isPaymentVerified =
+    order?.status === "PAYMENT_VERIFIED" || order?.paymentInfo?.vnpayVerified;
+
+  const canExportInvoice =
+    order?.paymentStatus === "PAID" && order?.orderSource === "ONLINE";
+
+  // QUAN TRỌNG: Phải khai báo TRƯỚC khi dùng trong useEffect
+  const isPendingVNPayOrder =
+    order?.paymentMethod === "VNPAY" &&
+    order?.status === "PENDING_PAYMENT" &&
+    !order?.paymentInfo?.vnpayVerified;
+
+  // =============== COUNTDOWN 15 PHÚT CHO VNPAY ===============
+  useEffect(() => {
+    if (!isPendingVNPayOrder || !order?.createdAt) {
+      setTimeRemaining(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const created = new Date(order.createdAt).getTime();
+      const now = Date.now();
+      const elapsed = now - created;
+      const remainingMs = 15 * 60 * 1000 - elapsed; // 15 phút
+
+      if (remainingMs <= 0) {
+        setTimeRemaining("Đã hết hạn");
+        fetchOrder(); // Tự động refresh để cập nhật trạng thái
+        return;
+      }
+
+      const minutes = Math.floor(remainingMs / 60000);
+      const seconds = Math.floor((remainingMs % 60000) / 1000);
+      setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, "0")}`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isPendingVNPayOrder, order?.createdAt]);
+
+  // =============== HANDLERS ===============
+  const handleCancelOrder = () => setShowCancelDialog(true);
+
   const handleConfirmCancel = async () => {
     setShowCancelDialog(false);
     setIsCancelling(true);
@@ -89,36 +139,74 @@ const OrderDetailPage = () => {
       setIsCancelling(false);
     }
   };
+
+  const handleCancelVNPayOrder = () => setShowCancelVNPayDialog(true);
+
+  const handleConfirmCancelVNPay = async () => {
+    setShowCancelVNPayDialog(false);
+    setIsCancellingVNPay(true);
+
+    try {
+      await orderAPI.cancel(id, {
+        reason: "Khách hàng hủy đơn VNPay chưa thanh toán",
+      });
+
+      // Xóa pending order khỏi localStorage
+      try {
+        const pending = localStorage.getItem("pending_vnpay_order");
+        if (pending) {
+          const data = JSON.parse(pending);
+          if (data.orderId === id) {
+            localStorage.removeItem("pending_vnpay_order");
+          }
+        }
+      } catch (e) {}
+
+      await fetchOrder();
+      toast.success("Đã hủy đơn hàng VNPay thành công");
+
+      setTimeout(() => navigate("/cart"), 2000);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Hủy đơn thất bại");
+    } finally {
+      setIsCancellingVNPay(false);
+    }
+  };
+
   const handlePrint = () => {
     const printContent = invoiceRef.current;
-    const winPrint = window.open("", "", "width=900,height=650");
-    winPrint.document.write("<html><head><title>Invoice</title>");
-    winPrint.document.write(
-      "<style>body { font-family: Arial, sans-serif; }</style>"
+    const win = window.open("", "", "width=900,height=650");
+    win.document.write("<html><head><title>Hóa đơn</title>");
+    win.document.write(
+      "<style>body{font-family:system-ui,Arial,sans-serif; padding:20px;}</style>"
     );
-    winPrint.document.write("</head><body>");
-    winPrint.document.write(printContent.innerHTML);
-    winPrint.document.write("</body></html>");
-    winPrint.document.close();
-    winPrint.focus();
-    winPrint.print();
-    winPrint.close();
-    toast.success("Đã in hóa đơn thành công");
+    win.document.write("</head><body>");
+    win.document.write(print.innerHTML);
+    win.document.write("</body></html>");
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+    toast.success("Đã gửi lệnh in");
   };
-  const handleExportInvoice = () => {
-    setShowInvoiceDialog(true);
-  };
+
+  const handleExportInvoice = () => setShowInvoiceDialog(true);
+
+  // =============== EARLY RETURNS ===============
   if (isLoading) return <Loading />;
+
   if (!order) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <p>Không tìm thấy đơn hàng</p>
+        <p className="text-lg">Không tìm thấy đơn hàng</p>
         <Button onClick={() => navigate("/profile")} className="mt-4">
           Quay lại trang cá nhân
         </Button>
       </div>
     );
   }
+
+  // =============== HELPER FUNCTIONS ===============
   const getImageUrl = (path) => {
     if (!path) return PlaceholderImg;
     if (path.startsWith("http")) return path;
@@ -126,79 +214,68 @@ const OrderDetailPage = () => {
       path.startsWith("/") ? "" : "/"
     }${path}`;
   };
+
   const getVariantLabel = (item) => {
     const parts = [];
     if (item.variantColor) parts.push(item.variantColor);
     if (item.variantStorage) parts.push(item.variantStorage);
     if (item.variantName) parts.push(item.variantName);
     if (item.variantConnectivity) parts.push(item.variantConnectivity);
+    if (item.variantCpuGpu) parts.push(item.variantCpuGpu);
+    if (item.variantRam) parts.push(item.variantRam);
     return parts.length > 0 ? parts.join(" • ") : null;
   };
-  const isCancelled = order.status === "CANCELLED";
-  const isReturned = order.status === "RETURNED";
-  const isPaymentVerified =
-    order.status === "PAYMENT_VERIFIED" || order.paymentInfo?.vnpayVerified;
-  const canExportInvoice =
-    order.paymentStatus === "PAID" && order.orderSource === "ONLINE";
-  // ✅ Prepare invoice data
+
   const invoiceData = {
-    customerName: order.shippingAddress?.fullName,
-    customerPhone: order.shippingAddress?.phoneNumber,
-    customerAddress: `${order.shippingAddress?.detailAddress}, ${order.shippingAddress?.ward}, ${order.shippingAddress?.province}`,
-    items: order.items.map((item) => ({
-      ...item,
-      imei: item.imei || "N/A",
-    })),
+    customerName: order.shippingAddress?.fullName || "",
+    customerPhone: order.shippingAddress?.phoneNumber || "",
+    customerAddress: `${order.shippingAddress?.detailAddress || ""}, ${
+      order.shippingAddress?.ward || ""
+    }, ${order.shippingAddress?.province || ""}`,
+    items: order.items.map((i) => ({ ...i, imei: i.imei || "N/A" })),
     totalAmount: order.totalAmount,
     paymentReceived: order.totalAmount,
     changeGiven: 0,
     orderNumber: order.orderNumber,
     createdAt: order.createdAt,
-    staffName: "Hệ thống",
-    cashierName: order.paymentMethod === "VNPAY" ? "VNPay" : "N/A",
+    staffName: "Hệ thống Online",
+    cashierName: order.paymentMethod === "VNPAY" ? "VNPay" : "COD",
   };
+
+  // =============== RENDER ===============
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Quay lại
       </Button>
-      {/* ✅ PAYMENT VERIFIED BANNER */}
+
+      {/* Thanh toán VNPay thành công */}
       {isPaymentVerified && !isCancelled && !isReturned && (
-        <div className="mb-6 rounded-lg border-2 bg-green-50 border-green-200 p-6">
+        <div className="mb-6 rounded-lg border-2 border-green-200 bg-green-50 p-6">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-green-100">
-              <CheckCircle2 className="w-6 h-6 text-green-600" />
+            <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-7 h-7 text-green-600" />
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold mb-2 text-green-900">
-                Thanh toán VNPay thành công
+            <div>
+              <h3 className="font-bold text-green-900 text-lg">
+                Thanh toán thành công!
               </h3>
-              <p className="text-sm text-green-700">
-                Đơn hàng đã được thanh toán qua VNPay. Chúng tôi sẽ xử lý và
-                giao hàng trong thời gian sớm nhất.
+              <p className="text-sm text-green-700 mt-1">
+                Đơn hàng đã được thanh toán qua VNPay. Chúng tôi sẽ xử lý giao
+                hàng sớm nhất.
               </p>
               {order.paymentInfo?.vnpayTransactionNo && (
-                <div className="mt-3 p-3 bg-white border border-green-200 rounded-md">
-                  <p className="text-sm font-medium text-gray-700">
-                    Mã giao dịch VNPay:
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1 font-mono">
-                    {order.paymentInfo.vnpayTransactionNo}
-                  </p>
-                </div>
-              )}
-              {order.paymentInfo?.vnpayPaidAt && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Thời gian thanh toán:{" "}
-                  {formatDate(order.paymentInfo.vnpayPaidAt)}
+                <p className="text-sm font-mono mt-2 text-gray-700">
+                  Mã GD: {order.paymentInfo.vnpayTransactionNo}
                 </p>
               )}
             </div>
           </div>
         </div>
       )}
-      {/* CANCELLED/RETURNED BANNER */}
+
+      {/* Đơn bị hủy hoặc hoàn trả */}
       {(isCancelled || isReturned) && (
         <div
           className={`mb-6 rounded-lg border-2 p-6 ${
@@ -207,54 +284,39 @@ const OrderDetailPage = () => {
               : "bg-orange-50 border-orange-200"
           }`}
         >
-          <div className="flex items-start gap-4">
-            <div
-              className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-                isCancelled ? "bg-red-100" : "bg-orange-100"
-              }`}
-            >
-              {isCancelled ? (
-                <XCircle className="w-6 h-6 text-red-600" />
-              ) : (
-                <RotateCcw className="w-6 h-6 text-orange-600" />
-              )}
-            </div>
-            <div className="flex-1">
-              <h3
-                className={`text-lg font-bold mb-2 ${
-                  isCancelled ? "text-red-900" : "text-orange-900"
-                }`}
-              >
+          <div className="flex items-center gap-4">
+            {isCancelled ? (
+              <XCircle className="w-10 h-10 text-red-600" />
+            ) : (
+              <RotateCcw className="w-10 h-10 text-orange-600" />
+            )}
+            <div>
+              <h3 className="font-bold text-lg">
                 {isCancelled
                   ? "Đơn hàng đã bị hủy"
-                  : "Đơn hàng đã được trả lại"}
+                  : "Đơn hàng đã được hoàn trả"}
               </h3>
-              <p
-                className={`text-sm ${
-                  isCancelled ? "text-red-700" : "text-orange-700"
-                }`}
-              >
+              <p className="text-sm mt-1">
                 {isCancelled
-                  ? "Đơn hàng này đã bị hủy và không thể khôi phục."
-                  : "Đơn hàng đã được hoàn trả."}
+                  ? "Không thể khôi phục đơn hàng này."
+                  : "Sản phẩm đã được hoàn lại kho."}
               </p>
             </div>
           </div>
         </div>
       )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* MAIN CONTENT */}
+        {/* CỘT TRÁI - CHI TIẾT */}
         <div className="lg:col-span-2 space-y-6">
-          {/* ORDER INFO */}
-          <Card className={isCancelled || isReturned ? "opacity-75" : ""}>
+          {/* Thông tin đơn */}
+          <Card>
             <CardHeader>
-              <div className="flex items-start justify-between">
+              <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="mb-2">
-                    Đơn hàng #{order.orderNumber}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Đặt ngày {formatDate(order.createdAt)}
+                  <CardTitle>Đơn hàng #{order.orderNumber}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {formatDate(order.createdAt)}
                   </p>
                 </div>
                 <Badge className={getStatusColor(order.status)}>
@@ -263,59 +325,50 @@ const OrderDetailPage = () => {
               </div>
             </CardHeader>
           </Card>
-          {/* ORDER ITEMS */}
-          <Card className={isCancelled || isReturned ? "opacity-75" : ""}>
+
+          {/* Danh sách sản phẩm */}
+          <Card>
             <CardHeader>
               <CardTitle>Sản phẩm</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {order.items.map((item, idx) => {
-                const imageUrl = item.images?.[0]
+                const img = item.images?.[0]
                   ? getImageUrl(item.images[0])
                   : PlaceholderImg;
-                const variantLabel = getVariantLabel(item);
+                const label = getVariantLabel(item);
                 return (
                   <div
                     key={item._id || idx}
-                    className="flex gap-4 pb-4 border-b last:border-0 relative"
+                    className="flex gap-4 pb-4 border-b last:border-0"
                   >
-                    {(isCancelled || isReturned) && (
-                      <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10">
-                        <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg font-semibold text-sm">
-                          {isCancelled ? "Đã hủy" : "Đã trả"}
-                        </div>
-                      </div>
-                    )}
                     <img
-                      src={imageUrl}
+                      src={img}
                       alt={item.productName}
                       className="w-20 h-20 object-cover rounded bg-gray-100"
-                      onError={(e) => {
-                        e.target.src = PlaceholderImg;
-                      }}
+                      onError={(e) => (e.target.src = PlaceholderImg)}
                     />
                     <div className="flex-1">
                       <p className="font-medium">{item.productName}</p>
-                      {variantLabel && (
+                      {label && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {variantLabel}
+                          {label}
                         </p>
                       )}
                       <p className="text-sm text-muted-foreground">
-                        SL: {item.quantity} x {formatPrice(item.price)}
+                        SL: {item.quantity} × {formatPrice(item.price)}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium">
-                        {formatPrice(item.total || item.price * item.quantity)}
-                      </p>
-                    </div>
+                    <p className="font-medium text-right">
+                      {formatPrice(item.total || item.price * item.quantity)}
+                    </p>
                   </div>
                 );
               })}
             </CardContent>
           </Card>
-          {/* SHIPPING ADDRESS */}
+
+          {/* Địa chỉ giao */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -324,10 +377,8 @@ const OrderDetailPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium mb-1">
-                {order.shippingAddress.fullName}
-              </p>
-              <p className="text-sm text-muted-foreground mb-1">
+              <p className="font-medium">{order.shippingAddress.fullName}</p>
+              <p className="text-sm text-muted-foreground">
                 {order.shippingAddress.phoneNumber}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -336,7 +387,8 @@ const OrderDetailPage = () => {
               </p>
             </CardContent>
           </Card>
-          {/* PAYMENT METHOD */}
+
+          {/* Phương thức thanh toán */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -355,13 +407,10 @@ const OrderDetailPage = () => {
             </CardContent>
           </Card>
         </div>
-        {/* SIDEBAR */}
+
+        {/* CỘT PHẢI - TỔNG TIỀN & NÚT HÀNH ĐỘNG */}
         <div className="lg:col-span-1">
-          <Card
-            className={`sticky top-20 ${
-              isCancelled || isReturned ? "border-2 border-red-200" : ""
-            }`}
-          >
+          <Card className="sticky top-20">
             <CardHeader>
               <CardTitle>Tổng quan đơn hàng</CardTitle>
             </CardHeader>
@@ -372,7 +421,7 @@ const OrderDetailPage = () => {
                   <span>{formatPrice(order.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Phí vận chuyển</span>
+                  <span className="text-muted-foreground">Phí ship</span>
                   <span
                     className={order.shippingFee === 0 ? "text-green-600" : ""}
                   >
@@ -381,21 +430,18 @@ const OrderDetailPage = () => {
                       : formatPrice(order.shippingFee)}
                   </span>
                 </div>
-                {/* ✅ THÊM ĐOẠN NÀY */}
                 {order.promotionDiscount > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Mã giảm giá{" "}
+                  <div className="flex justify-between text-sm text-green-600 font-medium">
+                    <span>
+                      Giảm giá{" "}
                       {order.appliedPromotion?.code &&
                         `(${order.appliedPromotion.code})`}
                     </span>
-                    <span className="text-green-600 font-medium">
-                      -{formatPrice(order.promotionDiscount)}
-                    </span>
+                    <span>-{formatPrice(order.promotionDiscount)}</span>
                   </div>
                 )}
-                <div className="border-t pt-2">
-                  <div className="flex justify-between text-lg font-semibold">
+                <div className="border-t pt-3">
+                  <div className="flex justify-between text-lg font-bold">
                     <span>Tổng cộng</span>
                     <span className="text-primary">
                       {formatPrice(order.totalAmount)}
@@ -403,36 +449,69 @@ const OrderDetailPage = () => {
                   </div>
                 </div>
               </div>
-              {/* ✅ EXPORT INVOICE BUTTON */}
+
+              {/* Nút xuất hóa đơn */}
               {canExportInvoice && (
                 <Button
-                  className="w-full"
                   variant="outline"
+                  className="w-full"
                   onClick={handleExportInvoice}
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Xuất hóa đơn
                 </Button>
               )}
-              {order.status === "PENDING" && (
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={handleCancelOrder}
-                  disabled={isCancelling}
-                >
-                  {isCancelling ? "Đang hủy..." : "Hủy đơn hàng"}
-                </Button>
+
+              {/* Nút hủy đơn COD */}
+              {order.status === "PENDING" &&
+                order.paymentMethod !== "VNPAY" && (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={handleCancelOrder}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling ? "Đang hủy..." : "Hủy đơn hàng"}
+                  </Button>
+                )}
+
+              {/* Thông báo + nút hủy cho VNPay chưa thanh toán */}
+              {isPendingVNPayOrder && (
+                <div className="space-y-3">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm">
+                    <p className="font-medium text-orange-900">
+                      Chờ thanh toán VNPay
+                    </p>
+                    <p className="text-orange-700 mt-1">
+                      Còn lại:{" "}
+                      <span className="font-mono font-bold">
+                        {timeRemaining || "..."}
+                      </span>
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      Đơn sẽ tự hủy nếu quá hạn
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={handleCancelVNPayOrder}
+                    disabled={isCancellingVNPay}
+                  >
+                    {isCancellingVNPay ? "Đang hủy..." : "Hủy đơn hàng"}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
-      {/* ✅ INVOICE DIALOG */}
+
+      {/* Dialog in hóa đơn */}
       <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Hóa đơn đơn hàng #{order.orderNumber}</DialogTitle>
+            <DialogTitle>Hóa đơn #{order.orderNumber}</DialogTitle>
           </DialogHeader>
           <div ref={invoiceRef}>
             <InvoiceTemplate
@@ -441,7 +520,7 @@ const OrderDetailPage = () => {
               storeInfo={{}}
             />
           </div>
-          <div className="flex gap-2 justify-end">
+          <div className="flex justify-end gap-3 mt-4">
             <Button
               variant="outline"
               onClick={() => setShowInvoiceDialog(false)}
@@ -450,27 +529,27 @@ const OrderDetailPage = () => {
             </Button>
             <Button onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-2" />
-              In hóa đơn
+              In
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-      {/* === AlertDialog Xác Nhận Hủy Đơn Hàng MỚI === */}
+
+      {/* AlertDialog hủy đơn thường */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận hủy đơn hàng</AlertDialogTitle>
+            <AlertDialogTitle>Xác nhận hủy đơn</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc chắn muốn hủy đơn hàng này? <br />
+              Bạn có chắc muốn hủy đơn hàng này?
+              <br />
               <span className="text-red-600 font-medium">
-                Hành động này sẽ không thể hoàn tác.
+                Hành động này không thể hoàn tác.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowCancelDialog(false)}>
-              Hủy
-            </AlertDialogCancel>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmCancel}
               className="bg-red-600 hover:bg-red-700"
@@ -480,7 +559,37 @@ const OrderDetailPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AlertDialog hủy đơn VNPay */}
+      <AlertDialog
+        open={showCancelVNPayDialog}
+        onOpenChange={setShowCancelVNPayDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hủy đơn VNPay</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn sắp hủy đơn chờ thanh toán VNPay.
+              <br />
+              <span className="text-orange-600 font-medium">
+                • Sản phẩm sẽ được giữ trong giỏ hàng
+                <br />• Bạn có thể đặt lại bất kỳ lúc nào
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Giữ đơn</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancelVNPay}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              Xác nhận hủy
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
+
 export default OrderDetailPage;

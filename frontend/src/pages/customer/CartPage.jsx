@@ -1,9 +1,9 @@
 // ============================================
 // FILE: src/pages/customer/CartPage.jsx
-// FIXED: Auto-select khi có parameter "select" – KHÔNG CÒN VÒNG LẶP
-// UPDATED: Dùng shadcn/ui Checkbox + cn() → MÀU ĐỎ KHI CHỌN
+// FIXED: Không còn bị bỏ chọn khi tăng/giảm số lượng
+// FIXED: Checkbox luôn click được, không bị disable vô cớ
+// UPDATED: Dùng shadcn/ui Checkbox + màu đỏ khi chọn
 // ============================================
-
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,9 @@ import {
 import { Loading } from "@/components/shared/Loading";
 import { Trash2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice, cn } from "@/lib/utils"; // ← ĐÃ CÓ cn()
+import { formatPrice, cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Checkbox } from "@/components/ui/checkbox"; // ← DÙNG CHECKBOX CHUẨN
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -33,8 +33,6 @@ import {
 const CartPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Đọc parameter "select" từ URL
   const searchParams = new URLSearchParams(location.search);
   const autoSelectVariantId = searchParams.get("select");
 
@@ -47,48 +45,34 @@ const CartPage = () => {
     addToCart,
     setSelectedForCheckout,
     shouldAutoSelect,
-    selectedForCheckout, // ✅ THÊM DÒNG NÀY
   } = useCartStore();
 
-  const [selectedItems, setSelectedItems] = useState([]); // Mảng variantId
+  // State riêng cho việc chọn sản phẩm - không bị ảnh hưởng bởi optimistic update
+  const [selectedItems, setSelectedItems] = useState([]); // [variantId]
   const [variantsCache, setVariantsCache] = useState({});
   const [optimisticCart, setOptimisticCart] = useState(null);
   const [loadingVariants, setLoadingVariants] = useState({});
   const [isChangingVariant, setIsChangingVariant] = useState(false);
-
-  // Dùng ref để tránh auto-select lại khi refresh hoặc re-render
   const hasAutoSelected = useRef(false);
+
   const items = optimisticCart?.items || cart?.items || [];
   const hasItems = items.length > 0;
 
   const [itemsOrder, setItemsOrder] = useState({}); // { variantId: timestamp }
 
-  // Sắp xếp theo thời gian thêm vào giỏ (mới nhất ở trên)
+  // Sắp xếp item mới nhất lên trên
   const sortedItems = useMemo(() => {
-    if (!items.length) {
-      return [];
-    }
-
-    // ✅ TẠO BẢN COPY VỚI INDEX GỐC
+    if (!items.length) return [];
     const itemsWithIndex = items.map((item, index) => ({
       ...item,
       originalIndex: index,
     }));
-
     const sorted = itemsWithIndex.sort((a, b) => {
       const timeA = itemsOrder[a.variantId] || 0;
       const timeB = itemsOrder[b.variantId] || 0;
-
-      // Nếu timestamp khác nhau → sort theo timestamp (mới hơn trước)
-      if (timeA !== timeB) {
-        return timeB - timeA; // Sắp xếp mới hơn trước
-      }
-
-      // Nếu timestamp giống nhau → giữ nguyên thứ tự gốc
+      if (timeA !== timeB) return timeB - timeA;
       return a.originalIndex - b.originalIndex;
     });
-
-    // Đảo ngược mảng đã sắp xếp để mới nhất ở trên
     return sorted.reverse();
   }, [items, itemsOrder]);
 
@@ -96,171 +80,150 @@ const CartPage = () => {
   useEffect(() => {
     getCart();
   }, [getCart]);
+
+  // Cập nhật thứ tự khi có item mới
   useEffect(() => {
-    // ✅ BỎ QUA NẾU ĐANG ĐỔI VARIANT
-    if (isChangingVariant) {
-      return;
-    }
+    if (isChangingVariant || !cart?.items) return;
 
-    if (cart?.items) {
-      setItemsOrder((prev) => {
-        const newOrder = { ...prev };
-        let hasChanges = false;
-
-        cart.items.forEach((item) => {
-          if (!newOrder[item.variantId]) {
-            const newTimestamp = Date.now();
-            newOrder[item.variantId] = newTimestamp;
-            hasChanges = true;
-          }
-        });
-
-        if (hasChanges) {
-          return newOrder;
+    setItemsOrder((prev) => {
+      const newOrder = { ...prev };
+      let changed = false;
+      cart.items.forEach((item) => {
+        if (!newOrder[item.variantId]) {
+          newOrder[item.variantId] = Date.now();
+          changed = true;
         }
-
-        return prev;
       });
-    }
-  }, [cart?.items, isChangingVariant]); // ← THÊM isChangingVariant vào deps
-  // Reset flag khi URL thay đổi (có param mới)
-
-  useEffect(() => {
-    console.log("🛒 CartPage mounted:", {
-      hasSelectedItems: selectedForCheckout.length > 0,
-      cartItemsCount: cart?.items?.length,
-      pathname: location.pathname,
+      return changed ? newOrder : prev;
     });
+  }, [cart?.items, isChangingVariant]);
 
-    if (selectedForCheckout.length === 0 && location.pathname === "/cart") {
-      console.log("⚠️ No selected items on cart page - this is normal");
-    }
-  }, [selectedForCheckout, cart, location]);
-
+  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY ĐANG CHỜ - CẢI THIỆN
   useEffect(() => {
-    if (cart?.items && cart.items.length > 0) {
-      const autoSelectId = shouldAutoSelect();
+    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    if (pendingOrder && cart?.items?.length > 0) {
+      try {
+        const { orderId, orderNumber, selectedItems, timestamp } =
+          JSON.parse(pendingOrder);
+        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
 
-      if (autoSelectId && !hasAutoSelected.current) {
-        const itemExists = cart.items.find(
-          (item) => item.variantId === autoSelectId
-        );
+        if (ageMinutes < 15) {
+          // Kiểm tra xem sản phẩm còn trong giỏ không
+          const stillInCart = cart.items.some((item) =>
+            selectedItems?.includes(item.variantId)
+          );
 
-        if (itemExists && !selectedItems.includes(autoSelectId)) {
-          setSelectedItems([autoSelectId]);
-
-          // Gán timestamp cho item vừa thêm
-          setItemsOrder((prev) => ({
-            ...prev,
-            [autoSelectId]: Date.now(),
-          }));
-
-          hasAutoSelected.current = true;
+          if (stillInCart) {
+            toast.warning(
+              `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
+              {
+                duration: 12000,
+                action: {
+                  label: "Xem chi tiết",
+                  onClick: () => navigate(`/orders/${orderId}`),
+                },
+              }
+            );
+          } else {
+            // Sản phẩm không còn trong giỏ, xóa thông báo
+            localStorage.removeItem("pending_vnpay_order");
+          }
+        } else {
+          // Quá 15 phút
+          toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
+            duration: 6000,
+          });
+          localStorage.removeItem("pending_vnpay_order");
         }
+      } catch (e) {
+        console.error("Error checking pending order:", e);
       }
     }
-  }, [cart?.items, shouldAutoSelect]);
+  }, [cart?.items, navigate]);
 
+  // Tự động chọn khi thêm từ trang sản phẩm
   useEffect(() => {
-    if (autoSelectVariantId) {
-      hasAutoSelected.current = false;
+    if (!cart?.items || cart.items.length === 0) return;
+    const idToSelect = autoSelectVariantId || shouldAutoSelect();
+    if (!idToSelect || hasAutoSelected.current) return;
+
+    const item = cart.items.find((i) => i.variantId === idToSelect);
+    if (item && !selectedItems.includes(idToSelect)) {
+      setSelectedItems([idToSelect]);
+      setItemsOrder((prev) => ({ ...prev, [idToSelect]: Date.now() }));
+      hasAutoSelected.current = true;
+      if (autoSelectVariantId) {
+        navigate("/cart", { replace: true });
+      }
     }
+  }, [
+    cart?.items,
+    autoSelectVariantId,
+    shouldAutoSelect,
+    selectedItems,
+    navigate,
+  ]);
+
+  // Reset flag khi có param select mới
+  useEffect(() => {
+    if (autoSelectVariantId) hasAutoSelected.current = false;
   }, [autoSelectVariantId]);
 
-  // TỰ ĐỘNG CHỌN SẢN PHẨM KHI CÓ PARAMETER "select"
-  useEffect(() => {
-    if (hasAutoSelected.current) return;
-    if (!autoSelectVariantId || !cart?.items || cart.items.length === 0) return;
-
-    const targetItem = cart.items.find(
-      (item) => item.variantId === autoSelectVariantId
-    );
-
-    if (targetItem && !selectedItems.includes(autoSelectVariantId)) {
-      setSelectedItems([autoSelectVariantId]);
-
-      // ✅ Gán timestamp mới cho item vừa thêm
-      setItemsOrder((prev) => ({
-        ...prev,
-        [autoSelectVariantId]: Date.now(),
-      }));
-
-      navigate("/cart", { replace: true });
-      hasAutoSelected.current = true;
-    }
-  }, [autoSelectVariantId, cart?.items, navigate]);
   // Scroll lên đầu
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-  // Load từ localStorage
+
+  // Lưu/đọc thứ tự từ localStorage
   useEffect(() => {
-    const savedOrder = localStorage.getItem("cart-items-order");
-    if (savedOrder) {
+    const saved = localStorage.getItem("cart-items-order");
+    if (saved) {
       try {
-        setItemsOrder(JSON.parse(savedOrder));
-      } catch (e) {
-        console.error("Failed to parse cart order", e);
-      }
+        setItemsOrder(JSON.parse(saved));
+      } catch {}
     }
   }, []);
 
-  // Save vào localStorage
   useEffect(() => {
     if (Object.keys(itemsOrder).length > 0) {
       localStorage.setItem("cart-items-order", JSON.stringify(itemsOrder));
     }
   }, [itemsOrder]);
 
-  // Cleanup items không còn trong cart
+  // Cleanup itemsOrder khi item bị xóa
   useEffect(() => {
-    if (cart?.items && !isChangingVariant) {
-      const currentVariantIds = new Set(
-        cart.items.map((item) => item.variantId)
-      );
-
-      setItemsOrder((prev) => {
-        const cleaned = {};
-        let hasChanges = false;
-
-        // Giữ lại những ID còn trong cart
-        Object.keys(prev).forEach((variantId) => {
-          if (currentVariantIds.has(variantId)) {
-            cleaned[variantId] = prev[variantId];
-          } else {
-            hasChanges = true;
-          }
-        });
-
-        return hasChanges ? cleaned : prev;
-      });
-    }
+    if (!cart?.items || isChangingVariant) return;
+    const existingIds = new Set(cart.items.map((i) => i.variantId));
+    setItemsOrder((prev) => {
+      const cleaned = {};
+      let changed = false;
+      for (const id in prev) {
+        if (existingIds.has(id)) cleaned[id] = prev[id];
+        else changed = true;
+      }
+      return changed ? cleaned : prev;
+    });
   }, [cart?.items, isChangingVariant]);
-  // Reset sau khi getCart() thành công
+
+  // Đồng bộ optimistic cart
   useEffect(() => {
-    if (cart) {
-      setOptimisticCart(cart);
-    }
+    if (cart) setOptimisticCart(cart);
   }, [cart]);
 
+  // Khởi tạo thứ tự lần đầu
   useEffect(() => {
     if (cart?.items && Object.keys(itemsOrder).length === 0) {
-      // Khởi tạo lần đầu - gán timestamp khác nhau cho mỗi item
-      const initialOrder = {};
-      const baseTime = Date.now();
-
-      cart.items.forEach((item, index) => {
-        // Mỗi item cách nhau 1ms để đảm bảo unique
-        initialOrder[item.variantId] = baseTime - index * 1;
+      const base = Date.now();
+      const initial = {};
+      cart.items.forEach((item, i) => {
+        initial[item.variantId] = base - i;
       });
-
-      setItemsOrder(initialOrder);
+      setItemsOrder(initial);
     }
-  }, [cart?.items]);
+  }, [cart?.items, itemsOrder]);
 
   // Tính tổng tiền
   const selectedTotal = useMemo(() => {
-    if (!items) return 0;
     return items
       .filter((item) => selectedItems.includes(item.variantId))
       .reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -268,15 +231,14 @@ const CartPage = () => {
 
   // Chọn/tắt tất cả
   const handleSelectAll = () => {
-    if (!items) return;
     if (selectedItems.length === items.length) {
       setSelectedItems([]);
     } else {
-      setSelectedItems(items.map((item) => item.variantId));
+      setSelectedItems(items.map((i) => i.variantId));
     }
   };
 
-  // Chọn/tắt một sản phẩm
+  // Chọn/tắt một item
   const handleSelectItem = (variantId) => {
     setSelectedItems((prev) =>
       prev.includes(variantId)
@@ -285,104 +247,65 @@ const CartPage = () => {
     );
   };
 
-  // Xóa nhiều sản phẩm
+  // Xóa nhiều
   const handleBulkRemove = async () => {
-    if (selectedItems.length === 0) {
-      toast.error("Vui lòng chọn ít nhất một sản phẩm để xóa");
-      return;
-    }
-
-    if (!window.confirm(`Xóa ${selectedItems.length} sản phẩm đã chọn?`))
-      return;
+    if (selectedItems.length === 0)
+      return toast.error("Chọn ít nhất 1 sản phẩm");
+    if (!confirm(`Xóa ${selectedItems.length} sản phẩm?`)) return;
 
     try {
-      for (const variantId of selectedItems) {
-        await removeFromCart(variantId);
-      }
+      for (const id of selectedItems) await removeFromCart(id);
       await getCart();
       setSelectedItems([]);
-      toast.success("Đã xóa các sản phẩm đã chọn");
-    } catch (error) {
+      toast.success("Đã xóa sản phẩm đã chọn");
+    } catch {
       toast.error("Xóa thất bại");
     }
   };
 
-  // Thêm debounce để tránh gọi API liên tục
+  // Cập nhật số lượng (có debounce + optimistic)
   const updateTimeoutRef = useRef(null);
-
-  const handleUpdateQuantity = async (item, newQuantity) => {
-    if (newQuantity < 1) return;
-
-    // Tìm index của item
-    const currentIndex = items.findIndex((i) => i.variantId === item.variantId);
+  const handleUpdateQuantity = (item, newQty) => {
+    if (newQty < 1 || newQty > item.stock) return;
 
     // Optimistic update
-    const updatedItems = [...items];
-    updatedItems[currentIndex] = {
-      ...updatedItems[currentIndex],
-      quantity: newQuantity,
-    };
-
-    setOptimisticCart({
-      ...cart,
-      items: updatedItems,
-    });
+    const updatedItems = items.map((i) =>
+      i.variantId === item.variantId ? { ...i, quantity: newQty } : i
+    );
+    setOptimisticCart((prev) => ({ ...prev, items: updatedItems }));
 
     // Debounce API call
-    if (updateTimeoutRef.current) {
-      clearTimeout(updateTimeoutRef.current);
-    }
-
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     updateTimeoutRef.current = setTimeout(async () => {
       try {
-        await updateCartItem(item.variantId, newQuantity);
-        // Không cần gọi getCart() nếu optimistic update thành công
-      } catch (error) {
-        toast.error("Không thể cập nhật số lượng");
-        await getCart(); // Revert nếu lỗi
+        await updateCartItem(item.variantId, newQty);
+      } catch {
+        toast.error("Cập nhật số lượng thất bại");
+        getCart();
       }
-    }, 300);
+    }, 400);
   };
 
-  // Cleanup
   useEffect(() => {
     return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
+      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     };
   }, []);
 
-  // QUAN TRỌNG: Cleanup timeout khi unmount
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Xóa một sản phẩm
+  // Xóa 1 sản phẩm
   const handleRemove = async (item) => {
     await removeFromCart(item.variantId);
     await getCart();
     setSelectedItems((prev) => prev.filter((id) => id !== item.variantId));
   };
 
-  // Fetch and cache variants for a product
+  // Fetch variants
   const fetchAndCacheVariants = async (item) => {
-    // Đang loading thì return cache hiện tại hoặc null
-    if (loadingVariants[item.productId]) {
+    if (loadingVariants[item.productId])
       return variantsCache[item.productId] || null;
-    }
+    if (variantsCache[item.productId]) return variantsCache[item.productId];
 
-    if (variantsCache[item.productId]) {
-      return variantsCache[item.productId];
-    }
-
-    // Đánh dấu đang loading
     setLoadingVariants((prev) => ({ ...prev, [item.productId]: true }));
-
     try {
       const apiMap = {
         iPhone: iPhoneAPI,
@@ -392,12 +315,11 @@ const CartPage = () => {
         AppleWatch: appleWatchAPI,
         Accessory: accessoryAPI,
       };
-
       const api = apiMap[item.productType];
       if (!api) return null;
 
-      const response = await api.getById(item.productId);
-      const product = response.data.data.product;
+      const res = await api.getById(item.productId);
+      const product = res.data.data.product;
       const variants = product.variants || [];
 
       const storages = [
@@ -409,145 +331,94 @@ const CartPage = () => {
 
       const cached = { variants, storages, colors };
       setVariantsCache((prev) => ({ ...prev, [item.productId]: cached }));
-
       return cached;
-    } catch (error) {
-      console.error("Error fetching variants:", error);
+    } catch (err) {
+      console.error(err);
       return null;
     } finally {
-      // Xóa loading state
       setLoadingVariants((prev) => ({ ...prev, [item.productId]: false }));
     }
   };
 
-  // Get storage options with cache
   const getStorageOptions = (item) => {
-    if (variantsCache[item.productId]) {
+    if (variantsCache[item.productId])
       return variantsCache[item.productId].storages;
-    }
-
-    // Trigger fetch in background
     fetchAndCacheVariants(item);
-
-    // Return current value while loading
     return [item.variantStorage || item.variantName || "Standard"];
   };
 
-  // Get color options with cache
   const getColorOptions = (item) => {
-    if (variantsCache[item.productId]) {
+    if (variantsCache[item.productId])
       return variantsCache[item.productId].colors;
-    }
-
-    // Trigger fetch in background
     fetchAndCacheVariants(item);
-
-    // Return current value while loading
     return [item.variantColor || "Default"];
   };
 
+  // Đổi nhanh variant
   const handleQuickChangeVariant = async (item, type, newValue) => {
-    // Lưu timestamp của item cũ
     const oldTimestamp = itemsOrder[item.variantId] || Date.now();
-
-    // ✅ SET FLAG - ĐANG ĐỔI VARIANT
     setIsChangingVariant(true);
 
     try {
-      let cached = variantsCache[item.productId];
+      let cached =
+        variantsCache[item.productId] || (await fetchAndCacheVariants(item));
+      if (!cached) throw new Error("Không tải được variant");
 
-      if (!cached) {
-        cached = await fetchAndCacheVariants(item);
-        if (!cached) {
-          toast.error("Không thể tải thông tin sản phẩm");
-          setIsChangingVariant(false);
-          return;
-        }
-      }
-
-      const variants = cached.variants;
-      let targetVariant;
-
-      if (type === "storage") {
-        targetVariant = variants.find(
-          (v) =>
-            (v.storage === newValue || v.variantName === newValue) &&
-            v.color === item.variantColor
+      const target =
+        cached.variants.find((v) => {
+          if (type === "storage") {
+            return (
+              (v.storage === newValue || v.variantName === newValue) &&
+              (v.color === item.variantColor || !v.color)
+            );
+          } else {
+            return (
+              v.color === newValue &&
+              (v.storage === item.variantStorage ||
+                v.variantName === item.variantName ||
+                !v.storage)
+            );
+          }
+        }) ||
+        cached.variants.find((v) =>
+          type === "storage"
+            ? v.storage || v.variantName === newValue
+            : v.color === newValue
         );
 
-        if (!targetVariant) {
-          targetVariant = variants.find(
-            (v) => v.storage === newValue || v.variantName === newValue
-          );
-        }
-      } else {
-        targetVariant = variants.find(
-          (v) =>
-            v.color === newValue &&
-            (v.storage === item.variantStorage ||
-              v.variantName === item.variantName)
-        );
+      if (!target) throw new Error("Không tìm thấy phiên bản");
+      if (target.stock === 0) throw new Error("Hết hàng");
 
-        if (!targetVariant) {
-          targetVariant = variants.find((v) => v.color === newValue);
-        }
-      }
-
-      if (!targetVariant) {
-        toast.error("Không tìm thấy phiên bản phù hợp");
-        setIsChangingVariant(false);
-        return;
-      }
-
-      if (targetVariant.stock === 0) {
-        toast.error("Phiên bản này đã hết hàng");
-        setIsChangingVariant(false);
-        return;
-      }
-
-      // ✅ CẬP NHẬT itemsOrder TRƯỚC KHI GỌI API
+      // Cập nhật order + selected trước khi thay đổi giỏ
       setItemsOrder((prev) => {
-        const newOrder = { ...prev };
-
-        // Xóa ID cũ
-        delete newOrder[item.variantId];
-
-        // Thêm ID mới với timestamp cũ
-        newOrder[targetVariant._id] = oldTimestamp;
-
-        return newOrder;
+        const n = { ...prev };
+        delete n[item.variantId];
+        n[target._id] = oldTimestamp;
+        return n;
       });
 
-      // ✅ CẬP NHẬT selectedItems TRƯỚC KHI GỌI API
       if (selectedItems.includes(item.variantId)) {
         setSelectedItems((prev) =>
-          prev.map((id) => (id === item.variantId ? targetVariant._id : id))
+          prev.map((id) => (id === item.variantId ? target._id : id))
         );
       }
 
       await removeFromCart(item.variantId);
-
-      await addToCart(targetVariant._id, item.quantity, item.productType);
-
+      await addToCart(target._id, item.quantity, item.productType);
       await getCart();
 
       toast.success(
-        `Đã đổi ${type === "storage" ? "dung lượng" : "màu sắc"} thành công`
+        `Đổi ${type === "storage" ? "dung lượng" : "màu sắc"} thành công`
       );
-    } catch (error) {
-      toast.error("Không thể thay đổi phiên bản");
-
-      // ✅ NẾU LỖI - REVERT LẠI
-      await getCart();
+    } catch (err) {
+      toast.error(err.message || "Đổi phiên bản thất bại");
+      getCart();
     } finally {
-      // ✅ RESET FLAG SAU KHI HOÀN TẤT
       setIsChangingVariant(false);
     }
   };
 
-  if (isLoading && !cart) {
-    return <Loading />;
-  }
+  if (isLoading && !cart) return <Loading />;
 
   return (
     <div className="container mx-auto px-4 pb-16">
@@ -561,26 +432,24 @@ const CartPage = () => {
             <p className="text-muted-foreground mb-6">
               Bạn chưa có sản phẩm nào trong giỏ hàng
             </p>
-            <Button onClick={() => navigate(-1)}>
-              Tiếp tục mua sắm
-            </Button>
+            <Button onClick={() => navigate(-1)}>Tiếp tục mua sắm</Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
-          {/* HEADER: CHỌN TẤT CẢ + XÓA NHIỀU */}
+          {/* Header: Chọn tất cả */}
           <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <Checkbox
                 checked={hasItems && selectedItems.length === items.length}
                 onCheckedChange={handleSelectAll}
                 className={cn(
-                  "data-[state=checked]:!bg-red-600",
-                  "data-[state=checked]:!border-red-600",
-                  "data-[state=checked]:text-white"
+                  "data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600",
+                  "focus-visible:ring-red-600",
+                  "border border-black" // Thêm viền màu đen
                 )}
               />
-              <span className="font-medium h-8 items-center flex">
+              <span className="font-medium py-2">
                 Chọn tất cả ({selectedItems.length}/{items.length})
               </span>
             </div>
@@ -589,16 +458,14 @@ const CartPage = () => {
                 variant="destructive"
                 size="sm"
                 onClick={handleBulkRemove}
-                className="flex items-center gap-2"
               >
-                <Trash2 className="w-4 h-4" />
-                Xóa đã chọn
+                <Trash2 className="w-4 h-4 mr-1" /> Xóa đã chọn
               </Button>
             )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* DANH SÁCH SẢN PHẨM */}
+            {/* Danh sách sản phẩm */}
             <div className="lg:col-span-2 space-y-4">
               {sortedItems.map((item) => {
                 const isSelected = selectedItems.includes(item.variantId);
@@ -606,178 +473,191 @@ const CartPage = () => {
                 return (
                   <Card
                     key={item.variantId}
-                    className={isSelected ? "ring-2 ring-primary" : ""}
+                    className={cn(
+                      "transition-all cursor-pointer hover:shadow-md",
+                      "border border-transparent-hover ",
+                      isSelected && "ring-2 ring-red-600 shadow-lg"
+                    )}
+                    // Click vào card = toggle chọn
                     onClick={() => handleSelectItem(item.variantId)}
                   >
                     <CardContent className="p-4">
-                      <div className="flex flex-col sm:flex-row gap-4">
-                        {/* CHECKBOX – DÙNG SHADCN + CN */}
-                        <div className="flex items-start mt-2 sm:mt-0 order-1 sm:order-none self-start sm:self-center">
+                      <div className="flex items-center gap-4">
+                        {/* Checkbox */}
+                        <div className="flex items-start /**/">
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() =>
-                              handleSelectItem(item.variantId)
-                            }
+                            onCheckedChange={(checked) => {
+                              if (!checked) {
+                                setSelectedItems((p) =>
+                                  p.filter((id) => id !== item.variantId)
+                                );
+                              } else {
+                                setSelectedItems((p) => [...p, item.variantId]);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
                             className={cn(
-                              "data-[state=checked]:!bg-red-600",
-                              "data-[state=checked]:!border-red-600",
-                              "data-[state=checked]:text-white"
+                              "data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600",
+                              "focus-visible:ring-red-600",
+                              "border border-black" // Thêm viền màu đen
                             )}
                           />
                         </div>
 
-                        {/* IMAGE */}
+                        {/* Hình + Info */}
                         <img
                           src={item.images?.[0] || "/placeholder.png"}
                           alt={item.productName}
                           className="w-24 h-24 object-cover rounded-md flex-shrink-0"
                         />
 
-                        <div className="flex-1 flex flex-col justify-between">
-                          {/* TÊN SẢN PHẨM */}
-                          <h3 className="font-semibold mb-1">
+                        {/* Thông tin sản phẩm + hành động */}
+                        <div className="flex-1 min-w-0 space-y-3">
+                          {/* Tên sản phẩm */}
+                          <h3 className="font-semibold text-lg line-clamp-2">
                             {item.productName}
                           </h3>
 
-                          {/* VARIANT INFO */}
-                          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-2">
+                          {/* Thông tin biến thể */}
+                          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                             {item.variantColor && (
                               <span>Màu: {item.variantColor}</span>
                             )}
                             {item.variantStorage && (
                               <span>{item.variantStorage}</span>
                             )}
-                            {item.variantConnectivity && (
-                              <span>{item.variantConnectivity}</span>
-                            )}
                             {item.variantName && (
                               <span>{item.variantName}</span>
                             )}
                           </div>
 
-                          {/* GIÁ + KHUYẾN MÃI */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-lg font-semibold text-red-600">
+                          {/* Giá */}
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl font-bold text-red-600">
                               {formatPrice(item.price)}
                             </span>
                             {item.originalPrice > item.price && (
-                              <>
-                                <span className="text-sm text-muted-foreground line-through">
-                                  {formatPrice(item.originalPrice)}
-                                </span>
-                                <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded">
-                                  -
-                                  {Math.round(
-                                    ((item.originalPrice - item.price) /
-                                      item.originalPrice) *
-                                      100
-                                  )}
-                                  %
-                                </span>
-                              </>
+                              <span className="text-sm text-muted-foreground line-through">
+                                {formatPrice(item.originalPrice)}
+                              </span>
                             )}
                           </div>
 
-                          {/* SỐ LƯỢNG + TỔNG + HÀNH ĐỘNG */}
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 gap-4 sm:gap-0">
-                            {/* LEFT: QUANTITY + STORAGE + COLOR */}
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* Quantity Controls */}
+                          {/* Quantity + Variant Selects + Tổng tiền + Xóa */}
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                            {/* Left: Quantity + 2 Select */}
+                            <div className="flex flex-wrap items-center gap-3">
+                              {/* Số lượng */}
                               <div className="flex items-center border rounded-md">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() =>
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleUpdateQuantity(
                                       item,
                                       item.quantity - 1
-                                    )
-                                  }
+                                    );
+                                  }}
                                   disabled={item.quantity <= 1}
                                 >
                                   <Minus className="h-4 w-4" />
                                 </Button>
-                                <span className="px-4 min-w-[40px] text-center">
+                                <span className="w-12 text-center font-medium">
                                   {item.quantity}
                                 </span>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() =>
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleUpdateQuantity(
                                       item,
                                       item.quantity + 1
-                                    )
-                                  }
+                                    );
+                                  }}
                                   disabled={item.quantity >= item.stock}
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
                               </div>
 
-                              {/* Storage Dropdown */}
+                              {/* Select Dung lượng / RAM */}
                               <Select
                                 value={
                                   item.variantStorage || item.variantName || ""
                                 }
-                                onValueChange={(newStorage) =>
-                                  handleQuickChangeVariant(
-                                    item,
-                                    "storage",
-                                    newStorage
-                                  )
+                                onValueChange={(v) =>
+                                  handleQuickChangeVariant(item, "storage", v)
                                 }
                                 disabled={loadingVariants[item.productId]}
                               >
-                                <SelectTrigger className="w-[120px] sm:w-[140px]">
-                                  <SelectValue placeholder="Dung lượng" />
+                                <SelectTrigger
+                                  className="w-[180px] overflow-hidden whitespace-nowrap text-ellipsis"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <SelectValue
+                                    placeholder="Dung lượng"
+                                    className="truncate"
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {getStorageOptions(item).map((storage) => (
-                                    <SelectItem key={storage} value={storage}>
-                                      {storage}
+                                  {getStorageOptions(item).map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      <span className="block truncate">
+                                        {s}
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
 
-                              {/* Color Dropdown */}
+                              {/* Select Màu sắc */}
                               <Select
                                 value={item.variantColor || ""}
-                                onValueChange={(newColor) =>
-                                  handleQuickChangeVariant(
-                                    item,
-                                    "color",
-                                    newColor
-                                  )
+                                onValueChange={(v) =>
+                                  handleQuickChangeVariant(item, "color", v)
                                 }
                                 disabled={loadingVariants[item.productId]}
                               >
-                                <SelectTrigger className="w-[120px] sm:w-[140px]">
-                                  <SelectValue placeholder="Màu sắc" />
+                                <SelectTrigger
+                                  className="w-[110px] overflow-hidden whitespace-nowrap text-ellipsis"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <SelectValue
+                                    placeholder="Màu"
+                                    className="truncate"
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {getColorOptions(item).map((color) => (
-                                    <SelectItem key={color} value={color}>
-                                      {color}
+                                  {getColorOptions(item).map((c) => (
+                                    <SelectItem key={c} value={c}>
+                                      <span className="flex items-center gap-2">
+                                        <span className="block truncate">
+                                          {c}
+                                        </span>
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </div>
 
-                            {/* RIGHT: TOTAL + DELETE */}
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-lg">
+                            {/* Right: Tổng tiền + Xóa */}
+                            <div className="flex items-center justify-between sm:justify-end gap-4">
+                              <span className="font-bold text-lg whitespace-nowrap">
                                 {formatPrice(item.price * item.quantity)}
                               </span>
-
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleRemove(item)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemove(item);
+                                }}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <Trash2 className="h-5 w-5 text-destructive" />
                               </Button>
                             </div>
                           </div>
@@ -789,47 +669,46 @@ const CartPage = () => {
               })}
             </div>
 
-            {/* TÓM TẮT ĐƠN HÀNG */}
+            {/* Tóm tắt đơn hàng */}
             <div className="lg:col-span-1">
               <Card className="sticky top-20">
-                <CardContent className="p-6 space-y-4">
-                  <h3 className="text-xl font-semibold">Tóm tắt đơn hàng</h3>
+                <CardContent className="p-6 space-y-6">
+                  <h3 className="text-xl font-bold">Tóm tắt đơn hàng</h3>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        Tạm tính ({selectedItems.length} sản phẩm)
+                      <span>Tạm tính ({selectedItems.length} sản phẩm)</span>
+                      <span className="font-medium">
+                        {formatPrice(selectedTotal)}
                       </span>
-                      <span>{formatPrice(selectedTotal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        Phí vận chuyển
-                      </span>
-                      <span className="text-green-600">
+                      <span>Phí vận chuyển</span>
+                      <span
+                        className={
+                          selectedTotal >= 5000000 ? "text-green-600" : ""
+                        }
+                      >
                         {selectedTotal >= 5000000 ? "Miễn phí" : "50.000đ"}
                       </span>
                     </div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between text-lg font-semibold">
+                    <div className="border-t pt-3">
+                      <div className="flex justify-between text-lg font-bold">
                         <span>Tổng cộng</span>
-                        <span className="text-primary">
+                        <span className="text-red-600">
                           {formatPrice(selectedTotal)}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* NÚT THANH TOÁN */}
                   <Button
-                    className="w-full"
                     size="lg"
+                    className="w-full"
                     disabled={selectedItems.length === 0}
                     onClick={() => {
                       if (selectedItems.length === 0) {
-                        toast.error(
-                          "Vui lòng chọn ít nhất một sản phẩm để thanh toán"
-                        );
+                        toast.error("Vui lòng chọn ít nhất 1 sản phẩm");
                         return;
                       }
                       setSelectedForCheckout(selectedItems);

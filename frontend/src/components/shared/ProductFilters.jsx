@@ -31,7 +31,7 @@ export const CATEGORY_DISPLAY = {
   iPhone: "iPhone",
   iPad: "iPad",
   Mac: "MacBook",
-  AirPods: " AirPods",
+  AirPods: "AirPods",
   AppleWatch: "Apple Watch",
   Accessories: "Phụ kiện",
 };
@@ -49,26 +49,42 @@ const ProductFilters = ({
   className = "",
   currentCategory,
   onCategoryChange,
-  hideCategory = false, // ← PROP MỚI: Ẩn hoàn toàn mục Danh mục
+  hideCategory = false, // Prop cũ vẫn giữ để tương thích
+  isCategoryPage = false, // Prop mới: đang ở trang danh mục riêng (ví dụ: /products?category=iPhone)
 }) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
 
-  // Mở tất cả section khi availableFilters thay đổi
+  // ============================================
+  // TỰ ĐỘNG ẨN DANH MỤC KHI ĐANG Ở TRANG DANH MỤC RIÊNG
+  // ============================================
+  const shouldHideCategory = hideCategory || isCategoryPage;
+
+  // Mở rộng các section khi có dữ liệu filter mới
   useEffect(() => {
     setExpandedSections((prev) => {
       const next = { ...prev };
-      if (!hideCategory) next.category = true;
+
+      // Danh mục (nếu không bị ẩn)
+      if (!shouldHideCategory) next.category = true;
+
+      // Giá luôn mở
       next.price = true;
+
+      // Các filter động
       Object.keys(availableFilters).forEach((key) => {
         if (next[key] === undefined) next[key] = true;
       });
+
       return next;
     });
-  }, [availableFilters, hideCategory]);
+  }, [availableFilters, shouldHideCategory]);
 
   const toggleSection = (section) => {
-    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
   };
 
   const handlePricePresetClick = (preset) => {
@@ -99,8 +115,8 @@ const ProductFilters = ({
         )}
       </div>
 
-      {/* ================== MỤC DANH MỤC - CHỈ HIỂN THỊ KHI KHÔNG ẨN ================== */}
-      {!hideCategory && (
+      {/* ================== DANH MỤC (chỉ hiển thị khi cần) ================== */}
+      {!shouldHideCategory && (
         <div className="mb-5">
           <button
             onClick={() => toggleSection("category")}
@@ -143,7 +159,7 @@ const ProductFilters = ({
         </div>
       )}
 
-      {/* ================== CÁC BỘ LỌC KHÁC ================== */}
+      {/* ================== CÁC BỘ LỌC KHÁC (storage, ram, condition, ...) ================== */}
       {Object.entries(availableFilters).map(([key, options]) => (
         <div key={key} className="mb-5">
           <button
@@ -164,6 +180,7 @@ const ProductFilters = ({
             <div className="space-y-2 pl-1">
               {options.map((opt) => {
                 const isChecked = filters[key]?.includes(opt) || false;
+
                 return (
                   <label
                     key={opt}
@@ -206,6 +223,7 @@ const ProductFilters = ({
 
         {expandedSections.price && (
           <div className="space-y-3 pl-1">
+            {/* Các mức giá cố định */}
             <div className="space-y-2">
               {PRICE_RANGES.map((preset) => (
                 <button
@@ -223,6 +241,7 @@ const ProductFilters = ({
               ))}
             </div>
 
+            {/* Nhập giá tùy chỉnh */}
             <div className="pt-3 border-t">
               <p className="text-xs text-gray-500 mb-3">
                 Nhập khoảng giá tùy chỉnh
@@ -231,7 +250,7 @@ const ProductFilters = ({
                 <input
                   type="number"
                   placeholder="Từ (VNĐ)"
-                  value={priceRange.min}
+                  value={priceRange.min || ""}
                   onChange={(e) => {
                     setSelectedPricePreset(null);
                     onPriceChange({ ...priceRange, min: e.target.value });
@@ -241,7 +260,7 @@ const ProductFilters = ({
                 <input
                   type="number"
                   placeholder="Đến (VNĐ)"
-                  value={priceRange.max}
+                  value={priceRange.max || ""}
                   onChange={(e) => {
                     setSelectedPricePreset(null);
                     onPriceChange({ ...priceRange, max: e.target.value });
@@ -249,6 +268,7 @@ const ProductFilters = ({
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+
               <button
                 onClick={() => onPriceChange(priceRange)}
                 disabled={!priceRange.min && !priceRange.max}
@@ -257,6 +277,7 @@ const ProductFilters = ({
                 Áp dụng giá
               </button>
 
+              {/* Hiển thị giá đang lọc */}
               {(priceRange.min || priceRange.max) && (
                 <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 font-medium text-center">
                   Đang lọc:{" "}

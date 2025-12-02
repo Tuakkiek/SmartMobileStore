@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
-import fs from "fs";  // Import fs module
+import fs from "fs"; // Import fs module
 
 // ================================
 // 🔹 Import tất cả routes
@@ -30,6 +30,8 @@ import posRoutes from "./routes/posRoutes.js";
 import homePageRoutes from "./routes/homePageRoutes.js";
 
 import vnpayRoutes from "./routes/vnpayRoutes.js";
+
+import { cancelExpiredVNPayOrders } from "./services/orderCleanupService.js";
 
 dotenv.config();
 
@@ -56,8 +58,8 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 
 // ================================
@@ -151,6 +153,9 @@ app.use((err, req, res, next) => {
   });
 });
 
+setInterval(async () => {
+  await cancelExpiredVNPayOrders();
+}, 5 * 60 * 1000);
 // ================================
 // 🔹 Production: Serve static files & SPA
 // ================================

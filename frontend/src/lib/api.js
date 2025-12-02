@@ -143,15 +143,27 @@ export const posAPI = {
 };
 
 // ============================================
-// REVIEW API - ✅ COMPLETE WITH LIKE
+// REVIEW API - ✅ UPDATED WITH NEW ENDPOINTS
 // ============================================
+
 export const reviewAPI = {
-  getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
+  // ✅ NEW: Check if user can review
+  canReview: (productId) => api.get(`/reviews/can-review/${productId}`),
+
+  // Get reviews (with optional filters)
+  getByProduct: (productId, params = {}) =>
+    api.get(`/reviews/product/${productId}`, { params }),
+
+  // Create review (with images & orderId)
   create: (data) => api.post("/reviews", data),
+
+  // Update review
   update: (id, data) => api.put(`/reviews/${id}`, data),
+
+  // Delete review
   delete: (id) => api.delete(`/reviews/${id}`),
 
-  // ✅ LIKE/UNLIKE REVIEW
+  // Like/unlike review
   likeReview: (id) => api.post(`/reviews/${id}/like`),
 
   // Admin functions
@@ -160,7 +172,6 @@ export const reviewAPI = {
     api.put(`/reviews/${id}/reply`, { content }),
   toggleVisibility: (id) => api.patch(`/reviews/${id}/toggle-visibility`),
 };
-
 // ============================================
 // PROMOTION API – PHIÊN BẢN HOÀN CHỈNH, CHUẨN ADMIN
 // ============================================

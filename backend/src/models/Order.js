@@ -261,6 +261,11 @@ orderSchema.pre("validate", async function (next) {
 
 orderSchema.pre("save", function (next) {
   if (this.isNew && this.statusHistory.length === 0) {
+    // ✅ ĐẶT TRẠNG THÁI BAN ĐẦU ĐÚNG CHO VNPAY
+    if (this.paymentMethod === "VNPAY" && this.status === "PENDING") {
+      this.status = "PENDING_PAYMENT";
+    }
+
     this.statusHistory.push({
       status: this.status,
       updatedBy: this.customerId,
