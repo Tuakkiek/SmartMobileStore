@@ -323,8 +323,23 @@ const CheckoutPage = () => {
         })),
       };
 
+      console.log("=== BEFORE ORDER CREATION ===");
+      console.log(
+        "Checkout items:",
+        checkoutItems.map((i) => ({
+          variantId: i.variantId,
+          productName: i.productName,
+        }))
+      );
+      console.log("Payment method:", formData.paymentMethod);
+
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
+
+      console.log("=== AFTER ORDER CREATION ===");
+      console.log("Order ID:", createdOrder._id);
+      console.log("Order status:", createdOrder.status);
+      console.log("Should clear cart:", formData.paymentMethod !== "VNPAY");
 
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
@@ -365,15 +380,42 @@ const CheckoutPage = () => {
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        // ✅ COD/BANK_TRANSFER - Backend đã xóa giỏ, chỉ cần refresh
+        // ✅ COD/BANK_TRANSFER - Đảm bảo xóa giỏ hàng
+        console.log(`📦 Processing order ${createdOrder.orderNumber}`);
+
+        // Clear selection ngay lập tức
         setSelectedForCheckout([]);
 
-        // Refresh cart từ server (backend đã xóa rồi)
+        // Đợi 500ms để backend xử lý xong
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Refresh cart từ server
         await getCart();
 
-        console.log(
-          `✅ Đơn hàng ${createdOrder.orderNumber} đã tạo thành công`
-        );
+        const remainingItems = cart?.items?.length || 0;
+        console.log(`🛒 Cart after order: ${remainingItems} items`);
+
+        // Nếu backend không xóa, xóa thủ công (fallback)
+        const selectedVariantIds = checkoutItems.map((i) => i.variantId);
+        const stillInCart =
+          cart?.items?.filter((item) =>
+            selectedVariantIds.includes(item.variantId)
+          ) || [];
+
+        if (stillInCart.length > 0) {
+          console.warn(
+            `⚠️ Backend didn't remove ${stillInCart.length} items, removing manually...`
+          );
+          for (const item of stillInCart) {
+            try {
+              await cartAPI.removeItem(item.variantId);
+            } catch (err) {
+              console.error(`Failed to remove ${item.variantId}:`, err);
+            }
+          }
+          // Refresh lại lần nữa
+          await getCart();
+        }
 
         toast.success("Đặt hàng thành công!");
 
