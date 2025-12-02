@@ -26,6 +26,26 @@ const getModelsByType = (productType) => {
 // CREATE ORDER - FIXED: LƯU ĐÚNG GIÁ FINAL SAU KHI ÁP MÃ GIẢM GIÁ
 // ============================================
 export const createOrder = async (req, res) => {
+  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY TRÙNG LẶP
+  if (paymentMethod === "VNPAY") {
+    const recentOrder = await Order.findOne({
+      customerId: req.user._id,
+      paymentMethod: "VNPAY",
+      status: { $in: ["PENDING_PAYMENT", "PAYMENT_VERIFIED"] },
+      createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }, // 15 phút gần nhất
+    }).session(session);
+
+    if (recentOrder) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message:
+          "Bạn có đơn hàng VNPay đang chờ thanh toán. Vui lòng hoàn tất hoặc hủy đơn trước.",
+        existingOrderId: recentOrder._id,
+      });
+    }
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
 

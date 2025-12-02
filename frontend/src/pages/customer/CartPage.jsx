@@ -98,6 +98,30 @@ const CartPage = () => {
     });
   }, [cart?.items, isChangingVariant]);
 
+  // ✅ KIỂM TRA ĐƠN HÀNG VNPay CHƯA THANH TOÁN
+  useEffect(() => {
+    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    if (pendingOrder) {
+      try {
+        const { orderId, timestamp } = JSON.parse(pendingOrder);
+        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
+
+        if (ageMinutes < 15) {
+          toast.warning("Bạn có đơn hàng VNPay chưa hoàn tất thanh toán", {
+            duration: 8000,
+            action: {
+              label: "Xem đơn hàng",
+              onClick: () => navigate(`/orders/${orderId}`),
+            },
+          });
+        } else {
+          // Hết hạn, dọn sạch
+          localStorage.removeItem("pending_vnpay_order");
+        }
+      } catch {}
+    }
+  }, []);
+
   // Tự động chọn khi thêm từ trang sản phẩm
   useEffect(() => {
     if (!cart?.items || cart.items.length === 0) return;

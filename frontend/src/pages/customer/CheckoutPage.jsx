@@ -298,17 +298,37 @@ const CheckoutPage = () => {
           });
 
           if (vnpayResponse.data?.success) {
-            await getCart(); // Refresh để cập nhật UI
+            // ✅ LƯU ID ĐƠN HÀNG VÀO localStorage ĐỂ DỌN GIỎ HÀNG SAU KHI THANH TOÁN
+            localStorage.setItem(
+              "pending_vnpay_order",
+              JSON.stringify({
+                orderId: createdOrder._id,
+                selectedItems: selectedForCheckout,
+                timestamp: Date.now(),
+              })
+            );
+
+            // ✅ CHUYỂN HƯỚNG MÀ KHÔNG XÓA GIỎ HÀNG
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");
           }
         } catch (err) {
           setIsRedirectingToPayment(false);
+          // ✅ HỦY ĐƠN HÀNG NẾU URL THANH TOÁN KHÔNG ĐƯỢC TẠO
+          await orderAPI.cancel(createdOrder._id, {
+            reason: "Không thể tạo link thanh toán VNPay",
+          });
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        await getCart(); // ✅ Refresh cart để hiển thị items còn lại
+        // ✅ COD: Xóa giỏ hàng ngay lập tức vì không cần thanh toán bên ngoài
+        const { removeFromCart } = useCartStore.getState();
+        for (const item of checkoutItems) {
+          await removeFromCart(item.variantId);
+        }
+        setSelectedForCheckout([]);
+        await getCart();
         toast.success("Đặt hàng thành công!");
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });

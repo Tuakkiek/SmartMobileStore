@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/shared/Loading";
 import { CheckCircle, XCircle } from "lucide-react";
 import { vnpayAPI } from "@/lib/api";
+import { useCartStore } from "@/store/cartStore";
+
 
 const VNPayReturnPage = () => {
   const navigate = useNavigate();
@@ -25,11 +27,40 @@ const VNPayReturnPage = () => {
             orderNumber: response.data.orderNumber,
             message: response.data.message,
           });
+
+          // ✅ PAYMENT SUCCESS: NOW CLEAR THE CART
+          const pendingOrder = localStorage.getItem("pending_vnpay_order");
+          if (pendingOrder) {
+            try {
+              const { selectedItems } = JSON.parse(pendingOrder);
+              const { removeFromCart, setSelectedForCheckout, getCart } =
+                useCartStore.getState();
+
+              // Remove paid items from cart
+              for (const variantId of selectedItems) {
+                await removeFromCart(variantId);
+              }
+
+              // Clear selection
+              setSelectedForCheckout([]);
+
+              // Refresh cart
+              await getCart();
+
+              // Clean up localStorage
+              localStorage.removeItem("pending_vnpay_order");
+            } catch (err) {
+              console.error("Error cleaning up cart:", err);
+            }
+          }
         } else {
           setStatus("failed");
           setOrderData({
             message: response.data?.message || "Thanh toán thất bại",
           });
+
+          // ✅ PAYMENT FAILED: Keep cart intact, clean up tracking
+          localStorage.removeItem("pending_vnpay_order");
         }
       } catch (error) {
         console.error("VNPay return error:", error);
@@ -38,6 +69,9 @@ const VNPayReturnPage = () => {
           message:
             error.response?.data?.message || error.message || "Lỗi hệ thống",
         });
+
+        // ✅ ERROR: Keep cart intact
+        localStorage.removeItem("pending_vnpay_order");
       }
     };
 
