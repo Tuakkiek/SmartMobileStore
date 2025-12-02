@@ -98,34 +98,48 @@ const CartPage = () => {
     });
   }, [cart?.items, isChangingVariant]);
 
-  // ✅ THÊM: Hiển thị cảnh báo nếu có đơn VNPay pending
+  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY ĐANG CHỜ - CẢI THIỆN
   useEffect(() => {
     const pendingOrder = localStorage.getItem("pending_vnpay_order");
-    if (pendingOrder && items.length > 0) {
+    if (pendingOrder && cart?.items?.length > 0) {
       try {
-        const {
-          orderId,
-          orderNumber,
-          selectedItems: pendingItems,
-        } = JSON.parse(pendingOrder);
+        const { orderId, orderNumber, selectedItems, timestamp } =
+          JSON.parse(pendingOrder);
+        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
 
-        // Kiểm tra xem sản phẩm pending có còn trong giỏ không
-        const stillInCart = items.some((item) =>
-          pendingItems.includes(item.variantId)
-        );
+        if (ageMinutes < 15) {
+          // Kiểm tra xem sản phẩm còn trong giỏ không
+          const stillInCart = cart.items.some((item) =>
+            selectedItems?.includes(item.variantId)
+          );
 
-        if (stillInCart) {
-          toast.info(`Bạn có đơn hàng #${orderNumber} chưa thanh toán`, {
-            duration: 8000,
-            action: {
-              label: "Hoàn tất thanh toán",
-              onClick: () => navigate(`/orders/${orderId}`),
-            },
+          if (stillInCart) {
+            toast.warning(
+              `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
+              {
+                duration: 12000,
+                action: {
+                  label: "Xem chi tiết",
+                  onClick: () => navigate(`/orders/${orderId}`),
+                },
+              }
+            );
+          } else {
+            // Sản phẩm không còn trong giỏ, xóa thông báo
+            localStorage.removeItem("pending_vnpay_order");
+          }
+        } else {
+          // Quá 15 phút
+          toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
+            duration: 6000,
           });
+          localStorage.removeItem("pending_vnpay_order");
         }
-      } catch {}
+      } catch (e) {
+        console.error("Error checking pending order:", e);
+      }
     }
-  }, [items, navigate]);
+  }, [cart?.items, navigate]);
 
   // Tự động chọn khi thêm từ trang sản phẩm
   useEffect(() => {
