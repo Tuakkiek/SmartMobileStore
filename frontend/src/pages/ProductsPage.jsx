@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import {
-  useSearchParams,
-  useNavigate,
-  useLocation, // THÊM MỚI - để hỗ trợ URL đẹp sau này
-} from "react-router-dom";
-import { SlidersHorizontal, ChevronDown, Package } from "lucide-react";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { SlidersHorizontal, Package } from "lucide-react";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -17,7 +13,7 @@ import ProductCard from "@/components/shared/ProductCard";
 import ProductFilters from "@/components/shared/ProductFilters";
 
 // ============================================
-// API MAPPING - Chuẩn hóa category với API
+// API MAPPING
 // ============================================
 const API_MAP = {
   iPhone: iPhoneAPI,
@@ -29,7 +25,7 @@ const API_MAP = {
 };
 
 // ============================================
-// FILTER OPTIONS - Phù hợp với từng category
+// FILTER OPTIONS
 // ============================================
 const FILTER_OPTIONS = {
   iPhone: {
@@ -57,7 +53,6 @@ const FILTER_OPTIONS = {
   },
 };
 
-// TÊN HIỂN THỊ ĐẸP CHO TIÊU ĐỀ (iPhone → Điện thoại, Mac → MacBook,...)
 const DISPLAY_LABELS = {
   iPhone: "iPhone",
   iPad: "iPad",
@@ -67,7 +62,6 @@ const DISPLAY_LABELS = {
   Accessories: "Phụ kiện",
 };
 
-// HỖ TRỢ URL ĐẸP (tùy chọn mở rộng sau)
 const PATH_TO_CATEGORY = {
   "/dien-thoai": "iPhone",
   "/may-tinh-bang": "iPad",
@@ -78,18 +72,20 @@ const PATH_TO_CATEGORY = {
 };
 
 // ============================================
-// COMPONENT - NHẬN category QUA PROPS (nếu có truyền)
+// COMPONENT
 // ============================================
 const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ƯU TIÊN: forcedCategory (truyền từ ngoài vào) > URL đẹp > query ?category= > mặc định iPhone
+  // ✅ FIX: Lấy category từ URL query, bỏ qua forcedCategory nếu có ?category=
   const categoryFromQuery = searchParams.get("category");
   const categoryFromPath = PATH_TO_CATEGORY[location.pathname];
+
+  // ✅ ƯU TIÊN: query > path > forcedCategory > default
   const category =
-    forcedCategory || categoryFromPath || categoryFromQuery || "iPhone";
+    categoryFromQuery || categoryFromPath || forcedCategory || "iPhone";
 
   const modelParam = searchParams.get("model") || "";
   const searchQuery = searchParams.get("search") || "";
@@ -104,11 +100,8 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [page, setPage] = useState(parseInt(searchParams.get("page")) || 1);
   const limit = 12;
 
-  // Dynamic filters based on category
   const [filters, setFilters] = useState({});
   const [expandedSections, setExpandedSections] = useState({});
-
-  // Price filter state
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
 
@@ -128,7 +121,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setFilters(newFilters);
     setExpandedSections(newExpanded);
 
-    // Initialize price range from URL
     const minPrice = searchParams.get("minPrice");
     const maxPrice = searchParams.get("maxPrice");
     if (minPrice || maxPrice) {
@@ -148,14 +140,11 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setError(null);
 
     try {
-      // Kiểm tra xem có filter nào đang được áp dụng không
       const hasActiveFilters =
         Object.keys(filters).some((key) => filters[key]?.length > 0) ||
         priceRange.min ||
         priceRange.max;
 
-      // Nếu có filter → lấy gần như toàn bộ dữ liệu (bỏ phân trang server)
-      // Nếu không → dùng phân trang bình thường từ server (nhanh hơn)
       const fetchLimit = hasActiveFilters ? 9999 : limit;
       const fetchPage = hasActiveFilters ? 1 : page;
 
@@ -167,9 +156,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
 
       if (searchQuery) params.search = searchQuery;
       if (modelParam) params.model = modelParam;
-
-      // Có thể thêm category vào params nếu backend hỗ trợ sau này
-      // if (category) params.category = category;
 
       console.log("Fetching products with params:", params);
 
@@ -183,12 +169,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       let fetchedProducts = serverData.products || [];
       const totalFromServer = serverData.total || fetchedProducts.length;
 
-      // ==================================================
-      // CLIENT-SIDE FILTERING (chỉ chạy khi có filter)
-      // ==================================================
+      // CLIENT-SIDE FILTERING
       if (hasActiveFilters) {
         const filteredProducts = fetchedProducts.filter((product) => {
-          // 1. Lọc theo dung lượng (storage)
           if (filters.storage?.length > 0) {
             const matchStorage = product.variants?.some((v) =>
               filters.storage.includes(v.storage)
@@ -196,7 +179,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchStorage) return false;
           }
 
-          // 2. Lọc theo RAM (chỉ MacBook)
           if (filters.ram?.length > 0) {
             const matchRam = product.variants?.some((v) =>
               filters.ram.includes(v.ram)
@@ -204,7 +186,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchRam) return false;
           }
 
-          // 3. Lọc theo kết nối (chỉ iPad - WiFi / Cellular)
           if (filters.connectivity?.length > 0) {
             const matchConnectivity = product.variants?.some((v) =>
               filters.connectivity.includes(v.connectivity)
@@ -212,12 +193,10 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchConnectivity) return false;
           }
 
-          // 4. Lọc theo tình trạng (New/Refurbished/Likenew)
           if (filters.condition?.length > 0) {
             if (!filters.condition.includes(product.condition)) return false;
           }
 
-          // 5. Lọc theo khoảng giá
           if (priceRange.min || priceRange.max) {
             const minPrice = priceRange.min ? parseFloat(priceRange.min) : 0;
             const maxPrice = priceRange.max
@@ -235,15 +214,13 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
           return true;
         });
 
-        // Phân trang lại sau khi đã lọc xong (client-side pagination)
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + limit;
         const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
 
         setProducts(paginatedProducts);
-        setTotal(filteredProducts.length); // Tổng số sản phẩm SAU khi lọc
+        setTotal(filteredProducts.length);
       } else {
-        // Không có filter → dùng dữ liệu + phân trang từ server
         setProducts(fetchedProducts);
         setTotal(totalFromServer);
       }
@@ -257,21 +234,12 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [
-    api,
-    searchQuery,
-    modelParam,
-    filters,
-    priceRange,
-    page,
-    limit,
-    // category, // có thể thêm sau nếu backend hỗ trợ filter theo category
-  ]);
+  }, [api, searchQuery, modelParam, filters, priceRange, page, limit]);
+
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Scroll to top on category/page change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [category, modelParam, page]);
@@ -312,13 +280,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     params.delete("minPrice");
     params.delete("maxPrice");
     params.set("page", "1");
+    params.set("category", category); // ✅ Giữ lại category hiện tại
 
-    // Nếu có forcedCategory thì KHÔNG ghi category vào URL
-    if (!forcedCategory) {
-      params.set("category", category);
-    }
     navigate(`?${params.toString()}`, { replace: true });
-
     setPage(1);
   };
 
@@ -334,7 +298,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const updateURLWithFilters = (currentFilters, currentPriceRange) => {
     const params = new URLSearchParams(searchParams);
 
-    // Update filter params
     Object.keys(currentFilters).forEach((key) => {
       if (currentFilters[key].length > 0) {
         params.set(key, currentFilters[key].join(","));
@@ -343,7 +306,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       }
     });
 
-    // Update price params
     if (currentPriceRange.min) {
       params.set("minPrice", currentPriceRange.min);
     } else {
@@ -356,17 +318,31 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       params.delete("maxPrice");
     }
 
-    // Chỉ thêm category vào URL nếu KHÔNG có forcedCategory
-    if (!forcedCategory) {
-      params.set("category", category);
-    }
-
+    // ✅ LUÔN LƯU CATEGORY VÀO URL
+    params.set("category", category);
     params.set("page", "1");
+
     navigate(`?${params.toString()}`, { replace: true });
   };
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN").format(price);
+  };
+
+  // ============================================
+  // ✅ HANDLER ĐỔI CATEGORY - XÓA TẤT CẢ FILTERS
+  // ============================================
+  const handleCategoryChange = (newCategory) => {
+    if (newCategory === category) return; // Không làm gì nếu đã đang ở category này
+
+    // Reset tất cả filters
+    setFilters({});
+    setPriceRange({ min: "", max: "" });
+    setSelectedPricePreset(null);
+    setPage(1);
+
+    // Navigate với chỉ category, bỏ hết filters cũ
+    navigate(`?category=${newCategory}`, { replace: true });
   };
 
   // ============================================
@@ -390,7 +366,6 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       0
     ) + (priceRange.min || priceRange.max ? 1 : 0);
 
-  // DÙNG TÊN ĐẸP CHO TIÊU ĐỀ
   const categoryLabel = DISPLAY_LABELS[category] || category;
 
   // ============================================
@@ -427,13 +402,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               onClearFilters={clearFilters}
               activeFiltersCount={activeFiltersCount}
               currentCategory={category}
-              isCategoryPage={!!forcedCategory}
-              onCategoryChange={(newCategory) => {
-                setFilters({});
-                setPriceRange({ min: "", max: "" });
-                setPage(1);
-                navigate(`?category=${newCategory}`);
-              }}
+              hideCategory={false} // ✅ LUÔN HIỂN THỊ BỘ LỌC CATEGORY
+              isCategoryPage={false} // ✅ KHÔNG BAO GIỜ TỰ ĐỘNG ẨN
+              onCategoryChange={handleCategoryChange}
             />
           </aside>
 
@@ -540,7 +511,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
 
                 <div className="flex gap-1">
                   {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const pageNum = i + +1;
+                    const pageNum = i + 1;
                     return (
                       <button
                         key={pageNum}
