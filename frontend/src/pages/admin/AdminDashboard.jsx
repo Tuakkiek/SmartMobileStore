@@ -141,7 +141,7 @@ const AdminDashboard = () => {
         </TabsContent>
 
         {/* ✅ NEW: Employees Tab */}
-        <TabsContent value="employees" className="space-y-6">
+        <TabsContent value="kpi">
           <EmployeeKPICharts stats={stats} />
         </TabsContent>
       </Tabs>

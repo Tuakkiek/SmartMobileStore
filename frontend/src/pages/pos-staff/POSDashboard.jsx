@@ -28,7 +28,7 @@ import {
   appleWatchAPI,
   accessoryAPI,
   promotionAPI,
-  posAPI, 
+  posAPI,
 } from "@/lib/api";
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import PersonalStatsWidget from "@/components/employee/PersonalStatsWidget";
 
 const POSDashboard = () => {
   // ============================================
@@ -68,7 +69,9 @@ const POSDashboard = () => {
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/128?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+    return `${import.meta.env.VITE_API_URL}${
+      path.startsWith("/") ? "" : "/"
+    }${path}`;
   };
 
   // ============================================
@@ -209,7 +212,8 @@ const POSDashboard = () => {
           response = await iPhoneAPI.getAll({ limit: 50 });
       }
 
-      const productData = response?.data?.data?.products || response?.data || [];
+      const productData =
+        response?.data?.data?.products || response?.data || [];
       setProducts(
         Array.isArray(productData)
           ? productData.map((p) => ({ ...p, category: selectedCategory }))
@@ -320,68 +324,70 @@ const POSDashboard = () => {
     }
   };
 
-// ============================================
-// CREATE ORDER
-// ============================================
-const handleCreateOrder = async () => {
-  if (cart.length === 0) {
-    toast.error("Giỏ hàng trống");
-    return;
-  }
+  // ============================================
+  // CREATE ORDER
+  // ============================================
+  const handleCreateOrder = async () => {
+    if (cart.length === 0) {
+      toast.error("Giỏ hàng trống");
+      return;
+    }
 
-  if (!customerName.trim()) {
-    toast.error("Vui lòng nhập tên khách hàng");
-    return;
-  }
+    if (!customerName.trim()) {
+      toast.error("Vui lòng nhập tên khách hàng");
+      return;
+    }
 
-  if (!customerPhone.trim()) {
-    toast.error("Vui lòng nhập số điện thoại");
-    return;
-  }
+    if (!customerPhone.trim()) {
+      toast.error("Vui lòng nhập số điện thoại");
+      return;
+    }
 
-  setIsLoading(true);
-  try {
-    const totalAmount = checkoutItemsWithFinalPrice.reduce(
-      (sum, item) =>
-        sum + (item.finalizedPrice || item.originalPrice) * item.quantity,
-      0
-    );
+    setIsLoading(true);
+    try {
+      const totalAmount = checkoutItemsWithFinalPrice.reduce(
+        (sum, item) =>
+          sum + (item.finalizedPrice || item.originalPrice) * item.quantity,
+        0
+      );
 
-    // ✅ SỬA: Dùng posAPI.createOrder thay vì axios.post
-    const response = await posAPI.createOrder({
-      orderSource: "IN_STORE",
-      items: checkoutItemsWithFinalPrice.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-        productType: item.productType,
-        quantity: item.quantity,
-        price: item.finalizedPrice || item.originalPrice,
-        originalPrice: item.originalPrice,
-      })),
-      customerInfo: {
-        fullName: customerName.trim(),
-        phoneNumber: customerPhone.trim(),
-      },
-      totalAmount,
-      storeLocation: "Ninh Kiều iStore",
-      promotionCode: appliedPromotion?.code || null,
-    });
+      // ✅ SỬA: Dùng posAPI.createOrder thay vì axios.post
+      const response = await posAPI.createOrder({
+        orderSource: "IN_STORE",
+        items: checkoutItemsWithFinalPrice.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          productType: item.productType,
+          quantity: item.quantity,
+          price: item.finalizedPrice || item.originalPrice,
+          originalPrice: item.originalPrice,
+        })),
+        customerInfo: {
+          fullName: customerName.trim(),
+          phoneNumber: customerPhone.trim(),
+        },
+        totalAmount,
+        storeLocation: "Ninh Kiều iStore",
+        promotionCode: appliedPromotion?.code || null,
+      });
 
-    toast.success("Tạo đơn thành công! Đơn hàng đã được chuyển sang Thu ngân.");
+      toast.success(
+        "Tạo đơn thành công! Đơn hàng đã được chuyển sang Thu ngân."
+      );
 
-    // Reset form
-    setCart([]);
-    setCustomerName("");
-    setCustomerPhone("");
-    setAppliedPromotion(null);
-    setPromotionCode("");
-  } catch (error) {
-    console.error("Lỗi tạo đơn:", error);
-    toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
-  } finally {
-    setIsLoading(false);
-  }
-};
+      // Reset form
+      setCart([]);
+      setCustomerName("");
+      setCustomerPhone("");
+      setAppliedPromotion(null);
+      setPromotionCode("");
+    } catch (error) {
+      console.error("Lỗi tạo đơn:", error);
+      toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredProducts = products.filter((p) =>
     p.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -392,6 +398,7 @@ const handleCreateOrder = async () => {
   // ============================================
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 h-screen overflow-hidden">
+      {/* <PersonalStatsWidget userRole={user.role} /> */}
       {/* LEFT: Product List */}
       <div className="lg:col-span-2 space-y-4 overflow-y-auto">
         <Card>
@@ -401,7 +408,14 @@ const handleCreateOrder = async () => {
           <CardContent>
             {/* Category Tabs */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-              {["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"].map((cat) => (
+              {[
+                "iPhone",
+                "iPad",
+                "Mac",
+                "AirPods",
+                "AppleWatch",
+                "Accessory",
+              ].map((cat) => (
                 <Button
                   key={cat}
                   size="sm"
@@ -428,7 +442,9 @@ const handleCreateOrder = async () => {
             {isLoading ? (
               <p className="text-center py-8">Đang tải...</p>
             ) : filteredProducts.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">Không có sản phẩm</p>
+              <p className="text-center py-8 text-muted-foreground">
+                Không có sản phẩm
+              </p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {filteredProducts.map((product) => (
@@ -444,7 +460,8 @@ const handleCreateOrder = async () => {
                           alt={product.name}
                           className="absolute top-0 left-0 w-full h-full object-contain rounded"
                           onError={(e) => {
-                            e.target.src = "https://via.placeholder.com/128?text=No+Image";
+                            e.target.src =
+                              "https://via.placeholder.com/128?text=No+Image";
                           }}
                         />
                       </div>
@@ -510,7 +527,9 @@ const handleCreateOrder = async () => {
           </CardHeader>
           <CardContent className="space-y-3 max-h-80 overflow-y-auto">
             {cart.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Chưa có sản phẩm</p>
+              <p className="text-center text-muted-foreground py-8">
+                Chưa có sản phẩm
+              </p>
             ) : (
               checkoutItemsWithFinalPrice.map((item) => (
                 <div key={item.variantId} className="flex gap-3 border-b pb-3">
@@ -519,11 +538,14 @@ const handleCreateOrder = async () => {
                     alt={item.productName}
                     className="w-16 h-16 object-contain rounded"
                     onError={(e) => {
-                      e.target.src = "https://via.placeholder.com/64?text=No+Image";
+                      e.target.src =
+                        "https://via.placeholder.com/64?text=No+Image";
                     }}
                   />
                   <div className="flex-1">
-                    <p className="font-medium text-sm line-clamp-1">{item.productName}</p>
+                    <p className="font-medium text-sm line-clamp-1">
+                      {item.productName}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {item.variantColor}
                       {item.variantStorage && ` • ${item.variantStorage}`}
@@ -549,7 +571,9 @@ const handleCreateOrder = async () => {
                         size="sm"
                         variant="outline"
                         className="h-6 px-2"
-                        onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
+                        onClick={() =>
+                          updateQuantity(item.variantId, item.quantity - 1)
+                        }
                       >
                         -
                       </Button>
@@ -560,7 +584,9 @@ const handleCreateOrder = async () => {
                         size="sm"
                         variant="outline"
                         className="h-6 px-2"
-                        onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
+                        onClick={() =>
+                          updateQuantity(item.variantId, item.quantity + 1)
+                        }
                       >
                         +
                       </Button>
@@ -592,14 +618,22 @@ const handleCreateOrder = async () => {
                   <Input
                     placeholder="Nhập mã giảm giá"
                     value={promotionCode}
-                    onChange={(e) => setPromotionCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && handleApplyPromotion()}
+                    onChange={(e) =>
+                      setPromotionCode(e.target.value.toUpperCase())
+                    }
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && handleApplyPromotion()
+                    }
                     disabled={isApplyingPromo || cart.length === 0}
                     className="uppercase"
                   />
                   <Button
                     onClick={handleApplyPromotion}
-                    disabled={isApplyingPromo || !promotionCode.trim() || cart.length === 0}
+                    disabled={
+                      isApplyingPromo ||
+                      !promotionCode.trim() ||
+                      cart.length === 0
+                    }
                     variant="outline"
                     size="sm"
                   >
@@ -640,7 +674,10 @@ const handleCreateOrder = async () => {
                 <span>Tạm tính:</span>
                 <span>
                   {formatPrice(
-                    cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                    cart.reduce(
+                      (sum, item) => sum + item.price * item.quantity,
+                      0
+                    )
                   )}
                 </span>
               </div>
@@ -676,7 +713,9 @@ const handleCreateOrder = async () => {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chọn phiên bản sản phẩm</DialogTitle>
-            <DialogDescription>Vui lòng chọn màu sắc và cấu hình</DialogDescription>
+            <DialogDescription>
+              Vui lòng chọn màu sắc và cấu hình
+            </DialogDescription>
           </DialogHeader>
 
           {selectedProduct && (
