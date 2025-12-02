@@ -148,98 +148,125 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setError(null);
 
     try {
-      const params = {
-        page,
-        limit,
-        status: "AVAILABLE", // Chỉ lấy sản phẩm còn hàng
-      };
-
-      // Thêm search nếu có
-      if (searchQuery) {
-        params.search = searchQuery;
-      }
-
-      // Thêm model filter nếu có
-      if (modelParam) {
-        params.model = modelParam;
-      }
-
-      console.log("Fetching products:", { category, params });
-
-      const response = await api.getAll(params);
-      const data = response.data?.data;
-
-      let fetchedProducts = data?.products || [];
-
-      // ============================================
-      // CLIENT-SIDE FILTERING (vì backend chưa hỗ trợ)
-      // ============================================
-      if (
+      // Kiểm tra xem có filter nào đang được áp dụng không
+      const hasActiveFilters =
         Object.keys(filters).some((key) => filters[key]?.length > 0) ||
         priceRange.min ||
-        priceRange.max
-      ) {
-        fetchedProducts = fetchedProducts.filter((product) => {
-          // Filter by storage
+        priceRange.max;
+
+      // Nếu có filter → lấy gần như toàn bộ dữ liệu (bỏ phân trang server)
+      // Nếu không → dùng phân trang bình thường từ server (nhanh hơn)
+      const fetchLimit = hasActiveFilters ? 9999 : limit;
+      const fetchPage = hasActiveFilters ? 1 : page;
+
+      const params = {
+        limit: fetchLimit,
+        page: fetchPage,
+        status: "AVAILABLE",
+      };
+
+      if (searchQuery) params.search = searchQuery;
+      if (modelParam) params.model = modelParam;
+
+      // Có thể thêm category vào params nếu backend hỗ trợ sau này
+      // if (category) params.category = category;
+
+      console.log("Fetching products with params:", params);
+
+      const response = await api.getAll(params);
+      const serverData = response.data?.data;
+
+      if (!serverData) {
+        throw new Error("Dữ liệu trả về không hợp lệ");
+      }
+
+      let fetchedProducts = serverData.products || [];
+      const totalFromServer = serverData.total || fetchedProducts.length;
+
+      // ==================================================
+      // CLIENT-SIDE FILTERING (chỉ chạy khi có filter)
+      // ==================================================
+      if (hasActiveFilters) {
+        const filteredProducts = fetchedProducts.filter((product) => {
+          // 1. Lọc theo dung lượng (storage)
           if (filters.storage?.length > 0) {
-            const hasMatchingStorage = product.variants?.some((variant) =>
-              filters.storage.includes(variant.storage)
+            const matchStorage = product.variants?.some((v) =>
+              filters.storage.includes(v.storage)
             );
-            if (!hasMatchingStorage) return false;
+            if (!matchStorage) return false;
           }
 
-          // Filter by RAM (Mac only)
+          // 2. Lọc theo RAM (chỉ MacBook)
           if (filters.ram?.length > 0) {
-            const hasMatchingRam = product.variants?.some((variant) =>
-              filters.ram.includes(variant.ram)
+            const matchRam = product.variants?.some((v) =>
+              filters.ram.includes(v.ram)
             );
-            if (!hasMatchingRam) return false;
+            if (!matchRam) return false;
           }
 
-          // Filter by connectivity (iPad only)
+          // 3. Lọc theo kết nối (chỉ iPad - WiFi / Cellular)
           if (filters.connectivity?.length > 0) {
-            const hasMatchingConnectivity = product.variants?.some((variant) =>
-              filters.connectivity.includes(variant.connectivity)
+            const matchConnectivity = product.variants?.some((v) =>
+              filters.connectivity.includes(v.connectivity)
             );
-            if (!hasMatchingConnectivity) return false;
+            if (!matchConnectivity) return false;
           }
 
-          // Filter by condition
+          // 4. Lọc theo tình trạng (New/Refurbished/Likenew)
           if (filters.condition?.length > 0) {
             if (!filters.condition.includes(product.condition)) return false;
           }
 
-          // Filter by price range
+          // 5. Lọc theo khoảng giá
           if (priceRange.min || priceRange.max) {
             const minPrice = priceRange.min ? parseFloat(priceRange.min) : 0;
             const maxPrice = priceRange.max
               ? parseFloat(priceRange.max)
               : Infinity;
 
-            const hasMatchingPrice = product.variants?.some((variant) => {
-              const variantPrice = variant.price || 0;
-              return variantPrice >= minPrice && variantPrice <= maxPrice;
+            const hasPriceInRange = product.variants?.some((v) => {
+              const price = v.price || 0;
+              return price >= minPrice && price <= maxPrice;
             });
 
-            if (!hasMatchingPrice) return false;
+            if (!hasPriceInRange) return false;
           }
 
           return true;
         });
-      }
 
-      setProducts(fetchedProducts);
-      setTotal(fetchedProducts.length);
+        // Phân trang lại sau khi đã lọc xong (client-side pagination)
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
+        setProducts(paginatedProducts);
+        setTotal(filteredProducts.length); // Tổng số sản phẩm SAU khi lọc
+      } else {
+        // Không có filter → dùng dữ liệu + phân trang từ server
+        setProducts(fetchedProducts);
+        setTotal(totalFromServer);
+      }
     } catch (err) {
-      console.error("Fetch error:", err);
-      setError(err.response?.data?.message || "Không thể tải sản phẩm");
+      console.error("Lỗi khi tải danh sách sản phẩm:", err);
+      const message =
+        err.response?.data?.message || err.message || "Không thể tải sản phẩm";
+      setError(message);
       setProducts([]);
       setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [api, category, modelParam, searchQuery, filters, page, limit]);
-
+  }, [
+    api,
+    searchQuery,
+    modelParam,
+    filters,
+    priceRange,
+    page,
+    limit,
+    // category, // có thể thêm sau nếu backend hỗ trợ filter theo category
+  ]);
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
@@ -400,8 +427,8 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               onClearFilters={clearFilters}
               activeFiltersCount={activeFiltersCount}
               currentCategory={category}
+              isCategoryPage={!!forcedCategory}
               onCategoryChange={(newCategory) => {
-                // Reset tất cả filter và chuyển danh mục
                 setFilters({});
                 setPriceRange({ min: "", max: "" });
                 setPage(1);
