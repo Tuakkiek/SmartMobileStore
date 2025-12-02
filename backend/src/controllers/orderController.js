@@ -26,26 +26,6 @@ const getModelsByType = (productType) => {
 // CREATE ORDER - FIXED: LƯU ĐÚNG GIÁ FINAL SAU KHI ÁP MÃ GIẢM GIÁ
 // ============================================
 export const createOrder = async (req, res) => {
-  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY TRÙNG LẶP
-  if (paymentMethod === "VNPAY") {
-    const recentOrder = await Order.findOne({
-      customerId: req.user._id,
-      paymentMethod: "VNPAY",
-      status: { $in: ["PENDING_PAYMENT", "PAYMENT_VERIFIED"] },
-      createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }, // 15 phút gần nhất
-    }).session(session);
-
-    if (recentOrder) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message:
-          "Bạn có đơn hàng VNPay đang chờ thanh toán. Vui lòng hoàn tất hoặc hủy đơn trước.",
-        existingOrderId: recentOrder._id,
-      });
-    }
-  }
-
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -58,11 +38,31 @@ export const createOrder = async (req, res) => {
       promotionCode,
     } = req.body;
 
+    // ✅ KIỂM TRA ĐƠN HÀNG VNPAY TRÙNG LẶP - ĐẶT SAU KHI TRÍCH XUẤT paymentMethod
+    if (paymentMethod === "VNPAY") {
+      const recentOrder = await Order.findOne({
+        customerId: req.user._id,
+        paymentMethod: "VNPAY",
+        status: { $in: ["PENDING_PAYMENT", "PAYMENT_VERIFIED"] },
+        createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
+      }).session(session);
+
+      if (recentOrder) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Bạn có đơn hàng VNPay đang chờ thanh toán. Vui lòng hoàn tất hoặc hủy đơn trước.",
+          existingOrderId: recentOrder._id,
+        });
+      }
+    }
+
     const cart = await Cart.findOne({ customerId: req.user._id }).session(
       session
     );
 
-    console.log("Cart items count:", cart?.items?.length);
+    console.log("Số lượng sản phẩm trong giỏ hàng:", cart?.items?.length);
 
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
@@ -72,13 +72,13 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    console.log("=== CREATING ORDER ===");
-    console.log("Cart items count:", cart.items.length);
+    console.log("=== ĐANG TẠO ĐƠN HÀNG ===");
+    console.log("Số lượng sản phẩm trong giỏ hàng:", cart.items.length);
 
-    // === VALIDATE & POPULATE CART ITEMS ===
+    // === KIỂM TRA VÀ ĐIỀU CHỈNH CÁC MẶT HÀNG CỦA ĐƠN ===
     const orderItems = [];
     let subtotal = 0;
-    const requestItems = req.body.items || []; // Items từ checkout
+    const requestItems = req.body.items || []; // Các mặt hàng từ checkout
 
     for (const reqItem of requestItems) {
       const variantId = reqItem.variantId;
