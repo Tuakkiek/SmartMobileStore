@@ -22,10 +22,12 @@ export const useDashboardData = (timeRange) => {
     setError(null);
 
     try {
-      // Fetch all data in parallel .
+      // ✅ NEW: Fetch thêm dữ liệu đơn hàng POS và Shipping
       const [
         ordersRes,
         deliveredRes,
+        posOrdersRes, // ✅ Đơn hàng POS
+        shippingOrdersRes, // ✅ Đơn hàng giao hàng
         employeesRes,
         iphonesRes,
         ipadsRes,
@@ -37,6 +39,8 @@ export const useDashboardData = (timeRange) => {
       ] = await Promise.all([
         orderAPI.getAll({ limit: 1000 }),
         orderAPI.getAll({ status: "DELIVERED", limit: 2000 }),
+        orderAPI.getAll({ orderSource: "IN_STORE", limit: 1000 }), // ✅ Đơn POS
+        orderAPI.getAll({ status: "SHIPPING,DELIVERED,RETURNED", limit: 1000 }), // ✅ Đơn có shipper
         userAPI.getAllEmployees(),
         iPhoneAPI.getAll({ limit: 1000 }),
         iPadAPI.getAll({ limit: 1000 }),
@@ -46,7 +50,6 @@ export const useDashboardData = (timeRange) => {
         accessoryAPI.getAll({ limit: 1000 }),
         promotionAPI.getAllPromotions(),
       ]);
-
       // Process data
       const processedStats = processAllData({
         ordersRes,

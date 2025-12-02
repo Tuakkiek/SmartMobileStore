@@ -1,7 +1,16 @@
 // frontend/src/pages/admin/AdminDashboard.jsx
+// ✅ UPDATED: Thêm tab "Nhân viên" để hiển thị KPI
+
 import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Box, ShoppingBag, Package, Gift } from "lucide-react";
+import {
+  BarChart3,
+  Box,
+  ShoppingBag,
+  Package,
+  Gift,
+  Users,
+} from "lucide-react";
 
 // Import các component con
 import StatsCards from "@/components/admin/dashboard/StatsCards";
@@ -10,13 +19,14 @@ import ProductCharts from "@/components/admin/dashboard/ProductCharts";
 import InventoryCharts from "@/components/admin/dashboard/InventoryCharts";
 import PromotionCharts from "@/components/admin/dashboard/PromotionCharts";
 import OrderCharts from "@/components/admin/dashboard/OrderCharts";
+import EmployeeKPICharts from "@/components/admin/dashboard/EmployeeKPICharts"; // ✅ NEW
 
 // Import hook để fetch data
 import { useDashboardData } from "@/hooks/useDashboardData";
 
 const AdminDashboard = () => {
   const [timeRange, setTimeRange] = useState("30days");
-  const [activeTab, setActiveTab] = useState("overview"); // ✅ THÊM STATE CHO TAB
+  const [activeTab, setActiveTab] = useState("overview");
   const { stats, isLoading, error, refetch } = useDashboardData(timeRange);
 
   if (isLoading) {
@@ -77,7 +87,7 @@ const AdminDashboard = () => {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">
             <BarChart3 className="w-4 h-4 mr-2" />
             Tổng quan
@@ -97,6 +107,11 @@ const AdminDashboard = () => {
           <TabsTrigger value="promotions">
             <Gift className="w-4 h-4 mr-2" />
             Khuyến mãi
+          </TabsTrigger>
+          {/* ✅ NEW TAB */}
+          <TabsTrigger value="employees">
+            <Users className="w-4 h-4 mr-2" />
+            Nhân viên
           </TabsTrigger>
         </TabsList>
 
@@ -123,6 +138,11 @@ const AdminDashboard = () => {
         {/* Promotions Tab */}
         <TabsContent value="promotions" className="space-y-6">
           <PromotionCharts stats={stats} />
+        </TabsContent>
+
+        {/* ✅ NEW: Employees Tab */}
+        <TabsContent value="employees" className="space-y-6">
+          <EmployeeKPICharts stats={stats} />
         </TabsContent>
       </Tabs>
     </div>
