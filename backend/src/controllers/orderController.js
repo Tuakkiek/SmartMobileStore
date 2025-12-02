@@ -687,7 +687,8 @@ export const updateOrderStatus = async (req, res) => {
 
   try {
     const { status, note } = req.body;
-    const adminId = req.user._id;
+    const userId = req.user._id;
+    const userRole = req.user.role;
 
     const order = await Order.findById(req.params.id).session(session);
     if (!order) {
@@ -720,33 +721,55 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Hoàn kho khi hủy/trả hàng - KHÔNG GỌI incrementSales()
+    // ✅ NEW: Lưu thông tin shipper khi chuyển sang SHIPPING
+    if (status === "SHIPPING" && userRole === "SHIPPER") {
+      order.shipperInfo = {
+        shipperId: userId,
+        shipperName: req.user.fullName,
+        shipperPhone: req.user.phoneNumber,
+        pickupAt: new Date(),
+      };
+    }
+
+    // ✅ NEW: Cập nhật thời gian giao hàng thành công
+    if (status === "DELIVERED" && order.shipperInfo?.shipperId) {
+      order.shipperInfo.deliveredAt = new Date();
+      order.shipperInfo.deliveryNote = note || "Giao hàng thành công";
+    }
+
+    // ✅ NEW: Cập nhật thời gian trả hàng
+    if (status === "RETURNED" && order.shipperInfo?.shipperId) {
+      order.shipperInfo.returnedAt = new Date();
+      order.shipperInfo.returnReason = note || "Trả hàng";
+    }
+
+    // Hoàn kho khi hủy/trả hàng
     if (
       ["CANCELLED", "RETURNED"].includes(status) &&
       !["CANCELLED", "RETURNED"].includes(order.status)
     ) {
       for (const item of order.items) {
-        const models = getModelsByType(reqItem.productType);
+        const models = getModelsByType(item.productType);
         if (models) {
-          const variant = await models.Variant.findById(
-            reqItem.variantId
-          ).session(session);
+          const variant = await models.Variant.findById(item.variantId).session(
+            session
+          );
           if (variant) {
-            variant.stock += reqItem.quantity;
+            variant.stock += item.quantity;
             variant.salesCount = Math.max(
               0,
-              (variant.salesCount || 0) - reqItem.quantity
+              (variant.salesCount || 0) - item.quantity
             );
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(
-            reqItem.productId
-          ).session(session);
+          const product = await models.Product.findById(item.productId).session(
+            session
+          );
           if (product) {
             product.salesCount = Math.max(
               0,
-              (product.salesCount || 0) - reqItem.quantity
+              (product.salesCount || 0) - item.quantity
             );
             await product.save({ session });
           }
@@ -766,7 +789,7 @@ export const updateOrderStatus = async (req, res) => {
     order.status = status;
     order.statusHistory.push({
       status,
-      updatedBy: adminId,
+      updatedBy: userId,
       updatedAt: now,
       note: note || getDefaultNote(order.status, status),
     });
