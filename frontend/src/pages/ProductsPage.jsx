@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
-import { SlidersHorizontal, Package } from "lucide-react";
+import { SlidersHorizontal, Package, ArrowUpDown } from "lucide-react";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import ProductCard from "@/components/shared/ProductCard";
 import ProductFilters from "@/components/shared/ProductFilters";
+import { Button } from "@/components/ui/button";
 
 // ============================================
 // API MAPPING
@@ -62,14 +63,13 @@ const DISPLAY_LABELS = {
   Accessories: "Phụ kiện",
 };
 
-const PATH_TO_CATEGORY = {
-  "/dien-thoai": "iPhone",
-  "/may-tinh-bang": "iPad",
-  "/macbook": "Mac",
-  "/tai-nghe": "AirPods",
-  "/apple-watch": "AppleWatch",
-  "/phu-kien": "Accessories",
-};
+const SORT_OPTIONS = [
+  { value: "default", label: "Mặc định" },
+  { value: "price_asc", label: "Giá tăng dần" },
+  { value: "price_desc", label: "Giá giảm dần" },
+  { value: "newest", label: "Mới nhất" },
+  { value: "popular", label: "Bán chạy" },
+];
 
 // ============================================
 // COMPONENT
@@ -79,16 +79,13 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ FIX: Lấy category từ URL query, bỏ qua forcedCategory nếu có ?category=
+  // Lấy category từ URL query
   const categoryFromQuery = searchParams.get("category");
-  const categoryFromPath = PATH_TO_CATEGORY[location.pathname];
-
-  // ✅ ƯU TIÊN: query > path > forcedCategory > default
-  const category =
-    categoryFromQuery || categoryFromPath || forcedCategory || "iPhone";
+  const category = categoryFromQuery || forcedCategory || "iPhone";
 
   const modelParam = searchParams.get("model") || "";
   const searchQuery = searchParams.get("search") || "";
+  const sortParam = searchParams.get("sort") || "default";
 
   const api = API_MAP[category] || iPhoneAPI;
   const availableFilters = FILTER_OPTIONS[category] || {};
@@ -104,6 +101,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
+  const [sortBy, setSortBy] = useState(sortParam);
 
   // ============================================
   // INITIALIZE FILTERS FROM URL
@@ -130,6 +128,10 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       });
       setSelectedPricePreset(null);
     }
+
+    // Sync sort from URL
+    const urlSort = searchParams.get("sort") || "default";
+    setSortBy(urlSort);
   }, [category, searchParams, availableFilters]);
 
   // ============================================
@@ -145,19 +147,15 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
         priceRange.min ||
         priceRange.max;
 
-      const fetchLimit = hasActiveFilters ? 9999 : limit;
-      const fetchPage = hasActiveFilters ? 1 : page;
-
+      // Luôn fetch tất cả để filter client-side
       const params = {
-        limit: fetchLimit,
-        page: fetchPage,
+        limit: 9999,
+        page: 1,
         status: "AVAILABLE",
       };
 
       if (searchQuery) params.search = searchQuery;
       if (modelParam) params.model = modelParam;
-
-      console.log("Fetching products with params:", params);
 
       const response = await api.getAll(params);
       const serverData = response.data?.data;
@@ -167,11 +165,11 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       }
 
       let fetchedProducts = serverData.products || [];
-      const totalFromServer = serverData.total || fetchedProducts.length;
 
       // CLIENT-SIDE FILTERING
       if (hasActiveFilters) {
-        const filteredProducts = fetchedProducts.filter((product) => {
+        fetchedProducts = fetchedProducts.filter((product) => {
+          // Filter by storage
           if (filters.storage?.length > 0) {
             const matchStorage = product.variants?.some((v) =>
               filters.storage.includes(v.storage)
@@ -179,6 +177,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchStorage) return false;
           }
 
+          // Filter by RAM
           if (filters.ram?.length > 0) {
             const matchRam = product.variants?.some((v) =>
               filters.ram.includes(v.ram)
@@ -186,6 +185,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchRam) return false;
           }
 
+          // Filter by connectivity
           if (filters.connectivity?.length > 0) {
             const matchConnectivity = product.variants?.some((v) =>
               filters.connectivity.includes(v.connectivity)
@@ -193,10 +193,12 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
             if (!matchConnectivity) return false;
           }
 
+          // Filter by condition
           if (filters.condition?.length > 0) {
             if (!filters.condition.includes(product.condition)) return false;
           }
 
+          // Filter by price range
           if (priceRange.min || priceRange.max) {
             const minPrice = priceRange.min ? parseFloat(priceRange.min) : 0;
             const maxPrice = priceRange.max
@@ -213,17 +215,19 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
 
           return true;
         });
-
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
-
-        setProducts(paginatedProducts);
-        setTotal(filteredProducts.length);
-      } else {
-        setProducts(fetchedProducts);
-        setTotal(totalFromServer);
       }
+
+      // SORTING
+      fetchedProducts = sortProducts(fetchedProducts, sortBy);
+
+      // PAGINATION
+      const totalFiltered = fetchedProducts.length;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedProducts = fetchedProducts.slice(startIndex, endIndex);
+
+      setProducts(paginatedProducts);
+      setTotal(totalFiltered);
     } catch (err) {
       console.error("Lỗi khi tải danh sách sản phẩm:", err);
       const message =
@@ -234,7 +238,41 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [api, searchQuery, modelParam, filters, priceRange, page, limit]);
+  }, [api, searchQuery, modelParam, filters, priceRange, page, limit, sortBy]);
+
+  // ============================================
+  // SORT PRODUCTS
+  // ============================================
+  const sortProducts = (products, sortType) => {
+    const sorted = [...products];
+
+    switch (sortType) {
+      case "price_asc":
+        return sorted.sort((a, b) => {
+          const priceA = Math.min(...a.variants.map((v) => v.price || 0));
+          const priceB = Math.min(...b.variants.map((v) => v.price || 0));
+          return priceA - priceB;
+        });
+
+      case "price_desc":
+        return sorted.sort((a, b) => {
+          const priceA = Math.min(...a.variants.map((v) => v.price || 0));
+          const priceB = Math.min(...b.variants.map((v) => v.price || 0));
+          return priceB - priceA;
+        });
+
+      case "newest":
+        return sorted.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+      case "popular":
+        return sorted.sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0));
+
+      default:
+        return sorted;
+    }
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -256,7 +294,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
           : [...(prev[type] || []), value],
       };
 
-      updateURLWithFilters(newFilters, priceRange);
+      updateURLWithFilters(newFilters, priceRange, sortBy);
       return newFilters;
     });
     setPage(1);
@@ -274,15 +312,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setFilters(emptyFilters);
     setPriceRange({ min: "", max: "" });
     setSelectedPricePreset(null);
+    setSortBy("default");
 
-    const params = new URLSearchParams(searchParams);
-    Object.keys(availableFilters).forEach((key) => params.delete(key));
-    params.delete("minPrice");
-    params.delete("maxPrice");
-    params.set("page", "1");
-    params.set("category", category); // ✅ Giữ lại category hiện tại
-
-    navigate(`?${params.toString()}`, { replace: true });
+    navigate(`/products?category=${category}&page=1`, { replace: true });
     setPage(1);
   };
 
@@ -291,58 +323,72 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   // ============================================
   const handlePriceChange = (newRange) => {
     setPriceRange(newRange);
-    updateURLWithFilters(filters, newRange);
+    updateURLWithFilters(filters, newRange, sortBy);
     setPage(1);
   };
 
-  const updateURLWithFilters = (currentFilters, currentPriceRange) => {
-    const params = new URLSearchParams(searchParams);
+  // ============================================
+  // SORT HANDLER
+  // ============================================
+  const handleSortChange = (newSort) => {
+    setSortBy(newSort);
+    updateURLWithFilters(filters, priceRange, newSort);
+    setPage(1);
+  };
 
+  // ============================================
+  // UPDATE URL WITH ALL PARAMS
+  // ============================================
+  const updateURLWithFilters = (
+    currentFilters,
+    currentPriceRange,
+    currentSort
+  ) => {
+    const params = new URLSearchParams();
+
+    // Category (required)
+    params.set("category", category);
+
+    // Filters
     Object.keys(currentFilters).forEach((key) => {
       if (currentFilters[key].length > 0) {
         params.set(key, currentFilters[key].join(","));
-      } else {
-        params.delete(key);
       }
     });
 
+    // Price range
     if (currentPriceRange.min) {
       params.set("minPrice", currentPriceRange.min);
-    } else {
-      params.delete("minPrice");
     }
-
     if (currentPriceRange.max) {
       params.set("maxPrice", currentPriceRange.max);
-    } else {
-      params.delete("maxPrice");
     }
 
-    // ✅ LUÔN LƯU CATEGORY VÀO URL
-    params.set("category", category);
+    // Sort
+    if (currentSort && currentSort !== "default") {
+      params.set("sort", currentSort);
+    }
+
+    // Page
     params.set("page", "1");
 
-    navigate(`?${params.toString()}`, { replace: true });
-  };
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("vi-VN").format(price);
+    navigate(`/products?${params.toString()}`, { replace: true });
   };
 
   // ============================================
-  // ✅ HANDLER ĐỔI CATEGORY - XÓA TẤT CẢ FILTERS
+  // CATEGORY CHANGE HANDLER
   // ============================================
   const handleCategoryChange = (newCategory) => {
-    if (newCategory === category) return; // Không làm gì nếu đã đang ở category này
+    if (newCategory === category) return;
 
-    // Reset tất cả filters
+    // Reset everything
     setFilters({});
     setPriceRange({ min: "", max: "" });
     setSelectedPricePreset(null);
+    setSortBy("default");
     setPage(1);
 
-    // Navigate với chỉ category, bỏ hết filters cũ
-    navigate(`?category=${newCategory}`, { replace: true });
+    navigate(`/products?category=${newCategory}`, { replace: true });
   };
 
   // ============================================
@@ -354,7 +400,8 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setPage(newPage);
     const params = new URLSearchParams(searchParams);
     params.set("page", newPage.toString());
-    navigate(`?${params.toString()}`, { replace: true });
+    navigate(`/products?${params.toString()}`, { replace: true });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // ============================================
@@ -402,8 +449,8 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               onClearFilters={clearFilters}
               activeFiltersCount={activeFiltersCount}
               currentCategory={category}
-              hideCategory={false} // ✅ LUÔN HIỂN THỊ BỘ LỌC CATEGORY
-              isCategoryPage={false} // ✅ KHÔNG BAO GIỜ TỰ ĐỘNG ẨN
+              hideCategory={false}
+              isCategoryPage={false}
               onCategoryChange={handleCategoryChange}
             />
           </aside>
@@ -413,19 +460,36 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
           {/* ============================================ */}
           <main className="flex-1 min-w-0">
             {/* Top bar */}
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between flex-wrap gap-4">
               <p className="text-sm text-gray-600">
                 Tìm thấy <span className="font-semibold">{total}</span> sản phẩm
+                {page > 1 && ` - Trang ${page}/${totalPages}`}
               </p>
-              <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                <SlidersHorizontal className="w-4 h-4" />
-                Bộ lọc
-                {activeFiltersCount > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
+
+              {/* Sort dropdown */}
+              <div className="flex items-center gap-3">
+                <select
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+
+                <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                  <SlidersHorizontal className="w-4 h-4" />
+                  Bộ lọc
+                  {activeFiltersCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Loading skeleton */}
@@ -498,60 +562,84 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               </div>
             )}
 
-            {/* Pagination */}
+            {/* Pagination - UI đẹp, hiện đại, tối đa 7 số + ... + trang cuối */}
             {!loading && totalPages > 1 && (
-              <div className="mt-8 flex justify-center gap-2">
-                <button
-                  onClick={() => handlePageChange(Math.max(1, page - 1))}
+              <div className="mt-12 flex justify-center items-center gap-2 flex-wrap">
+                {/* Nút Trước */}
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={page === 1}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  onClick={() => handlePageChange(Math.max(1, page - 1))}
                 >
                   Trước
-                </button>
+                </Button>
 
-                <div className="flex gap-1">
-                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => handlePageChange(pageNum)}
-                        className={`px-3 py-2 rounded-lg transition-colors ${
-                          page === pageNum
-                            ? "bg-blue-600 text-white"
-                            : "bg-white border border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  {totalPages > 5 && (
-                    <>
-                      <span className="px-2 py-2">...</span>
-                      <button
-                        onClick={() => handlePageChange(totalPages)}
-                        className={`px-3 py-2 rounded-lg transition-colors ${
-                          page === totalPages
-                            ? "bg-blue-600 text-white"
-                            : "bg-white border border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        {totalPages}
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* Trang 1 */}
+                <Button
+                  variant={page === 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                >
+                  1
+                </Button>
 
-                <button
+                {/* Dấu ... khi current page > 4 */}
+                {page > 4 && totalPages > 7 && (
+                  <span className="px-3 py-2 text-gray-500 font-medium">
+                    ...
+                  </span>
+                )}
+
+                {/* Các trang xung quanh current page (trừ trang 1 và trang cuối) */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(
+                    (p) =>
+                      p !== 1 &&
+                      p !== totalPages &&
+                      p >= page - 2 &&
+                      p <= page + 2
+                  )
+                  .map((pageNum) => (
+                    <Button
+                      key={pageNum}
+                      variant={page === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  ))}
+
+                {/* Dấu ... trước trang cuối */}
+                {page < totalPages - 3 && totalPages > 7 && (
+                  <span className="px-3 py-2 text-gray-500 font-medium">
+                    ...
+                  </span>
+                )}
+
+                {/* Trang cuối (chỉ hiển thị nếu > 1) */}
+                {totalPages > 1 && (
+                  <Button
+                    variant={page === totalPages ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(totalPages)}
+                  >
+                    {totalPages}
+                  </Button>
+                )}
+
+                {/* Nút Sau */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === totalPages}
                   onClick={() =>
                     handlePageChange(Math.min(totalPages, page + 1))
                   }
-                  disabled={page === totalPages}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Sau
-                </button>
+                </Button>
               </div>
             )}
           </main>
