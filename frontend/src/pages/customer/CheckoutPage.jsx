@@ -161,10 +161,58 @@ const CheckoutPage = () => {
     return () => window.removeEventListener("error", handler);
   }, []);
 
+  // ✅ THÊM: Cảnh báo khi rời trang
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isRedirectingToPayment) {
+        return; // Cho phép redirect đến VNPay
+      }
+
+      // Nếu đang ở trang checkout và có sản phẩm
+      if (checkoutItems.length > 0 && formData.paymentMethod === "VNPAY") {
+        e.preventDefault();
+        e.returnValue =
+          "Bạn có chắc muốn rời khỏi trang? Đơn hàng chưa được hoàn tất.";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [checkoutItems.length, isRedirectingToPayment, formData.paymentMethod]);
+
   const handleChange = (e) => {
     setError("");
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  useEffect(() => {
+    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    if (pendingOrder) {
+      try {
+        const { orderId, orderNumber, timestamp } = JSON.parse(pendingOrder);
+        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
+
+        if (ageMinutes < 15) {
+          toast.warning(
+            `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
+            {
+              duration: 10000,
+              action: {
+                label: "Tiếp tục thanh toán",
+                onClick: () => navigate(`/orders/${orderId}`),
+              },
+            }
+          );
+        } else {
+          // ✅ Sau 15 phút, hủy đơn và thông báo
+          toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
+            duration: 6000,
+          });
+          localStorage.removeItem("pending_vnpay_order");
+        }
+      } catch {}
+    }
+  }, [navigate]);
 
   // Áp dụng mã khuyến mãi
   const handleApplyPromotion = async () => {
@@ -289,17 +337,21 @@ const CheckoutPage = () => {
           });
 
           if (vnpayResponse.data?.success) {
-            // ✅ LƯU THÔNG TIN ĐƠN HÀNG CHỜ THANH TOÁN
+            // ✅ THÊM: Lưu thông tin chi tiết hơn
             localStorage.setItem(
               "pending_vnpay_order",
               JSON.stringify({
                 orderId: createdOrder._id,
+                orderNumber: createdOrder.orderNumber, // ← THÊM
                 selectedItems: selectedForCheckout,
+                totalAmount: createdOrder.totalAmount, // ← THÊM
                 timestamp: Date.now(),
               })
             );
 
-            // ✅ CHUYỂN HƯỚNG MÀ KHÔNG XÓA GIỎ HÀNG
+            // ✅ QUAN TRỌNG: Không xóa selectedForCheckout ở đây
+            // Chỉ xóa sau khi thanh toán thành công
+
             window.location.href = vnpayResponse.data.data.paymentUrl;
           } else {
             throw new Error("Không thể tạo link thanh toán");

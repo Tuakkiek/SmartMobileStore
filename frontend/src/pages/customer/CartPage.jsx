@@ -98,29 +98,34 @@ const CartPage = () => {
     });
   }, [cart?.items, isChangingVariant]);
 
-  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY ĐANG CHỜ
+  // ✅ THÊM: Hiển thị cảnh báo nếu có đơn VNPay pending
   useEffect(() => {
     const pendingOrder = localStorage.getItem("pending_vnpay_order");
-    if (pendingOrder) {
+    if (pendingOrder && items.length > 0) {
       try {
-        const { orderId, timestamp } = JSON.parse(pendingOrder);
-        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
+        const {
+          orderId,
+          orderNumber,
+          selectedItems: pendingItems,
+        } = JSON.parse(pendingOrder);
 
-        if (ageMinutes < 15) {
-          toast.warning("Bạn có đơn hàng VNPay chưa hoàn tất thanh toán", {
+        // Kiểm tra xem sản phẩm pending có còn trong giỏ không
+        const stillInCart = items.some((item) =>
+          pendingItems.includes(item.variantId)
+        );
+
+        if (stillInCart) {
+          toast.info(`Bạn có đơn hàng #${orderNumber} chưa thanh toán`, {
             duration: 8000,
             action: {
-              label: "Xem đơn hàng",
+              label: "Hoàn tất thanh toán",
               onClick: () => navigate(`/orders/${orderId}`),
             },
           });
-        } else {
-          // Quá 15 phút, dọn dẹp
-          localStorage.removeItem("pending_vnpay_order");
         }
       } catch {}
     }
-  }, []);
+  }, [items, navigate]);
 
   // Tự động chọn khi thêm từ trang sản phẩm
   useEffect(() => {

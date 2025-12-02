@@ -31,6 +31,8 @@ import homePageRoutes from "./routes/homePageRoutes.js";
 
 import vnpayRoutes from "./routes/vnpayRoutes.js";
 
+import { cancelExpiredVNPayOrders } from "./services/orderCleanupService.js";
+
 dotenv.config();
 
 // ================================
@@ -151,6 +153,9 @@ app.use((err, req, res, next) => {
   });
 });
 
+setInterval(async () => {
+  await cancelExpiredVNPayOrders();
+}, 5 * 60 * 1000);
 // ================================
 // 🔹 Production: Serve static files & SPA
 // ================================
