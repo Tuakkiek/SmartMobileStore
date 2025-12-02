@@ -534,6 +534,22 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
+    // ✅ THÊM: Nếu là đơn VNPay PENDING_PAYMENT, không cần kiểm tra customerId
+    // vì có thể hệ thống tự động hủy
+    const isVNPayPending =
+      order.paymentMethod === "VNPAY" && order.status === "PENDING_PAYMENT";
+
+    if (
+      !isVNPayPending &&
+      order.customerId.toString() !== req.user._id.toString()
+    ) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền hủy đơn hàng này",
+      });
+    }
+
     // ✅ FIXED: Hoàn lại stock - KHÔNG GỌI incrementSales()
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
