@@ -283,6 +283,10 @@ export const createOrder = async (req, res) => {
     console.log("Points Used:", pointsUsed);
     console.log("Total Amount:", total);
 
+    // ✅ XÁC ĐỊNH TRẠNG THÁI BAN ĐẦU
+    const initialStatus =
+      paymentMethod === "VNPAY" ? "PENDING_PAYMENT" : "PENDING";
+
     // Tạo đơn hàng
     const order = await Order.create(
       [
@@ -298,24 +302,29 @@ export const createOrder = async (req, res) => {
           appliedPromotion,
           pointsUsed,
           totalAmount: total,
-          status: "PENDING",
+          status: initialStatus, // ✅ ĐÚNG - PENDING_PAYMENT cho VNPay
         },
       ],
       { session }
     );
 
-    // ✅ CHỈ XÓA CÁC ITEMS ĐÃ CHECKOUT
-    const checkoutVariantIds = requestItems.map((item) =>
-      item.variantId.toString()
-    );
-    cart.items = cart.items.filter(
-      (item) => !checkoutVariantIds.includes(item.variantId.toString())
-    );
-    await cart.save({ session });
-
-    console.log(
-      `Removed ${requestItems.length} items from cart, ${cart.items.length} items remaining`
-    );
+    // ✅ CHỈ XÓA GIỎ HÀNG KHI KHÔNG PHẢI VNPAY
+    if (paymentMethod !== "VNPAY") {
+      const checkoutVariantIds = requestItems.map((item) =>
+        item.variantId.toString()
+      );
+      cart.items = cart.items.filter(
+        (item) => !checkoutVariantIds.includes(item.variantId.toString())
+      );
+      await cart.save({ session });
+      console.log(
+        `✅ Đã xóa ${requestItems.length} sản phẩm khỏi giỏ (${paymentMethod})`
+      );
+    } else {
+      console.log(
+        `⏸️ Giữ ${requestItems.length} sản phẩm trong giỏ - Chờ thanh toán VNPay`
+      );
+    }
 
     await session.commitTransaction();
 
@@ -334,6 +343,7 @@ export const createOrder = async (req, res) => {
       data: {
         order: order[0],
         redirectUrl: `/orders/${order[0]._id}`,
+        shouldClearCartImmediately: paymentMethod !== "VNPAY", // ✅ THÊM FLAG
       },
     });
   } catch (error) {
@@ -515,12 +525,12 @@ export const cancelOrder = async (req, res) => {
         message: "Bạn không có quyền hủy đơn hàng này",
       });
     }
-
-    if (order.status !== "PENDING") {
+    // ✅ CHO PHÉP HỦY CẢ PENDING VÀ PENDING_PAYMENT
+    if (!["PENDING", "PENDING_PAYMENT"].includes(order.status)) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Chỉ có thể hủy đơn hàng đang chờ xử lý",
+        message: "Chỉ có thể hủy đơn hàng đang chờ xử lý hoặc chờ thanh toán",
       });
     }
 

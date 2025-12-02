@@ -98,7 +98,7 @@ const CartPage = () => {
     });
   }, [cart?.items, isChangingVariant]);
 
-  // ✅ KIỂM TRA ĐƠN HÀNG VNPay CHƯA THANH TOÁN
+  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY ĐANG CHỜ
   useEffect(() => {
     const pendingOrder = localStorage.getItem("pending_vnpay_order");
     if (pendingOrder) {
@@ -115,7 +115,7 @@ const CartPage = () => {
             },
           });
         } else {
-          // Hết hạn, dọn sạch
+          // Quá 15 phút, dọn dẹp
           localStorage.removeItem("pending_vnpay_order");
         }
       } catch {}

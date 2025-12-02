@@ -278,15 +278,6 @@ const CheckoutPage = () => {
       const response = await orderAPI.create(orderData);
       const createdOrder = response.data.data.order;
 
-      // ✅ XÓA CÁC ITEMS ĐÃ CHECKOUT KHỎI GIỎ HÀNG
-      const { removeFromCart } = useCartStore.getState();
-      for (const item of checkoutItems) {
-        await removeFromCart(item.variantId);
-      }
-
-      // ✅ RESET SELECTED ITEMS
-      setSelectedForCheckout([]);
-
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
         try {
@@ -298,7 +289,7 @@ const CheckoutPage = () => {
           });
 
           if (vnpayResponse.data?.success) {
-            // ✅ LƯU ID ĐƠN HÀNG VÀO localStorage ĐỂ DỌN GIỎ HÀNG SAU KHI THANH TOÁN
+            // ✅ LƯU THÔNG TIN ĐƠN HÀNG CHỜ THANH TOÁN
             localStorage.setItem(
               "pending_vnpay_order",
               JSON.stringify({
@@ -315,14 +306,14 @@ const CheckoutPage = () => {
           }
         } catch (err) {
           setIsRedirectingToPayment(false);
-          // ✅ HỦY ĐƠN HÀNG NẾU URL THANH TOÁN KHÔNG ĐƯỢC TẠO
+          // ✅ HỦY ĐƠN HÀNG NẾU TẠO LINK THẤT BẠI
           await orderAPI.cancel(createdOrder._id, {
             reason: "Không thể tạo link thanh toán VNPay",
           });
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        // ✅ COD: Xóa giỏ hàng ngay lập tức vì không cần thanh toán bên ngoài
+        // ✅ CHỈ XÓA GIỎ HÀNG VỚI COD/BANK_TRANSFER
         const { removeFromCart } = useCartStore.getState();
         for (const item of checkoutItems) {
           await removeFromCart(item.variantId);

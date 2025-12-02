@@ -7,7 +7,6 @@ import { CheckCircle, XCircle } from "lucide-react";
 import { vnpayAPI } from "@/lib/api";
 import { useCartStore } from "@/store/cartStore";
 
-
 const VNPayReturnPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -28,7 +27,7 @@ const VNPayReturnPage = () => {
             message: response.data.message,
           });
 
-          // ✅ PAYMENT SUCCESS: NOW CLEAR THE CART
+          // ✅ THANH TOÁN THÀNH CÔNG - XÓA GIỎ HÀNG
           const pendingOrder = localStorage.getItem("pending_vnpay_order");
           if (pendingOrder) {
             try {
@@ -36,7 +35,7 @@ const VNPayReturnPage = () => {
               const { removeFromCart, setSelectedForCheckout, getCart } =
                 useCartStore.getState();
 
-              // Remove paid items from cart
+              // Xóa sản phẩm đã thanh toán khỏi giỏ
               for (const variantId of selectedItems) {
                 await removeFromCart(variantId);
               }
@@ -47,8 +46,10 @@ const VNPayReturnPage = () => {
               // Refresh cart
               await getCart();
 
-              // Clean up localStorage
+              // Dọn dẹp localStorage
               localStorage.removeItem("pending_vnpay_order");
+
+              console.log("✅ Đã xóa giỏ hàng sau khi thanh toán thành công");
             } catch (err) {
               console.error("Error cleaning up cart:", err);
             }
@@ -59,8 +60,9 @@ const VNPayReturnPage = () => {
             message: response.data?.message || "Thanh toán thất bại",
           });
 
-          // ✅ PAYMENT FAILED: Keep cart intact, clean up tracking
+          // ✅ THANH TOÁN THẤT BẠI - GIỮ GIỎ HÀNG
           localStorage.removeItem("pending_vnpay_order");
+          console.log("⚠️ Thanh toán thất bại - Giữ nguyên giỏ hàng");
         }
       } catch (error) {
         console.error("VNPay return error:", error);
@@ -70,7 +72,7 @@ const VNPayReturnPage = () => {
             error.response?.data?.message || error.message || "Lỗi hệ thống",
         });
 
-        // ✅ ERROR: Keep cart intact
+        // ✅ LỖI - GIỮ GIỎ HÀNG
         localStorage.removeItem("pending_vnpay_order");
       }
     };
@@ -78,6 +80,7 @@ const VNPayReturnPage = () => {
     handleReturn();
   }, [searchParams]);
 
+  
   if (status === "loading") {
     return <Loading />;
   }
