@@ -365,45 +365,21 @@ const CheckoutPage = () => {
           toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else {
-        // ✅ XÓA GIỎ HÀNG VỚI COD/BANK_TRANSFER
-        try {
-          // Import cartAPI ở đầu file nếu chưa có
-          const selectedVariantIds = checkoutItems.map(
-            (item) => item.variantId
-          );
+        // ✅ COD/BANK_TRANSFER - Backend đã xóa giỏ, chỉ cần refresh
+        setSelectedForCheckout([]);
 
-          // Xóa từng sản phẩm
-          for (const variantId of selectedVariantIds) {
-            try {
-              await cartAPI.removeItem(variantId);
-            } catch (err) {
-              console.error(`Failed to remove ${variantId}:`, err);
-            }
-          }
+        // Refresh cart từ server (backend đã xóa rồi)
+        await getCart();
 
-          // Clear selection
-          setSelectedForCheckout([]);
+        console.log(
+          `✅ Đơn hàng ${createdOrder.orderNumber} đã tạo thành công`
+        );
 
-          // Refresh cart
-          await getCart();
+        toast.success("Đặt hàng thành công!");
 
-          console.log(
-            `✅ Đã xóa ${selectedVariantIds.length} sản phẩm khỏi giỏ hàng`
-          );
-
-          toast.success("Đặt hàng thành công!");
-
-          setTimeout(() => {
-            navigate(`/orders/${createdOrder._id}`, { replace: true });
-          }, 300);
-        } catch (cleanupError) {
-          console.error("Cart cleanup error:", cleanupError);
-          // Vẫn chuyển trang dù xóa giỏ thất bại
-          toast.success("Đặt hàng thành công!");
-          setTimeout(() => {
-            navigate(`/orders/${createdOrder._id}`, { replace: true });
-          }, 300);
-        }
+        setTimeout(() => {
+          navigate(`/orders/${createdOrder._id}`, { replace: true });
+        }, 300);
       }
     } catch (error) {
       console.error("Order error:", error);
