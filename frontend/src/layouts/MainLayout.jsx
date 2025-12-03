@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useRef } from "react";
+// ============================================
+// FILE: frontend/src/layouts/MainLayout.jsx
+// UPDATED: Integrated CategoryDropdown for mobile menu
+// ============================================
+
+import React, { useState, useEffect } from "react";
 import { Outlet, Link, useNavigate } from "react-router-dom";
 import {
   ShoppingCart,
   Search,
   User,
   Menu,
-  X,
-  Package,
   MapPin,
   Phone,
+  X,
   Clock,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
@@ -19,53 +22,7 @@ import SearchOverlay from "@/components/shared/SearchOverlay";
 import CategoryDropdown from "@/components/shared/CategoryDropdown";
 import Breadcrumb from "@/components/shared/Breadcrumb";
 
-// Import API
-import {
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
-} from "@/lib/api";
-
-const API_MAP = {
-  iPhone: iPhoneAPI,
-  iPad: iPadAPI,
-  Mac: macAPI,
-  AirPods: airPodsAPI,
-  "Apple Watch": appleWatchAPI,
-  "Phụ Kiện": accessoryAPI,
-};
-
-const CATEGORY_IMAGES = {
-  iPhone: "/iphone_17_pro_bac.png",
-  iPad: "/ipad_air_xanh.png",
-  Mac: "/mac.png",
-  AirPods: "/airpods.png",
-  "Apple Watch": "/applewatch.png",
-  "Phụ Kiện": "/op_ip_17_pro.png",
-};
-
-const CATEGORY_PARAM_MAP = {
-  iPhone: "iPhone",
-  iPad: "iPad",
-  Mac: "Mac",
-  AirPods: "AirPods",
-  "Apple Watch": "AppleWatch",
-  "Phụ Kiện": "Accessories",
-};
-
-const categories = [
-  "iPhone",
-  "iPad",
-  "Mac",
-  "AirPods",
-  "Apple Watch",
-  "Phụ Kiện",
-];
-
-// Dữ liệu cửa hàng tại Cần Thơ
+// Store data
 const stores = [
   {
     id: 1,
@@ -119,168 +76,58 @@ const stores = [
     hours: "8:00 - 20:00 (Thứ 2 - Chủ Nhật)",
   },
 ];
+
 const districts = ["Tất cả", "Ninh Kiều", "Cái Răng", "Bình Thủy", "Ô Môn"];
 
 const MainLayout = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuthStore();
   const { getItemCount } = useCartStore();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [storeMenuOpen, setStoreMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Mobile menus
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(0);
-  const [selectedDistrict, setSelectedDistrict] = useState(0);
-  const [categoryProducts, setCategoryProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [storeMenuOpen, setStoreMenuOpen] = useState(false);
+  const [contactMenuOpen, setContactMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Desktop menus
   const [desktopStoreMenuOpen, setDesktopStoreMenuOpen] = useState(false);
   const [desktopSelectedDistrict, setDesktopSelectedDistrict] = useState(0);
-  const [contactMenuOpen, setContactMenuOpen] = useState(false);
 
-  const categoryMenuRef = useRef(null);
+  // Store menu
+  const [selectedDistrict, setSelectedDistrict] = useState(0);
 
-  // Fetch products by category
-  const fetchCategoryProducts = async (categoryName) => {
-    setLoading(true);
-    try {
-      const api = API_MAP[categoryName];
-      if (!api) {
-        setLoading(false);
-        return;
-      }
-      const response = await api.getAll({ limit: 100 });
-      const products = response.data?.data?.products || response.data || [];
-      setCategoryProducts(products);
-    } catch (error) {
-      console.error(`Error loading ${categoryName}:`, error);
-      setCategoryProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const cartItemCount = getItemCount();
 
-  // Load iPhone products on mobile menu open
+  // Prevent body scroll when any menu is open
   useEffect(() => {
-    if (mobileMenuOpen) {
-      fetchCategoryProducts(categories[0]); // Load iPhone by default
-    }
-  }, [mobileMenuOpen]);
-
-  // Prevent body scroll when mobile menu is open
-  useEffect(() => {
-    if (mobileMenuOpen || storeMenuOpen) {
+    if (
+      categoryMenuOpen ||
+      storeMenuOpen ||
+      contactMenuOpen ||
+      desktopStoreMenuOpen
+    ) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
     }
-
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [mobileMenuOpen, storeMenuOpen]);
-
-  // Close category menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        categoryMenuRef.current &&
-        !categoryMenuRef.current.contains(event.target)
-      ) {
-        setCategoryMenuOpen(false);
-        setSelectedCategory(null);
-      }
-    };
-
-    if (categoryMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [categoryMenuOpen]);
-
-  useEffect(() => {
-    if (desktopStoreMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [desktopStoreMenuOpen]);
-
-  useEffect(() => {
-    if (contactMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [contactMenuOpen]);
+  }, [categoryMenuOpen, storeMenuOpen, contactMenuOpen, desktopStoreMenuOpen]);
 
   const handleLogout = async () => {
     await logout();
     navigate("/");
-    setMobileMenuOpen(false);
   };
 
   const handleProfileNavigation = () => {
-    if (user?.role === "CUSTOMER") {
-      navigate("/profile");
-    } else if (user?.role === "ADMIN") {
-      navigate("/admin");
-    } else if (user?.role === "WAREHOUSE_STAFF") {
-      navigate("/warehouse/products");
-    } else if (user?.role === "ORDER_MANAGER") {
-      navigate("/order-manager/orders");
-    } else if (user?.role === "POS_STAFF") {
-      navigate("/pos/dashboard");
-    } else if (user?.role === "CASHIER") {
-      navigate("/CASHIER/dashboard");
-    }
-    setMobileMenuOpen(false);
-  };
-
-  const cartItemCount = getItemCount();
-
-  const handleSearchOpen = () => {
-    setSearchOpen(true);
-  };
-
-  const handleSearchClose = () => {
-    setSearchOpen(false);
-  };
-
-  const handleCategoryClick = (categoryIdx) => {
-    setSelectedCategory(categoryIdx);
-    fetchCategoryProducts(categories[categoryIdx]);
-  };
-
-  const handleDistrictClick = (districtIdx) => {
-    setSelectedDistrict(districtIdx);
-  };
-
-  const navigateToCategory = (categoryName) => {
-    const param = CATEGORY_PARAM_MAP[categoryName];
-    navigate(`/products?category=${encodeURIComponent(param)}`);
-    setMobileMenuOpen(false);
-  };
-
-  const handleProductClick = (product) => {
-    // Navigate to product detail or products page with model filter
-    const catParam = CATEGORY_PARAM_MAP[categories[selectedCategory]];
-    navigate(
-      `/products?category=${encodeURIComponent(
-        catParam
-      )}&model=${encodeURIComponent(product.model || product.name)}`
-    );
-    setMobileMenuOpen(false);
+    if (user?.role === "CUSTOMER") navigate("/profile");
+    else if (user?.role === "ADMIN") navigate("/admin");
+    else if (user?.role === "WAREHOUSE_STAFF") navigate("/warehouse/products");
+    else if (user?.role === "ORDER_MANAGER") navigate("/order-manager/orders");
+    else if (user?.role === "POS_STAFF") navigate("/pos/dashboard");
+    else if (user?.role === "CASHIER") navigate("/CASHIER/dashboard");
   };
 
   const filteredStores =
@@ -293,7 +140,7 @@ const MainLayout = () => {
   return (
     <div className="min-h-screen flex flex-col relative pb-16 md:pb-0">
       {/* Search Overlay */}
-      <SearchOverlay isOpen={searchOpen} onClose={handleSearchClose} />
+      <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 bg-black text-white py-3 px-4 md:py-4 md:px-6 z-40">
@@ -312,7 +159,7 @@ const MainLayout = () => {
                 <input
                   type="text"
                   placeholder="Bạn muốn..."
-                  onClick={handleSearchOpen}
+                  onClick={() => setSearchOpen(true)}
                   readOnly
                   className="w-full bg-white/10 text-white rounded-full py-2 px-4 pr-10 focus:outline-none placeholder-gray-400 text-sm cursor-pointer"
                 />
@@ -351,7 +198,7 @@ const MainLayout = () => {
                 <input
                   type="text"
                   placeholder="Tìm kiếm sản phẩm..."
-                  onClick={handleSearchOpen}
+                  onClick={() => setSearchOpen(true)}
                   readOnly
                   className="w-full bg-white text-black rounded-full py-3 px-6 pr-12 focus:outline-none transition-colors duration-300 hover:bg-gray-100 cursor-pointer"
                 />
@@ -404,6 +251,7 @@ const MainLayout = () => {
           </div>
         </div>
       </header>
+
       <Breadcrumb />
 
       {/* Mobile Bottom Navigation */}
@@ -417,10 +265,6 @@ const MainLayout = () => {
         >
           <Link
             to="/"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setStoreMenuOpen(false);
-            }}
             className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
           >
             <svg
@@ -440,22 +284,17 @@ const MainLayout = () => {
           </Link>
 
           <button
-            onClick={() => {
-              setMobileMenuOpen(true);
-              setStoreMenuOpen(false);
-            }}
+            onClick={() => setCategoryMenuOpen(true)}
             className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
           >
             <Menu className="w-5 h-5" />
             <span className="text-[10px] font-medium">Danh mục</span>
           </button>
+
           {isAuthenticated && user?.role === "CUSTOMER" && (
             <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setStoreMenuOpen(true);
-              }}
-              className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors relative"
+              onClick={() => setStoreMenuOpen(true)}
+              className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
             >
               <MapPin className="w-5 h-5" />
               <span className="text-[10px] font-medium">Cửa hàng</span>
@@ -490,242 +329,50 @@ const MainLayout = () => {
         </div>
       </nav>
 
-      {/* Mobile Category Menu Overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
-          onClick={() => setMobileMenuOpen(false)}
-        >
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-black rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-semibold">Danh mục</span>
-              </div>
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-white hover:text-gray-400 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex flex-1 overflow-hidden">
-              {/* Left Sidebar - Categories */}
-              <div className="w-1/3 bg-neutral-900 overflow-y-auto">
-                {categories.map((categoryName, idx) => {
-                  const imgSrc = CATEGORY_IMAGES[categoryName];
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleCategoryClick(idx)}
-                      className={`w-full text-left px-3 py-4 border-b border-gray-800 transition-colors flex flex-col items-center gap-2 ${
-                        selectedCategory === idx
-                          ? "bg-black text-white"
-                          : "text-gray-400 hover:text-white hover:bg-neutral-800"
-                      }`}
-                    >
-                      <img
-                        src={imgSrc}
-                        alt={categoryName}
-                        className="w-12 h-12 object-contain"
-                      />
-                      <span className="text-xs font-medium text-center">
-                        {categoryName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Right Content - Products */}
-              <div className="flex-1 bg-black overflow-y-auto">
-                <div className="p-4">
-                  <h2 className="text-white text-lg font-bold mb-4">
-                    {categories[selectedCategory]}
-                  </h2>
-
-                  {loading ? (
-                    <div className="space-y-4">
-                      <div className="mb-6">
-                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
-                          Gợi ý cho bạn
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {[1, 2].map((idx) => (
-                            <div
-                              key={idx}
-                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800"
-                            >
-                              <div className="bg-gray-800 rounded-lg aspect-square mb-2 animate-pulse"></div>
-                              <div className="h-3 bg-gray-800 rounded mb-1 animate-pulse"></div>
-                              <div className="h-2 bg-gray-800 rounded animate-pulse w-2/3"></div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ) : categoryProducts.length > 0 ? (
-                    <>
-                      <div className="mb-6">
-                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
-                          Gợi ý cho bạn
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {categoryProducts.slice(0, 2).map((product, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handleProductClick(product)}
-                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800 hover:border-gray-600 transition-colors"
-                            >
-                              <div className="bg-white rounded-lg aspect-square mb-2 flex items-center justify-center overflow-hidden">
-                                {product.images?.[0] ||
-                                product.variants?.[0]?.images?.[0] ? (
-                                  <img
-                                    src={
-                                      product.images?.[0] ||
-                                      product.variants?.[0]?.images?.[0]
-                                    }
-                                    alt={product.name}
-                                    className="w-full h-full object-contain"
-                                  />
-                                ) : (
-                                  <Package className="w-12 h-12 text-gray-400" />
-                                )}
-                              </div>
-                              <p className="text-white text-xs font-medium mb-1 line-clamp-2">
-                                {product.name}
-                              </p>
-                              <p className="text-gray-400 text-xs">
-                                {product.variants?.[0]?.price
-                                  ? `${product.variants[0].price.toLocaleString(
-                                      "vi-VN"
-                                    )}đ`
-                                  : "Liên hệ"}
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-gray-400 text-xs font-semibold mb-3">
-                          Chọn theo dòng
-                        </h3>
-                        <div className="space-y-2">
-                          {categoryProducts.map((product, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handleProductClick(product)}
-                              className="bg-neutral-900 rounded-xl p-3 border border-gray-800 hover:border-gray-600 transition-colors flex items-center gap-3 w-full"
-                            >
-                              <div className="bg-white rounded-lg w-12 h-12 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                {product.images?.[0] ||
-                                product.variants?.[0]?.images?.[0] ? (
-                                  <img
-                                    src={
-                                      product.images?.[0] ||
-                                      product.variants?.[0]?.images?.[0]
-                                    }
-                                    alt={product.name}
-                                    className="w-full h-full object-contain"
-                                  />
-                                ) : (
-                                  <Package className="w-10 h-10 text-gray-400" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0 text-left">
-                                <p className="text-white text-xs font-semibold mb-0.5 truncate">
-                                  {product.name}
-                                </p>
-                                <p className="text-gray-400 text-xs truncate">
-                                  {product.variants?.[0]?.price
-                                    ? `${product.variants[0].price.toLocaleString(
-                                        "vi-VN"
-                                      )}đ`
-                                    : product.model || "Liên hệ"}
-                                </p>
-                              </div>
-                              <svg
-                                className="w-4 h-4 text-gray-600 flex-shrink-0"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M9 5l7 7-7 7"
-                                />
-                              </svg>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() =>
-                          navigateToCategory(categories[selectedCategory])
-                        }
-                        className="w-full mt-4 bg-white text-black rounded-full py-2.5 px-6 text-sm font-semibold hover:bg-gray-200 transition-colors"
-                      >
-                        Xem tất cả {categories[selectedCategory]}
-                      </button>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                      <Package className="w-16 h-16 mb-4" />
-                      <p className="text-sm">Không có sản phẩm</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* Mobile Category Menu - Using CategoryDropdown */}
+      {categoryMenuOpen && (
+        <div className="md:hidden">
+          <CategoryDropdown
+            isMobileMenu={true}
+            isOpen={categoryMenuOpen}
+            onClose={() => setCategoryMenuOpen(false)}
+          />
         </div>
       )}
 
-      {/* Mobile Store Menu Overlay */}
+      {/* Mobile Store Menu */}
       {storeMenuOpen && (
         <div
           className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
           onClick={() => setStoreMenuOpen(false)}
         >
           <div
-            className="absolute bottom-0 left-0 right-0 bg-black rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
+            <div className="bg-white text-gray-900 p-4 flex items-center justify-between border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <MapPin className="w-6 h-6" />
+                <MapPin className="w-6 h-6 text-red-500" />
                 <span className="text-lg font-semibold">Cửa hàng</span>
               </div>
               <button
                 onClick={() => setStoreMenuOpen(false)}
-                className="text-white hover:text-gray-400 transition-colors"
+                className="text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Main Content */}
             <div className="flex flex-1 overflow-hidden">
-              {/* Left Sidebar - Districts */}
-              <div className="w-1/3 bg-neutral-900 overflow-y-auto">
+              <div className="w-1/3 bg-gray-50 overflow-y-auto border-r border-gray-200">
                 {districts.map((districtName, idx) => (
                   <button
                     key={idx}
-                    onClick={() => handleDistrictClick(idx)}
-                    className={`w-full text-left px-3 py-4 border-b border-gray-800 transition-colors ${
+                    onClick={() => setSelectedDistrict(idx)}
+                    className={`w-full text-left px-3 py-4 border-b border-gray-200 transition-colors ${
                       selectedDistrict === idx
-                        ? "bg-black text-white"
-                        : "text-gray-400 hover:text-white hover:bg-neutral-800"
+                        ? "bg-white text-black font-semibold"
+                        : "text-gray-600 hover:text-black hover:bg-gray-100"
                     }`}
                   >
                     <span className="text-xs font-medium">{districtName}</span>
@@ -733,10 +380,9 @@ const MainLayout = () => {
                 ))}
               </div>
 
-              {/* Right Content - Stores */}
-              <div className="flex-1 bg-black overflow-y-auto">
+              <div className="flex-1 bg-white overflow-y-auto">
                 <div className="p-4">
-                  <h2 className="text-white text-lg font-bold mb-4">
+                  <h2 className="text-gray-900 text-lg font-bold mb-4">
                     {districts[selectedDistrict]}
                   </h2>
 
@@ -745,14 +391,14 @@ const MainLayout = () => {
                       {filteredStores.map((store) => (
                         <div
                           key={store.id}
-                          className="bg-neutral-900 rounded-xl p-4 border border-gray-800"
+                          className="bg-gray-50 rounded-xl p-4 border border-gray-200"
                         >
                           <div className="flex items-start gap-3 mb-3">
-                            <div className="bg-white rounded-lg p-2 flex-shrink-0">
+                            <div className="bg-white rounded-lg p-2 flex-shrink-0 border border-gray-200">
                               <MapPin className="w-5 h-5 text-red-500" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="text-white text-sm font-semibold mb-1 flex items-center gap-2">
+                              <h3 className="text-gray-900 text-sm font-semibold mb-1 flex items-center gap-2">
                                 {store.name}
                                 {store.isMain && (
                                   <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
@@ -760,7 +406,7 @@ const MainLayout = () => {
                                   </span>
                                 )}
                               </h3>
-                              <p className="text-gray-400 text-xs">
+                              <p className="text-gray-600 text-xs">
                                 Quận {store.district}
                               </p>
                             </div>
@@ -769,7 +415,7 @@ const MainLayout = () => {
                           <div className="space-y-2">
                             <div className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                              <p className="text-gray-300 text-xs leading-relaxed">
+                              <p className="text-gray-700 text-xs leading-relaxed">
                                 {store.address}
                               </p>
                             </div>
@@ -778,7 +424,7 @@ const MainLayout = () => {
                               <Phone className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <a
                                 href={`tel:${store.phone}`}
-                                className="text-blue-400 text-xs hover:underline"
+                                className="text-blue-600 text-xs hover:underline"
                               >
                                 {store.phone}
                               </a>
@@ -786,26 +432,26 @@ const MainLayout = () => {
 
                             <div className="flex items-start gap-2">
                               <Clock className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                              <p className="text-gray-300 text-xs">
+                              <p className="text-gray-700 text-xs">
                                 {store.hours}
                               </p>
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-3 border-t border-gray-800 flex gap-2">
+                          <div className="mt-3 pt-3 border-t border-gray-200 flex gap-2">
                             <a
                               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                                 store.address
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex-1 bg-white text-black rounded-full py-2 px-4 text-xs font-semibold hover:bg-gray-200 transition-colors text-center"
+                              className="flex-1 bg-black text-white rounded-full py-2 px-4 text-xs font-semibold hover:bg-gray-800 transition-colors text-center"
                             >
                               Chỉ đường
                             </a>
                             <a
                               href={`tel:${store.phone}`}
-                              className="flex-1 bg-neutral-800 text-white rounded-full py-2 px-4 text-xs font-semibold hover:bg-neutral-700 transition-colors text-center border border-gray-700"
+                              className="flex-1 bg-white text-black rounded-full py-2 px-4 text-xs font-semibold hover:bg-gray-100 transition-colors text-center border border-gray-300"
                             >
                               Gọi ngay
                             </a>
@@ -825,7 +471,8 @@ const MainLayout = () => {
           </div>
         </div>
       )}
-      {/* Mobile Contact Menu Overlay */}
+
+      {/* Mobile Contact Menu */}
       {contactMenuOpen && (
         <div
           className="md:hidden fixed inset-0 bottom-16 z-50 bg-black/50"
@@ -835,32 +482,29 @@ const MainLayout = () => {
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[70vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="bg-black text-white p-4 flex items-center justify-between border-b border-gray-800 flex-shrink-0">
+            <div className="bg-white text-gray-900 p-4 flex items-center justify-between border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <Phone className="w-6 h-6" />
+                <Phone className="w-6 h-6 text-red-500" />
                 <div>
                   <span className="text-lg font-semibold">Tổng đài hỗ trợ</span>
-                  <p className="text-xs text-gray-400">(Từ 8:00-21:00)</p>
+                  <p className="text-xs text-gray-600">(Từ 8:00-21:00)</p>
                 </div>
               </div>
               <button
                 onClick={() => setContactMenuOpen(false)}
-                className="text-white hover:text-gray-400 transition-colors"
+                className="text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Contact list - Scrollable */}
-            <div className="flex-1 overflow-y-auto bg-black p-4">
+            <div className="flex-1 overflow-y-auto bg-white p-4">
               <div className="space-y-3">
-                {/* Hotline bán hàng */}
                 <a
                   href="tel:1900633909"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Hotline bán hàng:
                   </p>
                   <div className="flex items-center gap-2">
@@ -871,12 +515,11 @@ const MainLayout = () => {
                   </div>
                 </a>
 
-                {/* Khách hàng doanh nghiệp */}
                 <a
                   href="tel:0932640089"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Khách hàng doanh nghiệp:
                   </p>
                   <div className="flex items-center gap-2">
@@ -887,12 +530,11 @@ const MainLayout = () => {
                   </div>
                 </a>
 
-                {/* Hotline bảo hành */}
                 <a
                   href="tel:1900633909"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Hotline bảo hành, kỹ thuật:
                   </p>
                   <div className="flex items-center gap-2">
@@ -903,12 +545,11 @@ const MainLayout = () => {
                   </div>
                 </a>
 
-                {/* Hotline hỗ trợ phần mềm */}
                 <a
                   href="tel:1900633909"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Hotline hỗ trợ phần mềm:
                   </p>
                   <div className="flex items-center gap-2">
@@ -919,12 +560,11 @@ const MainLayout = () => {
                   </div>
                 </a>
 
-                {/* Hotline tư vấn trả góp */}
                 <a
                   href="tel:0977649939"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Hotline tư vấn trả góp:
                   </p>
                   <div className="flex items-center gap-2">
@@ -935,12 +575,11 @@ const MainLayout = () => {
                   </div>
                 </a>
 
-                {/* Hotline phản ánh chất lượng */}
                 <a
                   href="tel:0981000731"
-                  className="bg-neutral-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors block"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
                 >
-                  <p className="text-gray-400 text-xs mb-2">
+                  <p className="text-gray-600 text-xs mb-2">
                     Hotline phản ánh chất lượng dịch vụ:
                   </p>
                   <div className="flex items-center gap-2">
