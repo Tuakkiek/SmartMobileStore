@@ -111,14 +111,22 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       // ✅ Thêm shipperId nếu chuyển sang SHIPPING
       if (newStatus === "SHIPPING" && selectedShipper) {
         payload.shipperId = selectedShipper;
+        console.log("🚚 Giao đơn cho Shipper:", {
+          orderId: order._id,
+          shipperId: selectedShipper,
+          shipperName: shippers.find((s) => s._id === selectedShipper)
+            ?.fullName,
+        });
       }
 
-      await orderAPI.updateStatus(order._id, payload);
+      const response = await orderAPI.updateStatus(order._id, payload);
+      console.log("✅ Cập nhật thành công:", response.data);
+
       toast.success("Cập nhật trạng thái thành công");
       onSuccess?.();
       onClose();
     } catch (error) {
-      console.error("Lỗi cập nhật trạng thái:", error);
+      console.error("❌ Lỗi cập nhật trạng thái:", error);
       toast.error(error.response?.data?.message || "Cập nhật thất bại");
     } finally {
       setIsLoading(false);

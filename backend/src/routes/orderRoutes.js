@@ -23,16 +23,22 @@ router.post("/:id/cancel", restrictTo("CUSTOMER"), cancelOrder);
 // Order Manager routes
 router.get(
   "/all",
-  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER"),
+  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER"), // ✅ THÊM SHIPPER
   getAllOrders
 );
 router.put(
   "/:id/status",
-  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER"),
+  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER"), // ✅ THÊM SHIPPER
   updateOrderStatus
 );
 
 // Shared routes
 router.get("/:id", getOrderById);
+
+router.get(
+  "/statistics",
+  restrictTo("ADMIN", "ORDER_MANAGER"),
+  getOrderStatistics
+);
 
 export default router;

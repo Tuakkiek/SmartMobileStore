@@ -424,9 +424,10 @@ export const getOrderById = async (req, res) => {
           "items.productName items.quantity items.price items.images " +
           "items.variantColor items.variantStorage items.variantName items.variantConnectivity " +
           "items.variantSku items.originalPrice items.total " +
-          "statusHistory posInfo paymentInfo customerId" // <-- Đã thêm customerId
+          "statusHistory posInfo paymentInfo customerId shipperInfo"
       )
-      .populate("customerId", "fullName phoneNumber email");
+      .populate("customerId", "fullName phoneNumber email")
+      .populate("shipperInfo.shipperId", "fullName phoneNumber"); // ✅ THÊM populate Shipper
 
     if (!order) {
       return res.status(404).json({
@@ -435,55 +436,52 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    // === THÊM LOG ĐỂ DEBUG ===
     const userId = req.user._id.toString();
+    const userRole = req.user.role;
+
     console.log("=== ORDER ACCESS CHECK ===");
     console.log("User ID:", userId);
-    console.log("User Role:", req.user.role);
+    console.log("User Role:", userRole);
     console.log("Order ID:", order._id.toString());
-    console.log("Order customerId:", order.customerId._id.toString());
-    // console.log("Order posInfo:", JSON.stringify(order.posInfo, null, 2));
-    // console.log(
-    //   "Order paymentInfo:",
-    //   JSON.stringify(order.paymentInfo, null, 2)
-    // );
+    console.log("Order customerId:", order.customerId?._id.toString());
+    console.log("Order Shipper:", order.shipperInfo?.shipperId?.toString());
 
-    const isOwner = order.customerId._id.toString() === userId;
-    const isAdmin = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
-    const isPOSStaff = req.user.role === "POS_STAFF";
-    const isCashier = req.user.role === "CASHIER";
+    // ============================================
+    // ✅ FIXED LOGIC: Thêm kiểm tra Shipper
+    // ============================================
+    const isOwner = order.customerId?._id.toString() === userId;
+    const isAdmin = ["ADMIN", "ORDER_MANAGER"].includes(userRole);
+    const isPOSStaff = userRole === "POS_STAFF";
+    const isCashier = userRole === "CASHIER";
+    const isShipper = userRole === "SHIPPER";
+    const isPOSOrder = !!order.posInfo || !!order.paymentInfo;
+
+    // ✅ Shipper được xem đơn nếu đơn được giao cho mình
+    const isAssignedShipper =
+      isShipper && order.shipperInfo?.shipperId?.toString() === userId;
 
     console.log("isOwner:", isOwner);
     console.log("isAdmin:", isAdmin);
     console.log("isPOSStaff:", isPOSStaff);
     console.log("isCashier:", isCashier);
+    console.log("isShipper:", isShipper);
+    console.log("isAssignedShipper:", isAssignedShipper);
 
     // ============================================
-    // === LOGIC PHÂN QUYỀN ĐÃ SỬA ===
+    // ✅ LOGIC PHÂN QUYỀN MỚI
     // ============================================
-    // Kiểm tra xem đây có phải là đơn hàng POS không (có posInfo hoặc paymentInfo)
-    const isPOSOrder = !!order.posInfo || !!order.paymentInfo;
-    console.log("isPOSOrder:", isPOSOrder);
-
     if (
-      !isOwner &&
-      !isAdmin &&
-      // Logic mới:
-      // Nếu KHÔNG PHẢI là ( (người dùng có vai trò POS/Cashier) VÀ (đây là đơn POS) )
-      // thì mới từ chối.
-      !((isPOSStaff || isCashier) && isPOSOrder)
+      !isOwner && // Không phải chủ đơn
+      !isAdmin && // Không phải Admin/Order Manager
+      !isAssignedShipper && // Không phải Shipper được giao
+      !((isPOSStaff || isCashier) && isPOSOrder) // Không phải POS/Cashier xem đơn POS
     ) {
-      console.log(
-        "❌ ACCESS DENIED - User is not Owner, Admin, or relevant POS/Cashier"
-      );
+      console.log("❌ ACCESS DENIED");
       return res.status(403).json({
         success: false,
         message: "Bạn không có quyền xem đơn hàng này",
       });
     }
-    // ============================================
-    // === KẾT THÚC SỬA ĐỔI ===
-    // ============================================
 
     console.log("✅ ACCESS GRANTED");
     console.log("========================");
@@ -636,7 +634,13 @@ export const getAllOrders = async (req, res) => {
       startDate,
       endDate,
     } = req.query;
+
     const query = {};
+
+    // ✅ FIXED: Nếu là Shipper, chỉ lấy đơn được giao cho mình
+    if (req.user.role === "SHIPPER") {
+      query["shipperInfo.shipperId"] = req.user._id;
+    }
 
     if (status) query.status = status;
     if (startDate || endDate) {
@@ -647,7 +651,7 @@ export const getAllOrders = async (req, res) => {
 
     if (search) {
       query.$or = [
-        { _id: { $regex: search, $options: "i" } },
+        { orderNumber: { $regex: search, $options: "i" } },
         { "shippingAddress.fullName": { $regex: search, $options: "i" } },
         { "shippingAddress.phoneNumber": { $regex: search, $options: "i" } },
       ];
@@ -655,6 +659,7 @@ export const getAllOrders = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("customerId", "fullName phoneNumber email")
+      .populate("shipperInfo.shipperId", "fullName phoneNumber") // ✅ THÊM populate
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -678,7 +683,6 @@ export const getAllOrders = async (req, res) => {
     });
   }
 };
-
 // ============================================
 // UPDATE ORDER STATUS (Admin/Order Manager)
 // ============================================
@@ -690,7 +694,7 @@ export const updateOrderStatus = async (req, res) => {
     const { status, note, shipperId } = req.body;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const userName = req.user.fullName; // ✅ LẤY TÊN NGƯỜI DÙNG
+    const userName = req.user.fullName;
 
     const order = await Order.findById(req.params.id).session(session);
     if (!order) {
@@ -721,16 +725,12 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Order Manager chỉ định Shipper khi chuyển sang SHIPPING
+    // ============================================
+    // ✅ FIXED: Logic giao Shipper
+    // ============================================
     if (status === "SHIPPING") {
-      if (userRole === "SHIPPER") {
-        order.shipperInfo = {
-          shipperId: userId,
-          shipperName: userName,
-          shipperPhone: req.user.phoneNumber,
-          pickupAt: new Date(),
-        };
-      } else if (["ORDER_MANAGER", "ADMIN"].includes(userRole)) {
+      // ✅ CASE 1: Admin/Order Manager giao cho Shipper cụ thể
+      if (["ORDER_MANAGER", "ADMIN"].includes(userRole)) {
         if (!shipperId) {
           await session.abortTransaction();
           return res.status(400).json({
@@ -754,6 +754,31 @@ export const updateOrderStatus = async (req, res) => {
           shipperPhone: shipper.phoneNumber,
           pickupAt: new Date(),
         };
+
+        console.log(
+          "✅ Admin/Order Manager giao đơn cho Shipper:",
+          shipper.fullName
+        );
+      }
+      // ✅ CASE 2: Shipper tự nhận đơn (nếu cần - có thể bỏ nếu không cho phép)
+      else if (userRole === "SHIPPER") {
+        order.shipperInfo = {
+          shipperId: userId,
+          shipperName: userName,
+          shipperPhone: req.user.phoneNumber,
+          pickupAt: new Date(),
+        };
+
+        console.log("✅ Shipper tự nhận đơn:", userName);
+      }
+      // ✅ CASE 3: Vai trò khác không được phép chuyển sang SHIPPING
+      else {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message:
+            "Chỉ Order Manager/Admin/Shipper được chuyển sang trạng thái SHIPPING",
+        });
       }
     }
 
@@ -762,11 +787,9 @@ export const updateOrderStatus = async (req, res) => {
       if (!order.shipperInfo) {
         order.shipperInfo = {};
       }
-      
+
       order.shipperInfo.deliveredAt = new Date();
       order.shipperInfo.deliveryNote = note || "Giao hàng thành công";
-      
-      // ✅ LƯU TÊN NGƯỜI CẬP NHẬT (Admin hoặc Shipper)
       order.shipperInfo.deliveredBy = userName;
       order.shipperInfo.deliveredByRole = userRole;
     }
@@ -785,16 +808,26 @@ export const updateOrderStatus = async (req, res) => {
       for (const item of order.items) {
         const models = getModelsByType(item.productType);
         if (models) {
-          const variant = await models.Variant.findById(item.variantId).session(session);
+          const variant = await models.Variant.findById(item.variantId).session(
+            session
+          );
           if (variant) {
             variant.stock += item.quantity;
-            variant.salesCount = Math.max(0, (variant.salesCount || 0) - item.quantity);
+            variant.salesCount = Math.max(
+              0,
+              (variant.salesCount || 0) - item.quantity
+            );
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(item.productId).session(session);
+          const product = await models.Product.findById(item.productId).session(
+            session
+          );
           if (product) {
-            product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
+            product.salesCount = Math.max(
+              0,
+              (product.salesCount || 0) - item.quantity
+            );
             await product.save({ session });
           }
         }

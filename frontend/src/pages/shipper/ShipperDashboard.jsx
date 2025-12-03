@@ -73,15 +73,25 @@ const ShipperDashboard = () => {
   const fetchAllOrders = async () => {
     setIsLoading(true);
     try {
+      // ✅ FIXED: Shipper sẽ tự động chỉ nhận đơn của mình từ backend
       const statusList = ["SHIPPING", "DELIVERED", "RETURNED"];
       const promises = statusList.map((status) =>
         orderAPI.getAll({ status, limit: 1000 })
       );
       const responses = await Promise.all(promises);
       const all = responses.flatMap((r) => r.data.data.orders || []);
+
+      console.log("📦 Fetched orders for Shipper:", {
+        userId: user._id,
+        total: all.length,
+        shipping: all.filter((o) => o.status === "SHIPPING").length,
+        delivered: all.filter((o) => o.status === "DELIVERED").length,
+        returned: all.filter((o) => o.status === "RETURNED").length,
+      });
+
       setRawOrders(all);
     } catch (err) {
-      console.error(err);
+      console.error("❌ Lỗi tải đơn hàng:", err);
       toast.error("Không thể tải danh sách đơn hàng");
     } finally {
       setIsLoading(false);
