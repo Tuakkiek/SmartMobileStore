@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, Search, Package } from "lucide-react";
+import { Plus, Search, Package, Library } from "lucide-react";
 import {
   iPhoneAPI,
   iPadAPI,
@@ -47,6 +47,8 @@ const ProductsPage = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("iPhone");
   const [products, setProducts] = useState([]);
+  const [total, setTotal] = useState(0); // THÊM: tổng số sản phẩm
+  const [page, setPage] = useState(1); // THÊM: trang hiện tại
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -57,11 +59,24 @@ const ProductsPage = () => {
   const [showJsonForm, setShowJsonForm] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
   const [showCSVImporter, setShowCSVImporter] = useState(false);
+  const LIMIT = 12; // Số sản phẩm mỗi trang
 
-  // Fetch products khi thay đổi tab
+  // THÊM DÒNG NÀY
+const pagination = {
+  currentPage: page,
+  totalPages: Math.ceil(total / LIMIT),
+  hasPrev: page > 1,
+  hasNext: page < Math.ceil(total / LIMIT),
+};
+
   useEffect(() => {
     fetchProducts();
-  }, [activeTab]);
+  }, [activeTab, page, searchQuery, justCreatedProductId]);
+
+  // Reset trang khi đổi danh mục hoặc tìm kiếm
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, searchQuery]);
 
   // ============================================
   // FETCH PRODUCTS
@@ -70,58 +85,60 @@ const ProductsPage = () => {
     setIsLoading(true);
     try {
       const api = API_MAP[activeTab];
-      if (!api || !api.getAll) {
-        throw new Error(`API for ${activeTab} is not properly configured`);
-      }
+      if (!api?.getAll) throw new Error("API không hợp lệ");
 
-      console.log(`✅ Fetching products for category: ${activeTab}`);
-      const response = await api.getAll({ limit: 100 });
-      const data = response?.data?.data?.products || response?.data || [];
+      // THÊM: truyền page, limit, search
+      const response = await api.getAll({
+        page,
+        limit: LIMIT,
+        search: searchQuery || undefined,
+      });
 
-      // ✅ TÍNH TOP 10 MỚI NHẤT
-      const sortedByDate = [...data].sort(
+      const data = response?.data?.data;
+      if (!data) throw new Error("Không có dữ liệu");
+
+      const productsList = data.products || [];
+      const totalCount = data.total || productsList.length; // backend phải trả total
+
+      // Tính top 10 mới nhất
+      const sortedByDate = [...productsList].sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
       const top10NewIds = sortedByDate.slice(0, 10).map((p) => p._id);
 
-      // ✅ LẤY TOP 10 BÁN CHẠY
+      // Top 10 bán chạy
       let top10SellerIds = [];
       try {
-        const sellersRes = await analyticsAPI.getTopSellers(activeTab, 10);
-        top10SellerIds = sellersRes.data.data.map((s) => s.productId);
-      } catch (error) {
-        console.warn("Failed to fetch top sellers:", error);
+        const res = await analyticsAPI.getTopSellers(activeTab, 10);
+        top10SellerIds = res.data.data.map((s) => s.productId);
+      } catch (err) {
+        console.warn("Top seller lỗi");
       }
 
-      // ✅ ATTACH FLAGS VÀO PRODUCTS (thêm category để modal edit nhận đúng)
-      const productsWithFlags = data.map((p) => ({
+      const productsWithFlags = productsList.map((p) => ({
         ...p,
         isTopNew: top10NewIds.includes(p._id),
         isTopSeller: top10SellerIds.includes(p._id),
-        category: activeTab, // <-- SỬA Ở ĐÂY: Thêm category từ activeTab
+        category: activeTab,
       }));
 
-      setProducts(Array.isArray(productsWithFlags) ? productsWithFlags : []);
+      setProducts(productsWithFlags);
+      setTotal(totalCount); // quan trọng!
 
-      // If we just created a product, find it and auto-open edit
+      // Auto mở modal nếu vừa tạo sản phẩm
       if (justCreatedProductId) {
-        const createdProduct = productsWithFlags.find(
+        const newProduct = productsWithFlags.find(
           (p) => p._id === justCreatedProductId
         );
-        if (createdProduct) {
-          setCurrentMode("edit");
-          setCurrentProduct(createdProduct);
-          setShowModal(true);
+        if (newProduct) {
+          handleEdit(newProduct);
           setJustCreatedProductId(null);
         }
       }
     } catch (error) {
-      console.error("❌ Error fetching products:", {
-        message: error.message,
-        response: error.response?.data,
-      });
-      toast.error(error.response?.data?.message || "Lỗi khi tải sản phẩm");
+      toast.error(error.response?.data?.message || "Lỗi tải sản phẩm");
       setProducts([]);
+      setTotal(0);
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +192,12 @@ const ProductsPage = () => {
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại");
     } finally {
       setIsLoading(false);
+      // Nếu xóa hết sản phẩm ở trang cuối → lùi về trang trước
+      if (products.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        fetchProducts();
+      }
     }
   };
 
@@ -280,16 +303,21 @@ const ProductsPage = () => {
         </TabsList>
 
         {/* SEARCH */}
-        <div className="mt-4">
-          <div className="relative">
+        <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Tìm kiếm sản phẩm..."
+              placeholder="Tìm kiếm tên hoặc model..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
             />
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            Tìm thấy <span className="font-semibold">{total}</span> sản phẩm
+            {total > 0 && ` • Trang ${page} / ${Math.ceil(total / LIMIT)}`}
+          </p>
         </div>
 
         {/* PRODUCTS GRID */}
@@ -329,6 +357,32 @@ const ProductsPage = () => {
                 })}
               </div>
             )}
+                                       {/* PHÂN TRANG ĐẸP – GIỐNG CASHIER */}
+              {pagination.totalPages > 1 && (
+                <div className="flex justify-center items-center gap-8 mt-12">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page === 1 || isLoading}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Trước
+                  </Button>
+
+                  <div className="text-sm font-medium min-w-[140px] text-center">
+                    Trang {pagination.currentPage} / {pagination.totalPages}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page === pagination.totalPages || isLoading}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Sau
+                  </Button>
+                </div>
+              )}
           </TabsContent>
         ))}
       </Tabs>
