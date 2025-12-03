@@ -45,8 +45,13 @@ export const useDashboardData = (timeRange) => {
         promotionsRes,
         employeeKPIRes, // ✅ NEW
       ] = await Promise.all([
-        orderAPI.getAll({ limit: 1000 }),
-        orderAPI.getAll({ status: "DELIVERED", limit: 2000 }),
+        orderAPI.getAll({ limit: 1000, startDate, endDate }), // Thêm tham số ngày
+        orderAPI.getAll({
+          status: "DELIVERED",
+          limit: 2000,
+          startDate,
+          endDate,
+        }), // Thêm tham số ngày
         userAPI.getAllEmployees(),
         iPhoneAPI.getAll({ limit: 1000 }),
         iPadAPI.getAll({ limit: 1000 }),
@@ -99,30 +104,29 @@ export const useDashboardData = (timeRange) => {
 // ============================================
 const getDateRange = (timeRange) => {
   const now = new Date();
-  let startDate = null;
-  let endDate = new Date();
+  const endDate = new Date(now);
+  let startDate = new Date(now);
 
   switch (timeRange) {
-    case "today":
-      startDate = new Date(now.setHours(0, 0, 0, 0));
+    case "7days":
+      startDate.setDate(startDate.getDate() - 6); // Bao gồm 7 ngày
       break;
-    case "week":
-      startDate = new Date(now.setDate(now.getDate() - 7));
+    case "30days":
+      startDate.setDate(startDate.getDate() - 29);
       break;
-    case "month":
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    case "3months":
+      startDate.setMonth(startDate.getMonth() - 3);
       break;
-    case "year":
-      startDate = new Date(now.getFullYear(), 0, 1);
+    case "1year":
+      startDate.setFullYear(startDate.getFullYear() - 1);
       break;
     default:
-      startDate = null;
+      startDate.setDate(startDate.getDate() - 29); // Mặc định là 30 ngày
   }
 
-  return {
-    startDate: startDate?.toISOString(),
-    endDate: endDate.toISOString(),
-  };
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 };
 
 // ============================================
@@ -158,29 +162,48 @@ const processAllData = ({
   timeRange,
   employeeKPI, // ✅ NEW
 }) => {
+  const { startDate, endDate } = getDateRange(timeRange); // Tính lại ở đây
   const orders = ordersRes?.data?.data?.orders || [];
   const totalOrders = ordersRes?.data?.data?.total || 0;
+  const filteredOrders = orders.filter((o) => {
+    const createdAt = new Date(o.createdAt);
+    return (
+      (!startDate || createdAt >= new Date(startDate)) &&
+      (!endDate || createdAt <= new Date(endDate))
+    );
+  });
   const deliveredOrders = deliveredRes?.data?.data?.orders || [];
+  const filteredDelivered = deliveredOrders.filter((o) => {
+    const createdAt = new Date(o.createdAt);
+    return (
+      (!startDate || createdAt >= new Date(startDate)) &&
+      (!endDate || createdAt <= new Date(endDate))
+    );
+  });
 
-  // Revenue calculations
-  const totalRevenue = deliveredOrders.reduce(
+  // Sử dụng filteredOrders và filteredDelivered trong các phép tính
+  const totalRevenue = filteredDelivered.reduce(
     (sum, order) => sum + (order.totalAmount || 0),
     0
   );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayRevenue = deliveredOrders
+  const todayRevenue = filteredDelivered
     .filter((order) => new Date(order.createdAt) >= today)
     .reduce((sum, order) => sum + order.totalAmount, 0);
 
   const avgOrderValue =
-    deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
+    filteredDelivered.length > 0 ? totalRevenue / filteredDelivered.length : 0;
 
-  // Order status
-  const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
-  const completedOrders = orders.filter((o) => o.status === "DELIVERED").length;
-  const cancelledOrders = orders.filter((o) => o.status === "CANCELLED").length;
+  // Cập nhật số lượng trạng thái đơn hàng
+  const pendingOrders = filteredOrders.filter(
+    (o) => o.status === "PENDING"
+  ).length;
+  const completedOrders = filteredDelivered.length; // Vì filteredDelivered đã được lọc theo trạng thái DELIVERED
+  const cancelledOrders = filteredOrders.filter(
+    (o) => o.status === "CANCELLED"
+  ).length;
 
   // Products data processing (giữ nguyên code cũ)
   const iPhones = Array.isArray(iphonesRes?.data?.data?.products)
@@ -542,6 +565,7 @@ const processAllData = ({
     inventoryValue,
     avgRating,
     totalReviews,
+    ...employeeKPI, // ✅ NEW
   };
 };
 
