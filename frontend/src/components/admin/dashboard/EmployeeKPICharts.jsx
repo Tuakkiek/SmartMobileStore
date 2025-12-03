@@ -54,7 +54,7 @@ const EmployeeKPICharts = ({ stats }) => {
           </CardContent>
         </Card>
 
-        {/* Top Shipper */}
+        {/* Top Shipper - ✅ FIXED */}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
@@ -69,9 +69,13 @@ const EmployeeKPICharts = ({ stats }) => {
             <p className="text-2xl font-bold mb-1">
               {stats?.topShipper?.name || "N/A"}
             </p>
+            {/* ✅ FIXED: Dùng `delivered` thay vì `deliveredCount` */}
             <p className="text-sm text-muted-foreground">
-              {stats?.topShipper?.deliveredCount || 0} đơn giao •{" "}
-              {stats?.topShipper?.successRate?.toFixed(1) || 0}% thành công
+              {stats?.topShipper?.delivered || 0} đơn giao •{" "}
+              {typeof stats?.topShipper?.successRate === "number"
+                ? `${stats.topShipper.successRate.toFixed(1)}%`
+                : "0%"}{" "}
+              thành công
             </p>
           </CardContent>
         </Card>
@@ -160,7 +164,7 @@ const EmployeeKPICharts = ({ stats }) => {
         </Card>
       </div>
 
-      {/* SHIPPER PERFORMANCE - ✅ UPDATED */}
+      {/* SHIPPER PERFORMANCE */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -185,7 +189,6 @@ const EmployeeKPICharts = ({ stats }) => {
           </CardContent>
         </Card>
 
-        {/* Tỷ lệ giao hàng thành công - GIỮ NGUYÊN */}
         <Card>
           <CardHeader>
             <CardTitle>Tỷ lệ giao hàng thành công</CardTitle>
@@ -201,7 +204,9 @@ const EmployeeKPICharts = ({ stats }) => {
                   height={80}
                 />
                 <YAxis domain={[0, 100]} />
-                <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                <Tooltip
+                  formatter={(value) => `${Number(value).toFixed(1)}%`}
+                />
                 <Line
                   type="monotone"
                   dataKey="successRate"
@@ -256,7 +261,7 @@ const EmployeeKPICharts = ({ stats }) => {
           </CardContent>
         </Card>
 
-        {/* Shipper Detail */}
+        {/* Shipper Detail - ✅ FIXED */}
         <Card>
           <CardHeader>
             <CardTitle>Chi tiết Shipper</CardTitle>

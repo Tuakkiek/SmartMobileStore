@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import axios from "axios";
-import { Package, TrendingUp, Award, DollarSign } from "lucide-react";
+import { Package } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -38,13 +36,6 @@ const PersonalStatsWidget = ({ userRole }) => {
     }
   };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
-  };
-
   const periodLabels = {
     today: "Hôm nay",
     week: "Tuần này",
@@ -52,197 +43,79 @@ const PersonalStatsWidget = ({ userRole }) => {
     year: "Năm nay",
   };
 
+  // Tính tổng đơn đã hoàn thành theo role
+  const getCompletedOrders = () => {
+    if (!stats) return 0;
+
+    switch (userRole) {
+      case "POS_STAFF":
+        return stats.pos?.orders || 0;
+      case "SHIPPER":
+        return stats.shipper?.delivered || 0;
+      case "CASHIER":
+        return stats.cashier?.transactions || 0;
+      default:
+        return 0;
+    }
+  };
+
+  const getRoleLabel = () => {
+    switch (userRole) {
+      case "POS_STAFF":
+        return "Đơn hàng đã tạo";
+      case "SHIPPER":
+        return "Đơn đã giao thành công";
+      case "CASHIER":
+        return "Giao dịch đã xử lý";
+      default:
+        return "Đơn đã hoàn thành";
+    }
+  };
+
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <div className="text-center">Đang tải...</div>
+        <CardContent className="p-4">
+          <div className="text-sm text-muted-foreground">Đang tải...</div>
         </CardContent>
       </Card>
     );
   }
 
-  if (!stats) return null;
-
   return (
-    <div className="space-y-4">
-      {/* Period Selector */}
-      <div className="flex gap-2">
-        {Object.keys(periodLabels).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`px-4 py-2 rounded-lg transition-colors ${
-              period === p
-                ? "bg-primary text-white"
-                : "bg-muted hover:bg-muted/80"
-            }`}
-          >
-            {periodLabels[p]}
-          </button>
-        ))}
-      </div>
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between gap-4">
+          {/* Dropdown chọn khoảng thời gian */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Package className="w-5 h-5 text-blue-600" />
+            </div>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="px-3 py-2 border rounded-lg bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {Object.entries(periodLabels).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* POS Staff Stats */}
-        {userRole === "POS_STAFF" && (
-          <>
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Package className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <Badge className="bg-blue-100 text-blue-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Đơn hàng đã tạo
-                </h3>
-                <p className="text-3xl font-bold">{stats.pos.orders}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <DollarSign className="w-6 h-6 text-green-600" />
-                  </div>
-                  <Badge className="bg-green-100 text-green-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Doanh thu
-                </h3>
-                <p className="text-2xl font-bold">
-                  {formatPrice(stats.pos.revenue)}
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {/* Shipper Stats */}
-        {userRole === "SHIPPER" && (
-          <>
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Package className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <Badge className="bg-blue-100 text-blue-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Tổng đơn giao
-                </h3>
-                <p className="text-3xl font-bold">{stats.shipper.total}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  </div>
-                  <Badge className="bg-green-100 text-green-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Đã giao thành công
-                </h3>
-                <p className="text-3xl font-bold">{stats.shipper.delivered}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                    <Package className="w-6 h-6 text-red-600" />
-                  </div>
-                  <Badge className="bg-red-100 text-red-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">Trả hàng</h3>
-                <p className="text-3xl font-bold">{stats.shipper.returned}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-                    <Award className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <Badge className="bg-purple-100 text-purple-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Tỷ lệ thành công
-                </h3>
-                <p className="text-3xl font-bold">
-                  {stats.shipper.successRate}%
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {/* Cashier Stats */}
-        {userRole === "CASHIER" && (
-          <>
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Package className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <Badge className="bg-blue-100 text-blue-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Giao dịch
-                </h3>
-                <p className="text-3xl font-bold">
-                  {stats.cashier.transactions}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <DollarSign className="w-6 h-6 text-green-600" />
-                  </div>
-                  <Badge className="bg-green-100 text-green-800">
-                    {periodLabels[period]}
-                  </Badge>
-                </div>
-                <h3 className="text-sm text-muted-foreground mb-1">
-                  Tổng tiền thu
-                </h3>
-                <p className="text-2xl font-bold">
-                  {formatPrice(stats.cashier.revenue)}
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </div>
-    </div>
+          {/* Số liệu */}
+          <div className="text-right">
+            <p className="text-sm text-muted-foreground mb-1">
+              {getRoleLabel()}
+            </p>
+            <p className="text-3xl font-bold text-primary">
+              {getCompletedOrders()}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

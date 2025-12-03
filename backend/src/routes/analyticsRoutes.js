@@ -208,16 +208,17 @@ router.get(
 // ============================================
 router.get(
   "/employee/kpi",
+  protect,
   restrictTo("ADMIN", "ORDER_MANAGER"),
   getEmployeeKPI
 );
-
 // ============================================
 // EMPLOYEE ROUTES - Personal Stats
 // ============================================
 router.get(
   "/employee/personal",
-  restrictTo("POS_STAFF", "SHIPPER", "CASHIER"),
+  protect,
+  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"), // ← THÊM 3 ROLE NÀY
   getPersonalStats
 );
 

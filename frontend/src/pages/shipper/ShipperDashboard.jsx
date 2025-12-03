@@ -285,8 +285,6 @@ const ShipperDashboard = () => {
         </p>
       </div>
 
-      <PersonalStatsWidget userRole={user.role} />
-
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* ... giữ nguyên 4 card thống kê ... */}

@@ -1,48 +1,59 @@
 // ============================================
 // FILE: backend/src/controllers/analyticsController.js
-// UPDATED: Thêm endpoints cho employee KPI
+// ✅ FIXED: Thêm getPersonalStats controller
 // ============================================
 
-import employeeAnalyticsService from "../services/employeeAnalyticsService.js";
+import {
+  getPOSStaffStats,
+  getShipperStats,
+  getCashierStats,
+  getTopPerformers,
+  getPersonalStats as getPersonalStatsService,
+} from "../services/employeeAnalyticsService.js";
 
-/**
- * GET /api/analytics/employee/kpi
- * Lấy KPI tất cả nhân viên (Admin only)
- */
+// ============================================
+// GET EMPLOYEE KPI (Admin)
+// ============================================
 export const getEmployeeKPI = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    const [posStats, shipperStats, cashierStats, topPerformers] =
-      await Promise.all([
-        employeeAnalyticsService.getPOSStaffStats(startDate, endDate),
-        employeeAnalyticsService.getShipperStats(startDate, endDate),
-        employeeAnalyticsService.getCashierStats(startDate, endDate),
-        employeeAnalyticsService.getTopPerformers(startDate, endDate),
-      ]);
+    const [
+      posStaffPerformance,
+      shipperPerformance,
+      cashierPerformance,
+      topPerformers,
+    ] = await Promise.all([
+      getPOSStaffStats(startDate, endDate),
+      getShipperStats(startDate, endDate),
+      getCashierStats(startDate, endDate),
+      getTopPerformers(startDate, endDate),
+    ]);
+
+    // Prepare data for charts
+    const posStaffRevenue = posStaffPerformance.map((staff) => ({
+      name: staff.name,
+      value: staff.revenue,
+    }));
+
+    const shipperSuccessRate = shipperPerformance.map((shipper) => ({
+      name: shipper.name,
+      successRate: shipper.successRate,
+    }));
 
     res.json({
       success: true,
       data: {
-        posStaffPerformance: posStats,
-        shipperPerformance: shipperStats,
-        cashierPerformance: cashierStats,
-        topPOSStaff: topPerformers.topPOSStaff,
-        topShipper: topPerformers.topShipper,
-        topCashier: topPerformers.topCashier,
-        // Format for charts
-        posStaffRevenue: posStats.map((s) => ({
-          name: s.name,
-          value: s.revenue,
-        })),
-        shipperSuccessRate: shipperStats.map((s) => ({
-          name: s.name,
-          successRate: parseFloat(s.successRate),
-        })),
+        posStaffPerformance,
+        shipperPerformance,
+        cashierPerformance,
+        ...topPerformers,
+        posStaffRevenue,
+        shipperSuccessRate,
       },
     });
   } catch (error) {
-    console.error("getEmployeeKPI error:", error);
+    console.error("Get Employee KPI error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Lỗi lấy thống kê nhân viên",
@@ -50,26 +61,22 @@ export const getEmployeeKPI = async (req, res) => {
   }
 };
 
-/**
- * GET /api/analytics/employee/personal
- * Lấy thống kê cá nhân (POS Staff, Shipper, Cashier)
- */
+// ============================================
+// ✅ GET PERSONAL STATS (POS_STAFF, SHIPPER, CASHIER)
+// ============================================
 export const getPersonalStats = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id; // Lấy từ token
     const { period = "today" } = req.query;
 
-    const stats = await employeeAnalyticsService.getPersonalStats(
-      userId,
-      period
-    );
+    const stats = await getPersonalStatsService(userId, period);
 
     res.json({
       success: true,
       data: stats,
     });
   } catch (error) {
-    console.error("getPersonalStats error:", error);
+    console.error("Get Personal Stats error:", error);
     res.status(500).json({
       success: false,
       message: error.message || "Lỗi lấy thống kê cá nhân",

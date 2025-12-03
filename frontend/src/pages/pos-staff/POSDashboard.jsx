@@ -403,7 +403,7 @@ const POSDashboard = () => {
       {/* ✅ THÊM WIDGET THỐNG KÊ CÁ NHÂN */}
       <PersonalStatsWidget userRole={user?.role} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 h-screen overflow-hidden">
-        <PersonalStatsWidget userRole={user.role} />
+       
         {/* LEFT: Product List */}
         <div className="lg:col-span-2 space-y-4 overflow-y-auto">
           <Card>
