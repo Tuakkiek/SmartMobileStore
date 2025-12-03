@@ -41,10 +41,15 @@ const EmployeeKPICharts = ({ stats }) => {
               </div>
               <Badge className="bg-blue-100 text-blue-800">POS Top</Badge>
             </div>
-            <h3 className="text-sm text-muted-foreground mb-1">Nhân viên bán hàng xuất sắc</h3>
-            <p className="text-2xl font-bold mb-1">{stats?.topPOSStaff?.name || "N/A"}</p>
+            <h3 className="text-sm text-muted-foreground mb-1">
+              Nhân viên bán hàng xuất sắc
+            </h3>
+            <p className="text-2xl font-bold mb-1">
+              {stats?.topPOSStaff?.name || "N/A"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              {stats?.topPOSStaff?.orderCount || 0} đơn • {formatPrice(stats?.topPOSStaff?.revenue || 0)}
+              {stats?.topPOSStaff?.orderCount || 0} đơn •{" "}
+              {formatPrice(stats?.topPOSStaff?.revenue || 0)}
             </p>
           </CardContent>
         </Card>
@@ -58,10 +63,15 @@ const EmployeeKPICharts = ({ stats }) => {
               </div>
               <Badge className="bg-green-100 text-green-800">Shipper Top</Badge>
             </div>
-            <h3 className="text-sm text-muted-foreground mb-1">Shipper xuất sắc</h3>
-            <p className="text-2xl font-bold mb-1">{stats?.topShipper?.name || "N/A"}</p>
+            <h3 className="text-sm text-muted-foreground mb-1">
+              Shipper xuất sắc
+            </h3>
+            <p className="text-2xl font-bold mb-1">
+              {stats?.topShipper?.name || "N/A"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              {stats?.topShipper?.deliveredCount || 0} đơn giao • {stats?.topShipper?.successRate?.toFixed(1) || 0}% thành công
+              {stats?.topShipper?.deliveredCount || 0} đơn giao •{" "}
+              {stats?.topShipper?.successRate?.toFixed(1) || 0}% thành công
             </p>
           </CardContent>
         </Card>
@@ -73,12 +83,19 @@ const EmployeeKPICharts = ({ stats }) => {
               <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
                 <Award className="w-6 h-6 text-purple-600" />
               </div>
-              <Badge className="bg-purple-100 text-purple-800">Thu ngân Top</Badge>
+              <Badge className="bg-purple-100 text-purple-800">
+                Thu ngân Top
+              </Badge>
             </div>
-            <h3 className="text-sm text-muted-foreground mb-1">Thu ngân xuất sắc</h3>
-            <p className="text-2xl font-bold mb-1">{stats?.topCashier?.name || "N/A"}</p>
+            <h3 className="text-sm text-muted-foreground mb-1">
+              Thu ngân xuất sắc
+            </h3>
+            <p className="text-2xl font-bold mb-1">
+              {stats?.topCashier?.name || "N/A"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              {stats?.topCashier?.transactionCount || 0} giao dịch • {formatPrice(stats?.topCashier?.totalAmount || 0)}
+              {stats?.topCashier?.transactionCount || 0} giao dịch •{" "}
+              {formatPrice(stats?.topCashier?.totalAmount || 0)}
             </p>
           </CardContent>
         </Card>
@@ -94,7 +111,12 @@ const EmployeeKPICharts = ({ stats }) => {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={stats?.posStaffPerformance || []}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                <XAxis
+                  dataKey="name"
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
                 <YAxis />
                 <Tooltip formatter={(value) => formatPrice(value)} />
                 <Legend />
@@ -117,13 +139,18 @@ const EmployeeKPICharts = ({ stats }) => {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) =>
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
                 >
                   {(stats?.posStaffRevenue || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => formatPrice(value)} />
@@ -133,7 +160,7 @@ const EmployeeKPICharts = ({ stats }) => {
         </Card>
       </div>
 
-      {/* SHIPPER PERFORMANCE */}
+      {/* SHIPPER PERFORMANCE - ✅ UPDATED */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -141,12 +168,16 @@ const EmployeeKPICharts = ({ stats }) => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stats?.shipperPerformance || []} layout="vertical">
+              <BarChart
+                data={stats?.shipperPerformance || []}
+                layout="vertical"
+              >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="name" type="category" width={100} />
                 <Tooltip />
                 <Legend />
+                <Bar dataKey="shipping" fill="#f59e0b" name="Đang giao" />
                 <Bar dataKey="delivered" fill="#10b981" name="Đã giao" />
                 <Bar dataKey="returned" fill="#ef4444" name="Trả hàng" />
               </BarChart>
@@ -154,6 +185,7 @@ const EmployeeKPICharts = ({ stats }) => {
           </CardContent>
         </Card>
 
+        {/* Tỷ lệ giao hàng thành công - GIỮ NGUYÊN */}
         <Card>
           <CardHeader>
             <CardTitle>Tỷ lệ giao hàng thành công</CardTitle>
@@ -162,10 +194,21 @@ const EmployeeKPICharts = ({ stats }) => {
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={stats?.shipperSuccessRate || []}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                <XAxis
+                  dataKey="name"
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
                 <YAxis domain={[0, 100]} />
                 <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
-                <Line type="monotone" dataKey="successRate" stroke="#10b981" strokeWidth={2} name="Tỷ lệ %" />
+                <Line
+                  type="monotone"
+                  dataKey="successRate"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  name="Tỷ lệ %"
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -195,9 +238,15 @@ const EmployeeKPICharts = ({ stats }) => {
                     <tr key={idx} className="border-b hover:bg-muted/50">
                       <td className="p-3 font-medium">{staff.name}</td>
                       <td className="text-right p-3">{staff.orderCount}</td>
-                      <td className="text-right p-3">{formatPrice(staff.revenue)}</td>
                       <td className="text-right p-3">
-                        {formatPrice(staff.orderCount > 0 ? staff.revenue / staff.orderCount : 0)}
+                        {formatPrice(staff.revenue)}
+                      </td>
+                      <td className="text-right p-3">
+                        {formatPrice(
+                          staff.orderCount > 0
+                            ? staff.revenue / staff.orderCount
+                            : 0
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -218,6 +267,7 @@ const EmployeeKPICharts = ({ stats }) => {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-3">Tên</th>
+                    <th className="text-right p-3">Đang giao</th>
                     <th className="text-right p-3">Đã giao</th>
                     <th className="text-right p-3">Trả hàng</th>
                     <th className="text-right p-3">Tỷ lệ</th>
@@ -225,15 +275,31 @@ const EmployeeKPICharts = ({ stats }) => {
                 </thead>
                 <tbody>
                   {(stats?.shipperPerformance || []).map((shipper, idx) => {
-                    const total = shipper.delivered + shipper.returned;
-                    const rate = total > 0 ? (shipper.delivered / total) * 100 : 0;
+                    const completed = shipper.delivered + shipper.returned;
+                    const rate =
+                      completed > 0 ? (shipper.delivered / completed) * 100 : 0;
                     return (
                       <tr key={idx} className="border-b hover:bg-muted/50">
                         <td className="p-3 font-medium">{shipper.name}</td>
-                        <td className="text-right p-3 text-green-600">{shipper.delivered}</td>
-                        <td className="text-right p-3 text-red-600">{shipper.returned}</td>
+                        <td className="text-right p-3 text-orange-600">
+                          {shipper.shipping || 0}
+                        </td>
+                        <td className="text-right p-3 text-green-600">
+                          {shipper.delivered}
+                        </td>
+                        <td className="text-right p-3 text-red-600">
+                          {shipper.returned}
+                        </td>
                         <td className="text-right p-3">
-                          <Badge variant={rate >= 90 ? "default" : rate >= 70 ? "secondary" : "destructive"}>
+                          <Badge
+                            variant={
+                              rate >= 90
+                                ? "default"
+                                : rate >= 70
+                                ? "secondary"
+                                : "destructive"
+                            }
+                          >
                             {rate.toFixed(1)}%
                           </Badge>
                         </td>
@@ -268,12 +334,22 @@ const EmployeeKPICharts = ({ stats }) => {
                 {(stats?.cashierPerformance || []).map((cashier, idx) => (
                   <tr key={idx} className="border-b hover:bg-muted/50">
                     <td className="p-3 font-medium">{cashier.name}</td>
-                    <td className="text-right p-3">{cashier.transactionCount}</td>
-                    <td className="text-right p-3">{formatPrice(cashier.totalAmount)}</td>
                     <td className="text-right p-3">
-                      {formatPrice(cashier.transactionCount > 0 ? cashier.totalAmount / cashier.transactionCount : 0)}
+                      {cashier.transactionCount}
                     </td>
-                    <td className="text-right p-3">{cashier.vatInvoiceCount || 0}</td>
+                    <td className="text-right p-3">
+                      {formatPrice(cashier.totalAmount)}
+                    </td>
+                    <td className="text-right p-3">
+                      {formatPrice(
+                        cashier.transactionCount > 0
+                          ? cashier.totalAmount / cashier.transactionCount
+                          : 0
+                      )}
+                    </td>
+                    <td className="text-right p-3">
+                      {cashier.vatInvoiceCount || 0}
+                    </td>
                   </tr>
                 ))}
               </tbody>

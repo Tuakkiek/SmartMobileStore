@@ -1,24 +1,14 @@
 // ============================================
-// FILE: src/pages/order-manager/OrderManagementPage.jsx
-// ✅ UPDATED: Handle PAYMENT_VERIFIED status
-// ✅ UPDATED: Show VNPay payment info clearly
+// FILE: frontend/src/pages/order-manager/OrderManagementPage.jsx
+// ✅ UPDATED: Sử dụng OrderStatusUpdateDialog component
 // ============================================
 
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -26,9 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Loading } from "@/components/shared/Loading";
-import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import {
   ShoppingBag,
   Search,
@@ -50,6 +38,10 @@ import {
   getStatusText,
 } from "@/lib/utils";
 
+// ✅ IMPORT COMPONENT MỚI
+import OrderStatusUpdateDialog from "@/components/order/OrderStatusUpdateDialog";
+import OrderDetailDialog from "@/components/employee/OrderDetailDialog";
+
 const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,29 +56,6 @@ const OrdersPage = () => {
     total: 0,
   });
 
-  const [statusUpdate, setStatusUpdate] = useState({
-    status: "",
-    note: "",
-  });
-
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ✅ CẬP NHẬT: Thêm PAYMENT_VERIFIED vào luồng trạng thái
-  const getAllowedNextStatuses = (currentStatus) => {
-    const flow = {
-      PENDING: ["CONFIRMED", "CANCELLED"],
-      PAYMENT_VERIFIED: ["CONFIRMED", "CANCELLED"], // Cho phép chuyển sang xác nhận
-      CONFIRMED: ["SHIPPING", "CANCELLED"],
-      SHIPPING: ["DELIVERED", "RETURNED", "CANCELLED"],
-      DELIVERED: ["RETURNED"],
-      RETURNED: [],
-      CANCELLED: [],
-    };
-    return flow[currentStatus] || [];
-  };
-
-  // ✅ CẬP NHẬT: Thêm PAYMENT_VERIFIED vào bộ lọc
   const statusButtons = [
     { value: "all", label: "Tất cả" },
     { value: "PENDING", label: "Chờ xác nhận" },
@@ -98,14 +67,14 @@ const OrdersPage = () => {
     { value: "CANCELLED", label: "Đã hủy" },
   ];
 
-  // Helper function to get full image URL
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/64?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+    return `${import.meta.env.VITE_API_URL}${
+      path.startsWith("/") ? "" : "/"
+    }${path}`;
   };
 
-  // ✅ CẬP NHẬT: Icon cho PAYMENT_VERIFIED
   const getStatusIcon = (status) => {
     const icons = {
       PENDING: Clock,
@@ -140,6 +109,7 @@ const OrdersPage = () => {
       setPagination({ currentPage, totalPages, total });
     } catch (error) {
       console.error("Error fetching orders:", error);
+      toast.error("Không thể tải danh sách đơn hàng");
     } finally {
       setIsLoading(false);
     }
@@ -151,40 +121,15 @@ const OrdersPage = () => {
       setSelectedOrder(response.data.data.order);
       setShowDetailDialog(true);
     } catch (error) {
-      alert(error.response?.data?.message || "Không thể tải thông tin đơn hàng");
+      toast.error(
+        error.response?.data?.message || "Không thể tải thông tin đơn hàng"
+      );
     }
   };
 
   const handleOpenStatusDialog = (order) => {
     setSelectedOrder(order);
-    setStatusUpdate({
-      status: "",
-      note: "",
-    });
-    setError("");
     setShowStatusDialog(true);
-  };
-
-  const handleUpdateStatus = async () => {
-    if (!statusUpdate.status) {
-      setError("Vui lòng chọn trạng thái");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError("");
-
-    try {
-      await orderAPI.updateStatus(selectedOrder._id, statusUpdate);
-      await fetchOrders();
-      setShowStatusDialog(false);
-      toast.success("Cập nhật trạng thái thành công");
-    } catch (error) {
-      setError(error.response?.data?.message || "Cập nhật trạng thái thất bại");
-      toast.error("Cập nhật trạng thái thất bại");
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const getOrderStats = () => {
@@ -209,7 +154,7 @@ const OrdersPage = () => {
   const stats = getOrderStats();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">Quản lý đơn hàng</h1>
@@ -300,11 +245,15 @@ const OrdersPage = () => {
       <div className="space-y-4">
         {orders.map((order) => {
           const StatusIcon = getStatusIcon(order.status);
+          const canUpdate =
+            order.status !== "DELIVERED" &&
+            order.status !== "RETURNED" &&
+            order.status !== "CANCELLED";
+
           return (
             <Card key={order._id}>
               <CardContent className="p-6">
                 <div className="flex flex-col gap-4">
-                  {/* Header Row */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4 flex-1">
                       <div
@@ -324,18 +273,20 @@ const OrdersPage = () => {
                             {getStatusText(order.status)}
                           </Badge>
 
-                          {/* ✅ THÊM BADGE VNPAY */}
-                          {order.paymentMethod === "VNPAY" && order.paymentInfo?.vnpayVerified && (
-                            <Badge className="bg-green-100 text-green-800">
-                              Đã thanh toán VNPay
-                            </Badge>
-                          )}
+                          {order.paymentMethod === "VNPAY" &&
+                            order.paymentInfo?.vnpayVerified && (
+                              <Badge className="bg-green-100 text-green-800">
+                                Đã thanh toán VNPay
+                              </Badge>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-muted-foreground" />
-                            <span>{order.customerId?.fullName || "Khách lẻ"}</span>
+                            <span>
+                              {order.customerId?.fullName || "Khách lẻ"}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Phone className="w-4 h-4 text-muted-foreground" />
@@ -346,16 +297,6 @@ const OrdersPage = () => {
                             <span>{formatDate(order.createdAt)}</span>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            {order.shippingAddress?.detailAddress},{" "}
-                            {order.shippingAddress?.commune},{" "}
-                            {order.shippingAddress?.district},{" "}
-                            {order.shippingAddress?.province}
-                          </span>
-                        </div>
                       </div>
                     </div>
 
@@ -364,13 +305,6 @@ const OrdersPage = () => {
                         <p className="text-2xl font-bold text-primary">
                           {formatPrice(order.totalAmount)}
                         </p>
-                        <Badge
-                          variant={
-                            order.paymentStatus === "PAID" ? "default" : "secondary"
-                          }
-                        >
-                          {getStatusText(order.paymentStatus)}
-                        </Badge>
                       </div>
 
                       <div className="flex gap-2">
@@ -382,17 +316,14 @@ const OrdersPage = () => {
                           <Eye className="w-4 h-4 mr-2" />
                           Chi tiết
                         </Button>
-                        {order.status !== "DELIVERED" &&
-                          order.status !== "RETURNED" &&
-                          order.status !== "CANCELLED" &&
-                          getAllowedNextStatuses(order.status).length > 0 && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleOpenStatusDialog(order)}
-                            >
-                              Cập nhật
-                            </Button>
-                          )}
+                        {canUpdate && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenStatusDialog(order)}
+                          >
+                            Cập nhật
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -403,9 +334,6 @@ const OrdersPage = () => {
                       <h4 className="text-sm font-medium text-muted-foreground">
                         Sản phẩm ({order.items?.length})
                       </h4>
-                      <div className="text-sm text-muted-foreground">
-                        PT: {getStatusText(order.paymentMethod)}
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -489,186 +417,20 @@ const OrdersPage = () => {
         </div>
       )}
 
+      {/* ✅ SỬ DỤNG COMPONENT MỚI */}
+      <OrderStatusUpdateDialog
+        order={selectedOrder}
+        open={showStatusDialog}
+        onClose={() => setShowStatusDialog(false)}
+        onSuccess={fetchOrders}
+      />
+
       {/* Order Detail Dialog */}
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-            <DialogDescription>
-              Mã đơn: #{selectedOrder?.orderNumber}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-6">
-              {/* Danh sách sản phẩm */}
-              <div>
-                <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
-                <div className="space-y-3">
-                  {selectedOrder.items?.map((item, idx) => (
-                    <div key={idx} className="flex gap-4 p-4 border rounded-lg">
-                      <img
-                        src={getImageUrl(item.images?.[0]) || "/placeholder.png"}
-                        alt={item.productName}
-                        className="w-20 h-20 object-cover rounded"
-                        onError={(e) => {
-                          e.target.src = "/placeholder.png";
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {[
-                            item.variantColor,
-                            item.variantStorage,
-                            item.variantConnectivity,
-                            item.variantName,
-                          ]
-                            .filter(Boolean)
-                            .join(" • ")}
-                        </p>
-                        <p className="text-sm">
-                          SL: {item.quantity} × {formatPrice(item.price)}
-                        </p>
-                      </div>
-                      <p className="font-semibold">
-                        {formatPrice(item.price * item.quantity)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ✅ THÊM: Thông tin thanh toán VNPay */}
-              {selectedOrder?.paymentMethod === "VNPAY" && selectedOrder?.paymentInfo?.vnpayTransactionNo && (
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <h3 className="font-semibold mb-2 text-green-800">Thông tin thanh toán VNPay</h3>
-                  <div className="space-y-1 text-sm">
-                    <p><strong>Mã giao dịch:</strong> {selectedOrder.paymentInfo.vnpayTransactionNo}</p>
-                    <p><strong>Ngân hàng:</strong> {selectedOrder.paymentInfo.vnpayBankCode || "Không rõ"}</p>
-                    <p><strong>Thời gian thanh toán:</strong> {formatDate(selectedOrder.paymentInfo.vnpayPaidAt)}</p>
-                    <p><strong>Trạng thái:</strong> <span className="text-green-700 font-medium">Đã xác nhận</span></p>
-                  </div>
-                </div>
-              )}
-
-              {/* Địa chỉ giao hàng */}
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <h3 className="font-semibold mb-2">Địa chỉ giao hàng</h3>
-                <p>
-                  {selectedOrder.shippingAddress?.fullName} -{" "}
-                  {selectedOrder.shippingAddress?.phoneNumber}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedOrder.shippingAddress?.detailAddress},{" "}
-                  {selectedOrder.shippingAddress?.commune},
-                  {selectedOrder.shippingAddress?.district},{" "}
-                  {selectedOrder.shippingAddress?.province}
-                </p>
-              </div>
-
-              {/* Tóm tắt đơn hàng */}
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span>Tạm tính:</span>
-                  <span>{formatPrice(selectedOrder.subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Phí ship:</span>
-                  <span>{formatPrice(selectedOrder.shippingFee)}</span>
-                </div>
-                {selectedOrder.promotionDiscount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Giảm giá:</span>
-                    <span>-{formatPrice(selectedOrder.promotionDiscount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
-                  <span>Tổng:</span>
-                  <span className="text-primary">
-                    {formatPrice(selectedOrder.totalAmount)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
-              Đóng
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Update Status Dialog */}
-      <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cập nhật trạng thái đơn hàng</DialogTitle>
-            <DialogDescription>
-              Mã đơn: #{selectedOrder?.orderNumber}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {error && <ErrorMessage message={error} />}
-
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">
-                Trạng thái hiện tại
-              </p>
-              <Badge className={getStatusColor(selectedOrder?.status)}>
-                {getStatusText(selectedOrder?.status)}
-              </Badge>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Trạng thái mới *</Label>
-              <Select
-                value={statusUpdate.status}
-                onValueChange={(value) =>
-                  setStatusUpdate({ ...statusUpdate, status: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAllowedNextStatuses(selectedOrder?.status).map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {getStatusText(status)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="note">Ghi chú</Label>
-              <Textarea
-                id="note"
-                placeholder="Nhập ghi chú về cập nhật này..."
-                value={statusUpdate.note}
-                onChange={(e) =>
-                  setStatusUpdate({ ...statusUpdate, note: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowStatusDialog(false)}
-            >
-              Hủy
-            </Button>
-            <Button onClick={handleUpdateStatus} disabled={isSubmitting}>
-              {isSubmitting ? "Đang cập nhật..." : "Cập nhật"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderDetailDialog
+        order={selectedOrder}
+        open={showDetailDialog}
+        onClose={() => setShowDetailDialog(false)}
+      />
     </div>
   );
 };

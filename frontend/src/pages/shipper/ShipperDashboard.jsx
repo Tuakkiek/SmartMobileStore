@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useEffect, useState, useMemo } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,7 @@ import {
 import PersonalStatsWidget from "@/components/employee/PersonalStatsWidget";
 
 const ShipperDashboard = () => {
+  const { user } = useAuthStore();
   const [rawOrders, setRawOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
@@ -275,7 +277,6 @@ const ShipperDashboard = () => {
   /* ------------------------------------------------------------------ */
   return (
     <div className="space-y-6 p-6">
-      
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold mb-2">Bảng điều khiển giao hàng</h1>
@@ -284,7 +285,7 @@ const ShipperDashboard = () => {
         </p>
       </div>
 
-      {/* <PersonalStatsWidget userRole={user.role} /> */}
+      <PersonalStatsWidget userRole={user.role} />
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

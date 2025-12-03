@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import axios from "axios";
 import Order from "../models/Order.js";
+import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
 import IPad, { IPadVariant } from "../models/IPad.js";
@@ -686,7 +687,7 @@ export const updateOrderStatus = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status, note } = req.body;
+    const { status, note, shipperId } = req.body; // ✅ THÊM shipperId
     const userId = req.user._id;
     const userRole = req.user.role;
 
@@ -715,35 +716,62 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không thể chuyển từ "${getStatusText(
-          order.status
-        )}" sang "${getStatusText(status)}"`,
+        message: `Không thể chuyển từ "${order.status}" sang "${status}"`,
       });
     }
 
-    // ✅ NEW: Lưu thông tin shipper khi chuyển sang SHIPPING
-    if (status === "SHIPPING" && userRole === "SHIPPER") {
-      order.shipperInfo = {
-        shipperId: userId,
-        shipperName: req.user.fullName,
-        shipperPhone: req.user.phoneNumber,
-        pickupAt: new Date(),
-      };
+    // ✅ NEW: Order Manager chỉ định Shipper khi chuyển sang SHIPPING
+    if (status === "SHIPPING") {
+      if (userRole === "SHIPPER") {
+        // Shipper tự nhận đơn
+        order.shipperInfo = {
+          shipperId: userId,
+          shipperName: req.user.fullName,
+          shipperPhone: req.user.phoneNumber,
+          pickupAt: new Date(),
+        };
+      } else if (["ORDER_MANAGER", "ADMIN"].includes(userRole)) {
+        // Order Manager/Admin chỉ định Shipper
+        if (!shipperId) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng chỉ định Shipper cho đơn hàng",
+          });
+        }
+
+        // Kiểm tra Shipper có tồn tại không
+        const shipper = await User.findById(shipperId).session(session);
+        if (!shipper || shipper.role !== "SHIPPER") {
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: "Shipper không hợp lệ",
+          });
+        }
+
+        order.shipperInfo = {
+          shipperId: shipper._id,
+          shipperName: shipper.fullName,
+          shipperPhone: shipper.phoneNumber,
+          pickupAt: new Date(),
+        };
+      }
     }
 
-    // ✅ NEW: Cập nhật thời gian giao hàng thành công
+    // ✅ Cập nhật thời gian giao hàng thành công (GIỮ NGUYÊN)
     if (status === "DELIVERED" && order.shipperInfo?.shipperId) {
       order.shipperInfo.deliveredAt = new Date();
       order.shipperInfo.deliveryNote = note || "Giao hàng thành công";
     }
 
-    // ✅ NEW: Cập nhật thời gian trả hàng
+    // ✅ Cập nhật thời gian trả hàng (GIỮ NGUYÊN)
     if (status === "RETURNED" && order.shipperInfo?.shipperId) {
       order.shipperInfo.returnedAt = new Date();
       order.shipperInfo.returnReason = note || "Trả hàng";
     }
 
-    // Hoàn kho khi hủy/trả hàng
+    // Hoàn kho khi hủy/trả hàng (GIỮ NGUYÊN)
     if (
       ["CANCELLED", "RETURNED"].includes(status) &&
       !["CANCELLED", "RETURNED"].includes(order.status)
@@ -777,7 +805,7 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
-    // Cập nhật thời gian
+    // Cập nhật thời gian (GIỮ NGUYÊN)
     const now = new Date();
     if (status === "CONFIRMED") order.confirmedAt = now;
     if (status === "SHIPPING") order.shippingAt = now;

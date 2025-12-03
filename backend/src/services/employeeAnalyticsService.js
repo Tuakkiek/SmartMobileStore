@@ -1,12 +1,12 @@
 // ============================================
 // FILE: backend/src/services/employeeAnalyticsService.js
-// Service tính toán KPI nhân viên
+// ✅ FIXED: Query bao gồm cả đơn do Order Manager chỉ định Shipper
 // ============================================
 
 import Order from "../models/Order.js";
 
 /**
- * Lấy thống kê KPI của POS Staff
+ * Lấy thống kê KPI của POS Staff (GIỮ NGUYÊN)
  */
 export const getPOSStaffStats = async (startDate, endDate) => {
   const match = {
@@ -52,12 +52,13 @@ export const getPOSStaffStats = async (startDate, endDate) => {
 };
 
 /**
- * Lấy thống kê KPI của Shipper
+ * ✅ FIXED: Lấy thống kê KPI của Shipper
+ * Bây giờ bao gồm cả đơn do Order Manager chỉ định
  */
 export const getShipperStats = async (startDate, endDate) => {
   const match = {
-    "shipperInfo.shipperId": { $exists: true },
-    status: { $in: ["DELIVERED", "RETURNED"] },
+    "shipperInfo.shipperId": { $exists: true }, // ✅ VẪN GIỮ - Đảm bảo có Shipper
+    status: { $in: ["SHIPPING", "DELIVERED", "RETURNED"] }, // ✅ THÊM SHIPPING
   };
 
   if (startDate || endDate) {
@@ -75,6 +76,9 @@ export const getShipperStats = async (startDate, endDate) => {
           shipperName: "$shipperInfo.shipperName",
         },
         totalOrders: { $sum: 1 },
+        shipping: {
+          $sum: { $cond: [{ $eq: ["$status", "SHIPPING"] }, 1, 0] }, // ✅ THÊM
+        },
         delivered: {
           $sum: { $cond: [{ $eq: ["$status", "DELIVERED"] }, 1, 0] },
         },
@@ -90,15 +94,19 @@ export const getShipperStats = async (startDate, endDate) => {
     shipperId: s._id.shipperId,
     name: s._id.shipperName || "Unknown",
     totalOrders: s.totalOrders,
+    shipping: s.shipping, // ✅ THÊM
     delivered: s.delivered,
     returned: s.returned,
+    // ✅ Tính tỷ lệ thành công dựa trên (delivered + returned) / totalOrders
     successRate:
-      s.totalOrders > 0 ? ((s.delivered / s.totalOrders) * 100).toFixed(2) : 0,
+      s.totalOrders > 0
+        ? ((s.delivered / (s.delivered + s.returned)) * 100).toFixed(2)
+        : 0,
   }));
 };
 
 /**
- * Lấy thống kê KPI của Cashier
+ * Lấy thống kê KPI của Cashier (GIỮ NGUYÊN)
  */
 export const getCashierStats = async (startDate, endDate) => {
   const match = {
@@ -140,7 +148,7 @@ export const getCashierStats = async (startDate, endDate) => {
 };
 
 /**
- * Lấy top performer của từng vai trò
+ * Lấy top performer của từng vai trò (GIỮ NGUYÊN)
  */
 export const getTopPerformers = async (startDate, endDate) => {
   const [posStats, shipperStats, cashierStats] = await Promise.all([
@@ -157,7 +165,7 @@ export const getTopPerformers = async (startDate, endDate) => {
 };
 
 /**
- * Lấy thống kê cá nhân theo thời gian (today, week, month, year)
+ * ✅ FIXED: Lấy thống kê cá nhân theo thời gian (today, week, month, year)
  */
 export const getPersonalStats = async (userId, period = "today") => {
   const now = new Date();
@@ -180,7 +188,7 @@ export const getPersonalStats = async (userId, period = "today") => {
       startDate = new Date(now.setHours(0, 0, 0, 0));
   }
 
-  // Thống kê POS Staff
+  // Thống kê POS Staff (GIỮ NGUYÊN)
   const posOrders = await Order.countDocuments({
     "posInfo.staffId": userId,
     orderSource: "IN_STORE",
@@ -198,10 +206,16 @@ export const getPersonalStats = async (userId, period = "today") => {
     { $group: { _id: null, total: { $sum: "$totalAmount" } } },
   ]);
 
-  // Thống kê Shipper
+  // ✅ FIXED: Thống kê Shipper - Bao gồm cả SHIPPING
   const shipperOrders = await Order.countDocuments({
     "shipperInfo.shipperId": userId,
-    status: { $in: ["DELIVERED", "RETURNED"] },
+    status: { $in: ["SHIPPING", "DELIVERED", "RETURNED"] }, // ✅ THÊM SHIPPING
+    createdAt: { $gte: startDate },
+  });
+
+  const shipperShipping = await Order.countDocuments({
+    "shipperInfo.shipperId": userId,
+    status: "SHIPPING", // ✅ THÊM
     createdAt: { $gte: startDate },
   });
 
@@ -217,7 +231,7 @@ export const getPersonalStats = async (userId, period = "today") => {
     createdAt: { $gte: startDate },
   });
 
-  // Thống kê Cashier
+  // Thống kê Cashier (GIỮ NGUYÊN)
   const cashierTransactions = await Order.countDocuments({
     "posInfo.cashierId": userId,
     paymentStatus: "PAID",
@@ -244,11 +258,16 @@ export const getPersonalStats = async (userId, period = "today") => {
     },
     shipper: {
       total: shipperOrders,
+      shipping: shipperShipping, // ✅ THÊM
       delivered: shipperDelivered,
       returned: shipperReturned,
+      // ✅ Tính tỷ lệ thành công dựa trên delivered / (delivered + returned)
       successRate:
-        shipperOrders > 0
-          ? ((shipperDelivered / shipperOrders) * 100).toFixed(2)
+        shipperDelivered + shipperReturned > 0
+          ? (
+              (shipperDelivered / (shipperDelivered + shipperReturned)) *
+              100
+            ).toFixed(2)
           : 0,
     },
     cashier: {
