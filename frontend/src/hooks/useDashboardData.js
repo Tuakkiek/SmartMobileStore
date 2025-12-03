@@ -1,5 +1,10 @@
-// frontend/src/hooks/useDashboardData.js
+// ============================================
+// FILE: frontend/src/hooks/useDashboardData.js
+// UPDATED: Thêm employee KPI data
+// ============================================
+
 import { useState, useEffect } from "react";
+import axios from "axios";
 import {
   orderAPI,
   userAPI,
@@ -12,6 +17,8 @@ import {
   accessoryAPI,
 } from "@/lib/api";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
 export const useDashboardData = (timeRange) => {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,7 +29,9 @@ export const useDashboardData = (timeRange) => {
     setError(null);
 
     try {
-      // Fetch all data in parallel .
+      // Tính startDate/endDate từ timeRange
+      const { startDate, endDate } = getDateRange(timeRange);
+
       const [
         ordersRes,
         deliveredRes,
@@ -34,9 +43,15 @@ export const useDashboardData = (timeRange) => {
         applewatchesRes,
         accessoriesRes,
         promotionsRes,
+        employeeKPIRes, // ✅ NEW
       ] = await Promise.all([
-        orderAPI.getAll({ limit: 1000 }),
-        orderAPI.getAll({ status: "DELIVERED", limit: 2000 }),
+        orderAPI.getAll({ limit: 1000, startDate, endDate }), // Thêm tham số ngày
+        orderAPI.getAll({
+          status: "DELIVERED",
+          limit: 2000,
+          startDate,
+          endDate,
+        }), // Thêm tham số ngày
         userAPI.getAllEmployees(),
         iPhoneAPI.getAll({ limit: 1000 }),
         iPadAPI.getAll({ limit: 1000 }),
@@ -45,9 +60,14 @@ export const useDashboardData = (timeRange) => {
         appleWatchAPI.getAll({ limit: 1000 }),
         accessoryAPI.getAll({ limit: 1000 }),
         promotionAPI.getAllPromotions(),
+        axios.get(`${BASE_URL}/analytics/employee/kpi`, {
+          params: { startDate, endDate },
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        }), // ✅ NEW
       ]);
 
-      // Process data
       const processedStats = processAllData({
         ordersRes,
         deliveredRes,
@@ -60,6 +80,7 @@ export const useDashboardData = (timeRange) => {
         accessoriesRes,
         promotionsRes,
         timeRange,
+        employeeKPI: employeeKPIRes.data.data, // ✅ NEW
       });
 
       setStats(processedStats);
@@ -78,7 +99,55 @@ export const useDashboardData = (timeRange) => {
   return { stats, isLoading, error, refetch: fetchData };
 };
 
-// Helper function to process all data
+// ============================================
+// HELPER: Get date range
+// ============================================
+const getDateRange = (timeRange) => {
+  const now = new Date();
+  const endDate = new Date(now);
+  let startDate = new Date(now);
+
+  switch (timeRange) {
+    case "7days":
+      startDate.setDate(startDate.getDate() - 6); // Bao gồm 7 ngày
+      break;
+    case "30days":
+      startDate.setDate(startDate.getDate() - 29);
+      break;
+    case "3months":
+      startDate.setMonth(startDate.getMonth() - 3);
+      break;
+    case "1year":
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      break;
+    default:
+      startDate.setDate(startDate.getDate() - 29); // Mặc định là 30 ngày
+  }
+
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+};
+
+// ============================================
+// HELPER: Get token
+// ============================================
+const getToken = () => {
+  const authStorage = localStorage.getItem("auth-storage");
+  if (authStorage) {
+    try {
+      const { state } = JSON.parse(authStorage);
+      return state?.token;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
+// ============================================
+// HELPER: Process all data
+// ============================================
 const processAllData = ({
   ordersRes,
   deliveredRes,
@@ -91,32 +160,52 @@ const processAllData = ({
   accessoriesRes,
   promotionsRes,
   timeRange,
+  employeeKPI, // ✅ NEW
 }) => {
+  const { startDate, endDate } = getDateRange(timeRange); // Tính lại ở đây
   const orders = ordersRes?.data?.data?.orders || [];
   const totalOrders = ordersRes?.data?.data?.total || 0;
+  const filteredOrders = orders.filter((o) => {
+    const createdAt = new Date(o.createdAt);
+    return (
+      (!startDate || createdAt >= new Date(startDate)) &&
+      (!endDate || createdAt <= new Date(endDate))
+    );
+  });
   const deliveredOrders = deliveredRes?.data?.data?.orders || [];
+  const filteredDelivered = deliveredOrders.filter((o) => {
+    const createdAt = new Date(o.createdAt);
+    return (
+      (!startDate || createdAt >= new Date(startDate)) &&
+      (!endDate || createdAt <= new Date(endDate))
+    );
+  });
 
-  // Calculate revenue
-  const totalRevenue = deliveredOrders.reduce(
+  // Sử dụng filteredOrders và filteredDelivered trong các phép tính
+  const totalRevenue = filteredDelivered.reduce(
     (sum, order) => sum + (order.totalAmount || 0),
     0
   );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayRevenue = deliveredOrders
+  const todayRevenue = filteredDelivered
     .filter((order) => new Date(order.createdAt) >= today)
     .reduce((sum, order) => sum + order.totalAmount, 0);
 
   const avgOrderValue =
-    deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
+    filteredDelivered.length > 0 ? totalRevenue / filteredDelivered.length : 0;
 
-  // Order status
-  const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
-  const completedOrders = orders.filter((o) => o.status === "DELIVERED").length;
-  const cancelledOrders = orders.filter((o) => o.status === "CANCELLED").length;
+  // Cập nhật số lượng trạng thái đơn hàng
+  const pendingOrders = filteredOrders.filter(
+    (o) => o.status === "PENDING"
+  ).length;
+  const completedOrders = filteredDelivered.length; // Vì filteredDelivered đã được lọc theo trạng thái DELIVERED
+  const cancelledOrders = filteredOrders.filter(
+    (o) => o.status === "CANCELLED"
+  ).length;
 
-  // Products
+  // Products data processing (giữ nguyên code cũ)
   const iPhones = Array.isArray(iphonesRes?.data?.data?.products)
     ? iphonesRes.data.data.products
     : [];
@@ -148,7 +237,7 @@ const processAllData = ({
   ];
   const totalProducts = allProducts.length;
 
-  // Stock and inventory
+  // Stock and inventory (giữ nguyên)
   let totalStock = 0,
     totalVariants = 0,
     inventoryValue = 0;
@@ -184,7 +273,7 @@ const processAllData = ({
     return variants.every((v) => v.stock === 0);
   }).length;
 
-  // Category stock
+  // Category data (giữ nguyên)
   const categoryStock = [
     {
       name: "iPhone",
@@ -476,6 +565,7 @@ const processAllData = ({
     inventoryValue,
     avgRating,
     totalReviews,
+    ...employeeKPI, // ✅ NEW
   };
 };
 

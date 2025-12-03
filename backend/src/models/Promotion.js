@@ -125,7 +125,7 @@ promotionSchema.methods.getDisplayText = function () {
 /* ========================================
    INDEXES
    ======================================== */
-promotionSchema.index({ code: 1 });
+// promotionSchema.index({ code: 1 });
 promotionSchema.index({ startDate: 1, endDate: 1, isActive: 1 });
 promotionSchema.index({ createdBy: 1 });
 

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import axios from "axios";
 import Order from "../models/Order.js";
+import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import IPhone, { IPhoneVariant } from "../models/IPhone.js";
 import IPad, { IPadVariant } from "../models/IPad.js";
@@ -686,8 +687,10 @@ export const updateOrderStatus = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status, note } = req.body;
-    const adminId = req.user._id;
+    const { status, note, shipperId } = req.body;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    const userName = req.user.fullName; // ✅ LẤY TÊN NGƯỜI DÙNG
 
     const order = await Order.findById(req.params.id).session(session);
     if (!order) {
@@ -714,40 +717,84 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không thể chuyển từ "${getStatusText(
-          order.status
-        )}" sang "${getStatusText(status)}"`,
+        message: `Không thể chuyển từ "${order.status}" sang "${status}"`,
       });
     }
 
-    // ✅ FIXED: Hoàn kho khi hủy/trả hàng - KHÔNG GỌI incrementSales()
+    // Order Manager chỉ định Shipper khi chuyển sang SHIPPING
+    if (status === "SHIPPING") {
+      if (userRole === "SHIPPER") {
+        order.shipperInfo = {
+          shipperId: userId,
+          shipperName: userName,
+          shipperPhone: req.user.phoneNumber,
+          pickupAt: new Date(),
+        };
+      } else if (["ORDER_MANAGER", "ADMIN"].includes(userRole)) {
+        if (!shipperId) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng chỉ định Shipper cho đơn hàng",
+          });
+        }
+
+        const shipper = await User.findById(shipperId).session(session);
+        if (!shipper || shipper.role !== "SHIPPER") {
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: "Shipper không hợp lệ",
+          });
+        }
+
+        order.shipperInfo = {
+          shipperId: shipper._id,
+          shipperName: shipper.fullName,
+          shipperPhone: shipper.phoneNumber,
+          pickupAt: new Date(),
+        };
+      }
+    }
+
+    // ✅ CẬP NHẬT: Lưu tên người giao hàng thành công
+    if (status === "DELIVERED") {
+      if (!order.shipperInfo) {
+        order.shipperInfo = {};
+      }
+      
+      order.shipperInfo.deliveredAt = new Date();
+      order.shipperInfo.deliveryNote = note || "Giao hàng thành công";
+      
+      // ✅ LƯU TÊN NGƯỜI CẬP NHẬT (Admin hoặc Shipper)
+      order.shipperInfo.deliveredBy = userName;
+      order.shipperInfo.deliveredByRole = userRole;
+    }
+
+    // Cập nhật thời gian trả hàng
+    if (status === "RETURNED" && order.shipperInfo?.shipperId) {
+      order.shipperInfo.returnedAt = new Date();
+      order.shipperInfo.returnReason = note || "Trả hàng";
+    }
+
+    // Hoàn kho khi hủy/trả hàng
     if (
       ["CANCELLED", "RETURNED"].includes(status) &&
       !["CANCELLED", "RETURNED"].includes(order.status)
     ) {
       for (const item of order.items) {
-        const models = getModelsByType(reqItem.productType);
+        const models = getModelsByType(item.productType);
         if (models) {
-          const variant = await models.Variant.findById(
-            reqItem.variantId
-          ).session(session);
+          const variant = await models.Variant.findById(item.variantId).session(session);
           if (variant) {
-            variant.stock += reqItem.quantity;
-            variant.salesCount = Math.max(
-              0,
-              (variant.salesCount || 0) - reqItem.quantity
-            );
+            variant.stock += item.quantity;
+            variant.salesCount = Math.max(0, (variant.salesCount || 0) - item.quantity);
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(
-            reqItem.productId
-          ).session(session);
+          const product = await models.Product.findById(item.productId).session(session);
           if (product) {
-            product.salesCount = Math.max(
-              0,
-              (product.salesCount || 0) - reqItem.quantity
-            );
+            product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
             await product.save({ session });
           }
         }
@@ -766,7 +813,7 @@ export const updateOrderStatus = async (req, res) => {
     order.status = status;
     order.statusHistory.push({
       status,
-      updatedBy: adminId,
+      updatedBy: userId,
       updatedAt: now,
       note: note || getDefaultNote(order.status, status),
     });
@@ -798,7 +845,6 @@ const getDefaultNote = (from, to) => {
   };
   return notes[to] || "";
 };
-
 // ============================================
 // GET ORDER STATISTICS (Admin)
 // ============================================

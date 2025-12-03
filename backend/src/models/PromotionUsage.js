@@ -39,7 +39,11 @@ const promotionUsageSchema = new mongoose.Schema(
     snapshot: {
       code: { type: String, required: true },
       name: { type: String, required: true },
-      discountType: { type: String, enum: ["PERCENTAGE", "FIXED"], required: true },
+      discountType: {
+        type: String,
+        enum: ["PERCENTAGE", "FIXED"],
+        required: true,
+      },
       discountValue: { type: Number, required: true },
       maxDiscountAmount: { type: Number, default: null },
     },
@@ -63,7 +67,7 @@ promotionUsageSchema.index({ promotion: 1, usedAt: -1 });
 promotionUsageSchema.index({ user: 1, usedAt: -1 });
 
 // 4. Mỗi đơn hàng chỉ dùng được 1 mã (tránh retry thanh toán gây trùng)
-promotionUsageSchema.index({ order: 1 }, { unique: true });
+// promotionUsageSchema.index({ order: 1 }, { unique: true });
 
 // 5. Compound index cho báo cáo doanh thu theo thời gian + mã
 promotionUsageSchema.index({ usedAt: 1, promotion: 1 });

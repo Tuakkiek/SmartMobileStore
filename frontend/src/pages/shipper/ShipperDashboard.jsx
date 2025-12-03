@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useEffect, useState, useMemo } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,7 @@ import {
   RotateCcw,
   CheckCircle2, // ĐÃ THÊM: Icon cho thanh toán thành công
 } from "lucide-react";
-import { orderAPI } from "@/lib/api";
+import { orderAPI, userAPI } from "@/lib/api";
 import {
   formatPrice,
   formatDate,
@@ -41,7 +42,10 @@ import {
   getStatusText,
 } from "@/lib/utils";
 
+import PersonalStatsWidget from "@/components/employee/PersonalStatsWidget";
+
 const ShipperDashboard = () => {
+  const { user } = useAuthStore();
   const [rawOrders, setRawOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");

@@ -2,6 +2,10 @@
 import express from "express";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 import salesAnalyticsService from "../services/salesAnalyticsService.js";
+import {
+  getEmployeeKPI,
+  getPersonalStats,
+} from "../controllers/analyticsController.js";
 
 const router = express.Router();
 
@@ -197,6 +201,25 @@ router.get(
       });
     }
   }
+);
+
+// ============================================
+// ADMIN ROUTES - Employee KPI
+// ============================================
+router.get(
+  "/employee/kpi",
+  protect,
+  restrictTo("ADMIN", "ORDER_MANAGER"),
+  getEmployeeKPI
+);
+// ============================================
+// EMPLOYEE ROUTES - Personal Stats
+// ============================================
+router.get(
+  "/employee/personal",
+  protect,
+  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"), // ← THÊM 3 ROLE NÀY
+  getPersonalStats
 );
 
 export default router;

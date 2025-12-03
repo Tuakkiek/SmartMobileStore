@@ -1,14 +1,14 @@
 // ============================================
 // FILE: frontend/src/pages/pos-staff/POSOrderHistory.jsx
-// ĐÃ SỬA: LOADING, ERROR HANDLING, POS INFO, KEY, STATUS TEXT
+// ✅ UPDATED: Thêm KPI filters thay vì PersonalStatsWidget
 // ============================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,8 @@ import {
   Phone,
   MapPin,
   AlertCircle,
+  TrendingUp,
+  Calendar,
 } from "lucide-react";
 import { posAPI } from "@/lib/api";
 import {
@@ -42,12 +44,14 @@ const POSOrderHistory = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false); // Thêm loading cho dialog
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateFilter, setDateFilter] = useState({
-    startDate: "",
-    endDate: "",
-  });
+
+  // ✅ KPI Filters
+  const [kpiPeriod, setKpiPeriod] = useState("today");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -63,10 +67,54 @@ const POSOrderHistory = () => {
     }${path}`;
   };
 
+  // ✅ Tính KPI dựa trên period
+  const kpiStats = useMemo(() => {
+    const now = new Date();
+    let startDate, endDate;
+
+    switch (kpiPeriod) {
+      case "today":
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        endDate = new Date(now.setHours(23, 59, 59, 999));
+        break;
+      case "week":
+        startDate = new Date(now.setDate(now.getDate() - 7));
+        endDate = new Date();
+        break;
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date();
+        break;
+      case "custom":
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+        } else {
+          return { ordersCreated: 0, revenue: 0 };
+        }
+        break;
+      default:
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        endDate = new Date(now.setHours(23, 59, 59, 999));
+    }
+
+    const filteredOrders = orders.filter((o) => {
+      const orderDate = new Date(o.createdAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+
+    const paidOrders = filteredOrders.filter((o) => o.paymentStatus === "PAID");
+
+    return {
+      ordersCreated: filteredOrders.length,
+      revenue: paidOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+    };
+  }, [orders, kpiPeriod, customStartDate, customEndDate]);
+
   // Load đơn hàng
   useEffect(() => {
     fetchOrders();
-  }, [searchTerm, dateFilter, pagination.currentPage]);
+  }, [searchTerm, pagination.currentPage]);
 
   const fetchOrders = async () => {
     setIsLoading(true);
@@ -75,8 +123,6 @@ const POSOrderHistory = () => {
         page: pagination.currentPage,
         limit: 10,
         search: searchTerm || undefined,
-        startDate: dateFilter.startDate || undefined,
-        endDate: dateFilter.endDate || undefined,
       };
 
       const response = await posAPI.getHistory(params);
@@ -97,7 +143,7 @@ const POSOrderHistory = () => {
     }
   };
 
-  // Xem chi tiết – ĐÃ SỬA HOÀN TOÀN
+  // Xem chi tiết
   const handleViewDetail = async (orderId) => {
     if (!orderId) {
       toast.error("Không có ID đơn hàng");
@@ -108,19 +154,15 @@ const POSOrderHistory = () => {
     setShowDetailDialog(true);
 
     try {
-      console.log("Đang lấy chi tiết đơn hàng:", orderId);
       const response = await posAPI.getOrderById(orderId);
-
       if (!response?.data?.data?.order) {
         throw new Error("Không tìm thấy đơn hàng");
       }
-
       setSelectedOrder(response.data.data.order);
     } catch (error) {
       console.error("Lỗi khi lấy chi tiết:", error);
       toast.error(
-        error.response?.data?.message ||
-          "Không thể tải chi tiết đơn hàng. Vui lòng thử lại."
+        error.response?.data?.message || "Không thể tải chi tiết đơn hàng"
       );
       setShowDetailDialog(false);
     } finally {
@@ -128,17 +170,23 @@ const POSOrderHistory = () => {
     }
   };
 
-  // Thống kê
-  const getStats = () => {
-    return {
+  // Thống kê cơ bản
+  const basicStats = useMemo(
+    () => ({
       total: orders.length,
       pending: orders.filter((o) => o.status === "PENDING_PAYMENT").length,
       paid: orders.filter((o) => o.paymentStatus === "PAID").length,
       cancelled: orders.filter((o) => o.status === "CANCELLED").length,
-    };
-  };
+    }),
+    [orders]
+  );
 
-  const stats = getStats();
+  const periodLabels = {
+    today: "Hôm nay",
+    week: "Tuần này",
+    month: "Tháng này",
+    custom: "Tùy chỉnh",
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -150,18 +198,91 @@ const POSOrderHistory = () => {
         </p>
       </div>
 
+      {/* ✅ KPI SECTION */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Thống kê hiệu suất
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Period Selector */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <select
+                  value={kpiPeriod}
+                  onChange={(e) => setKpiPeriod(e.target.value)}
+                  className="px-3 py-2 border rounded-lg bg-white text-sm font-medium"
+                >
+                  {Object.entries(periodLabels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {kpiPeriod === "custom" && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-40"
+                  />
+                  <span className="text-sm text-muted-foreground">đến</span>
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* KPI Stats */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Đơn hàng đã tạo
+                  </p>
+                  <p className="text-3xl font-bold text-primary">
+                    {kpiStats.ordersCreated}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Doanh thu
+                  </p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {formatPrice(kpiStats.revenue)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold">{basicStats.total}</div>
             <p className="text-sm text-muted-foreground">Tổng đơn</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-yellow-600">
-              {stats.pending}
+              {basicStats.pending}
             </div>
             <p className="text-sm text-muted-foreground">Chờ thanh toán</p>
           </CardContent>
@@ -169,7 +290,7 @@ const POSOrderHistory = () => {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">
-              {stats.paid}
+              {basicStats.paid}
             </div>
             <p className="text-sm text-muted-foreground">Đã thanh toán</p>
           </CardContent>
@@ -177,44 +298,26 @@ const POSOrderHistory = () => {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-red-600">
-              {stats.cancelled}
+              {basicStats.cancelled}
             </div>
             <p className="text-sm text-muted-foreground">Đã hủy</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Search */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm mã đơn, số phiếu..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPagination((prev) => ({ ...prev, currentPage: 1 }));
-                }}
-                className="pl-9"
-              />
-            </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              type="date"
-              value={dateFilter.startDate}
+              placeholder="Tìm mã đơn, số phiếu..."
+              value={searchTerm}
               onChange={(e) => {
-                setDateFilter({ ...dateFilter, startDate: e.target.value });
+                setSearchTerm(e.target.value);
                 setPagination((prev) => ({ ...prev, currentPage: 1 }));
               }}
-            />
-            <Input
-              type="date"
-              value={dateFilter.endDate}
-              onChange={(e) => {
-                setDateFilter({ ...dateFilter, endDate: e.target.value });
-                setPagination((prev) => ({ ...prev, currentPage: 1 }));
-              }}
+              className="pl-9"
             />
           </div>
         </CardContent>
@@ -238,7 +341,6 @@ const POSOrderHistory = () => {
               : isPaid
               ? CheckCircle
               : XCircle;
-
             const statusColorClass = getStatusColor(order.status || "UNKNOWN");
             const bgColor = statusColorClass.includes("bg-")
               ? statusColorClass.split(" ")[0]
@@ -248,7 +350,6 @@ const POSOrderHistory = () => {
               <Card key={order._id}>
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
-                    {/* Header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4 flex-1">
                         <div
@@ -278,7 +379,6 @@ const POSOrderHistory = () => {
                               </Badge>
                             )}
                           </div>
-
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4 text-muted-foreground" />
@@ -299,7 +399,6 @@ const POSOrderHistory = () => {
                           </div>
                         </div>
                       </div>
-
                       <div className="flex flex-col items-end gap-3">
                         <div className="text-right">
                           <p className="text-2xl font-bold text-primary">
@@ -327,7 +426,7 @@ const POSOrderHistory = () => {
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                         {order.items?.slice(0, 4).map((item, idx) => (
                           <div
-                            key={item._id || idx} // Dùng _id nếu có, fallback idx
+                            key={item._id || idx}
                             className="flex gap-2 p-2 border rounded-lg hover:bg-muted/50"
                           >
                             <img
@@ -335,7 +434,6 @@ const POSOrderHistory = () => {
                               alt={item.productName}
                               className="w-16 h-16 object-cover rounded"
                               onError={(e) => {
-                                e.target.onerror = null;
                                 e.target.src =
                                   "https://via.placeholder.com/64?text=No+Image";
                               }}
@@ -408,7 +506,7 @@ const POSOrderHistory = () => {
         </div>
       )}
 
-      {/* DETAIL DIALOG – CHẠY ỔN ĐỊNH */}
+      {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -417,19 +515,12 @@ const POSOrderHistory = () => {
               Mã đơn: #{selectedOrder?.orderNumber}
             </DialogDescription>
           </DialogHeader>
-
           {isLoadingDetail ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <AlertCircle className="w-8 h-8 mx-auto mb-2 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  Đang tải chi tiết...
-                </p>
-              </div>
+              <AlertCircle className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : selectedOrder ? (
             <div className="space-y-6">
-              {/* SẢN PHẨM */}
               <div>
                 <h3 className="font-semibold mb-3">Sản phẩm trong đơn</h3>
                 <div className="space-y-3">
@@ -442,11 +533,6 @@ const POSOrderHistory = () => {
                         src={getImageUrl(item.images?.[0])}
                         alt={item.productName}
                         className="w-20 h-20 object-cover rounded"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src =
-                            "https://via.placeholder.com/64?text=No+Image";
-                        }}
                       />
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
@@ -471,12 +557,10 @@ const POSOrderHistory = () => {
                   ))}
                 </div>
               </div>
-
-              {/* ĐỊA CHỈ GIAO HÀNG */}
               <div className="p-4 bg-muted/50 rounded-lg">
                 <h3 className="font-semibold mb-2 flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
-                  Địa chỉ giao hàng
+                  Địa chỉ
                 </h3>
                 <p>
                   {selectedOrder.shippingAddress?.fullName || "Khách lẻ"} -{" "}
@@ -488,8 +572,6 @@ const POSOrderHistory = () => {
                     : "Mua tại cửa hàng"}
                 </p>
               </div>
-
-              {/* TÓM TẮT ĐƠN HÀNG */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
                   <span>Tạm tính:</span>
@@ -499,16 +581,6 @@ const POSOrderHistory = () => {
                     )}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Phí ship:</span>
-                  <span>{formatPrice(selectedOrder.shippingFee || 0)}</span>
-                </div>
-                {selectedOrder.promotionDiscount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Giảm giá:</span>
-                    <span>-{formatPrice(selectedOrder.promotionDiscount)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-bold text-lg border-t pt-2">
                   <span>Tổng:</span>
                   <span className="text-primary">
@@ -516,37 +588,8 @@ const POSOrderHistory = () => {
                   </span>
                 </div>
               </div>
-
-              {/* POS INFO (nếu có) */}
-              {selectedOrder.posInfo && (
-                <div className="p-4 bg-blue-50 rounded-lg text-sm">
-                  <p>
-                    <strong>Thu ngân:</strong>{" "}
-                    {selectedOrder.posInfo.cashierName}
-                  </p>
-                  <p>
-                    <strong>Tiền khách đưa:</strong>{" "}
-                    {formatPrice(selectedOrder.posInfo.paymentReceived)}
-                  </p>
-                  <p>
-                    <strong>Tiền thối:</strong>{" "}
-                    {formatPrice(selectedOrder.posInfo.changeGiven || 0)}
-                  </p>
-                  {selectedOrder.posInfo.receiptNumber && (
-                    <p>
-                      <strong>Số phiếu:</strong>{" "}
-                      {selectedOrder.posInfo.receiptNumber}
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              Không có dữ liệu đơn hàng
-            </div>
-          )}
-
+          ) : null}
           <DialogFooter>
             <Button
               variant="outline"

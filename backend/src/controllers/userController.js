@@ -170,7 +170,8 @@ export const getAllEmployees = async (req, res) => {
 // Tạo nhân viên mới
 export const createEmployee = async (req, res) => {
   try {
-    const { fullName, phoneNumber, email, province, password, role, avatar } = req.body;
+    const { fullName, phoneNumber, email, province, password, role, avatar } =
+      req.body;
 
     const user = await User.create({
       fullName,
@@ -179,7 +180,7 @@ export const createEmployee = async (req, res) => {
       province,
       password,
       role,
-      avatar: avatar || "", 
+      avatar: avatar || "",
     });
     res.status(201).json({
       success: true,
@@ -294,3 +295,27 @@ export const updateEmployee = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const getAllShippers = async (req, res) => {
+  try {
+    const shippers = await User.find({ 
+      role: "SHIPPER",
+      status: "ACTIVE" 
+    })
+      .select("_id fullName phoneNumber email")
+      .sort({ fullName: 1 });
+
+    res.json({
+      success: true,
+      data: { shippers },
+    });
+  } catch (error) {
+    console.error("Get all shippers error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Lỗi server",
+    });
+  }
+};
+
+

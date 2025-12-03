@@ -177,11 +177,10 @@ export const reviewAPI = {
 // ============================================
 export const promotionAPI = {
   // CŨ – vẫn giữ lại cho các trang customer/public dùng
-  getAll: (params = {}) => api.get("/promotions", { params }),        // ← có thể bỏ dần
+  getAll: (params = {}) => api.get("/promotions", { params }), // ← có thể bỏ dần
 
   // MỚI – DÀNH RIÊNG CHO ADMIN: phân trang, tìm kiếm, lọc status, sort...
-  getAllPromotions: (params = {}) => 
-    api.get("/promotions/admin", { params }),   // ← THÊM DÒNG NÀY (QUAN TRỌNG NHẤT)
+  getAllPromotions: (params = {}) => api.get("/promotions/admin", { params }), // ← THÊM DÒNG NÀY (QUAN TRỌNG NHẤT)
 
   // Các hàm khác (giữ nguyên)
   create: (data) => api.post("/promotions", data),
@@ -197,6 +196,9 @@ export const promotionAPI = {
 // USER API
 // ============================================
 export const userAPI = {
+  // ✅ NEW: Get all shippers (for Order Manager to assign)
+  getAllShippers: () => api.get("/users/shippers"),
+
   updateProfile: (data) => api.put("/users/profile", data),
   addAddress: (data) => api.post("/users/addresses", data),
   updateAddress: (addressId, data) =>

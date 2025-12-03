@@ -1,7 +1,6 @@
 // ============================================
 // FILE: backend/src/models/Order.js
-// ✅ FIXED: Added PAYMENT_VERIFIED to status enum
-// ✅ ADDED: Better tracking for VNPay payments
+// ✅ ADDED: shipperInfo để lưu thông tin người giao hàng
 // ============================================
 
 import mongoose from "mongoose";
@@ -56,7 +55,7 @@ const statusHistorySchema = new mongoose.Schema(
       enum: [
         "PENDING",
         "PENDING_PAYMENT",
-        "PAYMENT_VERIFIED", // ✅ ADDED
+        "PAYMENT_VERIFIED",
         "CONFIRMED",
         "SHIPPING",
         "DELIVERED",
@@ -84,11 +83,35 @@ const posInfoSchema = new mongoose.Schema(
       required: true,
     },
     staffName: { type: String, trim: true },
+    cashierId: {
+      // ✅ ADDED: ID của thu ngân
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
     cashierName: { type: String, trim: true },
     storeLocation: { type: String, trim: true },
     receiptNumber: { type: String, trim: true },
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
+  },
+  { _id: false }
+);
+
+// ✅ NEW: Schema cho thông tin shipper
+const shipperInfoSchema = new mongoose.Schema(
+  {
+    shipperId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    shipperName: { type: String, trim: true },
+    shipperPhone: { type: String, trim: true },
+    pickupAt: { type: Date }, // Thời điểm nhận hàng
+    deliveredAt: { type: Date }, // Thời điểm giao hàng
+    returnedAt: { type: Date }, // Thời điểm trả hàng (nếu có)
+    deliveryNote: { type: String, trim: true }, // Ghi chú khi giao hàng
+    returnReason: { type: String, trim: true }, // Lý do trả hàng
   },
   { _id: false }
 );
@@ -100,8 +123,6 @@ const paymentInfoSchema = new mongoose.Schema(
     paymentReceived: { type: Number, min: 0 },
     changeGiven: { type: Number, min: 0 },
     invoiceNumber: { type: String, trim: true },
-
-    // ✅ ENHANCED VNPay tracking
     vnpayTxnRef: { type: String, trim: true, index: true },
     vnpayTransactionNo: { type: String, trim: true },
     vnpayBankCode: { type: String, trim: true },
@@ -133,12 +154,11 @@ const vatInvoiceSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// ✅ NEW: Invoice tracking for online orders
 const onlineInvoiceSchema = new mongoose.Schema(
   {
     invoiceNumber: { type: String, trim: true },
     issuedAt: { type: Date },
-    downloadUrl: { type: String }, // For future PDF storage
+    downloadUrl: { type: String },
   },
   { _id: false }
 );
@@ -175,13 +195,12 @@ const orderSchema = new mongoose.Schema(
     shippingFee: { type: Number, default: 0, min: 0 },
     pointsUsed: { type: Number, default: 0, min: 0 },
 
-    // ✅ UPDATED: Added PAYMENT_VERIFIED
     status: {
       type: String,
       enum: [
         "PENDING",
         "PENDING_PAYMENT",
-        "PAYMENT_VERIFIED", // ✅ VNPay confirmed payment
+        "PAYMENT_VERIFIED",
         "CONFIRMED",
         "PROCESSING",
         "SHIPPING",
@@ -216,7 +235,8 @@ const orderSchema = new mongoose.Schema(
     posInfo: posInfoSchema,
     paymentInfo: paymentInfoSchema,
     vatInvoice: vatInvoiceSchema,
-    onlineInvoice: onlineInvoiceSchema, // ✅ NEW
+    onlineInvoice: onlineInvoiceSchema,
+    shipperInfo: shipperInfoSchema, // ✅ NEW: Thông tin shipper
 
     shippingNote: { type: String, trim: true },
     shippingProof: {
@@ -261,7 +281,6 @@ orderSchema.pre("validate", async function (next) {
 
 orderSchema.pre("save", function (next) {
   if (this.isNew && this.statusHistory.length === 0) {
-    // ✅ ĐẶT TRẠNG THÁI BAN ĐẦU ĐÚNG CHO VNPAY
     if (this.paymentMethod === "VNPAY" && this.status === "PENDING") {
       this.status = "PENDING_PAYMENT";
     }
@@ -319,7 +338,6 @@ orderSchema.methods.cancel = async function (userId, note) {
   return this.save();
 };
 
-// ✅ NEW: Issue online invoice
 orderSchema.methods.issueOnlineInvoice = async function () {
   if (this.onlineInvoice?.invoiceNumber) {
     throw new Error("Invoice already issued");
@@ -365,6 +383,8 @@ orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ orderSource: 1, createdAt: -1 });
 orderSchema.index({ "posInfo.staffId": 1 });
+orderSchema.index({ "posInfo.cashierId": 1 }); // ✅ NEW
+orderSchema.index({ "shipperInfo.shipperId": 1 }); // ✅ NEW
 orderSchema.index({ "paymentInfo.processedBy": 1 });
 orderSchema.index({ paymentMethod: 1, paymentStatus: 1 });
 orderSchema.index({ "paymentInfo.vnpayVerified": 1 });
