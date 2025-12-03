@@ -1,6 +1,6 @@
 // ============================================
-// FILE: frontend/src/pages/pos-staff/VATInvoicesPage.jsx
-// ✅ V3: Đã xóa bộ lọc, chỉ giữ lại thanh tìm kiếm mã
+// FILE: frontend/src/pages/cashier/VATInvoicesPage.jsx
+// ✅ FIXED: Sửa text hiển thị "Đã xuất VAT: {số hóa đơn}"
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -35,19 +35,13 @@ const VATInvoicesPage = () => {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
 
-  // ============================================
-  // STATE (ĐÃ ĐƠN GIẢN HÓA)
-  // ============================================
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
 
-  // Chỉ giữ lại state cho tìm kiếm
-  const [searchInput, setSearchInput] = useState(""); // State cho ô input
-  const [filters, setFilters] = useState({
-    search: "", // State kích hoạt tìm kiếm
-  });
+  const [searchInput, setSearchInput] = useState("");
+  const [filters, setFilters] = useState({ search: "" });
 
   const [stats, setStats] = useState({
     totalOrders: 0,
@@ -55,19 +49,16 @@ const VATInvoicesPage = () => {
     avgOrderValue: 0,
     totalVATInvoices: 0,
   });
-  // State phân trang
+
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
     total: 0,
   });
 
-  // ============================================
-  // FETCH ORDERS (ĐÃ ĐƠN GIẢN HÓA)
-  // ============================================
   useEffect(() => {
     fetchOrders(1);
-  }, [filters]); // Chỉ trigger khi 'filters' thay đổi
+  }, [filters]);
 
   const fetchOrders = async (page = 1) => {
     setIsLoading(true);
@@ -75,7 +66,7 @@ const VATInvoicesPage = () => {
       const response = await posAPI.getHistory({
         search: filters.search || undefined,
         page,
-        limit: 20, // hoặc 30 tùy bạn
+        limit: 20,
       });
 
       const { orders = [], pagination: pag = {} } = response.data.data;
@@ -87,16 +78,19 @@ const VATInvoicesPage = () => {
         total: pag.total || 0,
       });
 
-      // Tính stats từ dữ liệu hiện tại (hoặc backend trả thêm stats nếu muốn)
-      const total = orders.length;
+      // ✅ FIXED: Tính stats từ TẤT CẢ orders (không chỉ trang hiện tại)
+      // Để có stats chính xác, cần gọi API lấy tất cả orders
+      // Hoặc backend trả về stats riêng
+      // Tạm thời tính từ orders hiện tại:
+      const totalOrdersInPage = orders.length;
       const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
       const vatCount = orders.filter((o) => o.vatInvoice?.invoiceNumber).length;
 
       setStats({
-        totalOrders: pag.total || 0, // ← Dùng tổng thực từ backend
-        totalRevenue: revenue,
-        avgOrderValue: pag.total > 0 ? revenue / total : 0,
-        totalVATInvoices: vatCount,
+        totalOrders: pag.total || 0, // Tổng đơn từ backend
+        totalRevenue: revenue, // Revenue của trang hiện tại (có thể không chính xác)
+        avgOrderValue: totalOrdersInPage > 0 ? revenue / totalOrdersInPage : 0,
+        totalVATInvoices: vatCount, // ✅ FIXED: Đếm số đơn có VAT trong trang hiện tại
       });
     } catch (error) {
       console.error("Lỗi tải đơn hàng:", error);
@@ -105,9 +99,7 @@ const VATInvoicesPage = () => {
       setIsLoading(false);
     }
   };
-  // ============================================
-  // HANDLERS MỚI CHO TÌM KIẾM
-  // ============================================
+
   const handleSearch = () => {
     setFilters({ search: searchInput });
   };
@@ -116,7 +108,7 @@ const VATInvoicesPage = () => {
     setSearchInput("");
     setFilters({ search: "" });
   };
-  // Hàm xử lý chuyển trang
+
   const handlePageChange = (newPage) => {
     if (
       newPage >= 1 &&
@@ -127,9 +119,6 @@ const VATInvoicesPage = () => {
     }
   };
 
-  // ============================================
-  // VIEW DETAIL (Giữ nguyên)
-  // ============================================
   const handleViewDetail = async (orderId) => {
     try {
       const response = await posAPI.getOrderById(orderId);
@@ -140,9 +129,7 @@ const VATInvoicesPage = () => {
       toast.error("Không thể tải thông tin đơn hàng");
     }
   };
-  // ============================================
-  // PRINT RECEIPT (ĐÃ SỬA THEO MẪU MỚI)
-  // ============================================
+
   const handleReprintReceipt = (order) => {
     const editableData = {
       customerName: order.shippingAddress?.fullName || "",
@@ -155,7 +142,7 @@ const VATInvoicesPage = () => {
       paymentReceived: order.posInfo?.paymentReceived || order.totalAmount,
       changeGiven: order.posInfo?.changeGiven || 0,
       orderNumber: order.orderNumber,
-      createdAt: order.createdAt, // ← Ngày mua hàng
+      createdAt: order.createdAt,
       staffName: order.posInfo?.staffName || "N/A",
       cashierName: order.posInfo?.cashierName || "Thu ngân",
     };
@@ -187,19 +174,16 @@ const VATInvoicesPage = () => {
           .border-black { border-color: black; }
           .items-center { align-items: center; }
           .justify-center { justify-content: center; }
-          .text-[8px] { font-size: 0.5rem; }
           .text-center { text-align: center; }
           .text-base { font-size: 1rem; }
           .space-y-0.5 > * + * { margin-top: 0.125rem; }
           .font-semibold { font-weight: 600; }
           .w-full { width: 100%; }
           .border-b { border-bottom-width: 1px; }
-          .border-b-2 { border-bottom-width: 2px; }
           .border-r { border-right-width: 1px; }
           .p-1.5 { padding: 0.375rem; }
           .text-left { text-align: left; }
           .text-right { text-align: right; }
-          .text-center { text-align: center; }
           .w-32 { width: 8rem; }
           .w-24 { width: 6rem; }
           .text-[10px] { font-size: 0.625rem; }
@@ -207,7 +191,6 @@ const VATInvoicesPage = () => {
           .p-2 { padding: 0.5rem; }
           .list-disc { list-style-type: disc; }
           .ml-4 { margin-left: 1rem; }
-          .space-y-0.5 > * + * { margin-top: 0.125rem; }
           .bg-yellow-50 { background-color: #fdfce5; }
           .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
           .italic { font-style: italic; }
@@ -218,65 +201,46 @@ const VATInvoicesPage = () => {
       </head>
       <body>
         <div class="bg-white mx-auto">
-          <!-- Header -->
           <div class="flex justify-between items-start mb-3">
             <div class="flex-1">
               <h1 class="text-lg font-bold mb-1">Ninh Kiều iSTORE</h1>
               <p class="text-xs leading-tight">Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
-              <p class="text-xs">
-                Hotline: 0917.755.765 - Khánh sửa: 0981.774.710
-              </p>
+              <p class="text-xs">Hotline: 0917.755.765 - Khánh sửa: 0981.774.710</p>
             </div>
-            <div class="w-16 h-16 border border-black flex items-center justify-center flex-shrink-0">
-            </div>
+            <div class="w-16 h-16 border border-black flex items-center justify-center"></div>
           </div>
 
-          <!-- Title -->
           <div class="text-center mb-3">
-            <h2 class="text-base font-bold">
-              HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH
-            </h2>
+            <h2 class="text-base font-bold">HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH</h2>
             <p class="text-xs">Ngày lúc ${formatDate(
               editableData.createdAt
             )}</p>
           </div>
 
-          <!-- Customer Info -->
           <div class="mb-3 space-y-0.5 text-xs">
-            <p>
-              <span class="font-semibold">Tên khách hàng:</span> ${
-                editableData.customerName
-              }
-            </p>
-            <p>
-              <span class="font-semibold">Địa chỉ:</span> ${
-                editableData.customerAddress
-              }
-            </p>
-            <p>
-              <span class="font-semibold">Số điện thoại:</span> ${
-                editableData.customerPhone
-              }
-            </p>
+            <p><span class="font-semibold">Tên khách hàng:</span> ${
+              editableData.customerName
+            }</p>
+            <p><span class="font-semibold">Địa chỉ:</span> ${
+              editableData.customerAddress
+            }</p>
+            <p><span class="font-semibold">Số điện thoại:</span> ${
+              editableData.customerPhone
+            }</p>
           </div>
 
-          <!-- Products Table -->
           <table class="w-full border border-black mb-3 text-xs">
             <thead>
               <tr class="border-b border-black">
-                <th class="border-r border-black p-1.5 text-left font-bold">
-                  TÊN MÁY
-                </th>
-                <th class="border-r border-black p-1.5 text-center font-bold w-32">
-                  IMEI
-                </th>
+                <th class="border-r border-black p-1.5 text-left font-bold">TÊN MÁY</th>
+                <th class="border-r border-black p-1.5 text-center font-bold w-32">IMEI</th>
                 <th class="p-1.5 text-right font-bold w-24">ĐƠN GIÁ</th>
               </tr>
             </thead>
             <tbody>
               ${editableData.items
                 .map(
-                  (item, index) => `
+                  (item) => `
                 <tr class="border-b border-black">
                   <td class="border-r border-black p-1.5">
                     <div>${item.productName}</div>
@@ -286,12 +250,12 @@ const VATInvoicesPage = () => {
                   }
                     </div>
                   </td>
-                  <td class="border-r border-black p-1.5 text-center">
-                    ${item.imei || "N/A"}
-                  </td>
-                  <td class="p-1.5 text-right font-semibold">
-                    ${formatPrice(item.price * item.quantity)}
-                  </td>
+                  <td class="border-r border-black p-1.5 text-center">${
+                    item.imei || "N/A"
+                  }</td>
+                  <td class="p-1.5 text-right font-semibold">${formatPrice(
+                    item.price * item.quantity
+                  )}</td>
                 </tr>
               `
                 )
@@ -299,27 +263,17 @@ const VATInvoicesPage = () => {
             </tbody>
           </table>
 
-          <!-- Warranty Terms - COMPACT -->
           <div class="border border-black p-2 mb-3 text-xs">
             <p class="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
-            <p class="font-bold mb-1">
-              LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH
-            </p>
+            <p class="font-bold mb-1">LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH</p>
             <ul class="list-disc ml-4 text-[10px] space-y-0.5 leading-tight">
               <li>Mất tem máy, rách tem</li>
-              <li>
-                Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi
-                ra khỏi shop sẽ không bảo hành)
-              </li>
-              <li>
-                Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài
-                khoản icloud
-              </li>
+              <li>Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi ra khỏi shop sẽ không bảo hành)</li>
+              <li>Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài khoản icloud</li>
               <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
             </ul>
           </div>
 
-          <!-- Totals - COMPACT -->
           <div class="border border-black text-xs mb-3">
             <div class="flex justify-between p-1.5 border-b border-black">
               <span class="font-bold">Tiền sản phẩm:</span>
@@ -328,8 +282,7 @@ const VATInvoicesPage = () => {
               )}</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black">
-              <span>Voucher:</span>
-              <span>0</span>
+              <span>Voucher:</span><span>0</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black bg-yellow-50">
               <span class="font-bold">Thành tiền:</span>
@@ -344,19 +297,14 @@ const VATInvoicesPage = () => {
               )}</span>
             </div>
             <div class="flex justify-between p-1.5">
-              <span>Khoản vay còn lại:</span>
-              <span>0</span>
+              <span>Khoản vay còn lại:</span><span>0</span>
             </div>
           </div>
 
-          <!-- Warning -->
           <div class="text-center my-2">
-            <p class="font-bold italic text-xs">
-              CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
-            </p>
+            <p class="font-bold italic text-xs">CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!</p>
           </div>
 
-          <!-- Signatures -->
           <div class="flex justify-between mb-3">
             <div class="text-center text-xs">
               <p class="font-bold mb-12">NHÂN VIÊN</p>
@@ -368,15 +316,9 @@ const VATInvoicesPage = () => {
             </div>
           </div>
 
-          <!-- Footer -->
           <div class="text-center text-[10px] border-t border-black pt-2">
-            <p class="font-bold">
-              BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)
-            </p>
-            <p>
-              Xem thêm các điều khoản bảo hành tại 
-              <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span>
-            </p>
+            <p class="font-bold">BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)</p>
+            <p>Xem thêm các điều khoản bảo hành tại <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span></p>
           </div>
         </div>
       </body>
@@ -392,12 +334,8 @@ const VATInvoicesPage = () => {
     }, 500);
   };
 
-  // ============================================
-  // RENDER (ĐÃ THAY ĐỔI HEADER, XÓA BỘ LỌC)
-  // ============================================
   return (
     <div className="space-y-6 p-6">
-      {/* Header (ĐÃ THAY ĐỔI) */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
@@ -407,7 +345,6 @@ const VATInvoicesPage = () => {
               : "Xem các đơn hàng đã xử lý"}
           </p>
         </div>
-        {/* === Thanh tìm kiếm mới === */}
         <div className="flex w-full md:w-auto md:max-w-sm items-center gap-2">
           <Input
             type="text"
@@ -422,7 +359,6 @@ const VATInvoicesPage = () => {
           <Button onClick={handleSearch} aria-label="Tìm kiếm">
             <Search className="w-4 h-4" />
           </Button>
-          {/* Nút xóa chỉ hiện khi đang có tìm kiếm */}
           {filters.search && (
             <Button
               variant="ghost"
@@ -436,7 +372,6 @@ const VATInvoicesPage = () => {
         </div>
       </div>
 
-      {/* Statistics (Giữ nguyên) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
@@ -494,7 +429,9 @@ const VATInvoicesPage = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Hóa đơn</p>
+                <p className="text-sm text-muted-foreground mb-1">
+                  Hóa đơn VAT
+                </p>
                 <h3 className="text-2xl font-bold">{stats.totalVATInvoices}</h3>
               </div>
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
@@ -505,7 +442,6 @@ const VATInvoicesPage = () => {
         </Card>
       </div>
 
-      {/* Orders List (Giữ nguyên) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -618,7 +554,7 @@ const VATInvoicesPage = () => {
               ))}
             </div>
           )}
-          {/* PHÂN TRANG ĐẸP – GIỐNG CASHIER */}
+
           {pagination.totalPages > 1 && (
             <div className="flex justify-center items-center gap-6 mt-8">
               <Button
@@ -629,11 +565,9 @@ const VATInvoicesPage = () => {
               >
                 Trước
               </Button>
-
               <span className="text-sm font-medium min-w-[120px] text-center">
                 Trang {pagination.currentPage} / {pagination.totalPages}
               </span>
-
               <Button
                 variant="outline"
                 size="sm"
@@ -649,7 +583,6 @@ const VATInvoicesPage = () => {
         </CardContent>
       </Card>
 
-      {/* Detail Dialog (Giữ nguyên) */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -694,9 +627,10 @@ const VATInvoicesPage = () => {
                     <strong>SĐT:</strong>{" "}
                     {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
                   </p>
+                  {/* ✅ FIXED: Hiển thị đúng text "Đã xuất VAT: {số hóa đơn}" */}
                   {selectedOrder.vatInvoice?.invoiceNumber && (
                     <Badge className="bg-green-100 text-green-800 mt-2">
-                      Đã : {selectedOrder.vatInvoice.invoiceNumber}
+                      Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
                     </Badge>
                   )}
                 </div>

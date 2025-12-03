@@ -687,9 +687,10 @@ export const updateOrderStatus = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status, note, shipperId } = req.body; // ✅ THÊM shipperId
+    const { status, note, shipperId } = req.body;
     const userId = req.user._id;
     const userRole = req.user.role;
+    const userName = req.user.fullName; // ✅ LẤY TÊN NGƯỜI DÙNG
 
     const order = await Order.findById(req.params.id).session(session);
     if (!order) {
@@ -720,18 +721,16 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ NEW: Order Manager chỉ định Shipper khi chuyển sang SHIPPING
+    // Order Manager chỉ định Shipper khi chuyển sang SHIPPING
     if (status === "SHIPPING") {
       if (userRole === "SHIPPER") {
-        // Shipper tự nhận đơn
         order.shipperInfo = {
           shipperId: userId,
-          shipperName: req.user.fullName,
+          shipperName: userName,
           shipperPhone: req.user.phoneNumber,
           pickupAt: new Date(),
         };
       } else if (["ORDER_MANAGER", "ADMIN"].includes(userRole)) {
-        // Order Manager/Admin chỉ định Shipper
         if (!shipperId) {
           await session.abortTransaction();
           return res.status(400).json({
@@ -740,7 +739,6 @@ export const updateOrderStatus = async (req, res) => {
           });
         }
 
-        // Kiểm tra Shipper có tồn tại không
         const shipper = await User.findById(shipperId).session(session);
         if (!shipper || shipper.role !== "SHIPPER") {
           await session.abortTransaction();
@@ -759,19 +757,27 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
-    // ✅ Cập nhật thời gian giao hàng thành công (GIỮ NGUYÊN)
-    if (status === "DELIVERED" && order.shipperInfo?.shipperId) {
+    // ✅ CẬP NHẬT: Lưu tên người giao hàng thành công
+    if (status === "DELIVERED") {
+      if (!order.shipperInfo) {
+        order.shipperInfo = {};
+      }
+      
       order.shipperInfo.deliveredAt = new Date();
       order.shipperInfo.deliveryNote = note || "Giao hàng thành công";
+      
+      // ✅ LƯU TÊN NGƯỜI CẬP NHẬT (Admin hoặc Shipper)
+      order.shipperInfo.deliveredBy = userName;
+      order.shipperInfo.deliveredByRole = userRole;
     }
 
-    // ✅ Cập nhật thời gian trả hàng (GIỮ NGUYÊN)
+    // Cập nhật thời gian trả hàng
     if (status === "RETURNED" && order.shipperInfo?.shipperId) {
       order.shipperInfo.returnedAt = new Date();
       order.shipperInfo.returnReason = note || "Trả hàng";
     }
 
-    // Hoàn kho khi hủy/trả hàng (GIỮ NGUYÊN)
+    // Hoàn kho khi hủy/trả hàng
     if (
       ["CANCELLED", "RETURNED"].includes(status) &&
       !["CANCELLED", "RETURNED"].includes(order.status)
@@ -779,33 +785,23 @@ export const updateOrderStatus = async (req, res) => {
       for (const item of order.items) {
         const models = getModelsByType(item.productType);
         if (models) {
-          const variant = await models.Variant.findById(item.variantId).session(
-            session
-          );
+          const variant = await models.Variant.findById(item.variantId).session(session);
           if (variant) {
             variant.stock += item.quantity;
-            variant.salesCount = Math.max(
-              0,
-              (variant.salesCount || 0) - item.quantity
-            );
+            variant.salesCount = Math.max(0, (variant.salesCount || 0) - item.quantity);
             await variant.save({ session });
           }
 
-          const product = await models.Product.findById(item.productId).session(
-            session
-          );
+          const product = await models.Product.findById(item.productId).session(session);
           if (product) {
-            product.salesCount = Math.max(
-              0,
-              (product.salesCount || 0) - item.quantity
-            );
+            product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
             await product.save({ session });
           }
         }
       }
     }
 
-    // Cập nhật thời gian (GIỮ NGUYÊN)
+    // Cập nhật thời gian
     const now = new Date();
     if (status === "CONFIRMED") order.confirmedAt = now;
     if (status === "SHIPPING") order.shippingAt = now;
@@ -849,7 +845,6 @@ const getDefaultNote = (from, to) => {
   };
   return notes[to] || "";
 };
-
 // ============================================
 // GET ORDER STATISTICS (Admin)
 // ============================================

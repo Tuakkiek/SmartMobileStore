@@ -1,6 +1,6 @@
 // ============================================
-// FILE: frontend/src/pages/CASHIER/CASHIERDashboard.jsx
-// ✅ V2: Nhận đơn từ POS → Xử lý thanh toán → In hóa đơn
+// FILE: frontend/src/pages/cashier/CASHIERDashboard.jsx
+// ✅ FIXED: Sửa thống kê "Đơn hôm nay"
 // ============================================
 
 import React, { useEffect, useState } from "react";
@@ -23,21 +23,15 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Printer,
-  FileText,
   DollarSign,
   Clock,
   User,
-  ChevronLeft,
-  ChevronRight,
+  FileText,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
 import EditInvoiceDialog from "@/components/pos/EditInvoiceDialog";
 
 const CASHIERDashboard = () => {
-  // ============================================
-  // STATE
-  // ============================================
   const [pendingOrders, setPendingOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -51,7 +45,6 @@ const CASHIERDashboard = () => {
   });
   const [showEditInvoice, setShowEditInvoice] = useState(false);
   const [orderToPrint, setOrderToPrint] = useState(null);
-  // State phân trang
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -64,7 +57,6 @@ const CASHIERDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle page change
   const handlePageChange = (newPage) => {
     if (
       newPage >= 1 &&
@@ -74,17 +66,11 @@ const CASHIERDashboard = () => {
       fetchPendingOrders(newPage);
     }
   };
-  // ============================================
-  // FETCH PENDING ORDERS
-  // ============================================
+
   const fetchPendingOrders = async (page = 1) => {
     try {
       setIsLoading(true);
-      const response = await posAPI.getPendingOrders({
-        page,
-        limit: 20,
-      });
-
+      const response = await posAPI.getPendingOrders({ page, limit: 20 });
       const { orders = [], pagination: pag = {} } = response.data.data;
 
       setPendingOrders(orders);
@@ -101,9 +87,6 @@ const CASHIERDashboard = () => {
     }
   };
 
-  // ============================================
-  // XỬ LÝ THANH TOÁN
-  // ============================================
   const handleOpenPayment = (order) => {
     setSelectedOrder(order);
     setPaymentReceived(order.totalAmount.toString());
@@ -127,9 +110,15 @@ const CASHIERDashboard = () => {
       setShowPaymentDialog(false);
       fetchPendingOrders(pagination.currentPage);
 
-      // ✅ SỬA: Set orderToPrint với data từ response (có paymentReceived)
-      // Thay vì dùng selectedOrder cũ
-      setOrderToPrint(response.data.data.order); // ← THAY ĐỔI NÀY
+      const orderWithIMEI = {
+        ...response.data.data.order,
+        items: response.data.data.order.items.map((item) => ({
+          ...item,
+          imei: item.imei || "",
+        })),
+      };
+
+      setOrderToPrint(orderWithIMEI);
       setShowEditInvoice(true);
     } catch (error) {
       console.error("Lỗi thanh toán:", error);
@@ -139,11 +128,7 @@ const CASHIERDashboard = () => {
     }
   };
 
-  // ============================================
-  // HÀM IN VỚI DỮ LIỆU ĐÃ CHỈNH SỬA
-  // ============================================
   const handlePrintInvoice = async (editableData) => {
-    // ✅ BƯỚC 1: Tạo HTML hóa đơn
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
@@ -169,19 +154,16 @@ const CASHIERDashboard = () => {
           .border-black { border-color: black; }
           .items-center { align-items: center; }
           .justify-center { justify-content: center; }
-          .text-[8px] { font-size: 0.5rem; }
           .text-center { text-align: center; }
           .text-base { font-size: 1rem; }
           .space-y-0.5 > * + * { margin-top: 0.125rem; }
           .font-semibold { font-weight: 600; }
           .w-full { width: 100%; }
           .border-b { border-bottom-width: 1px; }
-          .border-b-2 { border-bottom-width: 2px; }
           .border-r { border-right-width: 1px; }
           .p-1.5 { padding: 0.375rem; }
           .text-left { text-align: left; }
           .text-right { text-align: right; }
-          .text-center { text-align: center; }
           .w-32 { width: 8rem; }
           .w-24 { width: 6rem; }
           .text-[10px] { font-size: 0.625rem; }
@@ -189,7 +171,6 @@ const CASHIERDashboard = () => {
           .p-2 { padding: 0.5rem; }
           .list-disc { list-style-type: disc; }
           .ml-4 { margin-left: 1rem; }
-          .space-y-0.5 > * + * { margin-top: 0.125rem; }
           .bg-yellow-50 { background-color: #fdfce5; }
           .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
           .italic { font-style: italic; }
@@ -200,65 +181,46 @@ const CASHIERDashboard = () => {
       </head>
       <body>
         <div class="bg-white mx-auto">
-          <!-- Header -->
           <div class="flex justify-between items-start mb-3">
             <div class="flex-1">
               <h1 class="text-lg font-bold mb-1">Ninh Kiều iSTORE</h1>
               <p class="text-xs leading-tight">Số 58 Đường 3 Tháng 2 - Phường Xuân Khánh - Quận Ninh Kiều, Cần Thơ</p>
-              <p class="text-xs">
-                Hotline: 0917.755.765 - Khánh sửa: 0981.774.710
-              </p>
+              <p class="text-xs">Hotline: 0917.755.765 - Khánh sửa: 0981.774.710</p>
             </div>
-            <div class="w-16 h-16 border border-black flex items-center justify-center flex-shrink-0">
-            </div>
+            <div class="w-16 h-16 border border-black flex items-center justify-center"></div>
           </div>
 
-          <!-- Title -->
           <div class="text-center mb-3">
-            <h2 class="text-base font-bold">
-              HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH
-            </h2>
+            <h2 class="text-base font-bold">HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH</h2>
             <p class="text-xs">Ngày lúc ${formatDate(
               editableData.createdAt
             )}</p>
           </div>
 
-          <!-- Customer Info -->
           <div class="mb-3 space-y-0.5 text-xs">
-            <p>
-              <span class="font-semibold">Tên khách hàng:</span> ${
-                editableData.customerName
-              }
-            </p>
-            <p>
-              <span class="font-semibold">Địa chỉ:</span> ${
-                editableData.customerAddress
-              }
-            </p>
-            <p>
-              <span class="font-semibold">Số điện thoại:</span> ${
-                editableData.customerPhone
-              }
-            </p>
+            <p><span class="font-semibold">Tên khách hàng:</span> ${
+              editableData.customerName
+            }</p>
+            <p><span class="font-semibold">Địa chỉ:</span> ${
+              editableData.customerAddress
+            }</p>
+            <p><span class="font-semibold">Số điện thoại:</span> ${
+              editableData.customerPhone
+            }</p>
           </div>
 
-          <!-- Products Table -->
           <table class="w-full border border-black mb-3 text-xs">
             <thead>
               <tr class="border-b border-black">
-                <th class="border-r border-black p-1.5 text-left font-bold">
-                  TÊN MÁY
-                </th>
-                <th class="border-r border-black p-1.5 text-center font-bold w-32">
-                  IMEI
-                </th>
+                <th class="border-r border-black p-1.5 text-left font-bold">TÊN MÁY</th>
+                <th class="border-r border-black p-1.5 text-center font-bold w-32">IMEI</th>
                 <th class="p-1.5 text-right font-bold w-24">ĐƠN GIÁ</th>
               </tr>
             </thead>
             <tbody>
               ${editableData.items
                 .map(
-                  (item, index) => `
+                  (item) => `
                 <tr class="border-b border-black">
                   <td class="border-r border-black p-1.5">
                     <div>${item.productName}</div>
@@ -268,12 +230,12 @@ const CASHIERDashboard = () => {
                   }
                     </div>
                   </td>
-                  <td class="border-r border-black p-1.5 text-center">
-                    ${item.imei || "N/A"}
-                  </td>
-                  <td class="p-1.5 text-right font-semibold">
-                    ${formatPrice(item.price * item.quantity)}
-                  </td>
+                  <td class="border-r border-black p-1.5 text-center">${
+                    item.imei || "N/A"
+                  }</td>
+                  <td class="p-1.5 text-right font-semibold">${formatPrice(
+                    item.price * item.quantity
+                  )}</td>
                 </tr>
               `
                 )
@@ -281,27 +243,17 @@ const CASHIERDashboard = () => {
             </tbody>
           </table>
 
-          <!-- Warranty Terms - COMPACT -->
           <div class="border border-black p-2 mb-3 text-xs">
             <p class="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
-            <p class="font-bold mb-1">
-              LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH
-            </p>
+            <p class="font-bold mb-1">LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH</p>
             <ul class="list-disc ml-4 text-[10px] space-y-0.5 leading-tight">
               <li>Mất tem máy, rách tem</li>
-              <li>
-                Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi
-                ra khỏi shop sẽ không bảo hành)
-              </li>
-              <li>
-                Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài
-                khoản icloud
-              </li>
+              <li>Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi ra khỏi shop sẽ không bảo hành)</li>
+              <li>Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài khoản icloud</li>
               <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
             </ul>
           </div>
 
-          <!-- Totals - COMPACT -->
           <div class="border border-black text-xs mb-3">
             <div class="flex justify-between p-1.5 border-b border-black">
               <span class="font-bold">Tiền sản phẩm:</span>
@@ -310,8 +262,7 @@ const CASHIERDashboard = () => {
               )}</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black">
-              <span>Voucher:</span>
-              <span>0</span>
+              <span>Voucher:</span><span>0</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black bg-yellow-50">
               <span class="font-bold">Thành tiền:</span>
@@ -326,19 +277,14 @@ const CASHIERDashboard = () => {
               )}</span>
             </div>
             <div class="flex justify-between p-1.5">
-              <span>Khoản vay còn lại:</span>
-              <span>0</span>
+              <span>Khoản vay còn lại:</span><span>0</span>
             </div>
           </div>
 
-          <!-- Warning -->
           <div class="text-center my-2">
-            <p class="font-bold italic text-xs">
-              CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!
-            </p>
+            <p class="font-bold italic text-xs">CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!</p>
           </div>
 
-          <!-- Signatures -->
           <div class="flex justify-between mb-3">
             <div class="text-center text-xs">
               <p class="font-bold mb-12">NHÂN VIÊN</p>
@@ -350,22 +296,15 @@ const CASHIERDashboard = () => {
             </div>
           </div>
 
-          <!-- Footer -->
           <div class="text-center text-[10px] border-t border-black pt-2">
-            <p class="font-bold">
-              BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)
-            </p>
-            <p>
-              Xem thêm các điều khoản bảo hành tại 
-              <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span>
-            </p>
+            <p class="font-bold">BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)</p>
+            <p>Xem thêm các điều khoản bảo hành tại <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span></p>
           </div>
         </div>
       </body>
       </html>
     `;
 
-    // ✅ BƯỚC 2: Mở window in
     const printWindow = window.open("", "", "width=800,height=1000");
     if (!printWindow) {
       toast.error("Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.");
@@ -376,72 +315,11 @@ const CASHIERDashboard = () => {
     printWindow.document.close();
     printWindow.focus();
 
-    // ✅ BƯỚC 3: Xử lý sau khi in xong
-    // const handleAfterPrint = async () => {
-    //   try {
-    //     // Đóng window in
-    //     if (printWindow && !printWindow.closed) {
-    //       printWindow.close();
-    //     }
-
-    //     // ✅ HOÀN TẤT ĐƠN HÀNG
-    //     setIsLoading(true);
-
-    //     const authStorage = localStorage.getItem("auth-storage");
-    //     const token = authStorage ? JSON.parse(authStorage).state.token : null;
-
-    //     if (!token) {
-    //       throw new Error("Token không hợp lệ");
-    //     }
-
-    //     console.log("Gọi API hoàn tất đơn:", orderToPrint._id);
-
-    //     await axios.put(
-    //       `${import.meta.env.VITE_API_URL}/orders/${orderToPrint._id}/status`,
-    //       {
-    //         status: "DELIVERED",
-    //         note: "Thu ngân hoàn tất đơn hàng - In hóa đơn thành công",
-    //       },
-    //       {
-    //         headers: {
-    //           Authorization: `Bearer ${token}`,
-    //           "Content-Type": "application/json",
-    //         },
-    //       }
-    //     );
-
-    //     console.log("✅ Hoàn tất đơn thành công");
-
-    //     toast.success("Đơn hàng đã hoàn tất!");
-
-    //     // ĐÓNG DIALOG & REFRESH
-    //     setShowEditInvoice(false);
-    //     setOrderToPrint(null);
-    //     await fetchPendingOrders();
-    //   } catch (error) {
-    //     console.error("❌ Lỗi hoàn tất đơn:", error);
-    //     // ✅ CHỈ TOAST LỖI, KHÔNG BLOCK USER
-    //     toast.error("Lỗi hoàn tất đơn. Vui lòng thử lại sau.");
-    //     // Vẫn đóng dialog để user tiếp tục công việc khác
-    //     setShowEditInvoice(false);
-    //     setOrderToPrint(null);
-    //   } finally {
-    //     setIsLoading(false);
-    //   }
-    // };
-
-    // ✅ BƯỚC 4: Gán event listener cho afterprint
-    // printWindow.addEventListener("afterprint", handleAfterPrint);
-
-    // ✅ BƯỚC 5: Trigger print dialog
     setTimeout(() => {
       printWindow.print();
     }, 500);
   };
 
-  // ============================================
-  // HỦY ĐƠN
-  // ============================================
   const handleCancelOrder = async (orderId) => {
     if (!confirm("Bạn có chắc muốn hủy đơn này?")) return;
 
@@ -457,9 +335,6 @@ const CASHIERDashboard = () => {
     }
   };
 
-  // ============================================
-  // XUẤT HÓA ĐƠN VAT
-  // ============================================
   const handleOpenVAT = (order) => {
     setSelectedOrder(order);
     setVatForm({ companyName: "", taxCode: "", companyAddress: "" });
@@ -483,12 +358,21 @@ const CASHIERDashboard = () => {
     }
   };
 
-  // ============================================
-  // RENDER
-  // ============================================
+  // ✅ FIXED: Tính đúng "Đơn hôm nay"
+  const getTodayOrdersCount = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    return pendingOrders.filter((order) => {
+      const orderDate = new Date(order.createdAt);
+      orderDate.setHours(0, 0, 0, 0);
+      return orderDate.getTime() === todayTime;
+    }).length;
+  };
+
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Xử lý thanh toán</h1>
@@ -504,7 +388,6 @@ const CASHIERDashboard = () => {
         </Button>
       </div>
 
-      {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardContent className="p-6">
@@ -542,6 +425,7 @@ const CASHIERDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* ✅ FIXED: Card "Đơn hôm nay" */}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -549,14 +433,7 @@ const CASHIERDashboard = () => {
                 <p className="text-sm text-muted-foreground mb-1">
                   Đơn hôm nay
                 </p>
-                <h3 className="text-3xl font-bold">
-                  {
-                    pendingOrders.filter((o) => {
-                      const today = new Date().toDateString();
-                      return new Date(o.createdAt).toDateString() === today;
-                    }).length
-                  }
-                </h3>
+                <h3 className="text-3xl font-bold">{getTodayOrdersCount()}</h3>
               </div>
               <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
                 <FileText className="w-6 h-6 text-blue-600" />
@@ -566,7 +443,6 @@ const CASHIERDashboard = () => {
         </Card>
       </div>
 
-      {/* Pending Orders List */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -646,7 +522,6 @@ const CASHIERDashboard = () => {
                           </div>
                         </div>
 
-                        {/* Items Preview */}
                         <div className="border-t pt-3">
                           <p className="text-sm font-medium mb-2">Sản phẩm:</p>
                           <div className="space-y-1">
@@ -691,7 +566,6 @@ const CASHIERDashboard = () => {
             </div>
           )}
 
-          {/* Phân trang - Dạng TrangX/Y- 2 nút trước sau */}
           {pagination.totalPages > 1 && (
             <div className="flex justify-center items-center gap-6 mt-8">
               <Button
@@ -702,11 +576,9 @@ const CASHIERDashboard = () => {
               >
                 Trước
               </Button>
-
               <span className="text-sm font-medium text-muted-foreground min-w-[120px] text-center">
                 Trang {pagination.currentPage} / {pagination.totalPages}
               </span>
-
               <Button
                 variant="outline"
                 size="sm"
@@ -722,7 +594,6 @@ const CASHIERDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Payment Dialog */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
@@ -782,7 +653,6 @@ const CASHIERDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* VAT Dialog */}
       <Dialog open={showVATDialog} onOpenChange={setShowVATDialog}>
         <DialogContent>
           <DialogHeader>
@@ -843,7 +713,7 @@ const CASHIERDashboard = () => {
 
       <EditInvoiceDialog
         open={showEditInvoice}
-        onOpenChange={setShowEditInvoice} // ← Đơn giản hóa thành này
+        onOpenChange={setShowEditInvoice}
         order={orderToPrint}
         onPrint={handlePrintInvoice}
         isLoading={isLoading}

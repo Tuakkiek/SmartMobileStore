@@ -1,7 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/posController.js
-// FINAL VERSION 2025 – POS HOÀN HẢO NHẤT TỪ TRƯỚC ĐẾN NAY
-// Đã viết đầy đủ tất cả các hàm: processPayment, cancelPendingOrder, issueVATInvoice
+// ✅ ADDED: Stats API for Cashier Dashboard
 // ============================================
 
 import mongoose from "mongoose";
@@ -13,9 +12,6 @@ import AirPods, { AirPodsVariant } from "../models/AirPods.js";
 import AppleWatch, { AppleWatchVariant } from "../models/AppleWatch.js";
 import Accessory, { AccessoryVariant } from "../models/Accessory.js";
 
-// ============================================
-// HELPER: Map productType → Model
-// ============================================
 const getModelsByType = (productType) => {
   const map = {
     iPhone: { Product: IPhone, Variant: IPhoneVariant },
@@ -260,7 +256,6 @@ export const processPayment = async (req, res) => {
 
     const changeGiven = paymentReceived - order.totalAmount;
 
-    // Tạo số hóa đơn tự động
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -277,15 +272,13 @@ export const processPayment = async (req, res) => {
       .toString()
       .padStart(6, "0")}`;
 
-    // ✅ UPDATED: Cập nhật cả posInfo.cashierId
     order.paymentStatus = "PAID";
     order.status = "DELIVERED";
 
-    // Cập nhật posInfo với cashier info
     if (!order.posInfo) {
       order.posInfo = {};
     }
-    order.posInfo.cashierId = req.user._id; // ✅ LƯU CASHIER ID
+    order.posInfo.cashierId = req.user._id;
     order.posInfo.cashierName = req.user.fullName;
     order.posInfo.paymentReceived = paymentReceived;
     order.posInfo.changeGiven = changeGiven;
@@ -319,7 +312,7 @@ export const processPayment = async (req, res) => {
 };
 
 // ============================================
-// 4. HỦY ĐƠN CHỜ THANH TOÁN (CASHIER) – HOÀN KHO + GIẢM DOANH SỐ
+// 4. HỦY ĐƠN CHỜ THANH TOÁN (CASHIER)
 // ============================================
 export const cancelPendingOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -347,7 +340,6 @@ export const cancelPendingOrder = async (req, res) => {
         });
     }
 
-    // HOÀN KHO & GIẢM DOANH SỐ
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
       if (models) {
@@ -532,6 +524,88 @@ export const getPOSOrderHistory = async (req, res) => {
   }
 };
 
+// ============================================
+// ✅ 7. NEW: STATS API FOR CASHIER/ADMIN
+// ============================================
+export const getPOSStats = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Base query
+    const query = { orderSource: "IN_STORE" };
+
+    // Nếu là Cashier, chỉ lấy đơn của mình xử lý
+    if (userRole === "CASHIER") {
+      query["posInfo.cashierId"] = userId;
+    }
+
+    // Filter by date range
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    // Get all orders matching query
+    const allOrders = await Order.find(query).lean();
+
+    // Calculate stats
+    const stats = {
+      totalOrders: allOrders.length,
+      totalRevenue: allOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+      totalVATInvoices: allOrders.filter((o) => o.vatInvoice?.invoiceNumber)
+        .length,
+
+      // By payment status
+      paidOrders: allOrders.filter((o) => o.paymentStatus === "PAID").length,
+      unpaidOrders: allOrders.filter((o) => o.paymentStatus === "UNPAID")
+        .length,
+
+      // By status
+      pendingPayment: allOrders.filter((o) => o.status === "PENDING_PAYMENT")
+        .length,
+      delivered: allOrders.filter((o) => o.status === "DELIVERED").length,
+      cancelled: allOrders.filter((o) => o.status === "CANCELLED").length,
+
+      // Average order value
+      avgOrderValue:
+        allOrders.length > 0
+          ? allOrders.reduce((sum, o) => sum + o.totalAmount, 0) /
+            allOrders.length
+          : 0,
+
+      // Today's stats
+      todayOrders: allOrders.filter((o) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const orderDate = new Date(o.createdAt);
+        orderDate.setHours(0, 0, 0, 0);
+        return orderDate.getTime() === today.getTime();
+      }).length,
+
+      todayRevenue: allOrders
+        .filter((o) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const orderDate = new Date(o.createdAt);
+          orderDate.setHours(0, 0, 0, 0);
+          return orderDate.getTime() === today.getTime();
+        })
+        .reduce((sum, o) => sum + o.totalAmount, 0),
+    };
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error("GET POS STATS ERROR:", error);
+    res.status(500).json({ success: false, message: "Lỗi lấy thống kê" });
+  }
+};
+
 export default {
   createPOSOrder,
   getPendingOrders,
@@ -539,4 +613,5 @@ export default {
   cancelPendingOrder,
   issueVATInvoice,
   getPOSOrderHistory,
+  getPOSStats, // ✅ NEW
 };
