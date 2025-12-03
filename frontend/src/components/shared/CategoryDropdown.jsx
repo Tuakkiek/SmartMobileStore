@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/shared/CategoryDropdown.jsx
-// UPDATED: Optimized mobile UI with white background
+// UPDATED: Fixed mobile UI - 2/3 screen height, toggle functionality
 // ============================================
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -432,190 +432,229 @@ const CategoryDropdown = ({
 
       {/* Panel - shown when triggered (desktop hover or mobile click) */}
       {isOpen && (
-        <div
-          className="fixed inset-0 top-20 z-50 bg-white overflow-y-auto
-                     md:inset-auto md:top-20 md:left-1/2 md:-translate-x-1/2 md:w-[1200px] md:h-[600px] md:rounded-3xl md:shadow-2xl md:overflow-hidden md:bg-white/40 md:backdrop-blur-3xl md:border md:border-white/20"
-        >
-          {/* Close button - Mobile only */}
-          <button
-            onClick={() => {
-              setIsOpen(false);
-              if (isMobileMenu) onClose();
-            }}
-            className="absolute top-4 right-4 z-10 text-gray-700 hover:text-black md:hidden"
+        <>
+          {/* Mobile backdrop - only show on mobile */}
+          {isMobileMenu && (
+            <div
+              className="md:hidden fixed inset-0 z-40"
+              onClick={() => {
+                setIsOpen(false);
+                onClose();
+              }}
+            />
+          )}
+
+          {/* Panel */}
+          <div
+            className={`
+              ${
+                isMobileMenu
+                  ? "fixed bottom-16 left-0 right-0 h-[66vh] z-50 bg-white rounded-t-3xl shadow-2xl overflow-hidden"
+                  : "fixed inset-0 top-20 z-50 bg-white overflow-y-auto"
+              }
+              md:inset-auto md:top-20 md:left-1/2 md:-translate-x-1/2 md:w-[1200px] md:h-[600px] md:rounded-3xl md:shadow-2xl md:overflow-hidden md:bg-white/40 md:backdrop-blur-3xl md:border md:border-white/20
+            `}
+            onClick={(e) => e.stopPropagation()}
           >
-            <X className="w-6 h-6" />
-          </button>
-
-          <div className="flex flex-col h-full md:flex-row">
-            {/* Left: Categories */}
-            <div className="w-full bg-gray-50 p-2 md:w-80 md:p-6 md:overflow-y-auto">
-              <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden pb-2 md:pb-0">
-                {categories.map((cat, idx) => {
-                  const imgSrc = CATEGORY_IMAGES[cat];
-                  const displayName = CATEGORY_DISPLAY_MAP[cat] || cat;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleCategoryClick(cat, idx)}
-                      onMouseEnter={() => {
-                        setSelectedCategory(idx);
-                        fetchCategoryData(cat);
-                      }}
-                      className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl 
-                                  md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
-                                    selectedCategory === idx
-                                      ? "bg-white text-black shadow-sm"
-                                      : "text-gray-600 hover:bg-gray-100"
-                                  }`}
-                    >
-                      <img
-                        src={imgSrc}
-                        alt={displayName}
-                        className="w-14 h-14 md:w-10 md:h-10 object-contain"
-                      />
-                      <span className="text-center text-xs md:text-left md:text-base">
-                        {displayName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right: Content */}
-            <div className="flex-1 p-4 overflow-y-auto md:p-8 bg-white md:bg-transparent">
-              {loading ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="w-16 h-16 bg-gray-200 rounded-lg mx-auto"></div>
-                        <div className="h-3 bg-gray-200 rounded mt-2 w-16 mx-auto"></div>
-                      </div>
-                    ))}
-                  </div>
+            {/* Mobile Header with drag indicator */}
+            {isMobileMenu && (
+              <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex flex-col items-center flex-shrink-0">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mb-2" />
+                <div className="flex items-center justify-between w-full">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Danh mục sản phẩm
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      onClose();
+                    }}
+                    className="text-gray-700 hover:text-black"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
                 </div>
-              ) : currentData ? (
-                <>
-                  {/* Top Sellers */}
-                  <div className="mb-6 md:mb-10">
-                    <h3 className="text-base md:text-lg font-bold mb-4 md:mb-5 flex items-center gap-2 text-gray-900">
-                      <span className="inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
-                        HOT
-                      </span>
-                      Sản phẩm bán chạy
-                    </h3>
+              </div>
+            )}
 
-                    {displayBestSellers.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                        {displayBestSellers.map((product) => (
-                          <button
-                            key={product._id}
-                            onClick={() => navigateToProductDetail(product)}
-                            className="group relative text-center hover:-translate-y-2 transition-all duration-300"
-                          >
-                            <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md mb-2 md:mb-3">
-                              <img
-                                src={
-                                  product.images?.[0] ||
-                                  product.variants?.[0]?.images?.[0] ||
-                                  "/placeholder.png"
-                                }
-                                alt={product.name}
-                                className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
-                                loading="lazy"
-                              />
-                            </div>
-                            <p className="text-xs md:text-sm font-medium line-clamp-2 text-gray-800 px-1 leading-tight">
-                              {product.name}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                        {[...Array(4)].map((_, i) => (
-                          <div key={i} className="animate-pulse text-center">
-                            <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gray-200 rounded-2xl mb-2 md:mb-3" />
-                            <div className="h-3 md:h-4 bg-gray-200 rounded-full w-16 md:w-20 mx-auto" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Series Grid */}
-                  <h3 className="text-sm md:text-base text-black font-semibold mb-3 md:mb-4 md:text-lg">
-                    Chọn theo dòng {categories[selectedCategory]}
-                  </h3>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
-                    {currentData.series.map((series, idx) => (
+            <div
+              className={`flex h-full ${
+                isMobileMenu ? "flex-col" : "flex-col md:flex-row"
+              }`}
+            >
+              {/* Left: Categories */}
+              <div
+                className={`w-full bg-gray-50 p-2 md:w-80 md:p-6 md:overflow-y-auto ${
+                  isMobileMenu ? "flex-shrink-0" : ""
+                }`}
+              >
+                <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden pb-2 md:pb-0 scrollbar-hide">
+                  {categories.map((cat, idx) => {
+                    const imgSrc = CATEGORY_IMAGES[cat];
+                    const displayName = CATEGORY_DISPLAY_MAP[cat] || cat;
+                    return (
                       <button
                         key={idx}
-                        onClick={() =>
-                          navigateToCategory(
-                            categories[selectedCategory],
-                            series.seriesName
-                          )
-                        }
-                        className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
+                        onClick={() => handleCategoryClick(cat, idx)}
+                        onMouseEnter={() => {
+                          setSelectedCategory(idx);
+                          fetchCategoryData(cat);
+                        }}
+                        className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl 
+                                    md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
+                                      selectedCategory === idx
+                                        ? "bg-white text-black shadow-sm"
+                                        : "text-gray-600 hover:bg-gray-100"
+                                    }`}
                       >
-                        <div className="flex gap-3 items-start mb-3">
-                          <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-50 rounded-lg overflow-hidden flex-shrink-0">
-                            {series.image ? (
-                              <img
-                                src={series.image}
-                                alt={series.seriesName}
-                                className="w-full h-full object-contain group-hover:scale-110 transition-transform"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                <Package className="w-6 h-6 md:w-8 md:h-8" />
+                        <img
+                          src={imgSrc}
+                          alt={displayName}
+                          className="w-14 h-14 md:w-10 md:h-10 object-contain"
+                        />
+                        <span className="text-center text-xs md:text-left md:text-base">
+                          {displayName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Content */}
+              <div className="flex-1 p-4 overflow-y-auto md:p-8 bg-white md:bg-transparent pb-6">
+                {loading ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="w-16 h-16 bg-gray-200 rounded-lg mx-auto"></div>
+                          <div className="h-3 bg-gray-200 rounded mt-2 w-16 mx-auto"></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : currentData ? (
+                  <>
+                    {/* Top Sellers */}
+                    <div className="mb-6 md:mb-10">
+                      <h3 className="text-base md:text-lg font-bold mb-4 md:mb-5 flex items-center gap-2 text-gray-900">
+                        <span className="inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
+                          HOT
+                        </span>
+                        Sản phẩm bán chạy
+                      </h3>
+
+                      {displayBestSellers.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                          {displayBestSellers.map((product) => (
+                            <button
+                              key={product._id}
+                              onClick={() => navigateToProductDetail(product)}
+                              className="group relative text-center hover:-translate-y-2 transition-all duration-300"
+                            >
+                              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md mb-2 md:mb-3">
+                                <img
+                                  src={
+                                    product.images?.[0] ||
+                                    product.variants?.[0]?.images?.[0] ||
+                                    "/placeholder.png"
+                                  }
+                                  alt={product.name}
+                                  className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                  loading="lazy"
+                                />
                               </div>
+                              <p className="text-xs md:text-sm font-medium line-clamp-2 text-gray-800 px-1 leading-tight">
+                                {product.name}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                          {[...Array(4)].map((_, i) => (
+                            <div key={i} className="animate-pulse text-center">
+                              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gray-200 rounded-2xl mb-2 md:mb-3" />
+                              <div className="h-3 md:h-4 bg-gray-200 rounded-full w-16 md:w-20 mx-auto" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Series Grid */}
+                    <h3 className="text-sm md:text-base text-black font-semibold mb-3 md:mb-4 md:text-lg">
+                      Chọn theo dòng {categories[selectedCategory]}
+                    </h3>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
+                      {currentData.series.map((series, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() =>
+                            navigateToCategory(
+                              categories[selectedCategory],
+                              series.seriesName
+                            )
+                          }
+                          className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
+                        >
+                          <div className="flex gap-3 items-start mb-3">
+                            <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-50 rounded-lg overflow-hidden flex-shrink-0">
+                              {series.image ? (
+                                <img
+                                  src={series.image}
+                                  alt={series.seriesName}
+                                  className="w-full h-full object-contain group-hover:scale-110 transition-transform"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                  <Package className="w-6 h-6 md:w-8 md:h-8" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-sm text-gray-900 md:text-base mb-1">
+                                {series.seriesName}
+                              </h4>
+                              <p className="text-xs text-gray-500">
+                                {series.products.length} phiên bản
+                              </p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                          </div>
+                          <div className="space-y-1 text-xs text-gray-600 md:text-sm">
+                            {series.products.slice(0, 2).map((p, i) => (
+                              <p
+                                key={i}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigateToProductDetail(p);
+                                }}
+                                className="hover:text-black cursor-pointer pl-1 line-clamp-1"
+                              >
+                                • {p.name}
+                              </p>
+                            ))}
+                            {series.products.length > 2 && (
+                              <p className="text-xs text-blue-600 pl-1">
+                                +{series.products.length - 2} sản phẩm khác
+                              </p>
                             )}
                           </div>
-                          <div className="flex-1">
-                            <h4 className="font-bold text-sm text-gray-900 md:text-base mb-1">
-                              {series.seriesName}
-                            </h4>
-                            <p className="text-xs text-gray-500">
-                              {series.products.length} phiên bản
-                            </p>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
-                        </div>
-                        <div className="space-y-1 text-xs text-gray-600 md:text-sm">
-                          {series.products.slice(0, 2).map((p, i) => (
-                            <p
-                              key={i}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigateToProductDetail(p);
-                              }}
-                              className="hover:text-black cursor-pointer pl-1 line-clamp-1"
-                            >
-                              • {p.name}
-                            </p>
-                          ))}
-                          {series.products.length > 2 && (
-                            <p className="text-xs text-blue-600 pl-1">
-                              +{series.products.length - 2} sản phẩm khác
-                            </p>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    <p>Không có dữ liệu</p>
                   </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  <p>Không có dữ liệu</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

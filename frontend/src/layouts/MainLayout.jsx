@@ -101,12 +101,7 @@ const MainLayout = () => {
 
   // Prevent body scroll when any menu is open
   useEffect(() => {
-    if (
-      categoryMenuOpen ||
-      storeMenuOpen ||
-      contactMenuOpen ||
-      desktopStoreMenuOpen
-    ) {
+    if (storeMenuOpen || contactMenuOpen || desktopStoreMenuOpen) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
@@ -114,7 +109,7 @@ const MainLayout = () => {
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [categoryMenuOpen, storeMenuOpen, contactMenuOpen, desktopStoreMenuOpen]);
+  }, [storeMenuOpen, contactMenuOpen, desktopStoreMenuOpen]);
 
   const handleLogout = async () => {
     await logout();
@@ -293,7 +288,7 @@ const MainLayout = () => {
 
           {isAuthenticated && user?.role === "CUSTOMER" && (
             <button
-              onClick={() => setStoreMenuOpen(true)}
+              onClick={() => setStoreMenuOpen(!storeMenuOpen)}
               className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
             >
               <MapPin className="w-5 h-5" />
@@ -302,7 +297,7 @@ const MainLayout = () => {
           )}
 
           <button
-            onClick={() => setContactMenuOpen(true)}
+            onClick={() => setContactMenuOpen(!contactMenuOpen)}
             className="flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-red-500 transition-colors"
           >
             <Phone className="w-5 h-5" />
@@ -362,7 +357,6 @@ const MainLayout = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-
             <div className="flex flex-1 overflow-hidden">
               <div className="w-1/3 bg-gray-50 overflow-y-auto border-r border-gray-200">
                 {districts.map((districtName, idx) => (
@@ -379,13 +373,11 @@ const MainLayout = () => {
                   </button>
                 ))}
               </div>
-
               <div className="flex-1 bg-white overflow-y-auto">
                 <div className="p-4">
                   <h2 className="text-gray-900 text-lg font-bold mb-4">
                     {districts[selectedDistrict]}
                   </h2>
-
                   {filteredStores.length > 0 ? (
                     <div className="space-y-3">
                       {filteredStores.map((store) => (
@@ -411,7 +403,6 @@ const MainLayout = () => {
                               </p>
                             </div>
                           </div>
-
                           <div className="space-y-2">
                             <div className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
@@ -419,7 +410,6 @@ const MainLayout = () => {
                                 {store.address}
                               </p>
                             </div>
-
                             <div className="flex items-center gap-2">
                               <Phone className="w-4 h-4 text-gray-500 flex-shrink-0" />
                               <a
@@ -429,7 +419,6 @@ const MainLayout = () => {
                                 {store.phone}
                               </a>
                             </div>
-
                             <div className="flex items-start gap-2">
                               <Clock className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
                               <p className="text-gray-700 text-xs">
@@ -437,7 +426,6 @@ const MainLayout = () => {
                               </p>
                             </div>
                           </div>
-
                           <div className="mt-3 pt-3 border-t border-gray-200 flex gap-2">
                             <a
                               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -471,7 +459,6 @@ const MainLayout = () => {
           </div>
         </div>
       )}
-
       {/* Mobile Contact Menu */}
       {contactMenuOpen && (
         <div
@@ -497,7 +484,6 @@ const MainLayout = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-
             <div className="flex-1 overflow-y-auto bg-white p-4">
               <div className="space-y-3">
                 <a
@@ -514,7 +500,6 @@ const MainLayout = () => {
                     </span>
                   </div>
                 </a>
-
                 <a
                   href="tel:0932640089"
                   className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
@@ -529,7 +514,6 @@ const MainLayout = () => {
                     </span>
                   </div>
                 </a>
-
                 <a
                   href="tel:1900633909"
                   className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
@@ -544,7 +528,6 @@ const MainLayout = () => {
                     </span>
                   </div>
                 </a>
-
                 <a
                   href="tel:1900633909"
                   className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
@@ -559,7 +542,6 @@ const MainLayout = () => {
                     </span>
                   </div>
                 </a>
-
                 <a
                   href="tel:0977649939"
                   className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"
@@ -574,7 +556,6 @@ const MainLayout = () => {
                     </span>
                   </div>
                 </a>
-
                 <a
                   href="tel:0981000731"
                   className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-gray-300 transition-colors block"

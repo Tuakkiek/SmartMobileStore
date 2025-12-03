@@ -787,11 +787,10 @@ const ProductDetailPage = () => {
                   <li className="flex items-start gap-2">
                     <span className="text-red-600 mt-1">•</span>
                     <span>
-                      Giảm thêm đến 2.5 triệu khi mua kèm SIM FPT
-                      FVIP150/F299/F399 6-12 tháng{" "}
-                      <button className="text-blue-600 hover:underline">
+                      Giảm thêm đến 250k khi mua kèm SIM
+                      {/* <button className="text-blue-600 hover:underline">
                         Xem chi tiết
-                      </button>
+                      </button> */}
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
