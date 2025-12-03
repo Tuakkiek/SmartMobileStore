@@ -433,7 +433,8 @@ const CategoryDropdown = ({
       {/* Panel - shown when triggered (desktop hover or mobile click) */}
       {isOpen && (
         <>
-          {/* Mobile backdrop - only show on mobile */}
+        
+          {/* Mobile backdrop - only show on mobile  */}
           {isMobileMenu && (
             <div
               className="md:hidden fixed inset-0 z-40"
