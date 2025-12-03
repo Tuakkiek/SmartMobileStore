@@ -1,69 +1,187 @@
 import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import ProductCard from "@/components/shared/ProductCard";
-import axios from "axios";
+import {
+  iPhoneAPI,
+  iPadAPI,
+  macAPI,
+  airPodsAPI,
+  appleWatchAPI,
+  accessoryAPI,
+} from "@/lib/api";
 
-const CATEGORY_ROUTE_MAP = {
-  iPhone: "dien-thoai",
-  iPad: "may-tinh-bang",
-  Mac: "macbook",
-  AirPods: "tai-nghe",
-  AppleWatch: "apple-watch",
-  Accessories: "phu-kien",
+// ============================================
+// CATEGORY MAPPING
+// ============================================
+const CATEGORY_API_MAP = {
+  iPhone: { api: iPhoneAPI, route: "dien-thoai" },
+  iPad: { api: iPadAPI, route: "may-tinh-bang" },
+  Mac: { api: macAPI, route: "macbook" },
+  AirPods: { api: airPodsAPI, route: "tai-nghe" },
+  AppleWatch: { api: appleWatchAPI, route: "apple-watch" },
+  Accessory: { api: accessoryAPI, route: "phu-kien" },
+  Accessories: { api: accessoryAPI, route: "phu-kien" }, // ✅ Alias cho Accessory
 };
 
-/**
- * Tính điểm liên quan dựa trên tên sản phẩm
- * Logic: Nếu sản phẩm có model tương tự (iPhone 17, iPhone 17 Pro, ...) thì ưu tiên
- */
-const calculateRelevanceScore = (productName, baseProductName) => {
+// ============================================
+// TYPO CORRECTION & TOKENIZATION
+// ============================================
+const TYPO_MAPPINGS = {
+  // iPhone
+  ip: "iphone",
+  ifone: "iphone",
+  iphon: "iphone",
+  plus: "plus",
+  pro: "pro",
+  promax: "pro max",
+  max: "max",
+  mini: "mini",
+
+  // iPad
+  iapd: "ipad",
+  pad: "ipad",
+  air: "air",
+
+  // Mac
+  mac: "macbook",
+  macbok: "macbook",
+  mb: "macbook",
+  mba: "macbook air",
+  mbp: "macbook pro",
+
+  // AirPods
+  airpod: "airpods",
+  aripod: "airpods",
+
+  // Watch
+  wach: "apple watch",
+  wacth: "apple watch",
+  aw: "apple watch",
+
+  // Accessories
+  sac: "sạc",
+  cap: "cáp",
+  "op lung": "ốp lưng",
+};
+
+const correctTypos = (input) => {
+  if (!input) return "";
+  let corrected = input.toLowerCase().trim();
+
+  if (TYPO_MAPPINGS[corrected]) return TYPO_MAPPINGS[corrected];
+
+  Object.keys(TYPO_MAPPINGS).forEach((key) => {
+    const regex = new RegExp(`\\b${key}\\b`, "gi");
+    if (regex.test(corrected)) {
+      corrected = corrected.replace(regex, TYPO_MAPPINGS[key]);
+    }
+  });
+
+  return corrected;
+};
+
+const tokenizeQuery = (query) => {
+  if (!query) return [];
+
+  const corrected = correctTypos(query);
+  const tokens = corrected.toLowerCase().trim().split(/\s+/);
+
+  const stopWords = ["the", "a", "an", "and", "or", "của", "cho", "với", "và"];
+  return tokens.filter(
+    (token) => !stopWords.includes(token) && token.length > 0
+  );
+};
+
+// ============================================
+// RELEVANCE SCORING
+// ============================================
+const calculateRelevanceScore = (productName, baseName) => {
   const name = productName.toLowerCase();
-  const baseName = baseProductName.toLowerCase();
+  const base = baseName.toLowerCase();
+
+  const nameTokens = tokenizeQuery(productName);
+  const baseTokens = tokenizeQuery(baseName);
+
+  if (nameTokens.length === 0 || baseTokens.length === 0) return 0;
 
   let score = 0;
+  let matchedTokens = 0;
 
-  // Chiết xuất model chính (iPhone 17, iPhone 16, ...)
+  // Khớp chính xác toàn bộ
+  if (name === base) return 100;
+
+  // Tính điểm cho từng token
+  baseTokens.forEach((baseToken) => {
+    nameTokens.forEach((nameToken) => {
+      // Khớp chính xác từ
+      if (nameToken === baseToken) {
+        matchedTokens++;
+        score += 30;
+
+        // Bonus nếu token xuất hiện ở đầu
+        if (name.startsWith(baseToken)) {
+          score += 15;
+        }
+      }
+      // Khớp một phần
+      else if (nameToken.includes(baseToken) || baseToken.includes(nameToken)) {
+        matchedTokens++;
+        score += 15;
+      }
+    });
+  });
+
+  // Tỷ lệ khớp
+  const matchRatio =
+    matchedTokens / Math.max(baseTokens.length, nameTokens.length);
+
+  if (matchRatio >= 0.8) {
+    score += 20;
+  } else if (matchRatio >= 0.5) {
+    score += 10;
+  }
+
+  // Bonus nếu base xuất hiện liên tiếp trong name
+  if (name.includes(base)) {
+    score += 25;
+  }
+
+  // Cùng dòng sản phẩm (iPhone 15 vs iPhone 15 Pro)
   const modelRegex = /(\w+\s+\d+)\s*(pro|max|plus|mini|air)?/i;
-  const currentMatch = name.match(modelRegex);
-  const baseMatch = baseName.match(modelRegex);
+  const nameMatch = name.match(modelRegex);
+  const baseMatch = base.match(modelRegex);
 
-  if (currentMatch && baseMatch) {
-    // Cùng dòng model (iPhone 17 vs iPhone 17 Pro)
-    if (currentMatch[1].toLowerCase() === baseMatch[1].toLowerCase()) {
-      score += 50; // Điểm cao - cùng dòng sản phẩm
-    }
-    // Cùng thương hiệu nhưng khác thế hệ (iPhone 17 vs iPhone 16)
-    else if (
-      currentMatch[1].split(" ")[0].toLowerCase() ===
-      baseMatch[1].split(" ")[0].toLowerCase()
-    ) {
-      score += 30; // Điểm trung bình - cùng thương hiệu
+  if (nameMatch && baseMatch) {
+    if (nameMatch[1] === baseMatch[1]) {
+      score += 40; // Cùng dòng model
+    } else if (nameMatch[1].split(" ")[0] === baseMatch[1].split(" ")[0]) {
+      score += 20; // Cùng thương hiệu
     }
   }
 
-  // Ưu tiên sản phẩm có variant (nhiều tùy chọn)
-  score += 10;
+  // Penalty nếu tên quá khác biệt
+  const lengthDiff = Math.abs(name.length - base.length);
+  if (lengthDiff > 30) {
+    score -= 10;
+  }
 
-  return score;
+  return Math.min(Math.max(score, 0), 100);
 };
 
-const SimilarProducts = ({ productId, category }) => {
-  const navigate = useNavigate();
+// ============================================
+// MAIN COMPONENT
+// ============================================
+const SimilarProducts = ({ productId, category, currentProduct }) => {
   const [similarProducts, setSimilarProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollContainerRef = React.useRef(null);
-  const [currentProduct, setCurrentProduct] = useState(null);
 
   useEffect(() => {
     const fetchSimilarProducts = async () => {
       if (!productId || !category) {
-        console.log(
-          "[SimilarProducts] Missing productId or category",
-          { productId, category }
-        );
+        console.log("[SimilarProducts] Missing productId or category");
         setIsLoading(false);
         return;
       }
@@ -72,78 +190,85 @@ const SimilarProducts = ({ productId, category }) => {
         setIsLoading(true);
         setError(null);
 
-        console.log("[SimilarProducts] Fetching similar products", {
+        console.log("[SimilarProducts] Fetching for:", {
           productId,
           category,
+          currentProductName: currentProduct?.name,
         });
 
-        const baseURL = import.meta.env.VITE_API_URL || "/api";
-        const response = await axios.get(
-          `${baseURL}/products/${productId}/related`,
-          {
-            withCredentials: true,
-          }
-        );
+        const categoryInfo = CATEGORY_API_MAP[category];
 
-        console.log(
-          "[SimilarProducts] API Response:",
-          response.data
-        );
+        if (!categoryInfo) {
+          console.warn("[SimilarProducts] Unknown category:", category);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch tất cả sản phẩm cùng category
+        const response = await categoryInfo.api.getAll({
+          limit: 100,
+          status: "AVAILABLE",
+        });
 
         let products = response.data?.data?.products || [];
 
         if (!Array.isArray(products)) {
-          console.warn("[SimilarProducts] Products is not an array:", products);
+          console.warn("[SimilarProducts] Invalid products data");
           products = [];
         }
 
-        console.log(`[SimilarProducts] Fetched ${products.length} products`);
+        // Loại bỏ sản phẩm hiện tại
+        products = products.filter((p) => p._id !== productId);
 
-        // Thêm log chi tiết từng sản phẩm
-        products.forEach((p, idx) => {
-          console.log(`[SimilarProducts] Product ${idx}:`, {
-            id: p._id,
-            name: p.name,
-            model: p.model,
-            variants: p.variants?.length || 0,
-            images: p.images?.length || 0,
-            price: p.price,
-          });
+        console.log(`[SimilarProducts] Found ${products.length} products`);
+
+        // Tính điểm liên quan
+        const productsWithScore = products.map((product) => ({
+          ...product,
+          _relevanceScore: calculateRelevanceScore(
+            product.name || product.model,
+            currentProduct?.name || currentProduct?.model || ""
+          ),
+          _category: categoryInfo.route,
+          _categoryName: category,
+        }));
+
+        // Sắp xếp theo điểm số, rating, và salesCount
+        productsWithScore.sort((a, b) => {
+          // Ưu tiên điểm liên quan
+          if (b._relevanceScore !== a._relevanceScore) {
+            return b._relevanceScore - a._relevanceScore;
+          }
+
+          // Sau đó là rating
+          if ((b.averageRating || 0) !== (a.averageRating || 0)) {
+            return (b.averageRating || 0) - (a.averageRating || 0);
+          }
+
+          // Cuối cùng là lượt bán
+          if ((b.salesCount || 0) !== (a.salesCount || 0)) {
+            return (b.salesCount || 0) - (a.salesCount || 0);
+          }
+
+          return 0;
         });
 
-        // Tính điểm liên quan và sắp xếp
-        const productsWithScore = products
-          .map((product) => ({
-            ...product,
-            _relevanceScore: calculateRelevanceScore(product.name, currentProduct?.name || ""),
-          }))
-          .sort((a, b) => {
-            // Sắp xếp theo: điểm liên quan DESC → đánh giá DESC → tên ASC
-            if (b._relevanceScore !== a._relevanceScore) {
-              return b._relevanceScore - a._relevanceScore;
-            }
-            if ((b.averageRating || 0) !== (a.averageRating || 0)) {
-              return (b.averageRating || 0) - (a.averageRating || 0);
-            }
-            return (a.name || "").localeCompare(b.name || "");
-          });
+        // Lấy top 10 sản phẩm
+        const topProducts = productsWithScore.slice(0, 10);
 
         console.log(
-          "[SimilarProducts] Sorted products:",
-          productsWithScore.map((p) => ({
+          "[SimilarProducts] Top products:",
+          topProducts.map((p) => ({
             name: p.name,
             score: p._relevanceScore,
             rating: p.averageRating,
+            sales: p.salesCount,
           }))
         );
 
-        setSimilarProducts(productsWithScore);
+        setSimilarProducts(topProducts);
       } catch (err) {
-        console.error("[SimilarProducts] Error fetching similar products:", {
-          message: err.message,
-          status: err.response?.status,
-          data: err.response?.data,
-        });
+        console.error("[SimilarProducts] Error:", err);
         setError(err.message);
         setSimilarProducts([]);
       } finally {
@@ -152,44 +277,7 @@ const SimilarProducts = ({ productId, category }) => {
     };
 
     fetchSimilarProducts();
-  }, [productId, category, currentProduct?.name]);
-
-  // Fetch thông tin sản phẩm hiện tại
-  useEffect(() => {
-    if (!productId || !category) return;
-
-    const fetchCurrentProduct = async () => {
-      try {
-        const categoryRouteMap = {
-          iPhone: "iphones",
-          iPad: "ipads",
-          Mac: "macs",
-          AirPods: "airpods",
-          AppleWatch: "applewatches",
-          Accessory: "accessories",
-        };
-
-        const apiBase = categoryRouteMap[category];
-        if (!apiBase) return;
-
-        const baseURL = import.meta.env.VITE_API_URL || "/api";
-        const response = await axios.get(`${baseURL}/${apiBase}/${productId}`, {
-          withCredentials: true,
-        });
-
-        const product = response.data?.data?.product || response.data?.data;
-        setCurrentProduct(product);
-        console.log("[SimilarProducts] Current product:", {
-          name: product?.name,
-          model: product?.model,
-        });
-      } catch (err) {
-        console.error("[SimilarProducts] Error fetching current product:", err.message);
-      }
-    };
-
-    fetchCurrentProduct();
-  }, [productId, category]);
+  }, [productId, category, currentProduct]);
 
   const scroll = (direction) => {
     if (!scrollContainerRef.current) return;
@@ -207,14 +295,10 @@ const SimilarProducts = ({ productId, category }) => {
     setScrollPosition(newPosition);
   };
 
-  /**
-   * Xử lý click vào sản phẩm - reload trang để chuyển sản phẩm
-   */
   const handleProductClick = (product) => {
     console.log("[SimilarProducts] Product clicked:", {
       name: product.name,
       baseSlug: product.baseSlug,
-      variants: product.variants?.length || 0,
     });
 
     if (!product.baseSlug) {
@@ -222,27 +306,21 @@ const SimilarProducts = ({ productId, category }) => {
       return;
     }
 
-    const categoryPath = CATEGORY_ROUTE_MAP[category];
-    if (!categoryPath) {
-      console.warn("[SimilarProducts] Unknown category:", category);
-      return;
-    }
-
     // Chọn variant đầu tiên có stock
-    const selectedVariant = product.variants?.find((v) => v.stock > 0);
+    const selectedVariant =
+      product.variants?.find((v) => v.stock > 0) || product.variants?.[0];
     const sku = selectedVariant?.sku;
 
-    let url = `/${categoryPath}/${product.baseSlug}`;
+    let url = `/${product._category}/${product.baseSlug}`;
     if (sku) {
       url += `?sku=${sku}`;
     }
 
     console.log("[SimilarProducts] Navigating to:", url);
-
-    // Reload trang để chuyển sản phẩm
     window.location.href = url;
   };
 
+  // Loading state
   if (isLoading) {
     return (
       <div className="py-8">
@@ -253,17 +331,17 @@ const SimilarProducts = ({ productId, category }) => {
     );
   }
 
+  // Error state
   if (error) {
     console.warn("[SimilarProducts] Error state:", error);
     return null;
   }
 
+  // Empty state
   if (!similarProducts || similarProducts.length === 0) {
     console.log("[SimilarProducts] No similar products to display");
     return null;
   }
-
-  console.log("[SimilarProducts] Rendering", similarProducts.length, "products");
 
   return (
     <div className="py-8 bg-white rounded-lg">
@@ -304,13 +382,11 @@ const SimilarProducts = ({ productId, category }) => {
               onClick={() => handleProductClick(product)}
             >
               <ProductCard product={product} />
-              {/* DEBUG BADGE - Xóa sau khi test xong */}
-              
             </div>
           ))}
         </div>
 
-        {/* CSS to hide scrollbar */}
+        {/* Hide scrollbar */}
         <style>{`
           div::-webkit-scrollbar {
             display: none;

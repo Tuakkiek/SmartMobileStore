@@ -29,10 +29,9 @@ import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import posRoutes from "./routes/posRoutes.js";
 import homePageRoutes from "./routes/homePageRoutes.js";
-
 import vnpayRoutes from "./routes/vnpayRoutes.js";
-
 import { cancelExpiredVNPayOrders } from "./services/orderCleanupService.js";
+import searchRoutes from "./routes/searchRoutes.js";
 
 dotenv.config();
 
@@ -130,6 +129,7 @@ app.use("/api/pos", posRoutes);
 app.use("/api/payment/vnpay", vnpayRoutes);
 
 app.use("/api/homepage", homePageRoutes);
+app.use("/api/search", searchRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

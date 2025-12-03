@@ -336,6 +336,11 @@ export const homePageAPI = {
   resetToDefault: () => api.post("/homepage/reset-default"),
 };
 
+export const searchAPI = {
+  search: (params) => api.get("/search", { params }),
+  autocomplete: (params) => api.get("/search/autocomplete", { params }),
+};
+
 // ============================================
 // EXPORT DEFAULT
 // ============================================

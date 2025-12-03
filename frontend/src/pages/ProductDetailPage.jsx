@@ -887,7 +887,11 @@ const ProductDetailPage = () => {
 
       {/* Similar Products Section */}
       <div className="mt-4 sm:mt-8">
-        <SimilarProducts productId={product._id} category={product.category} />
+        <SimilarProducts
+          productId={product._id}
+          category={product.category}
+          currentProduct={product} // ← THÊM prop này để tính điểm tốt hơn
+        />
       </div>
 
       {/* Reviews Section - Độc lập */}
