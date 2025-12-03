@@ -28,6 +28,7 @@ import { SpecificationsTab } from "@/components/product/SpecificationsTab";
 import { WarrantyTab } from "@/components/product/WarrantyTab";
 import AddToCartModal from "@/components/product/AddToCartModal";
 import { ReviewsTab } from "@/components/product/ReviewsTab";
+import SimilarProducts from "@/components/product/SimilarProducts";
 import { Button } from "@/components/ui/button";
 
 const CATEGORY_MAP = {
@@ -882,6 +883,11 @@ const ProductDetailPage = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Similar Products Section */}
+      <div className="mt-4 sm:mt-8">
+        <SimilarProducts productId={product._id} category={product.category} />
       </div>
 
       {/* Reviews Section - Độc lập */}

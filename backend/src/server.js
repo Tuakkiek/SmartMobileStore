@@ -24,6 +24,7 @@ import macRoutes from "./routes/macRoutes.js";
 import airPodsRoutes from "./routes/airPodsRoutes.js";
 import appleWatchRoutes from "./routes/appleWatchRoutes.js";
 import accessoryRoutes from "./routes/accessoryRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import salesRoutes from "./routes/salesRoutes.js";
 import posRoutes from "./routes/posRoutes.js";
@@ -115,6 +116,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/promotions", promotionRoutes);
 
+app.use("/api/products", productRoutes);
 app.use("/api/iphones", iPhoneRoutes);
 app.use("/api/ipads", iPadRoutes);
 app.use("/api/macs", macRoutes);
