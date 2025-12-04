@@ -36,7 +36,6 @@ const addressSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema(
   {
-    // ✅ THÊM POS_STAFF VÀ CASHIER
     role: {
       type: String,
       enum: [
@@ -45,28 +44,49 @@ const userSchema = new mongoose.Schema(
         "WAREHOUSE_STAFF",
         "ORDER_MANAGER",
         "SHIPPER",
-        "POS_STAFF", // ✅ NHÂN VIÊN BÁN HÀNG TRỰC TIẾP
-        "CASHIER", // ✅ Thu ngân
+        "POS_STAFF",
+        "CASHIER",
         "ADMIN",
       ],
       default: "USER",
     },
     fullName: {
       type: String,
-      required: true,
+      required: [true, "Vui lòng nhập họ tên"],
       trim: true,
+      minlength: [2, "Họ tên phải có ít nhất 2 ký tự"],
+      maxlength: [100, "Họ tên không được vượt quá 100 ký tự"],
     },
     phoneNumber: {
       type: String,
-      required: true,
+      required: [true, "Vui lòng nhập số điện thoại"],
       unique: true,
       trim: true,
+      validate: {
+        validator: function (v) {
+          // CHỈ VALIDATE KHI TẠO MỚI (this.isNew = true)
+          // Tài khoản cũ bỏ qua validation này
+          if (!this.isNew) return true;
+
+          // Kiểm tra: 10 chữ số, bắt đầu bằng 0
+          return /^0\d{9}$/.test(v);
+        },
+        message: "Số điện thoại phải có 10 chữ số và bắt đầu bằng số 0",
+      },
     },
     email: {
       type: String,
       trim: true,
-      sparse: true,
+      sparse: true, // Cho phép null nhưng nếu có thì phải unique
       lowercase: true,
+      validate: {
+        validator: function (v) {
+          // Nếu có email thì phải hợp lệ
+          if (!v) return true; // Email là optional
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+        },
+        message: "Email không hợp lệ. Email phải có dạng: example@domain.com",
+      },
     },
     province: {
       type: String,
@@ -74,8 +94,34 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
-      minlength: 6,
+      required: [true, "Vui lòng nhập mật khẩu"],
+      minlength: [8, "Mật khẩu phải có ít nhất 8 ký tự"],
+      validate: {
+        validator: function (v) {
+          // Kiểm tra mật khẩu mạnh:
+          // - Ít nhất 8 ký tự
+          // - Có chữ thường (a-z)
+          // - Có chữ hoa (A-Z)
+          // - Có số (0-9)
+          // - Có ký tự đặc biệt
+          const hasLowerCase = /[a-z]/.test(v);
+          const hasUpperCase = /[A-Z]/.test(v);
+          const hasNumber = /[0-9]/.test(v);
+          const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(
+            v
+          );
+
+          return (
+            hasLowerCase &&
+            hasUpperCase &&
+            hasNumber &&
+            hasSpecialChar &&
+            v.length >= 8
+          );
+        },
+        message:
+          "Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ thường, chữ hoa, số và ký tự đặc biệt (!@#$%^&*...)",
+      },
     },
     status: {
       type: String,
@@ -83,14 +129,11 @@ const userSchema = new mongoose.Schema(
       default: "ACTIVE",
     },
     addresses: [addressSchema],
-
     avatar: {
       type: String,
       default: null,
       trim: true,
     },
-
-    // ✅ THÊM: Thông tin nhân viên POS
     storeLocation: {
       type: String,
       trim: true,
