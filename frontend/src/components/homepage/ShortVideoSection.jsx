@@ -1,58 +1,39 @@
+// ============================================
+// FILE: frontend/src/components/homepage/ShortVideoSection.jsx
+// ✅ UPDATED: Fetch from API instead of mock data
+// ============================================
+
 import React, { useState, useEffect } from "react";
 import { Play, TrendingUp, Heart } from "lucide-react";
+import { shortVideoAPI } from "@/lib/api";
+import { toast } from "sonner";
 
-// Mock API - Replace with real API
-const fetchVideos = async () => {
-  return [
-    {
-      _id: "1",
-      title: "iPhone 17 Pro Max Unboxing",
-      thumbnailUrl: "/ip17pm.png",
-      views: 15420,
-      likes: 892,
-      duration: 45,
-    },
-    {
-      _id: "2",
-      title: "MacBook Pro M4 Review",
-      thumbnailUrl: "/macpro14.png",
-      views: 8930,
-      likes: 634,
-      duration: 60,
-    },
-    {
-      _id: "3",
-      title: "AirPods Pro Tips & Tricks",
-      thumbnailUrl: "/banner_phu1.png",
-      views: 12100,
-      likes: 743,
-      duration: 38,
-    },
-    {
-      _id: "4",
-      title: "iPad Air 2025 First Look",
-      thumbnailUrl: "/ipAir.png",
-      views: 6780,
-      likes: 421,
-      duration: 52,
-    },
-  ];
-};
-
-const ShortVideoSection = ({ onVideoClick }) => {
+const ShortVideoSection = ({
+  title = "Video ngắn",
+  videoLimit = 6,
+  videoType = "latest",
+  onVideoClick,
+}) => {
   const [videos, setVideos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadVideos();
-  }, []);
+  }, [videoType, videoLimit]);
 
   const loadVideos = async () => {
+    setIsLoading(true);
     try {
-      const data = await fetchVideos();
-      setVideos(data);
+      const response =
+        videoType === "trending"
+          ? await shortVideoAPI.getTrending(videoLimit)
+          : await shortVideoAPI.getPublished({ limit: videoLimit });
+
+      const videoData = response.data?.data?.videos || [];
+      setVideos(videoData);
     } catch (error) {
       console.error("Error loading videos:", error);
+      toast.error("Không thể tải video");
     } finally {
       setIsLoading(false);
     }
@@ -76,8 +57,8 @@ const ShortVideoSection = ({ onVideoClick }) => {
         <div className="container mx-auto px-4">
           <div className="animate-pulse space-y-4">
             <div className="h-8 bg-gray-200 rounded w-48"></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[1, 2, 3, 4].map((i) => (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {[...Array(videoLimit)].map((_, i) => (
                 <div
                   key={i}
                   className="aspect-[9/16] bg-gray-200 rounded-2xl"
@@ -88,6 +69,10 @@ const ShortVideoSection = ({ onVideoClick }) => {
         </div>
       </section>
     );
+  }
+
+  if (!videos.length) {
+    return null; // Don't show section if no videos
   }
 
   return (
@@ -101,7 +86,7 @@ const ShortVideoSection = ({ onVideoClick }) => {
             </div>
             <div>
               <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                Video ngắn
+                {title}
               </h2>
               <p className="text-sm text-gray-500 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3" />
@@ -121,7 +106,7 @@ const ShortVideoSection = ({ onVideoClick }) => {
             >
               {/* Thumbnail */}
               <img
-                src={video.thumbnailUrl}
+                src={video.thumbnailUrl || "/placeholder.png"}
                 alt={video.title}
                 className="w-full h-full object-cover"
               />
@@ -166,7 +151,10 @@ const ShortVideoSection = ({ onVideoClick }) => {
 
         {/* View All Button */}
         <div className="text-center mt-6">
-          <button className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-semibold hover:shadow-lg hover:scale-105 transition-all">
+          <button
+            onClick={() => (window.location.href = "/videos")}
+            className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-semibold hover:shadow-lg hover:scale-105 transition-all"
+          >
             Xem tất cả video
           </button>
         </div>

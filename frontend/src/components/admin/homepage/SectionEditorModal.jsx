@@ -314,7 +314,68 @@ const SectionEditorModal = ({ section, open, onClose }) => {
             </p>
           </div>
         );
+      case "short-videos":
+        return (
+          <>
+            <div>
+              <Label>Số lượng video hiển thị</Label>
+              <Input
+                type="number"
+                min="1"
+                max="20"
+                value={formData.config.videoLimit || 6}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    config: {
+                      ...formData.config,
+                      videoLimit: parseInt(e.target.value) || 6,
+                    },
+                  })
+                }
+              />
+              <p className="text-xs text-gray-500 mt-1">Từ 1 đến 20 video</p>
+            </div>
 
+            <div>
+              <Label>Loại video</Label>
+              <Select
+                value={formData.config.videoType || "latest"}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    config: { ...formData.config, videoType: value },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn loại video" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">Mới nhất</SelectItem>
+                  <SelectItem value="trending">
+                    Trending (7 ngày gần đây)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <strong className="text-blue-900">Lưu ý:</strong>
+              <ul className="list-disc list-inside mt-2 space-y-1 text-blue-800">
+                <li>
+                  <strong>Mới nhất:</strong> Hiển thị video được upload gần đây
+                  nhất
+                </li>
+                <li>
+                  <strong>Trending:</strong> Hiển thị video có lượt xem/thích
+                  cao trong 7 ngày qua
+                </li>
+                <li>Video phải có status = "PUBLISHED" mới hiển thị</li>
+              </ul>
+            </div>
+          </>
+        );
       default:
         return (
           <div className="text-gray-500 text-sm">

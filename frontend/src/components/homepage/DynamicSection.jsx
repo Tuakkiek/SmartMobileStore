@@ -1,9 +1,9 @@
 // ============================================
 // FILE: frontend/src/components/homepage/DynamicSection.jsx
-// Renders different section types dynamically based on config
+// ✅ UPDATED: Added 'short-videos' case
 // ============================================
 
-import React from "react";
+import React, { useState } from "react";
 import { HeroBannerCarousel } from "@/components/shared/HeroBanner";
 import SecondaryBanners from "@/components/shared/SecondaryBanners";
 import PromoStrip from "@/components/shared/PromoStrip";
@@ -12,6 +12,8 @@ import MagicDealsSection from "@/components/shared/MagicDealsSection";
 import IPhoneShowcase from "@/components/shared/iPhoneShowcase";
 import CategoryNav from "./CategoryNav";
 import ProductsSection from "./ProductsSection";
+import ShortVideoSection from "./ShortVideoSection";
+import ShortVideoPlayerModal from "./ShortVideoPlayerModal";
 
 const DynamicSection = ({
   section,
@@ -20,9 +22,17 @@ const DynamicSection = ({
   onEdit,
   onDelete,
 }) => {
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [videoInitialIndex, setVideoInitialIndex] = useState(0);
+
   if (!section || !section.enabled) return null;
 
   const { type, config, title } = section;
+
+  const handleVideoClick = (index) => {
+    setVideoInitialIndex(index);
+    setVideoModalOpen(true);
+  };
 
   switch (type) {
     // ============================================
@@ -66,6 +76,26 @@ const DynamicSection = ({
       return <CategoryNav allProducts={allProducts} />;
 
     // ============================================
+    // SHORT VIDEOS (✅ NEW)
+    // ============================================
+    case "short-videos":
+      return (
+        <>
+          <ShortVideoSection
+            title={title || "Video ngắn"}
+            videoLimit={config.videoLimit || 6}
+            videoType={config.videoType || "latest"}
+            onVideoClick={handleVideoClick}
+          />
+          <ShortVideoPlayerModal
+            open={videoModalOpen}
+            onClose={() => setVideoModalOpen(false)}
+            initialIndex={videoInitialIndex}
+          />
+        </>
+      );
+
+    // ============================================
     // DEALS GRID
     // ============================================
     case "deals-grid":
@@ -96,9 +126,8 @@ const DynamicSection = ({
         <ProductsSection
           title={title || "Sản phẩm mới"}
           products={newProducts}
-          showBadges={true} // ← CHỈ BẬT BADGES CHO SECTION NÀY
-          badgeType="new" // ← CHỈ ĐỊNH LOẠI BADGE
-          // allProducts={allProducts}
+          showBadges={true}
+          badgeType="new"
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -119,8 +148,8 @@ const DynamicSection = ({
         <ProductsSection
           title={title || "Sản phẩm bán chạy"}
           products={topSellers}
-          showBadges={true} // ← CHỈ BẬT BADGES CHO SECTION NÀY
-          badgeType="seller" // ← CHỈ ĐỊNH LOẠI BADGE
+          showBadges={true}
+          badgeType="seller"
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}

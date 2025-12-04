@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/models/HomePageLayout.js
-// Schema for dynamic homepage layout configuration
+// ✅ UPDATED: Added 'short-videos' section type
 // ============================================
 
 import mongoose from "mongoose";
@@ -39,6 +39,14 @@ const sectionConfigSchema = new mongoose.Schema(
         link: { type: String, trim: true },
       },
     ],
+
+    // ✅ NEW: For short-videos section
+    videoLimit: { type: Number, default: 6, min: 1, max: 20 },
+    videoType: {
+      type: String,
+      enum: ["trending", "latest"],
+      default: "latest",
+    },
   },
   { _id: false }
 );
@@ -60,11 +68,12 @@ const sectionSchema = new mongoose.Schema(
         "category-section",
         "iphone-showcase",
         "secondary-banners",
+        "short-videos", // ✅ NEW TYPE
       ],
     },
     enabled: { type: Boolean, default: true },
     order: { type: Number, required: true, min: 0 },
-    title: { type: String, trim: true }, // Display title for section
+    title: { type: String, trim: true },
     config: { type: sectionConfigSchema, default: {} },
   },
   { _id: false }
@@ -101,22 +110,18 @@ homePageLayoutSchema.index({ isActive: 1 });
 homePageLayoutSchema.index({ version: -1 });
 
 // ============================================
-// METHODS
+// STATIC METHODS
 // ============================================
-
-// Get active layout
 homePageLayoutSchema.statics.getActiveLayout = async function () {
   const layout = await this.findOne({ isActive: true }).sort({ version: -1 });
 
   if (!layout) {
-    // Return default layout if none exists
     return this.getDefaultLayout();
   }
 
   return layout;
 };
 
-// Create default layout
 homePageLayoutSchema.statics.getDefaultLayout = function () {
   return {
     sections: [
@@ -172,11 +177,25 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         title: "Category Navigation",
         config: {},
       },
+
+      // ✅ NEW: Short Videos Section
+      {
+        id: "short-videos",
+        type: "short-videos",
+        enabled: true,
+        order: 5,
+        title: "Video ngắn",
+        config: {
+          videoLimit: 6,
+          videoType: "latest",
+        },
+      },
+
       {
         id: "deals-grid",
         type: "deals-grid",
         enabled: true,
-        order: 5,
+        order: 6,
         title: "Deals Grid",
         config: {
           dealImages: [
@@ -194,19 +213,17 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "magic-deals",
         type: "magic-deals",
         enabled: true,
-        order: 6,
+        order: 7,
         title: "Magic Deals",
         config: {
-          images: [
-            "/banner_chinh1.png",
-          ],
+          images: ["/banner_chinh1.png"],
         },
       },
       {
         id: "products-new",
         type: "products-new",
         enabled: true,
-        order: 7,
+        order: 8,
         title: "Sản phẩm mới",
         config: { limit: 10 },
       },
@@ -214,7 +231,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "products-topSeller",
         type: "products-topSeller",
         enabled: true,
-        order: 8,
+        order: 9,
         title: "Sản phẩm bán chạy",
         config: { limit: 10 },
       },
@@ -222,7 +239,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-iphone",
         type: "category-section",
         enabled: true,
-        order: 9,
+        order: 10,
         title: "iPhone",
         config: { categoryFilter: "iPhone", limit: 10 },
       },
@@ -230,7 +247,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-ipad",
         type: "category-section",
         enabled: true,
-        order: 10,
+        order: 11,
         title: "iPad",
         config: { categoryFilter: "iPad", limit: 10 },
       },
@@ -238,7 +255,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-mac",
         type: "category-section",
         enabled: true,
-        order: 11,
+        order: 12,
         title: "Mac",
         config: { categoryFilter: "Mac", limit: 10 },
       },
@@ -246,7 +263,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-airpods",
         type: "category-section",
         enabled: true,
-        order: 12,
+        order: 13,
         title: "AirPods",
         config: { categoryFilter: "AirPods", limit: 10 },
       },
@@ -254,7 +271,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-applewatch",
         type: "category-section",
         enabled: true,
-        order: 13,
+        order: 14,
         title: "Apple Watch",
         config: { categoryFilter: "AppleWatch", limit: 10 },
       },
@@ -262,7 +279,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "category-accessories",
         type: "category-section",
         enabled: true,
-        order: 14,
+        order: 15,
         title: "Phụ kiện",
         config: { categoryFilter: "Accessories", limit: 10 },
       },
@@ -270,7 +287,7 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         id: "iphone-showcase",
         type: "iphone-showcase",
         enabled: true,
-        order: 15, // ← Đổi từ 12 thành 15
+        order: 16,
         title: "iPhone Showcase",
         config: {
           showcaseItems: [
@@ -293,12 +310,9 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
   };
 };
 
-// Create new version
 homePageLayoutSchema.methods.createNewVersion = async function () {
-  // Deactivate current layout
   await this.constructor.updateMany({}, { isActive: false });
 
-  // Create new version
   this.version += 1;
   this.isActive = true;
   this.isNew = true;

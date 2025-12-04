@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/admin/homepage/SectionItem.jsx
-// Individual draggable section item
+// ✅ UPDATED: Added icon for 'short-videos'
 // ============================================
 
 import React from "react";
@@ -21,6 +21,7 @@ import {
   Package,
   Grid3x3,
   Sparkles,
+  Video, // ✅ NEW
 } from "lucide-react";
 
 // Section type icons
@@ -35,6 +36,7 @@ const SECTION_ICONS = {
   "category-section": Package,
   "iphone-showcase": ImageIcon,
   "secondary-banners": ImageIcon,
+  "short-videos": Video, // ✅ NEW
 };
 
 // Section type labels
@@ -49,6 +51,7 @@ const SECTION_LABELS = {
   "category-section": "Danh mục",
   "iphone-showcase": "iPhone Showcase",
   "secondary-banners": "Secondary Banners",
+  "short-videos": "Video ngắn", // ✅ NEW
 };
 
 const SectionItem = ({ section, onEdit }) => {
@@ -113,6 +116,13 @@ const SectionItem = ({ section, onEdit }) => {
                   {section.config.categoryFilter}
                 </Badge>
               )}
+            {section.type === "short-videos" && section.config?.videoType && (
+              <Badge variant="outline" className="text-xs">
+                {section.config.videoType === "trending"
+                  ? "Trending"
+                  : "Mới nhất"}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
             {section.type} • Order: {section.order}
