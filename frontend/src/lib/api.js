@@ -341,6 +341,23 @@ export const searchAPI = {
   autocomplete: (params) => api.get("/search/autocomplete", { params }),
 };
 
+export const shortVideoAPI = {
+  getPublished: (params) => api.get("/short-videos/published", { params }),
+  getTrending: (limit = 20) =>
+    api.get("/short-videos/trending", { params: { limit } }),
+  getById: (id) => api.get(`/short-videos/${id}`),
+  incrementView: (id) => api.post(`/short-videos/${id}/view`),
+  toggleLike: (id) => api.post(`/short-videos/${id}/like`),
+  incrementShare: (id) => api.post(`/short-videos/${id}/share`),
+
+  // Admin
+  getAll: (params) => api.get("/short-videos", { params }),
+  create: (data) => api.post("/short-videos", data),
+  update: (id, data) => api.put(`/short-videos/${id}`, data),
+  delete: (id) => api.delete(`/short-videos/${id}`),
+  reorder: (videoIds) => api.put("/short-videos/reorder", { videoIds }),
+};
+
 // ============================================
 // EXPORT DEFAULT
 // ============================================

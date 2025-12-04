@@ -32,6 +32,7 @@ import homePageRoutes from "./routes/homePageRoutes.js";
 import vnpayRoutes from "./routes/vnpayRoutes.js";
 import { cancelExpiredVNPayOrders } from "./services/orderCleanupService.js";
 import searchRoutes from "./routes/searchRoutes.js";
+import shortVideoRoutes from "./routes/shortVideoRoutes.js";
 
 dotenv.config();
 
@@ -130,6 +131,7 @@ app.use("/api/payment/vnpay", vnpayRoutes);
 
 app.use("/api/homepage", homePageRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/short-videos", shortVideoRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint
