@@ -56,18 +56,19 @@ const HeroBanner = ({
         className
       )}
     >
-            {/* Background Image */}     {" "}
+      {/* Background Image */}
       <div className="absolute inset-0">
-               {" "}
-        <img
-          src={getImageUrl(imageSrc)}
-          alt={alt}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-          loading="lazy"
-        />
-             {" "}
+        <a href={ctaLink} className="w-full h-full" onClick={() => {}}>
+          <img
+            src={getImageUrl(imageSrc)}
+            alt={alt}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            loading="lazy"
+          />
+        </a>
       </div>
-            {/* Content Overlay */} {" "}
+
+      {/* Content Overlay */}
       {(title || subtitle || ctaText) && (
         <div
           className={cn(
@@ -75,26 +76,22 @@ const HeroBanner = ({
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
           )}
         >
-                   {" "}
           {ctaText && ctaLink && (
             <Button
-              variant="default" // size="lg" // <-- BỎ prop này
+              variant="default"
               className={cn(
-                // Style chung
-                "bg-white/30 text-black hover:bg-white/50 backdrop-blur-lg font-semibold rounded-full transition-all duration-300 hover:scale-105 shadow-lg", // Class KÍCH THƯỚC co dãn (thay cho px-10, h-14, text-lg)
-                "h-10 px-6 text-sm", // Kích thước trên mobile
-                "md:h-12 md:px-8 md:text-base" // Kích thước trên desktop
+                "bg-white/30 text-black hover:bg-white/50 backdrop-blur-lg font-semibold rounded-full transition-all duration-300 hover:scale-105 shadow-lg",
+                "h-10 px-6 text-sm",
+                "md:h-12 md:px-8 md:text-base"
               )}
               onClick={() => (window.location.href = ctaLink)}
             >
-                            {ctaText}
-                            <ArrowRight className="ml-2 h-5 w-5" />           {" "}
+              {ctaText}
+              <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           )}
-                 {" "}
         </div>
       )}
-         {" "}
     </div>
   );
 };

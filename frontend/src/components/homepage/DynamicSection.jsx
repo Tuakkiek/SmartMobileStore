@@ -82,7 +82,12 @@ const DynamicSection = ({
     // MAGIC DEALS
     // ============================================
     case "magic-deals":
-      return <MagicDealsSection config={config} />;
+      return (
+        <MagicDealsSection
+          config={section.config}
+          allProducts={allProducts} // ← Truyền danh sách sản phẩm
+        />
+      );
 
     // ============================================
     // NEW PRODUCTS
