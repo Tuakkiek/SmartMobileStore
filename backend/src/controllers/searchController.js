@@ -149,29 +149,26 @@ const correctTypos = (query) => {
 // ============================================
 // HELPER: Expand synonyms
 // ============================================
-const expandSynonyms = (query) => {
-  const normalized = normalizeVietnamese(query);
-  const words = normalized.split(/\s+/);
-  const expandedTerms = new Set([normalized]);
+const expandSynonyms = (originalQuery) => {
+  const normalized = normalizeVietnamese(originalQuery);
+  const terms = new Set([normalized]);
 
-  words.forEach((word) => {
-    if (SYNONYM_MAP[word]) {
-      SYNONYM_MAP[word].forEach((synonym) => {
-        expandedTerms.add(synonym);
-        // Add variations with original words
-        words.forEach((otherWord) => {
-          if (otherWord !== word) {
-            expandedTerms.add(`${synonym} ${otherWord}`);
-            expandedTerms.add(`${otherWord} ${synonym}`);
-          }
-        });
+  Object.entries(SYNONYM_MAP).forEach(([key, synonyms]) => {
+    const normalizedKey = normalizeVietnamese(key);
+    
+    // Chỉ kích hoạt nếu query chứa ĐÚNG cụm từ đó (không tách từ)
+    if (normalized.includes(normalizedKey)) {
+      synonyms.forEach(syn => {
+        const normSyn = normalizeVietnamese(syn);
+        if (normSyn && normSyn !== normalizedKey) {
+          terms.add(normSyn);
+        }
       });
     }
   });
 
-  return Array.from(expandedTerms);
+  return Array.from(terms);
 };
-
 // ============================================
 // HELPER: Extract attributes from query
 // ============================================
