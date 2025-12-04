@@ -349,7 +349,7 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">
-            Sản phẩm tương tự
+            Có thể bạn cũng thích
           </h2>
           <div className="flex gap-2">
             <button

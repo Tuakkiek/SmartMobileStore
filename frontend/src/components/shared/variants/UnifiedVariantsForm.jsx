@@ -57,7 +57,7 @@ const UnifiedVariantsForm = ({
           key: "storage",
           type: "select",
           label: "Bộ nhớ",
-          options: ["128GB", "256GB", "512GB", "1TB", "2TB"],
+          options: ["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"],
         },
       ];
     }
