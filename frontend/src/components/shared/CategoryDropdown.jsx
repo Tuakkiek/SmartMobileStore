@@ -104,8 +104,11 @@ const CategoryDropdown = ({
     const name = productName.trim();
 
     if (categoryName === "iPhone") {
-      const match = name.match(/iPhone\s+(\d+[A-Za-z]*)/i);
-      if (match) return `iPhone ${match[1]} Series`;
+      // Bắt iPhone 16, 16 Pro, 16 Plus, 16 Pro Max, 16e, 16mini, 16s, v.v.
+      const match = name.match(/iPhone\s+(\d+)[A-Za-z]*/i);
+      if (match) {
+        return `iPhone ${match[1]} Series`;
+      }
     }
 
     if (categoryName === "iPad") {
