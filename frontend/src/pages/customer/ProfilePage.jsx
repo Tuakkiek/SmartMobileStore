@@ -64,7 +64,10 @@ const ProfilePage = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
+    
+    // Refresh user data để có địa chỉ mới nhất
+    getCurrentUser();
+  }, [getCurrentUser]);
 
   return (
     <div className="container mx-auto px-4 py-8">
