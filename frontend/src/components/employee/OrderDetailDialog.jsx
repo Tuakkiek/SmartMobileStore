@@ -82,7 +82,7 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
               {order.shippingAddress?.fullName} - {order.shippingAddress?.phoneNumber}
             </p>
             <p className="text-sm text-muted-foreground">
-              {order.shippingAddress?.detailAddress}, {order.shippingAddress?.ward}, {order.shippingAddress?.district}, {order.shippingAddress?.province}
+              {order.shippingAddress?.detailAddress}, {order.shippingAddress?.ward}, {order.shippingAddress?.province}
             </p>
           </div>
 

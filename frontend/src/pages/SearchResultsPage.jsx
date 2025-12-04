@@ -11,6 +11,7 @@ import ProductCard from "@/components/shared/ProductCard";
 import ProductFilters from "@/components/shared/ProductFilters";
 import { Loading } from "@/components/shared/Loading";
 import { searchAPI } from "@/lib/api"; // ← UPDATED IMPORT
+import { useAuthStore } from "@/store/authStore";
 
 const SEARCH_AVAILABLE_FILTERS = {
   condition: ["NEW", "LIKE_NEW"],
@@ -33,6 +34,8 @@ const SearchResultsPage = () => {
 
   const [filters, setFilters] = useState({ condition: [], storage: [] });
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
+  const { isAuthenticated, user } = useAuthStore();
+   const isAdmin = user?.role === "ADMIN";
 
   // ============================================
   // FETCH DATA using Full-Text Search API
@@ -285,7 +288,7 @@ const SearchResultsPage = () => {
                     <div key={product._id} className="relative">
                       <ProductCard product={product} showVariantsBadge={true} />
                       {/* Relevance Score Badge (for debugging) */}
-                      {product._relevance > 0 && (
+                      {isAdmin && product._relevance > 0 && (
                         <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-bold">
                           {product._relevance}%
                         </div>

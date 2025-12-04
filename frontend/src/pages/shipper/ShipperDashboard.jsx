@@ -593,8 +593,7 @@ const ShipperDashboard = () => {
                               {order.shippingAddress?.detailAddress}
                             </p>
                             <p className="text-muted-foreground">
-                              {order.shippingAddress?.commune},{" "}
-                              {order.shippingAddress?.district}
+                              {order.shippingAddress?.ward}
                             </p>
                             <p className="text-muted-foreground">
                               {order.shippingAddress?.province}
@@ -859,8 +858,7 @@ const ShipperDashboard = () => {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {selectedOrder.shippingAddress?.detailAddress},{" "}
-                  {selectedOrder.shippingAddress?.commune},{" "}
-                  {selectedOrder.shippingAddress?.district},{" "}
+                  {selectedOrder.shippingAddress?.ward},{" "}
                   {selectedOrder.shippingAddress?.province}
                 </p>
               </div>
