@@ -69,7 +69,7 @@ const TYPO_MAP = {
   aiphon: "iphone",
   iphoen: "iphone",
   ipohne: "iphone",
-
+  
   // iPad
   iapd: "ipad",
   iapad: "ipad",
