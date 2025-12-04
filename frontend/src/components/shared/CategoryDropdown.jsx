@@ -433,7 +433,6 @@ const CategoryDropdown = ({
       {/* Panel - shown when triggered (desktop hover or mobile click) */}
       {isOpen && (
         <>
-        
           {/* Mobile backdrop - only show on mobile  */}
           {isMobileMenu && (
             <div
@@ -552,9 +551,11 @@ const CategoryDropdown = ({
                             <button
                               key={product._id}
                               onClick={() => navigateToProductDetail(product)}
-                              className="group relative text-center hover:-translate-y-2 transition-all duration-300"
+                              // **Đã thêm: flex, flex-col, h-full, justify-start**
+                              className="group relative text-center hover:-translate-y-2 transition-all duration-300 flex flex-col h-full justify-start"
                             >
-                              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md mb-2 md:mb-3">
+                              {/* **Phần ảnh sản phẩm** */}
+                              <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md mb-2 md:mb-3 flex-shrink-0">
                                 <img
                                   src={
                                     product.images?.[0] ||
@@ -566,6 +567,7 @@ const CategoryDropdown = ({
                                   loading="lazy"
                                 />
                               </div>
+                              {/* **Phần tên sản phẩm** */}
                               <p className="text-xs md:text-sm font-medium line-clamp-2 text-gray-800 px-1 leading-tight">
                                 {product.name}
                               </p>
@@ -585,7 +587,7 @@ const CategoryDropdown = ({
                     </div>
 
                     {/* Series Grid */}
-                    <h3 className="text-sm md:text-base text-black font-semibold mb-3 md:mb-4 md:text-lg">
+                    <h3 className="text-sm text-black font-semibold mb-3 md:mb-4 md:text-lg">
                       Chọn theo dòng {categories[selectedCategory]}
                     </h3>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
