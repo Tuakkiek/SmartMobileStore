@@ -150,6 +150,40 @@ const SectionEditorModal = ({ section, open, onClose }) => {
           <>
             <div className="space-y-4">
               <div>
+                <Label>Banner chính (bên trái)</Label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Chỉ upload 1 ảnh banner cho phần bên trái. 8 sản phẩm bên phải
+                  sẽ tự động hiển thị sản phẩm có % giảm giá cao nhất.
+                </p>
+                <ImageUploader
+                  images={formData.config.images?.slice(0, 1) || []}
+                  onChange={(images) =>
+                    setFormData({
+                      ...formData,
+                      config: {
+                        ...formData.config,
+                        images: images.slice(0, 1), // Chỉ lấy 1 ảnh
+                      },
+                    })
+                  }
+                />
+              </div>
+
+              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <strong className="text-blue-900">Lưu ý:</strong>
+                <ul className="list-disc list-inside mt-2 space-y-1 text-blue-800">
+                  <li>Banner bên trái: Có thể tùy chỉnh</li>
+                  <li>8 sản phẩm bên phải: Tự động hiển thị top giảm giá</li>
+                  <li>Click vào sản phẩm để xem chi tiết</li>
+                </ul>
+              </div>
+            </div>
+          </>
+        );
+        return (
+          <>
+            <div className="space-y-4">
+              <div>
                 <Label>Magic Deals Images (9 ảnh)</Label>
                 <p className="text-xs text-gray-500 mb-2">
                   1 banner chính + 8 ảnh danh mục (4+4)

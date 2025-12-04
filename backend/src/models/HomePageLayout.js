@@ -199,14 +199,6 @@ homePageLayoutSchema.statics.getDefaultLayout = function () {
         config: {
           images: [
             "/banner_chinh1.png",
-            "/iphone_17_pro_bac.png",
-            "/ipad_air_xanh.png",
-            "/mac.png",
-            "/airpods.png",
-            "/op_ip_17_pro.png",
-            "/day_deo.png",
-            "/sac_magsafe.png",
-            "/pin_magsafe.png",
           ],
         },
       },

@@ -83,9 +83,50 @@ const MagicDealsSection = ({ config = {}, allProducts = [] }) => {
   return (
     <div className="bg-gray-50 py-6 px-4 rounded-xl">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Tiêu đề cho phần giảm giá - ĐÃ CHỈNH SỬA */}
+        <div className="col-span-1 md:col-span-4 text-center mb-6">
+          <h1
+            className="
+          text-4xl
+          sm:text-5xl
+          font-extrabold
+          text-transparent
+          bg-clip-text
+          bg-gradient-to-r from-red-900 to-black
+          inline-block
+          p-2
+          border-b-4 border-stone-600
+          transform hover:scale-105 transition duration-300
+        "
+          >
+            Khám Phá Sản Phẩm Giảm Giá Hot Nhất
+          </h1>
+          <p
+            className="
+          text-gray-600
+          mt-3
+          text-lg
+          max-w-xl
+          mx-auto
+          relative
+          after:content-['']
+          after:absolute
+          after:bottom-0
+          after:left-1/2
+          after:-translate-x-1/2
+          after:w-16
+          after:h-0.5
+         
+        "
+          >
+            Cơ hội tuyệt vời để sở hữu những sản phẩm yêu thích với mức giá ưu
+            đãi
+          </p>
+        </div>
+
         {/* ==========================================
-            BANNER BÊN TRÁI - GIỮ NGUYÊN
-            ========================================== */}
+          BANNER BÊN TRÁI - GIỮ NGUYÊN
+          ========================================== */}
         <div className="col-span-1 md:col-span-2">
           <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md group">
             <img
@@ -98,8 +139,8 @@ const MagicDealsSection = ({ config = {}, allProducts = [] }) => {
         </div>
 
         {/* ==========================================
-            8 SẢN PHẨM GIẢM GIÁ - THAY ĐỔI
-            ========================================== */}
+          8 SẢN PHẨM GIẢM GIÁ - THAY ĐỔI
+          ========================================== */}
         <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Khối 1: 4 sản phẩm đầu */}
           <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
