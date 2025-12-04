@@ -2,9 +2,16 @@
 // FILE: src/pages/customer/CartPage.jsx
 // FIXED: Không còn bị bỏ chọn khi tăng/giảm số lượng
 // FIXED: Checkbox luôn click được, không bị disable vô cớ
+// FIXED: Maximum Update Depth by optimizing useEffects to avoid infinite loops
 // UPDATED: Dùng shadcn/ui Checkbox + màu đỏ khi chọn
 // ============================================
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,20 +54,168 @@ const CartPage = () => {
     shouldAutoSelect,
   } = useCartStore();
 
-  // State riêng cho việc chọn sản phẩm - không bị ảnh hưởng bởi optimistic update
-  const [selectedItems, setSelectedItems] = useState([]); // [variantId]
+  const [selectedItems, setSelectedItems] = useState([]);
   const [variantsCache, setVariantsCache] = useState({});
   const [optimisticCart, setOptimisticCart] = useState(null);
   const [loadingVariants, setLoadingVariants] = useState({});
   const [isChangingVariant, setIsChangingVariant] = useState(false);
   const hasAutoSelected = useRef(false);
+  const updateTimeoutRef = useRef(null);
+  const [itemsOrder, setItemsOrder] = useState({});
 
   const items = optimisticCart?.items || cart?.items || [];
   const hasItems = items.length > 0;
 
-  const [itemsOrder, setItemsOrder] = useState({}); // { variantId: timestamp }
+  // Load giỏ hàng CHỈ 1 LẦN khi mount
+  useEffect(() => {
+    getCart();
+  }, [getCart]); // getCart là stable function từ Zustand
 
-  // Sắp xếp item mới nhất lên trên
+  // Kiểm tra VNPay pending - CHỈ phụ thuộc vào cart items length
+  useEffect(() => {
+    if (!cart?.items || cart.items.length === 0) return;
+    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    if (!pendingOrder) return;
+    try {
+      const {
+        orderId,
+        orderNumber,
+        selectedItems: pendingItems,
+        timestamp,
+      } = JSON.parse(pendingOrder);
+      const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
+      if (ageMinutes < 15) {
+        const stillInCart = cart.items.some((item) =>
+          pendingItems?.includes(item.variantId)
+        );
+        if (stillInCart) {
+          toast.warning(
+            `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
+            {
+              duration: 12000,
+              action: {
+                label: "Xem chi tiết",
+                onClick: () => navigate(`/orders/${orderId}`),
+              },
+            }
+          );
+        } else {
+          localStorage.removeItem("pending_vnpay_order");
+        }
+      } else {
+        toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
+          duration: 6000,
+        });
+        localStorage.removeItem("pending_vnpay_order");
+      }
+    } catch (e) {
+      console.error("Error checking pending order:", e);
+    }
+  }, [cart?.items?.length, navigate]); // CHỈ phụ thuộc LENGTH, không phụ thuộc cả array
+
+  // Auto-select sản phẩm - CHỈ chạy khi có query param HOẶC shouldAutoSelect thay đổi
+  useEffect(() => {
+    if (!cart?.items || cart.items.length === 0) return;
+
+    const idToSelect = autoSelectVariantId || shouldAutoSelect();
+    if (!idToSelect || hasAutoSelected.current) return;
+    const item = cart.items.find((i) => i.variantId === idToSelect);
+    if (item && !selectedItems.includes(idToSelect)) {
+      setSelectedItems([idToSelect]);
+      setItemsOrder((prev) => ({ ...prev, [idToSelect]: Date.now() }));
+      hasAutoSelected.current = true;
+
+      if (autoSelectVariantId) {
+        navigate("/cart", { replace: true });
+      }
+    }
+  }, [cart?.items, autoSelectVariantId, shouldAutoSelect, navigate]); // BỎ selectedItems
+
+  // Reset flag khi query param thay đổi
+  useEffect(() => {
+    if (autoSelectVariantId) {
+      hasAutoSelected.current = false;
+    }
+  }, [autoSelectVariantId]);
+
+  // Scroll to top
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Load order từ localStorage CHỈ 1 LẦN
+  useEffect(() => {
+    const saved = localStorage.getItem("cart-items-order");
+    if (saved) {
+      try {
+        setItemsOrder(JSON.parse(saved));
+      } catch {}
+    }
+  }, []);
+
+  // Save order khi thay đổi
+  useEffect(() => {
+    if (Object.keys(itemsOrder).length > 0) {
+      localStorage.setItem("cart-items-order", JSON.stringify(itemsOrder));
+    }
+  }, [itemsOrder]);
+
+  // Cleanup items không còn trong giỏ - SỬ DỤNG CALLBACK
+  const cleanupItemsOrder = useCallback(() => {
+    if (!cart?.items || isChangingVariant) return;
+
+    const existingIds = new Set(cart.items.map((i) => i.variantId));
+    setItemsOrder((prev) => {
+      const cleaned = {};
+      let changed = false;
+
+      for (const id in prev) {
+        if (existingIds.has(id)) {
+          cleaned[id] = prev[id];
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? cleaned : prev;
+    });
+  }, [cart?.items, isChangingVariant]);
+
+  useEffect(() => {
+    cleanupItemsOrder();
+  }, [cleanupItemsOrder]);
+
+  // Sync optimistic cart
+  useEffect(() => {
+    if (cart) setOptimisticCart(cart);
+  }, [cart]);
+
+  // Initialize order for new items
+  useEffect(() => {
+    if (!cart?.items || isChangingVariant) return;
+
+    setItemsOrder((prev) => {
+      const newOrder = { ...prev };
+      let changed = false;
+
+      cart.items.forEach((item) => {
+        if (!newOrder[item.variantId]) {
+          newOrder[item.variantId] = Date.now();
+          changed = true;
+        }
+      });
+
+      return changed ? newOrder : prev;
+    });
+  }, [cart?.items, isChangingVariant]);
+
+  // Tính tổng tiền
+  const selectedTotal = useMemo(() => {
+    return items
+      .filter((item) => selectedItems.includes(item.variantId))
+      .reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [items, selectedItems]);
+
   const sortedItems = useMemo(() => {
     if (!items.length) return [];
     const itemsWithIndex = items.map((item, index) => ({
@@ -76,158 +231,14 @@ const CartPage = () => {
     return sorted.reverse();
   }, [items, itemsOrder]);
 
-  // Load giỏ hàng
+  // Cleanup timeout
   useEffect(() => {
-    getCart();
-  }, [getCart]);
-
-  // Cập nhật thứ tự khi có item mới
-  useEffect(() => {
-    if (isChangingVariant || !cart?.items) return;
-
-    setItemsOrder((prev) => {
-      const newOrder = { ...prev };
-      let changed = false;
-      cart.items.forEach((item) => {
-        if (!newOrder[item.variantId]) {
-          newOrder[item.variantId] = Date.now();
-          changed = true;
-        }
-      });
-      return changed ? newOrder : prev;
-    });
-  }, [cart?.items, isChangingVariant]);
-
-  // ✅ KIỂM TRA ĐƠN HÀNG VNPAY ĐANG CHỜ - CẢI THIỆN
-  useEffect(() => {
-    const pendingOrder = localStorage.getItem("pending_vnpay_order");
-    if (pendingOrder && cart?.items?.length > 0) {
-      try {
-        const { orderId, orderNumber, selectedItems, timestamp } =
-          JSON.parse(pendingOrder);
-        const ageMinutes = (Date.now() - timestamp) / 1000 / 60;
-
-        if (ageMinutes < 15) {
-          // Kiểm tra xem sản phẩm còn trong giỏ không
-          const stillInCart = cart.items.some((item) =>
-            selectedItems?.includes(item.variantId)
-          );
-
-          if (stillInCart) {
-            toast.warning(
-              `Đơn hàng #${orderNumber} chưa thanh toán - Sản phẩm vẫn trong giỏ`,
-              {
-                duration: 12000,
-                action: {
-                  label: "Xem chi tiết",
-                  onClick: () => navigate(`/orders/${orderId}`),
-                },
-              }
-            );
-          } else {
-            // Sản phẩm không còn trong giỏ, xóa thông báo
-            localStorage.removeItem("pending_vnpay_order");
-          }
-        } else {
-          // Quá 15 phút
-          toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
-            duration: 6000,
-          });
-          localStorage.removeItem("pending_vnpay_order");
-        }
-      } catch (e) {
-        console.error("Error checking pending order:", e);
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
       }
-    }
-  }, [cart?.items, navigate]);
-
-  // Tự động chọn khi thêm từ trang sản phẩm
-  useEffect(() => {
-    if (!cart?.items || cart.items.length === 0) return;
-    const idToSelect = autoSelectVariantId || shouldAutoSelect();
-    if (!idToSelect || hasAutoSelected.current) return;
-
-    const item = cart.items.find((i) => i.variantId === idToSelect);
-    if (item && !selectedItems.includes(idToSelect)) {
-      setSelectedItems([idToSelect]);
-      setItemsOrder((prev) => ({ ...prev, [idToSelect]: Date.now() }));
-      hasAutoSelected.current = true;
-      if (autoSelectVariantId) {
-        navigate("/cart", { replace: true });
-      }
-    }
-  }, [
-    cart?.items,
-    autoSelectVariantId,
-    shouldAutoSelect,
-    selectedItems,
-    navigate,
-  ]);
-
-  // Reset flag khi có param select mới
-  useEffect(() => {
-    if (autoSelectVariantId) hasAutoSelected.current = false;
-  }, [autoSelectVariantId]);
-
-  // Scroll lên đầu
-  useEffect(() => {
-    window.scrollTo(0, 0);
+    };
   }, []);
-
-  // Lưu/đọc thứ tự từ localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("cart-items-order");
-    if (saved) {
-      try {
-        setItemsOrder(JSON.parse(saved));
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    if (Object.keys(itemsOrder).length > 0) {
-      localStorage.setItem("cart-items-order", JSON.stringify(itemsOrder));
-    }
-  }, [itemsOrder]);
-
-  // Cleanup itemsOrder khi item bị xóa
-  useEffect(() => {
-    if (!cart?.items || isChangingVariant) return;
-    const existingIds = new Set(cart.items.map((i) => i.variantId));
-    setItemsOrder((prev) => {
-      const cleaned = {};
-      let changed = false;
-      for (const id in prev) {
-        if (existingIds.has(id)) cleaned[id] = prev[id];
-        else changed = true;
-      }
-      return changed ? cleaned : prev;
-    });
-  }, [cart?.items, isChangingVariant]);
-
-  // Đồng bộ optimistic cart
-  useEffect(() => {
-    if (cart) setOptimisticCart(cart);
-  }, [cart]);
-
-  // Khởi tạo thứ tự lần đầu
-  useEffect(() => {
-    if (cart?.items && Object.keys(itemsOrder).length === 0) {
-      const base = Date.now();
-      const initial = {};
-      cart.items.forEach((item, i) => {
-        initial[item.variantId] = base - i;
-      });
-      setItemsOrder(initial);
-    }
-  }, [cart?.items, itemsOrder]);
-
-  // Tính tổng tiền
-  const selectedTotal = useMemo(() => {
-    return items
-      .filter((item) => selectedItems.includes(item.variantId))
-      .reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [items, selectedItems]);
 
   // Chọn/tắt tất cả
   const handleSelectAll = () => {
@@ -264,7 +275,6 @@ const CartPage = () => {
   };
 
   // Cập nhật số lượng (có debounce + optimistic)
-  const updateTimeoutRef = useRef(null);
   const handleUpdateQuantity = (item, newQty) => {
     if (newQty < 1 || newQty > item.stock) return;
 
@@ -285,12 +295,6 @@ const CartPage = () => {
       }
     }, 400);
   };
-
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-    };
-  }, []);
 
   // Xóa 1 sản phẩm
   const handleRemove = async (item) => {
