@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
-import fs from "fs"; // Import fs module
+import fs from "fs";
 
 // ================================
 // 🔹 Import tất cả routes
@@ -44,6 +44,31 @@ const app = express();
 const __dirname = path.resolve();
 
 // ================================
+// 🔹 TẠO THỨ MỤC UPLOADS NẾU CHƯA TỒN TẠI
+// ================================
+const createUploadDirs = () => {
+  const uploadDirs = [
+    "uploads/banners",
+    "uploads/products",
+    "uploads/avatars",
+    "uploads/reviews",
+    "uploads/videos",
+    "uploads/thumbnails",
+  ];
+
+  uploadDirs.forEach((dir) => {
+    const fullPath = path.join(process.cwd(), dir);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`📁 Created directory: ${dir}`);
+    }
+  });
+};
+
+// Gọi hàm tạo thư mục
+createUploadDirs();
+
+// ================================
 // 🔹 Middleware
 // ================================
 app.use(
@@ -59,16 +84,19 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// ✅ TĂNG GIỚI HẠN CHO VIDEO UPLOAD
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
 app.use(cookieParser());
 
 // ================================
 // 🔹 Serve Static Files
 // ================================
 
-// Serve uploads
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// ✅ QUAN TRỌNG: Serve uploads folder (videos, thumbnails, images, etc.)
+const uploadsPath = path.join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsPath));
+console.log("📁 Uploads directory:", uploadsPath);
 
 // Serve backend public folder
 const backendPublicPath = path.join(process.cwd(), "public");
@@ -93,7 +121,7 @@ connectDB()
   .then(() => console.log("✅ MongoDB connected successfully"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Thêm sau dòng connectDB()
+// Kiểm tra VNPay config
 if (!process.env.VNP_TMN_CODE || !process.env.VNP_HASH_SECRET) {
   console.error("❌ MISSING VNPAY CONFIGURATION");
   console.error(
@@ -122,8 +150,8 @@ app.use("/api/ipads", iPadRoutes);
 app.use("/api/macs", macRoutes);
 app.use("/api/airpods", airPodsRoutes);
 app.use("/api/applewatches", appleWatchRoutes);
-app.use("/api/accessories", accessoryRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/accessories", accessoryRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/pos", posRoutes);
 
@@ -131,6 +159,8 @@ app.use("/api/payment/vnpay", vnpayRoutes);
 
 app.use("/api/homepage", homePageRoutes);
 app.use("/api/search", searchRoutes);
+
+// ✅ SHORT VIDEOS ROUTE
 app.use("/api/short-videos", shortVideoRoutes);
 
 // ================================
@@ -142,6 +172,10 @@ app.get("/api/health", (req, res) => {
     message: "Server is running",
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
+    uploads: {
+      path: uploadsPath,
+      exists: fs.existsSync(uploadsPath),
+    },
   });
 });
 
@@ -150,6 +184,21 @@ app.get("/api/health", (req, res) => {
 // ================================
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.stack);
+
+  // Xử lý lỗi Multer (file upload)
+  if (err.name === "MulterError") {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        success: false,
+        message: "File quá lớn. Video tối đa 100MB, ảnh tối đa 5MB.",
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: `Lỗi upload: ${err.message}`,
+    });
+  }
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Internal Server Error",
@@ -157,9 +206,11 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ✅ Cleanup expired VNPay orders
 setInterval(async () => {
   await cancelExpiredVNPayOrders();
 }, 5 * 60 * 1000);
+
 // ================================
 // 🔹 Production: Serve static files & SPA
 // ================================
@@ -174,7 +225,7 @@ if (process.env.NODE_ENV === "production") {
 
   // SPA fallback - catch all non-API routes
   app.use((req, res, next) => {
-    if (!req.path.startsWith("/api")) {
+    if (!req.path.startsWith("/api") && !req.path.startsWith("/uploads")) {
       res.sendFile(path.join(frontendPath, "index.html"), (err) => {
         if (err) {
           console.error("Error sending index.html:", err);
@@ -191,6 +242,7 @@ if (process.env.NODE_ENV === "production") {
     res.status(404).json({
       success: false,
       message: "Route not found",
+      path: req.path,
     });
   });
 }
@@ -212,10 +264,12 @@ const startServer = () => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📍 Environment: ${config.nodeEnv}`);
+    console.log(`📊 Analytics API: http://localhost:${PORT}/api/analytics`);
+    console.log(`🛒 POS API: http://localhost:${PORT}/api/pos`);
     console.log(
-      `📊 Analytics API available at http://localhost:${PORT}/api/analytics`
+      `🎬 Short Videos API: http://localhost:${PORT}/api/short-videos`
     );
-    console.log(`🛒 POS API available at http://localhost:${PORT}/api/pos`);
+    console.log(`📁 Uploads: http://localhost:${PORT}/uploads/`);
     console.log(
       `⏰ Current time: ${new Date().toLocaleString("en-US", {
         timeZone: "Asia/Ho_Chi_Minh",

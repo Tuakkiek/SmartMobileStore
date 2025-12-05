@@ -352,7 +352,23 @@ export const shortVideoAPI = {
 
   // Admin
   getAll: (params) => api.get("/short-videos", { params }),
-  create: (data) => api.post("/short-videos", data),
+  create: (data) => {
+    console.log("🚀 Calling API create with data:", data);
+    // Log FormData content
+    if (data instanceof FormData) {
+      console.log("📦 FormData entries:");
+      for (let [key, value] of data.entries()) {
+        if (value instanceof File) {
+          console.log(`- ${key}:`, value.name, value.size, value.type);
+        } else {
+          console.log(`- ${key}:`, value);
+        }
+      }
+    }
+    return api.post("/short-videos", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   update: (id, data) => api.put(`/short-videos/${id}`, data),
   delete: (id) => api.delete(`/short-videos/${id}`),
   reorder: (videoIds) => api.put("/short-videos/reorder", { videoIds }),

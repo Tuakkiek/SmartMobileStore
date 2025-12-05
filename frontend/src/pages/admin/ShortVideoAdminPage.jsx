@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -10,62 +10,36 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  Loader2,
 } from "lucide-react";
-
-// Mock data
-const mockVideos = [
-  {
-    _id: "1",
-    title: "iPhone 17 Pro Max Unboxing",
-    description: "Mở hộp và đánh giá chi tiết iPhone 17 Pro Max",
-    thumbnailUrl: "/ip17pm.png",
-    videoUrl: "/videos/iphone-17.mp4",
-    duration: 45,
-    views: 15420,
-    likes: 892,
-    shares: 124,
-    status: "PUBLISHED",
-    order: 1,
-    publishedAt: "2025-01-15",
-    createdBy: { fullName: "Admin User", avatar: null },
-  },
-  {
-    _id: "2",
-    title: "MacBook Pro M4 Review",
-    description: "Đánh giá hiệu năng MacBook Pro M4",
-    thumbnailUrl: "/macpro14.png",
-    videoUrl: "/videos/macbook-m4.mp4",
-    duration: 60,
-    views: 8930,
-    likes: 634,
-    shares: 89,
-    status: "PUBLISHED",
-    order: 2,
-    publishedAt: "2025-01-14",
-    createdBy: { fullName: "Admin User", avatar: null },
-  },
-  {
-    _id: "3",
-    title: "AirPods Pro Tips",
-    description: "Mẹo hay cho AirPods Pro",
-    thumbnailUrl: "/banner_phu1.png",
-    videoUrl: "/videos/airpods.mp4",
-    duration: 38,
-    views: 12100,
-    likes: 743,
-    shares: 156,
-    status: "DRAFT",
-    order: 3,
-    publishedAt: null,
-    createdBy: { fullName: "Admin User", avatar: null },
-  },
-];
+import { shortVideoAPI } from "@/lib/api";
+import { toast } from "sonner";
+import ShortVideoUploadModal from "@/components/admin/ShortVideoUploadModal";
 
 const ShortVideoAdminPage = () => {
-  const [videos, setVideos] = useState(mockVideos);
+  const [videos, setVideos] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [showUploadModal, setShowUploadModal] = useState(false);
+
+  useEffect(() => {
+    loadVideos();
+  }, []);
+
+  const loadVideos = async () => {
+    setIsLoading(true);
+    try {
+      const response = await shortVideoAPI.getAll();
+      const videoData = response.data?.data?.videos || [];
+      setVideos(videoData);
+    } catch (error) {
+      console.error("Load videos error:", error);
+      toast.error("Không thể tải danh sách video");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredVideos = videos.filter((video) => {
     const matchesSearch = video.title
@@ -76,13 +50,19 @@ const ShortVideoAdminPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleDelete = (id) => {
-    if (confirm("Bạn có chắc muốn xóa video này?")) {
+  const handleDelete = async (id) => {
+    if (!confirm("Bạn có chắc muốn xóa video này?")) return;
+
+    try {
+      await shortVideoAPI.delete(id);
       setVideos(videos.filter((v) => v._id !== id));
+      toast.success("Đã xóa video");
+    } catch (error) {
+      toast.error("Không thể xóa video");
     }
   };
 
-  const handleReorder = (id, direction) => {
+  const handleReorder = async (id, direction) => {
     const index = videos.findIndex((v) => v._id === id);
     if (
       (direction === "up" && index === 0) ||
@@ -98,12 +78,25 @@ const ShortVideoAdminPage = () => {
       newVideos[index],
     ];
 
-    // Update order values
     newVideos.forEach((video, idx) => {
       video.order = idx + 1;
     });
 
     setVideos(newVideos);
+
+    try {
+      const videoIds = newVideos.map((v) => v._id);
+      await shortVideoAPI.reorder(videoIds);
+      toast.success("Đã cập nhật thứ tự");
+    } catch (error) {
+      toast.error("Không thể cập nhật thứ tự");
+      loadVideos();
+    }
+  };
+
+  const handleUploadSuccess = (newVideo) => {
+    loadVideos();
+    toast.success("Video đã được thêm thành công!");
   };
 
   const formatNumber = (num) => {
@@ -131,6 +124,17 @@ const ShortVideoAdminPage = () => {
       </span>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-pink-600 mx-auto mb-4" />
+          <p className="text-gray-600">Đang tải video...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -160,7 +164,6 @@ const ShortVideoAdminPage = () => {
 
           {/* Filters */}
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -172,7 +175,6 @@ const ShortVideoAdminPage = () => {
               />
             </div>
 
-            {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -306,23 +308,12 @@ const ShortVideoAdminPage = () => {
         )}
       </div>
 
-      {/* Upload Modal - Placeholder */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6">
-            <h2 className="text-2xl font-bold mb-4">Thêm video mới</h2>
-            <p className="text-gray-500 mb-6">
-              Tính năng upload video đang được phát triển...
-            </p>
-            <button
-              onClick={() => setShowUploadModal(false)}
-              className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Upload Modal */}
+      <ShortVideoUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onSuccess={handleUploadSuccess}
+      />
     </div>
   );
 };

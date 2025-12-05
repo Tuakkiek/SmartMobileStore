@@ -1,10 +1,5 @@
-// ============================================
-// FILE: frontend/src/components/homepage/ShortVideoSection.jsx
-// ✅ UPDATED: Fetch from API instead of mock data
-// ============================================
-
 import React, { useState, useEffect } from "react";
-import { Play, TrendingUp, Heart } from "lucide-react";
+import { Play, TrendingUp, Heart, Eye, Loader2 } from "lucide-react";
 import { shortVideoAPI } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -24,15 +19,21 @@ const ShortVideoSection = ({
   const loadVideos = async () => {
     setIsLoading(true);
     try {
+      console.log("🎬 Loading videos...", { videoType, videoLimit });
+
       const response =
         videoType === "trending"
           ? await shortVideoAPI.getTrending(videoLimit)
           : await shortVideoAPI.getPublished({ limit: videoLimit });
 
+      console.log("✅ Videos loaded:", response.data);
+
       const videoData = response.data?.data?.videos || [];
+      console.log("📹 Video data:", videoData);
+
       setVideos(videoData);
     } catch (error) {
-      console.error("Error loading videos:", error);
+      console.error("❌ Error loading videos:", error);
       toast.error("Không thể tải video");
     } finally {
       setIsLoading(false);
@@ -42,7 +43,7 @@ const ShortVideoSection = ({
   const formatViews = (views) => {
     if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
     if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
-    return views.toString();
+    return views?.toString() || "0";
   };
 
   const formatDuration = (seconds) => {
@@ -55,16 +56,8 @@ const ShortVideoSection = ({
     return (
       <section className="py-8 bg-gradient-to-b from-white to-gray-50">
         <div className="container mx-auto px-4">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-48"></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {[...Array(videoLimit)].map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-[9/16] bg-gray-200 rounded-2xl"
-                ></div>
-              ))}
-            </div>
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
           </div>
         </div>
       </section>
@@ -72,8 +65,11 @@ const ShortVideoSection = ({
   }
 
   if (!videos.length) {
-    return null; // Don't show section if no videos
+    console.log("⚠️ No videos to display");
+    return null;
   }
+
+  console.log("🎥 Rendering", videos.length, "videos");
 
   return (
     <section className="py-8 bg-gradient-to-b from-white to-gray-50">
@@ -101,14 +97,18 @@ const ShortVideoSection = ({
           {videos.map((video, index) => (
             <button
               key={video._id}
-              onClick={() => onVideoClick(index)}
+              onClick={() => onVideoClick(index, videos)}
               className="group relative aspect-[9/16] rounded-2xl overflow-hidden bg-gray-900 hover:scale-105 transition-transform duration-300 shadow-lg hover:shadow-2xl"
             >
               {/* Thumbnail */}
               <img
-                src={video.thumbnailUrl || "/placeholder.png"}
+                src={video.thumbnailUrl}
                 alt={video.title}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  console.error("❌ Image load error:", video.thumbnailUrl);
+                  e.target.src = "/placeholder.png";
+                }}
               />
 
               {/* Gradient Overlay */}
@@ -133,7 +133,7 @@ const ShortVideoSection = ({
                 </h3>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="flex items-center gap-1">
-                    <Play className="w-3 h-3" />
+                    <Eye className="w-3 h-3" />
                     {formatViews(video.views)}
                   </span>
                   <span className="flex items-center gap-1">

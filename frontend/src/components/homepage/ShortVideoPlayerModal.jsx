@@ -9,78 +9,39 @@ import {
   ChevronDown,
   ShoppingBag,
 } from "lucide-react";
+import { shortVideoAPI } from "@/lib/api";
+import { toast } from "sonner";
 
-// Mock videos - Replace with real data
-const mockVideos = [
-  {
-    _id: "1",
-    title: "iPhone 17 Pro Max - Đánh giá chi tiết",
-    description:
-      "Cùng khám phá iPhone 17 Pro Max với thiết kế hoàn toàn mới và chip A19 Pro siêu mạnh mẽ!",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    views: 15420,
-    likes: 892,
-    isLiked: false,
-    linkedProducts: [
-      {
-        _id: "1",
-        name: "iPhone 17 Pro Max 256GB",
-        image: "/ip17pm.png",
-        price: 34990000,
-      },
-    ],
-  },
-  {
-    _id: "2",
-    title: "MacBook Pro M4 - Sức mạnh vượt trội",
-    description:
-      "MacBook Pro M4 với hiệu năng đột phá, màn hình ProMotion 120Hz tuyệt đẹp",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    views: 8930,
-    likes: 634,
-    isLiked: false,
-    linkedProducts: [
-      {
-        _id: "2",
-        name: 'MacBook Pro 14" M4',
-        image: "/macpro14.png",
-        price: 45990000,
-      },
-    ],
-  },
-  {
-    _id: "3",
-    title: "AirPods Pro - Mẹo hay không phải ai cũng biết",
-    description: "10 tính năng ẩn của AirPods Pro giúp bạn trải nghiệm tốt hơn",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    views: 12100,
-    likes: 743,
-    isLiked: true,
-    linkedProducts: [],
-  },
-];
-
-const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
+const ShortVideoPlayerModal = ({
+  open,
+  onClose,
+  initialIndex = 0,
+  videos = [],
+}) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isMuted, setIsMuted] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
   const videoRef = useRef(null);
 
-  const currentVideo = mockVideos[currentIndex];
+  // Reset index when modal opens
+  useEffect(() => {
+    if (open) {
+      setCurrentIndex(initialIndex);
+    }
+  }, [open, initialIndex]);
+
+  const currentVideo = videos[currentIndex];
 
   useEffect(() => {
-    if (open && videoRef.current) {
+    if (open && videoRef.current && currentVideo) {
       videoRef.current
         .play()
         .catch((err) => console.log("Autoplay prevented:", err));
     }
-  }, [open, currentIndex]);
+  }, [open, currentIndex, currentVideo]);
 
   const handleNext = () => {
-    if (currentIndex < mockVideos.length - 1) {
+    if (currentIndex < videos.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   };
@@ -91,9 +52,14 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
     }
   };
 
-  const handleLike = () => {
-    // TODO: Call API to toggle like
-    console.log("Toggle like for video:", currentVideo._id);
+  const handleLike = async () => {
+    try {
+      await shortVideoAPI.toggleLike(currentVideo._id);
+      toast.success("Đã thích video!");
+    } catch (error) {
+      console.error("Toggle like error:", error);
+      toast.error("Không thể thích video");
+    }
   };
 
   const handleShare = async () => {
@@ -103,6 +69,8 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
         text: currentVideo.description,
         url: window.location.href,
       });
+      // Increment share count
+      await shortVideoAPI.incrementShare(currentVideo._id);
     } catch (err) {
       console.log("Share failed:", err);
     }
@@ -111,10 +79,17 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
   const formatNumber = (num) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
+    return num?.toString() || "0";
   };
 
-  if (!open) return null;
+  if (!open || !currentVideo) return null;
+
+  // Ensure video URL is absolute
+  const getVideoUrl = (url) => {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    return `${window.location.origin}${url}`;
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black">
@@ -132,7 +107,7 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
         <div className="relative w-full max-w-[500px] h-full bg-black">
           <video
             ref={videoRef}
-            src={currentVideo.videoUrl}
+            src={getVideoUrl(currentVideo.videoUrl)}
             className="w-full h-full object-contain"
             loop
             muted={isMuted}
@@ -143,6 +118,10 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
               } else {
                 videoRef.current.pause();
               }
+            }}
+            onError={(e) => {
+              console.error("❌ Video load error:", currentVideo.videoUrl);
+              toast.error("Không thể phát video");
             }}
           />
 
@@ -171,18 +150,8 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
               onClick={handleLike}
               className="flex flex-col items-center gap-1 text-white"
             >
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md transition-colors ${
-                  currentVideo.isLiked
-                    ? "bg-pink-500"
-                    : "bg-black/50 hover:bg-black/70"
-                }`}
-              >
-                <Heart
-                  className={`w-6 h-6 ${
-                    currentVideo.isLiked ? "fill-white" : ""
-                  }`}
-                />
+              <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/70 flex items-center justify-center transition-colors">
+                <Heart className="w-6 h-6" />
               </div>
               <span className="text-xs font-semibold">
                 {formatNumber(currentVideo.likes)}
@@ -201,23 +170,24 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
             </button>
 
             {/* Products Button */}
-            {currentVideo.linkedProducts.length > 0 && (
-              <button
-                onClick={() => setShowProducts(!showProducts)}
-                className="flex flex-col items-center gap-1 text-white"
-              >
-                <div
-                  className={`w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center transition-colors ${
-                    showProducts
-                      ? "bg-blue-500"
-                      : "bg-black/50 hover:bg-black/70"
-                  }`}
+            {currentVideo.linkedProducts &&
+              currentVideo.linkedProducts.length > 0 && (
+                <button
+                  onClick={() => setShowProducts(!showProducts)}
+                  className="flex flex-col items-center gap-1 text-white"
                 >
-                  <ShoppingBag className="w-6 h-6" />
-                </div>
-                <span className="text-xs font-semibold">Sản phẩm</span>
-              </button>
-            )}
+                  <div
+                    className={`w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center transition-colors ${
+                      showProducts
+                        ? "bg-blue-500"
+                        : "bg-black/50 hover:bg-black/70"
+                    }`}
+                  >
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <span className="text-xs font-semibold">Sản phẩm</span>
+                </button>
+              )}
 
             {/* Mute Button */}
             <button
@@ -245,7 +215,7 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
               </button>
             )}
             <div></div>
-            {currentIndex < mockVideos.length - 1 && (
+            {currentIndex < videos.length - 1 && (
               <button
                 onClick={handleNext}
                 className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/70 flex items-center justify-center text-white transition-colors pointer-events-auto"
@@ -256,35 +226,37 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
           </div>
 
           {/* Products Drawer */}
-          {showProducts && currentVideo.linkedProducts.length > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 max-h-[40vh] overflow-y-auto animate-slide-up">
-              <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
-              <h4 className="font-bold text-lg mb-4">Sản phẩm trong video</h4>
-              <div className="space-y-3">
-                {currentVideo.linkedProducts.map((product) => (
-                  <button
-                    key={product._id}
-                    className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    <img
-                      src={product.image}
-                      alt={product.name}
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                    <div className="flex-1 text-left">
-                      <p className="font-semibold text-sm line-clamp-2">
-                        {product.name}
-                      </p>
-                      <p className="text-red-600 font-bold mt-1">
-                        {product.price.toLocaleString()}đ
-                      </p>
-                    </div>
-                    <ChevronDown className="w-5 h-5 text-gray-400 -rotate-90" />
-                  </button>
-                ))}
+          {showProducts &&
+            currentVideo.linkedProducts &&
+            currentVideo.linkedProducts.length > 0 && (
+              <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 max-h-[40vh] overflow-y-auto animate-slide-up">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+                <h4 className="font-bold text-lg mb-4">Sản phẩm trong video</h4>
+                <div className="space-y-3">
+                  {currentVideo.linkedProducts.map((product) => (
+                    <button
+                      key={product._id}
+                      className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                    >
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                      <div className="flex-1 text-left">
+                        <p className="font-semibold text-sm line-clamp-2">
+                          {product.name}
+                        </p>
+                        <p className="text-red-600 font-bold mt-1">
+                          {product.price?.toLocaleString()}đ
+                        </p>
+                      </div>
+                      <ChevronDown className="w-5 h-5 text-gray-400 -rotate-90" />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </div>
 
@@ -320,7 +292,7 @@ const ShortVideoPlayerModal = ({ open, onClose, initialIndex = 0 }) => {
         }}
       />
 
-      <style jsx>{`
+      <style>{`
         @keyframes slide-up {
           from {
             transform: translateY(100%);

@@ -28,6 +28,8 @@ import ProfilePage from "@/pages/customer/ProfilePage";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import EmployeesPage from "@/pages/admin/EmployeesPage";
 import PromotionsPage from "@/pages/admin/PromotionsPage";
+import HomePageEditor from "@/pages/admin/HomePageEditor";
+import ShortVideoAdminPage from "@/pages/admin/ShortVideoAdminPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
@@ -44,7 +46,6 @@ import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
 
 import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
-import HomePageEditor from "@/pages/admin/HomePageEditor";
 
 // ============================================
 // SCROLL TO TOP
@@ -192,6 +193,8 @@ function App() {
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
           <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
+          {/* ✅ NEW: Short Videos Management */}
+          <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
         </Route>
 
         {/* ========================================

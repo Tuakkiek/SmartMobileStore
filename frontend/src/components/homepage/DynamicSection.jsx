@@ -24,6 +24,7 @@ const DynamicSection = ({
 }) => {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoInitialIndex, setVideoInitialIndex] = useState(0);
+  const [currentVideos, setCurrentVideos] = useState([]);
 
   if (!section || !section.enabled) return null;
 
@@ -31,6 +32,7 @@ const DynamicSection = ({
 
   const handleVideoClick = (index) => {
     setVideoInitialIndex(index);
+    setCurrentVideos(videos);
     setVideoModalOpen(true);
   };
 
@@ -91,6 +93,7 @@ const DynamicSection = ({
             open={videoModalOpen}
             onClose={() => setVideoModalOpen(false)}
             initialIndex={videoInitialIndex}
+            videos={currentVideos}
           />
         </>
       );
