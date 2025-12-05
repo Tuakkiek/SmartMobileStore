@@ -138,7 +138,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br bg-black flex items-center justify-center">
               <Video className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -353,7 +353,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
                 !thumbnailFile ||
                 !formData.title.trim()
               }
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-3 bg-gradient-to-r bg-black text-white rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isUploading ? (
                 <>
