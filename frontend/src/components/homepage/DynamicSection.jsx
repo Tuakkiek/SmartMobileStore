@@ -118,7 +118,7 @@ const DynamicSection = ({
     // MAGIC DEALS
     // ============================================
     case "magic-deals":
-      return <MagicDealsSection config={config} />;
+      return <MagicDealsSection config={config} allProducts={allProducts} />;
 
     // ============================================
     // NEW PRODUCTS
