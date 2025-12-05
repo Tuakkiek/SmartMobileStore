@@ -1,16 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  X,
-  Heart,
-  Share2,
-  Volume2,
-  VolumeX,
-  ChevronUp,
-  ChevronDown,
-  ShoppingBag,
-} from "lucide-react";
-import { shortVideoAPI } from "@/lib/api";
-import { toast } from "sonner";
+import { X, Volume2, VolumeX, ChevronUp, ChevronDown } from "lucide-react";
+
+// ✅ HELPER: Convert path to URL
+const getMediaUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+
+  const baseUrl =
+    import.meta.env.VITE_API_URL?.replace("/api", "") ||
+    "http://localhost:5000";
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+  return `${baseUrl}${cleanPath}`;
+};
 
 const ShortVideoPlayerModal = ({
   open,
@@ -20,7 +22,6 @@ const ShortVideoPlayerModal = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isMuted, setIsMuted] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
   const videoRef = useRef(null);
 
   // Reset index when modal opens
@@ -32,6 +33,7 @@ const ShortVideoPlayerModal = ({
 
   const currentVideo = videos[currentIndex];
 
+  // Auto-play video
   useEffect(() => {
     if (open && videoRef.current && currentVideo) {
       videoRef.current
@@ -39,6 +41,52 @@ const ShortVideoPlayerModal = ({
         .catch((err) => console.log("Autoplay prevented:", err));
     }
   }, [open, currentIndex, currentVideo]);
+
+  // ✅ KEYBOARD NAVIGATION
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrevious();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNext();
+      } else if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, currentIndex, videos.length]);
+
+  // ✅ SCROLL/WHEEL NAVIGATION
+  useEffect(() => {
+    if (!open) return;
+
+    let isScrolling = false;
+    const handleWheel = (e) => {
+      if (isScrolling) return;
+
+      e.preventDefault();
+      isScrolling = true;
+
+      if (e.deltaY > 0) {
+        handleNext();
+      } else if (e.deltaY < 0) {
+        handlePrevious();
+      }
+
+      setTimeout(() => {
+        isScrolling = false;
+      }, 500);
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [open, currentIndex, videos.length]);
 
   const handleNext = () => {
     if (currentIndex < videos.length - 1) {
@@ -52,44 +100,7 @@ const ShortVideoPlayerModal = ({
     }
   };
 
-  const handleLike = async () => {
-    try {
-      await shortVideoAPI.toggleLike(currentVideo._id);
-      toast.success("Đã thích video!");
-    } catch (error) {
-      console.error("Toggle like error:", error);
-      toast.error("Không thể thích video");
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      await navigator.share({
-        title: currentVideo.title,
-        text: currentVideo.description,
-        url: window.location.href,
-      });
-      // Increment share count
-      await shortVideoAPI.incrementShare(currentVideo._id);
-    } catch (err) {
-      console.log("Share failed:", err);
-    }
-  };
-
-  const formatNumber = (num) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num?.toString() || "0";
-  };
-
   if (!open || !currentVideo) return null;
-
-  // Ensure video URL is absolute
-  const getVideoUrl = (url) => {
-    if (!url) return "";
-    if (url.startsWith("http")) return url;
-    return `${window.location.origin}${url}`;
-  };
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black">
@@ -107,7 +118,7 @@ const ShortVideoPlayerModal = ({
         <div className="relative w-full max-w-[500px] h-full bg-black">
           <video
             ref={videoRef}
-            src={getVideoUrl(currentVideo.videoUrl)}
+            src={getMediaUrl(currentVideo.videoUrl)}
             className="w-full h-full object-contain"
             loop
             muted={isMuted}
@@ -121,7 +132,6 @@ const ShortVideoPlayerModal = ({
             }}
             onError={(e) => {
               console.error("❌ Video load error:", currentVideo.videoUrl);
-              toast.error("Không thể phát video");
             }}
           />
 
@@ -133,63 +143,15 @@ const ShortVideoPlayerModal = ({
             <h3 className="font-bold text-lg line-clamp-2">
               {currentVideo.title}
             </h3>
-            <p className="text-sm text-gray-300 line-clamp-2">
-              {currentVideo.description}
-            </p>
-            <div className="flex items-center gap-4 text-sm text-gray-300">
-              <span>{formatNumber(currentVideo.views)} lượt xem</span>
-              <span>•</span>
-              <span>{formatNumber(currentVideo.likes)} lượt thích</span>
-            </div>
+            {currentVideo.description && (
+              <p className="text-sm text-gray-300 line-clamp-2">
+                {currentVideo.description}
+              </p>
+            )}
           </div>
 
-          {/* Action Buttons (Right Side) */}
-          <div className="absolute right-4 bottom-4 flex flex-col gap-4">
-            {/* Like Button */}
-            <button
-              onClick={handleLike}
-              className="flex flex-col items-center gap-1 text-white"
-            >
-              <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/70 flex items-center justify-center transition-colors">
-                <Heart className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold">
-                {formatNumber(currentVideo.likes)}
-              </span>
-            </button>
-
-            {/* Share Button */}
-            <button
-              onClick={handleShare}
-              className="flex flex-col items-center gap-1 text-white"
-            >
-              <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md hover:bg-black/70 flex items-center justify-center transition-colors">
-                <Share2 className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold">Chia sẻ</span>
-            </button>
-
-            {/* Products Button */}
-            {currentVideo.linkedProducts &&
-              currentVideo.linkedProducts.length > 0 && (
-                <button
-                  onClick={() => setShowProducts(!showProducts)}
-                  className="flex flex-col items-center gap-1 text-white"
-                >
-                  <div
-                    className={`w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center transition-colors ${
-                      showProducts
-                        ? "bg-blue-500"
-                        : "bg-black/50 hover:bg-black/70"
-                    }`}
-                  >
-                    <ShoppingBag className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs font-semibold">Sản phẩm</span>
-                </button>
-              )}
-
-            {/* Mute Button */}
+          {/* Mute Button (Bottom Right) */}
+          <div className="absolute right-4 bottom-4">
             <button
               onClick={() => setIsMuted(!isMuted)}
               className="flex flex-col items-center gap-1 text-white"
@@ -225,38 +187,10 @@ const ShortVideoPlayerModal = ({
             )}
           </div>
 
-          {/* Products Drawer */}
-          {showProducts &&
-            currentVideo.linkedProducts &&
-            currentVideo.linkedProducts.length > 0 && (
-              <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 max-h-[40vh] overflow-y-auto animate-slide-up">
-                <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
-                <h4 className="font-bold text-lg mb-4">Sản phẩm trong video</h4>
-                <div className="space-y-3">
-                  {currentVideo.linkedProducts.map((product) => (
-                    <button
-                      key={product._id}
-                      className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                    >
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                      <div className="flex-1 text-left">
-                        <p className="font-semibold text-sm line-clamp-2">
-                          {product.name}
-                        </p>
-                        <p className="text-red-600 font-bold mt-1">
-                          {product.price?.toLocaleString()}đ
-                        </p>
-                      </div>
-                      <ChevronDown className="w-5 h-5 text-gray-400 -rotate-90" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          {/* Video Counter */}
+          <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm px-3 py-1 rounded-full text-sm text-white font-semibold">
+            {currentIndex + 1} / {videos.length}
+          </div>
         </div>
       </div>
 
@@ -292,20 +226,13 @@ const ShortVideoPlayerModal = ({
         }}
       />
 
-      <style>{`
-        @keyframes slide-up {
-          from {
-            transform: translateY(100%);
-          }
-          to {
-            transform: translateY(0);
-          }
-        }
-
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
-        }
-      `}</style>
+      {/* Hint Text */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-xs text-center">
+        <p className="hidden md:block">
+          Dùng phím mũi tên ↑↓ hoặc lăn chuột để chuyển video
+        </p>
+        <p className="md:hidden">Vuốt lên/xuống để chuyển video</p>
+      </div>
     </div>
   );
 };

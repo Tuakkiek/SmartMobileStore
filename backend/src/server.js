@@ -95,7 +95,7 @@ app.use(cookieParser());
 
 // ✅ QUAN TRỌNG: Serve uploads folder (videos, thumbnails, images, etc.)
 const uploadsPath = path.join(process.cwd(), "uploads");
-app.use("/uploads", express.static(uploadsPath));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 console.log("📁 Uploads directory:", uploadsPath);
 
 // Serve backend public folder

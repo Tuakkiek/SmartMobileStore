@@ -44,6 +44,7 @@ import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
 
 import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
+import VideosPage from "@/pages/VideosPage"; // ✅ NEW
 
 import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
 
@@ -98,10 +99,13 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
 
-          {/* ✅ ROUTE MỚI: /products với query params */}
+          {/* ✅ NEW: Videos Page */}
+          <Route path="/videos" element={<VideosPage />} />
+
+          {/* Products */}
           <Route path="/products" element={<ProductsPage />} />
 
-          {/* ✅ GIỮ LẠI CÁC ROUTE CŨ ĐỂ TƯƠNG THÍCH NGƯỢC */}
+          {/* Legacy category routes */}
           <Route
             path="/dien-thoai"
             element={<ProductsPage category="iPhone" />}
@@ -124,16 +128,16 @@ function App() {
             element={<ProductsPage category="Accessories" />}
           />
 
-          {/* Tìm kiếm */}
+          {/* Search */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
 
-          {/* Chi tiết sản phẩm */}
+          {/* Product Detail */}
           <Route
             path="/:categorySlug/:productSlug"
             element={<ProductDetailPage />}
           />
 
-          {/* Đăng nhập / Đăng ký */}
+          {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -193,7 +197,6 @@ function App() {
           <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
           <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
-          {/* ✅ NEW: Short Videos Management */}
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
         </Route>
 

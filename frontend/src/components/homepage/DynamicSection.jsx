@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/components/homepage/DynamicSection.jsx
-// ✅ UPDATED: Added 'short-videos' case
+// ✅ FIXED: Properly pass videos to modal
 // ============================================
 
 import React, { useState } from "react";
@@ -22,6 +22,7 @@ const DynamicSection = ({
   onEdit,
   onDelete,
 }) => {
+  // ✅ FIX: State for video modal
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoInitialIndex, setVideoInitialIndex] = useState(0);
   const [currentVideos, setCurrentVideos] = useState([]);
@@ -30,7 +31,9 @@ const DynamicSection = ({
 
   const { type, config, title } = section;
 
-  const handleVideoClick = (index) => {
+  // ✅ FIX: Handler nhận cả videos array
+  const handleVideoClick = (index, videos) => {
+    console.log("🎬 Video clicked:", { index, videosCount: videos.length });
     setVideoInitialIndex(index);
     setCurrentVideos(videos);
     setVideoModalOpen(true);
@@ -78,7 +81,7 @@ const DynamicSection = ({
       return <CategoryNav allProducts={allProducts} />;
 
     // ============================================
-    // SHORT VIDEOS (✅ NEW)
+    // SHORT VIDEOS (✅ FIXED)
     // ============================================
     case "short-videos":
       return (

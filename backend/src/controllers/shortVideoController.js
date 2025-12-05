@@ -156,7 +156,7 @@ export const createVideo = async (req, res) => {
     console.log("📥 Create video request received");
     console.log("- Body:", req.body);
     console.log("- Files:", req.files);
-    
+
     const { title, description, status, linkedProducts } = req.body;
     const userId = req.user._id;
 
@@ -218,9 +218,10 @@ export const createVideo = async (req, res) => {
     let parsedLinkedProducts = [];
     if (linkedProducts) {
       try {
-        parsedLinkedProducts = typeof linkedProducts === "string" 
-          ? JSON.parse(linkedProducts) 
-          : linkedProducts;
+        parsedLinkedProducts =
+          typeof linkedProducts === "string"
+            ? JSON.parse(linkedProducts)
+            : linkedProducts;
       } catch (e) {
         console.warn("Could not parse linkedProducts:", e);
       }
@@ -251,7 +252,7 @@ export const createVideo = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Create video error:", error);
-    
+
     // Clean up uploaded files if save fails
     if (req.files) {
       if (req.files.video) {
@@ -269,7 +270,8 @@ export const createVideo = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || "Lỗi khi tạo video",
-      error: process.env.NODE_ENV === "development" ? error.toString() : undefined,
+      error:
+        process.env.NODE_ENV === "development" ? error.toString() : undefined,
     });
   }
 };
@@ -385,6 +387,19 @@ export const deleteVideo = async (req, res) => {
     });
   }
 };
+
+// ✅ THÊM LOG CHI TIẾT HƠN
+// console.log("✅ Files uploaded:");
+// console.log("- Video Path:", videoPath);
+// console.log("- Thumbnail Path:", thumbnailPath);
+// console.log(
+//   "- Video exists:",
+//   fs.existsSync(path.join(process.cwd(), videoPath))
+// );
+// console.log(
+//   "- Thumbnail exists:",
+//   fs.existsSync(path.join(process.cwd(), thumbnailPath))
+// );
 
 // ============================================
 // INCREMENT VIEW COUNT (Public)

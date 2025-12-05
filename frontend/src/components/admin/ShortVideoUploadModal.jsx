@@ -1,12 +1,5 @@
 import React, { useState, useRef } from "react";
-import {
-  X,
-  Upload,
-  Video,
-  Loader2,
-  AlertCircle,
-  CheckCircle,
-} from "lucide-react";
+import { X, Upload, Video, Loader2, CheckCircle } from "lucide-react";
 import { shortVideoAPI } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -14,7 +7,6 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    status: "DRAFT",
   });
 
   const [videoFile, setVideoFile] = useState(null);
@@ -90,11 +82,9 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
       const data = new FormData();
       data.append("title", formData.title);
       data.append("description", formData.description);
-      data.append("status", formData.status);
+      data.append("status", "PUBLISHED"); // ✅ Luôn publish ngay
       data.append("video", videoFile);
       data.append("thumbnail", thumbnailFile);
-
-      console.log("📤 Uploading video...");
 
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {
@@ -111,7 +101,6 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      console.log("✅ Upload successful:", response.data);
       toast.success("Upload video thành công!");
 
       setTimeout(() => {
@@ -130,7 +119,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
     if (videoPreview) URL.revokeObjectURL(videoPreview);
     if (thumbnailPreview) URL.revokeObjectURL(thumbnailPreview);
 
-    setFormData({ title: "", description: "", status: "DRAFT" });
+    setFormData({ title: "", description: "" });
     setVideoFile(null);
     setThumbnailFile(null);
     setVideoPreview(null);
@@ -155,7 +144,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
             <div>
               <h2 className="text-xl font-bold">Upload Video Mới</h2>
               <p className="text-sm text-gray-500">
-                Thêm video ngắn để giới thiệu sản phẩm
+                Video sẽ được xuất bản ngay sau khi upload
               </p>
             </div>
           </div>
@@ -226,10 +215,6 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
                 </div>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              <AlertCircle className="w-3 h-3 inline mr-1" />
-              Video nên dài 15-60 giây, tỷ lệ 9:16 (dọc)
-            </p>
           </div>
 
           {/* Thumbnail Upload */}
@@ -311,7 +296,9 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-semibold mb-2">Mô tả</label>
+            <label className="block text-sm font-semibold mb-2">
+              Mô tả (tùy chọn)
+            </label>
             <textarea
               value={formData.description}
               onChange={(e) =>
@@ -326,24 +313,6 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
             <p className="text-xs text-gray-500 mt-1">
               {formData.description.length}/500 ký tự
             </p>
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Trạng thái
-            </label>
-            <select
-              value={formData.status}
-              onChange={(e) =>
-                setFormData({ ...formData, status: e.target.value })
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-              disabled={isUploading}
-            >
-              <option value="DRAFT">Bản nháp</option>
-              <option value="PUBLISHED">Xuất bản ngay</option>
-            </select>
           </div>
 
           {/* Upload Progress */}
@@ -394,7 +363,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
               ) : (
                 <>
                   <Upload className="w-5 h-5" />
-                  Upload Video
+                  Upload & Xuất bản
                 </>
               )}
             </button>
