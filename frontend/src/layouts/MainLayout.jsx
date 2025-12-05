@@ -147,7 +147,7 @@ const MainLayout = () => {
               to="/"
               className="bg-white rounded-full px-6 py-2.5 flex items-center justify-center"
             >
-              <span className="text-black font-bold text-sm">LOGO</span>
+              <span className="text-black font-bold text-sm">Ninh Kiều iSTORE</span>
             </Link>
 
             <div className="flex-1">
