@@ -222,15 +222,15 @@ const CartPage = () => {
       ...item,
       originalIndex: index,
     }));
+    // Sắp xếp: timestamp lớn nhất (mới nhất) lên đầu
     const sorted = itemsWithIndex.sort((a, b) => {
       const timeA = itemsOrder[a.variantId] || 0;
       const timeB = itemsOrder[b.variantId] || 0;
-      if (timeA !== timeB) return timeB - timeA;
+      if (timeA !== timeB) return timeB - timeA; // Mới nhất trước
       return a.originalIndex - b.originalIndex;
     });
-    return sorted.reverse();
+    return sorted; // ✅ BỎ reverse() để giữ thứ tự mới nhất ở trên
   }, [items, itemsOrder]);
-
   // Cleanup timeout
   useEffect(() => {
     return () => {
@@ -598,7 +598,7 @@ const CartPage = () => {
                                 disabled={loadingVariants[item.productId]}
                               >
                                 <SelectTrigger
-                                  className="w-[180px] overflow-hidden whitespace-nowrap text-ellipsis"
+                                  className="w-[130px] sm:w-[140px] overflow-hidden whitespace-nowrap text-ellipsis"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <SelectValue
@@ -626,7 +626,7 @@ const CartPage = () => {
                                 disabled={loadingVariants[item.productId]}
                               >
                                 <SelectTrigger
-                                  className="w-[110px] overflow-hidden whitespace-nowrap text-ellipsis"
+                                  className="w-[130px] sm:w-[140px] overflow-hidden whitespace-nowrap text-ellipsis"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <SelectValue
@@ -646,6 +646,8 @@ const CartPage = () => {
                                   ))}
                                 </SelectContent>
                               </Select>
+
+                            
                             </div>
 
                             {/* Right: Tổng tiền + Xóa */}
