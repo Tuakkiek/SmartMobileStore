@@ -881,16 +881,16 @@ const MainLayout = () => {
               </h3>
               <ul className="space-y-2.5">
                 <li>
-                  <a
-                    href="#"
+                 <Link
+                    to="/profile"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
-                    Quản Lý Tài Khoản Của Bạn
-                  </a>
+                    Quản lý tài khoản của bạn
+                  </Link>
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="https://secure8.store.apple.com/vn/shop/signIn/account?ssi=4AAABmvf0Or4BIEbjTHWjrBfsnq47F0HfjvLFTuFFtGn_1NLalTnDjNiuAAAAN2h0dHBzOi8vc2VjdXJlOC5zdG9yZS5hcHBsZS5jb20vdm4vc2hvcC9hY2NvdW50L2hvbWV8fHwAAgH_FQYXXEJAMARSu4N76JHKY9IW2zmbs9q2ltlrtjN-nA"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Tài Khoản Apple Store
@@ -898,7 +898,7 @@ const MainLayout = () => {
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="https://www.icloud.com/"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     iCloud.com
@@ -914,7 +914,7 @@ const MainLayout = () => {
               <ul className="space-y-2.5">
                 <li>
                   <a
-                    href="#"
+                    href="https://apps.apple.com/vn/app/apple-store/id375380948"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Ứng Dụng Apple Store
@@ -922,7 +922,7 @@ const MainLayout = () => {
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="https://www.apple.com/vn/shop/trade-in"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Apple Trade In
@@ -930,7 +930,7 @@ const MainLayout = () => {
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="https://www.apple.com/vn/shop/browse/financing"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Tài Chính
@@ -938,7 +938,7 @@ const MainLayout = () => {
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="/profile"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Tình Trạng Đơn Hàng
@@ -946,7 +946,7 @@ const MainLayout = () => {
                 </li>
                 <li>
                   <a
-                    href="#"
+                    href="https://www.apple.com/vn/shop/help"
                     className="text-sm text-white hover:text-gray-400 transition-colors"
                   >
                     Hỗ Trợ Mua Hàng
