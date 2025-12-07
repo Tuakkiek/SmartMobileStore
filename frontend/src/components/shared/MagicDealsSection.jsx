@@ -1,6 +1,6 @@
 // ============================================
 // FILE: src/components/shared/MagicDealsSection.jsx
-// ✅ UPDATED: Hiển thị 8 sản phẩm có % giảm giá cao nhất
+// ✅ UPDATED: Fully Responsive - Giữ nguyên hình dạng mọi kích thước
 // ============================================
 
 import { getImageUrl } from "@/lib/imageUtils";
@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 const MagicDealsSection = ({ config = {}, allProducts = [] }) => {
   const navigate = useNavigate();
 
-  // Banner chính (giữ nguyên)
+  // Banner chính
   const mainBanner = config.images?.[0] || "/banner_chinh1.png";
 
   // ============================================
@@ -81,43 +81,37 @@ const MagicDealsSection = ({ config = {}, allProducts = [] }) => {
   };
 
   return (
-    <div className="bg-gray-50 py-6 px-4 rounded-xl">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Tiêu đề cho phần giảm giá - ĐÃ CHỈNH SỬA */}
-        <div className="col-span-1 md:col-span-4 text-center mb-6">
+    <div className="bg-gray-50 py-4 sm:py-6 md:py-8 px-3 sm:px-4 md:px-6 rounded-xl">
+      <div className="max-w-7xl mx-auto">
+        {/* ==========================================
+          TIÊU ĐỀ - RESPONSIVE
+          ========================================== */}
+        <div className="text-center mb-4 sm:mb-6 md:mb-8">
           <h1
             className="
-          text-4xl
-          sm:text-5xl
-          font-extrabold
-          text-transparent
-          bg-clip-text
-          bg-gradient-to-r from-red-900 to-black
-          inline-block
-          p-2
-          border-b-4 border-stone-600
-          transform hover:scale-105 transition duration-300
-        "
+              text-2xl sm:text-3xl md:text-4xl lg:text-5xl
+              font-extrabold
+              text-transparent
+              bg-clip-text
+              bg-gradient-to-r from-red-900 to-black
+              inline-block
+              px-2 sm:px-4
+              py-1 sm:py-2
+              border-b-2 sm:border-b-4 border-stone-600
+              transform hover:scale-105 transition duration-300
+            "
           >
             Khám Phá Sản Phẩm Giảm Giá Hot Nhất
           </h1>
           <p
             className="
-          text-gray-600
-          mt-3
-          text-lg
-          max-w-xl
-          mx-auto
-          relative
-          after:content-['']
-          after:absolute
-          after:bottom-0
-          after:left-1/2
-          after:-translate-x-1/2
-          after:w-16
-          after:h-0.5
-         
-        "
+              text-gray-600
+              mt-2 sm:mt-3
+              text-sm sm:text-base md:text-lg
+              max-w-xl
+              mx-auto
+              px-4
+            "
           >
             Cơ hội tuyệt vời để sở hữu những sản phẩm yêu thích với mức giá ưu
             đãi
@@ -125,77 +119,82 @@ const MagicDealsSection = ({ config = {}, allProducts = [] }) => {
         </div>
 
         {/* ==========================================
-          BANNER BÊN TRÁI - GIỮ NGUYÊN
+          LAYOUT CHÍNH - RESPONSIVE
           ========================================== */}
-        <div className="col-span-1 md:col-span-2">
-          <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md group">
-            <img
-              src={getImageUrl(mainBanner)}
-              alt="Main Banner"
-              className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+          {/* ==========================================
+            BANNER BÊN TRÁI - RESPONSIVE HEIGHT
+            ========================================== */}
+          <div className="w-full">
+            <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-full rounded-xl sm:rounded-2xl overflow-hidden shadow-md group">
+              <img
+                src={getImageUrl(mainBanner)}
+                alt="Main Banner"
+                className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            </div>
+          </div>
+
+          {/* ==========================================
+            8 SẢN PHẨM GIẢM GIÁ - RESPONSIVE GRID
+            ========================================== */}
+          <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {/* Khối 1: 4 sản phẩm đầu */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 bg-white p-2 sm:p-3 md:p-4 rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+              {topDiscountProducts.slice(0, 4).map((product, i) => (
+                <div
+                  key={`product-1-${i}`}
+                  className="relative aspect-square bg-gray-100 rounded-lg sm:rounded-xl overflow-hidden group cursor-pointer"
+                  onClick={() => handleProductClick(product)}
+                >
+                  <img
+                    src={getImageUrl(product.image)}
+                    alt={product.name}
+                    className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-110"
+                  />
+                  {/* Badge giảm giá - Responsive */}
+                  <div className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-red-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md shadow-md z-10">
+                    -{product.discountPercent}%
+                  </div>
+                  {/* Overlay khi hover */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Khối 2: 4 sản phẩm sau */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 bg-white p-2 sm:p-3 md:p-4 rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
+              {topDiscountProducts.slice(4, 8).map((product, i) => (
+                <div
+                  key={`product-2-${i}`}
+                  className="relative aspect-square bg-gray-100 rounded-lg sm:rounded-xl overflow-hidden group cursor-pointer"
+                  onClick={() => handleProductClick(product)}
+                >
+                  <img
+                    src={getImageUrl(product.image)}
+                    alt={product.name}
+                    className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-110"
+                  />
+                  {/* Badge giảm giá - Responsive */}
+                  <div className="absolute top-1 right-1 sm:top-2 sm:right-2 bg-red-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md shadow-md z-10">
+                    -{product.discountPercent}%
+                  </div>
+                  {/* Overlay khi hover */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300"></div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* ==========================================
-          8 SẢN PHẨM GIẢM GIÁ - THAY ĐỔI
-          ========================================== */}
-        <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Khối 1: 4 sản phẩm đầu */}
-          <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
-            {topDiscountProducts.slice(0, 4).map((product, i) => (
-              <div
-                key={`product-1-${i}`}
-                className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden group cursor-pointer"
-                onClick={() => handleProductClick(product)}
-              >
-                <img
-                  src={getImageUrl(product.image)}
-                  alt={product.name}
-                  className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-110"
-                />
-                {/* Badge giảm giá */}
-                <div className="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-md shadow-md z-10">
-                  -{product.discountPercent}%
-                </div>
-                {/* Overlay khi hover */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300"></div>
-              </div>
-            ))}
+        {/* Hiển thị message nếu không có sản phẩm giảm giá */}
+        {topDiscountProducts.length === 0 && (
+          <div className="text-center text-gray-500 mt-4 text-xs sm:text-sm">
+            Chưa có sản phẩm giảm giá
           </div>
-
-          {/* Khối 2: 4 sản phẩm sau */}
-          <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300">
-            {topDiscountProducts.slice(4, 8).map((product, i) => (
-              <div
-                key={`product-2-${i}`}
-                className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden group cursor-pointer"
-                onClick={() => handleProductClick(product)}
-              >
-                <img
-                  src={getImageUrl(product.image)}
-                  alt={product.name}
-                  className="object-cover w-full h-full transition-transform duration-500 ease-in-out group-hover:scale-110"
-                />
-                {/* Badge giảm giá */}
-                <div className="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-md shadow-md z-10">
-                  -{product.discountPercent}%
-                </div>
-                {/* Overlay khi hover */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300"></div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
-
-      {/* Hiển thị message nếu không có sản phẩm giảm giá */}
-      {topDiscountProducts.length === 0 && (
-        <div className="text-center text-gray-500 mt-4 text-sm">
-          Chưa có sản phẩm giảm giá
-        </div>
-      )}
     </div>
   );
 };
