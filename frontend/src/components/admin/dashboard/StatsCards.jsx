@@ -28,11 +28,11 @@ const StatsCards = ({ stats }) => {
     {
       title: "Tổng doanh thu",
       value: formatPrice(stats.totalRevenue),
-      change: `${
-        stats.revenueGrowth >= 0 ? "+" : ""
-      }${stats.revenueGrowth.toFixed(1)}%`,
+      // change: `${
+      //   stats.revenueGrowth >= 0 ? "+" : ""
+      // }${stats.revenueGrowth.toFixed(1)}%`,
       changeType: stats.revenueGrowth >= 0 ? "increase" : "decrease",
-      subValue: `Hôm nay: ${formatPrice(stats.todayRevenue)}`,
+      // subValue: `Hôm nay: ${formatPrice(stats.todayRevenue)}`,
       icon: DollarSign,
       color: "text-green-600",
       bg: "bg-green-100",
@@ -40,9 +40,9 @@ const StatsCards = ({ stats }) => {
     {
       title: "Đơn hàng",
       value: stats.totalOrders,
-      change: `${stats.orderGrowth >= 0 ? "+" : ""}${stats.orderGrowth.toFixed(
-        1
-      )}%`,
+      // change: `${stats.orderGrowth >= 0 ? "+" : ""}${stats.orderGrowth.toFixed(
+      //   1
+      // )}%`,
       changeType: stats.orderGrowth >= 0 ? "increase" : "decrease",
       subValue: `${stats.pendingOrders} chờ xử lý`,
       icon: ShoppingBag,

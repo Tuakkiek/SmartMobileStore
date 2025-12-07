@@ -321,8 +321,8 @@ const ProductCard = ({
           </div>
         )}
 
-        {/* DEBUG UI: CHỈ ADMIN + DEV MODE */}
-        {isAdmin && process.env.NODE_ENV === "development" && (
+        {/* DEBUG UI: CHỈ ADMIN */}
+        {isAdmin && (
           <div className="absolute top-12 left-3 z-10 bg-black/90 text-white text-[7px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px] opacity-80">
             <div className="truncate">
               Base:{" "}

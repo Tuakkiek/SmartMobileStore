@@ -64,6 +64,8 @@ const ProfilePage = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
+
+    // Refresh user data để có địa chỉ mới nhất
     getCurrentUser();
   }, []);
 
