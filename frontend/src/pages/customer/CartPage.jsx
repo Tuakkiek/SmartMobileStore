@@ -22,6 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Loading } from "@/components/shared/Loading";
 import { Trash2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
@@ -42,7 +52,7 @@ const CartPage = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const autoSelectVariantId = searchParams.get("select");
-
+const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const {
     cart,
     isLoading,
@@ -259,20 +269,29 @@ const CartPage = () => {
   };
 
   // Xóa nhiều
-  const handleBulkRemove = async () => {
-    if (selectedItems.length === 0)
-      return toast.error("Chọn ít nhất 1 sản phẩm");
-    if (!confirm(`Xóa ${selectedItems.length} sản phẩm?`)) return;
+  const handleBulkRemove = () => {
+  if (selectedItems.length === 0) {
+    toast.error("Chọn ít nhất 1 sản phẩm");
+    return;
+  }
+  setDeleteDialogOpen(true); // Mở dialog
+};
 
-    try {
-      for (const id of selectedItems) await removeFromCart(id);
-      await getCart();
-      setSelectedItems([]);
-      toast.success("Đã xóa sản phẩm đã chọn");
-    } catch {
-      toast.error("Xóa thất bại");
+const confirmBulkDelete = async () => {
+  setDeleteDialogOpen(false);
+
+  try {
+    for (const id of selectedItems) {
+      await removeFromCart(id);
     }
-  };
+    await getCart();
+    setSelectedItems([]);
+    toast.success(`Đã xóa ${selectedItems.length} sản phẩm khỏi giỏ hàng`);
+  } catch (error) {
+    toast.error("Có lỗi xảy ra khi xóa sản phẩm");
+    console.error(error);
+  }
+};
 
   // Cập nhật số lượng (có debounce + optimistic)
   const handleUpdateQuantity = (item, newQty) => {
@@ -737,6 +756,31 @@ const CartPage = () => {
           </div>
         </div>
       )}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa sản phẩm</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa{" "}
+              <strong>{selectedItems.length} sản phẩm</strong> đã chọn khỏi giỏ hàng không?
+              <br />
+              <span className="text-red-600 font-medium">
+                Hành động này không thể hoàn tác.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Xóa vĩnh viễn
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
