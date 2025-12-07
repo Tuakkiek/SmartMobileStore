@@ -12,7 +12,12 @@ import ProductFilters from "@/components/shared/ProductFilters";
 import { Loading } from "@/components/shared/Loading";
 import { searchAPI } from "@/lib/api"; // ← UPDATED IMPORT
 import { useAuthStore } from "@/store/authStore";
-
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 const SEARCH_AVAILABLE_FILTERS = {
   condition: ["NEW", "LIKE_NEW"],
   storage: ["64GB", "128GB", "256GB", "512GB", "1TB"],
@@ -213,27 +218,9 @@ const SearchResultsPage = () => {
         </div>
 
         <div className="flex gap-8">
-          {/* Sidebar Filter */}
-          <aside
-            className={`fixed inset-0 z-50 bg-white lg:relative lg:z-auto ${
-              showMobileFilter ? "block" : "hidden lg:block"
-            } lg:w-80 flex-shrink-0`}
-          >
-            {showMobileFilter && (
-              <div
-                className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                onClick={() => setShowMobileFilter(false)}
-              />
-            )}
-
-            <div className="relative h-full bg-white rounded-lg lg:rounded-none shadow-lg lg:shadow-none p-5 lg:p-0 lg:sticky lg:top-24 overflow-y-auto">
-              <div className="flex justify-between items-center mb-4 lg:hidden">
-                <h2 className="text-lg font-bold">Bộ lọc</h2>
-                <button onClick={() => setShowMobileFilter(false)}>
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
+          {/* ==================== DESKTOP FILTER (giữ nguyên như cũ) ==================== */}
+          <aside className="hidden lg:block w-80 flex-shrink-0">
+            <div className="sticky top-24 bg-white rounded-xl shadow-sm p-5">
               <ProductFilters
                 filters={filters}
                 onFilterChange={handleFilterChange}
@@ -244,42 +231,75 @@ const SearchResultsPage = () => {
                 activeFiltersCount={activeFiltersCount}
                 hideCategory={true}
               />
-
-              <div className="mt-6 flex gap-3 lg:hidden">
-                <Button
-                  variant="outline"
-                  onClick={handleClearFilters}
-                  className="flex-1"
-                >
-                  Xóa tất cả
-                </Button>
-                <Button
-                  onClick={() => setShowMobileFilter(false)}
-                  className="flex-1"
-                >
-                  Xem {filteredProducts.length} kết quả
-                </Button>
-              </div>
             </div>
           </aside>
 
-          {/* Main Content */}
+          {/* ==================== NỘI DUNG CHÍNH ==================== */}
           <main className="flex-1">
-            <div className="mb-4 lg:hidden">
+            {/* Nút mở filter trên mobile */}
+            <div className="mb-5 lg:hidden">
               <Button
                 variant="outline"
+                size="lg"
+                className="w-full h-12 flex items-center justify-center gap-3 text-base font-medium"
                 onClick={() => setShowMobileFilter(true)}
-                className="w-full flex items-center justify-center gap-2"
               >
-                <SlidersHorizontal className="w-4 h-4" />
+                <SlidersHorizontal className="w-5 h-5" />
                 Bộ lọc
                 {activeFiltersCount > 0 && (
-                  <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+                  <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
                     {activeFiltersCount}
                   </span>
                 )}
               </Button>
             </div>
+
+            {/* ==================== MOBILE FILTER SHEET (ĐẸP + KHÔNG LỖI) ==================== */}
+            <Sheet open={showMobileFilter} onOpenChange={setShowMobileFilter}>
+              <SheetContent side="left" className="w-[90vw] sm:w-[400px] p-0">
+                {/* Header */}
+                <SheetHeader className="sticky top-0 bg-white border-b z-10 px-6 py-5">
+                  <div className="flex items-center justify-between">
+                    <SheetTitle className="text-xl font-bold">
+                      Bộ lọc tìm kiếm
+                    </SheetTitle>
+                    <button
+                      onClick={() => setShowMobileFilter(false)}
+                      className="p-2 hover:bg-gray-100 rounded-full transition"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </SheetHeader>
+
+                {/* Nội dung filter – chừa chỗ cho nút dưới */}
+                <div className="px-6 pt-4 pb-36 overflow-y-auto">
+                  <ProductFilters
+                    filters={filters}
+                    onFilterChange={handleFilterChange}
+                    priceRange={priceRange}
+                    onPriceChange={handlePriceChange}
+                    availableFilters={SEARCH_AVAILABLE_FILTERS}
+                    onClearFilters={handleClearFilters}
+                    activeFiltersCount={activeFiltersCount}
+                    hideCategory={true}
+                  />
+                </div>
+
+                {/* Nút cố định dưới cùng – KHÔNG bị đè input giá */}
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-2xl z-20">
+                  <div className="flex gap-3 max-w-md mx-auto">
+                    <Button
+                      size="lg"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowMobileFilter(false)}
+                    >
+                      Xem {filteredProducts.length.toLocaleString("vi-VN")} kết quả
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
 
             {currentProducts.length > 0 ? (
               <>

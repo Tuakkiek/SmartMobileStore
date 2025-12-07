@@ -9,6 +9,14 @@ import {
   appleWatchAPI,
   accessoryAPI,
 } from "@/lib/api";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { X } from "lucide-react"; // thêm icon đóng
 import ProductCard from "@/components/shared/ProductCard";
 import ProductFilters from "@/components/shared/ProductFilters";
 import { Button } from "@/components/ui/button";
@@ -102,7 +110,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [selectedPricePreset, setSelectedPricePreset] = useState(null);
   const [sortBy, setSortBy] = useState(sortParam);
-
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   // ============================================
   // INITIALIZE FILTERS FROM URL
   // ============================================
@@ -480,15 +488,85 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
                   ))}
                 </select>
 
-                <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                  <SlidersHorizontal className="w-4 h-4" />
-                  Bộ lọc
-                  {activeFiltersCount > 0 && (
-                    <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                      {activeFiltersCount}
-                    </span>
-                  )}
-                </button>
+                {/* Mobile Filter Drawer */}
+                <Sheet
+                  open={mobileFiltersOpen}
+                  onOpenChange={setMobileFiltersOpen}
+                >
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="lg:hidden flex items-center gap-2 h-10"
+                    >
+                      <SlidersHorizontal className="w-4 h-4" />
+                      Bộ lọc
+                      {activeFiltersCount > 0 && (
+                        <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full ml-1">
+                          {activeFiltersCount}
+                        </span>
+                      )}
+                    </Button>
+                  </SheetTrigger>
+
+                  <SheetContent
+                    side="left"
+                    className="w-[90vw] sm:w-[400px] p-0 overflow-y-auto"
+                  >
+                    {/* Header cố định */}
+                    <SheetHeader className="sticky top-0 bg-white border-b z-10 p-6 pb-4">
+                      <div className="flex items-center justify-between">
+                        <SheetTitle className="text-xl font-bold">
+                          Bộ lọc sản phẩm
+                        </SheetTitle>
+                        <button
+                          onClick={() => setMobileFiltersOpen(false)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </SheetHeader>
+
+                    {/* Nội dung bộ lọc */}
+                    <div className="p-6 pt-2 pb-32">
+                      <ProductFilters
+                        filters={filters}
+                        onFilterChange={(type, value) => {
+                          handleFilterToggle(type, value);
+                        }}
+                        priceRange={priceRange}
+                        onPriceChange={(newRange) => {
+                          handlePriceChange(newRange);
+                          
+                        }}
+                        availableFilters={availableFilters}
+                        onClearFilters={() => {
+                          clearFilters();
+                          
+                        }}
+                        activeFiltersCount={activeFiltersCount}
+                        currentCategory={category}
+                        onCategoryChange={(newCat) => {
+                          handleCategoryChange(newCat);
+                          
+                        }}
+                        hideCategory={false}
+                        isCategoryPage={false}
+                      />
+                    </div>
+
+                    {/* Nút cố định dưới cùng */}
+                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
+                      <Button
+                        size="lg"
+                        className="w-full h-12 text-lg font-semibold"
+                        onClick={() => setMobileFiltersOpen(false)}
+                      >
+                        Xem {total.toLocaleString("vi-VN")} sản phẩm
+                      </Button>
+                    </div>
+                  </SheetContent>
+                </Sheet>
               </div>
             </div>
 
