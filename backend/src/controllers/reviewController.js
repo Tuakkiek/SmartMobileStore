@@ -1,6 +1,6 @@
 // ============================================
 // FILE: backend/src/controllers/reviewController.js
-// ✅ UPDATED: Added purchase verification & image upload
+// ✅ UPDATED: Allow up to 20 reviews per order
 // ============================================
 
 import Review from "../models/Review.js";
@@ -12,14 +12,16 @@ import AirPods from "../models/AirPods.js";
 import AppleWatch from "../models/AppleWatch.js";
 import Accessory from "../models/Accessory.js";
 
-// ✅ Helper: Find product and update rating
+const MAX_REVIEWS_PER_ORDER = 20; // ✅ Giới hạn 20 reviews/đơn
+
+// Helper: Find product and update rating
 const findProductAndUpdateRating = async (productId) => {
   const models = [IPhone, IPad, Mac, AirPods, AppleWatch, Accessory];
 
   for (const Model of models) {
     const product = await Model.findById(productId);
     if (product) {
-      const reviews = await Review.find({ productId });
+      const reviews = await Review.find({ productId, isHidden: false });
 
       if (reviews.length > 0) {
         const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
@@ -39,19 +41,19 @@ const findProductAndUpdateRating = async (productId) => {
 };
 
 // ============================================
-// ✅ NEW: CHECK IF USER CAN REVIEW
+// ✅ NEW: CHECK IF USER CAN REVIEW (với giới hạn 20 lần)
 // ============================================
 export const canReviewProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const customerId = req.user._id;
 
-    // Tìm đơn hàng đã giao có chứa sản phẩm này
+    // ✅ Tìm các đơn hàng đã giao có chứa sản phẩm này
     const orders = await Order.find({
       customerId,
       status: "DELIVERED",
       "items.productId": productId,
-    }).select("_id orderNumber");
+    }).select("_id orderNumber createdAt");
 
     if (orders.length === 0) {
       return res.json({
@@ -64,33 +66,67 @@ export const canReviewProduct = async (req, res) => {
       });
     }
 
-    // Kiểm tra xem đã review chưa
-    const existingReview = await Review.findOne({
+    // ✅ Đếm số lượng reviews cho từng order
+    const orderReviewCounts = await Promise.all(
+      orders.map(async (order) => {
+        const reviewCount = await Review.countDocuments({
+          productId,
+          customerId,
+          orderId: order._id,
+        });
+
+        return {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          createdAt: order.createdAt,
+          reviewCount,
+          canReview: reviewCount < MAX_REVIEWS_PER_ORDER,
+          remainingReviews: MAX_REVIEWS_PER_ORDER - reviewCount,
+        };
+      })
+    );
+
+    // ✅ Lấy tất cả reviews hiện có
+    const existingReviews = await Review.find({
       productId,
       customerId,
-    });
+    })
+      .select("_id orderId rating comment createdAt")
+      .populate("orderId", "orderNumber")
+      .sort({ createdAt: -1 });
 
-    if (existingReview) {
-      return res.json({
-        success: true,
-        data: {
-          canReview: false,
-          reason: "Bạn đã đánh giá sản phẩm này rồi",
-          hasReviewed: true,
-          reviewId: existingReview._id,
-          orders: [],
-        },
-      });
-    }
+    // ✅ Tìm order có thể review (chưa đủ 20 lần)
+    const availableOrders = orderReviewCounts.filter((o) => o.canReview);
+
+    // ✅ Tổng số reviews đã tạo
+    const totalReviews = existingReviews.length;
+    const maxPossibleReviews = orders.length * MAX_REVIEWS_PER_ORDER;
 
     res.json({
       success: true,
       data: {
-        canReview: true,
-        orders: orders.map((o) => ({
+        canReview: availableOrders.length > 0,
+        orders: availableOrders.map((o) => ({
           _id: o._id,
           orderNumber: o.orderNumber,
+          reviewCount: o.reviewCount,
+          remainingReviews: o.remainingReviews,
         })),
+        orderReviewCounts,
+        existingReviews: existingReviews.map((r) => ({
+          _id: r._id,
+          orderId: r.orderId._id,
+          orderNumber: r.orderId.orderNumber,
+          rating: r.rating,
+          comment: r.comment.substring(0, 100),
+          createdAt: r.createdAt,
+        })),
+        stats: {
+          totalOrders: orders.length,
+          totalReviews,
+          maxPossibleReviews,
+          availableSlots: maxPossibleReviews - totalReviews,
+        },
       },
     });
   } catch (error) {
@@ -112,7 +148,6 @@ export const getProductReviews = async (req, res) => {
       query.isHidden = false;
     }
 
-    // ✅ FILTER: Chỉ lấy review có ảnh
     if (hasImages === "true") {
       query.images = { $exists: true, $not: { $size: 0 } };
     }
@@ -130,7 +165,7 @@ export const getProductReviews = async (req, res) => {
 };
 
 // ============================================
-// ✅ UPDATED: CREATE REVIEW (With Purchase Verification & Images)
+// ✅ UPDATED: CREATE REVIEW (giới hạn 20 lần/đơn)
 // ============================================
 export const createReview = async (req, res) => {
   try {
@@ -153,16 +188,17 @@ export const createReview = async (req, res) => {
       });
     }
 
-    // ✅ CHECK EXISTING REVIEW
-    const existingReview = await Review.findOne({
+    // ✅ CHECK: Đã đánh giá đủ 20 lần cho đơn này chưa?
+    const reviewCount = await Review.countDocuments({
       productId,
       customerId,
+      orderId,
     });
 
-    if (existingReview) {
+    if (reviewCount >= MAX_REVIEWS_PER_ORDER) {
       return res.status(400).json({
         success: false,
-        message: "Bạn đã đánh giá sản phẩm này rồi",
+        message: `Bạn đã đánh giá đơn hàng này ${MAX_REVIEWS_PER_ORDER} lần rồi. Vui lòng chọn đơn hàng khác.`,
       });
     }
 
@@ -186,10 +222,21 @@ export const createReview = async (req, res) => {
 
     await findProductAndUpdateRating(productId);
 
+    // ✅ Đếm lại số reviews còn lại
+    const newReviewCount = await Review.countDocuments({
+      productId,
+      customerId,
+      orderId,
+    });
+
     res.status(201).json({
       success: true,
       message: "Đánh giá sản phẩm thành công",
-      data: { review },
+      data: {
+        review,
+        reviewCount: newReviewCount,
+        remainingReviews: MAX_REVIEWS_PER_ORDER - newReviewCount,
+      },
     });
   } catch (error) {
     console.error("❌ Create review error:", error);
@@ -198,7 +245,7 @@ export const createReview = async (req, res) => {
 };
 
 // ============================================
-// ✅ UPDATED: UPDATE REVIEW (Allow image updates)
+// UPDATE REVIEW
 // ============================================
 export const updateReview = async (req, res) => {
   try {
@@ -223,7 +270,6 @@ export const updateReview = async (req, res) => {
     review.rating = rating;
     review.comment = comment;
 
-    // ✅ UPDATE IMAGES
     if (images !== undefined) {
       const validImages = Array.isArray(images)
         ? images.filter(Boolean).slice(0, 5)

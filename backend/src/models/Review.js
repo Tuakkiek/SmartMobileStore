@@ -1,3 +1,8 @@
+// ============================================
+// FILE: backend/src/models/Review.js
+// ✅ UPDATED: Allow up to 20 reviews per purchase
+// ============================================
+
 import mongoose from "mongoose";
 
 const reviewSchema = new mongoose.Schema(
@@ -17,7 +22,6 @@ const reviewSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    // ✅ THÊM: Lưu orderId để verify đã mua
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
@@ -35,7 +39,6 @@ const reviewSchema = new mongoose.Schema(
       trim: true,
       maxlength: 3000,
     },
-    // ✅ CẬP NHẬT: Cho phép nhiều ảnh
     images: [
       {
         type: String,
@@ -46,7 +49,6 @@ const reviewSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // ✅ THÊM: Đánh dấu đã mua và xác minh
     purchaseVerified: {
       type: Boolean,
       default: false,
@@ -85,11 +87,12 @@ const reviewSchema = new mongoose.Schema(
   }
 );
 
-// ✅ CẬP NHẬT INDEX: Thêm orderId
-reviewSchema.index({ productId: 1, customerId: 1, orderId: 1 });
+// ✅ INDEXES: Không có unique constraint, cho phép nhiều reviews
 reviewSchema.index({ productId: 1, createdAt: -1 });
-reviewSchema.index({ customerId: 1 });
+reviewSchema.index({ customerId: 1, createdAt: -1 });
+reviewSchema.index({ orderId: 1 });
 reviewSchema.index({ purchaseVerified: 1 });
+reviewSchema.index({ productId: 1, customerId: 1 }); // Không unique
 
 const Review = mongoose.model("Review", reviewSchema);
 
