@@ -1,5 +1,5 @@
 // backend/src/lib/generateSKU.js
-import SkuCounter from "../models/SkuCounter.js";
+import SkuCounter from "../modules/product/SkuCounter.js";
 
 /**
  * Sinh SKU toàn cục 8 chữ số: 00000001, 00000002,...

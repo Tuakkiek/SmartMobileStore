@@ -1,8 +1,8 @@
+import "dotenv/config"; // ✅ Load env vars BEFORE other imports
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import dotenv from "dotenv";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import config from "./config/config.js";
@@ -11,30 +11,30 @@ import fs from "fs";
 // ================================
 // 🔹 Import tất cả routes
 // ================================
-import authRoutes from "./routes/authRoutes.js";
-import userRoutes from "./routes/userRoutes.js";
-import cartRoutes from "./routes/cartRoutes.js";
-import orderRoutes from "./routes/orderRoutes.js";
-import reviewRoutes from "./routes/reviewRoutes.js";
-import promotionRoutes from "./routes/promotionRoutes.js";
+import authRoutes from "./modules/auth/authRoutes.js";
+import userRoutes from "./modules/auth/userRoutes.js";
+import cartRoutes from "./modules/cart/cartRoutes.js";
+import orderRoutes from "./modules/order/orderRoutes.js";
+import reviewRoutes from "./modules/review/reviewRoutes.js";
+import promotionRoutes from "./modules/promotion/promotionRoutes.js";
 
-import iPhoneRoutes from "./routes/iPhoneRoutes.js";
-import iPadRoutes from "./routes/iPadRoutes.js";
-import macRoutes from "./routes/macRoutes.js";
-import airPodsRoutes from "./routes/airPodsRoutes.js";
-import appleWatchRoutes from "./routes/appleWatchRoutes.js";
-import accessoryRoutes from "./routes/accessoryRoutes.js";
-import productRoutes from "./routes/productRoutes.js";
-import analyticsRoutes from "./routes/analyticsRoutes.js";
-import salesRoutes from "./routes/salesRoutes.js";
-import posRoutes from "./routes/posRoutes.js";
-import homePageRoutes from "./routes/homePageRoutes.js";
-import vnpayRoutes from "./routes/vnpayRoutes.js";
-import { cancelExpiredVNPayOrders } from "./services/orderCleanupService.js";
-import searchRoutes from "./routes/searchRoutes.js";
-import shortVideoRoutes from "./routes/shortVideoRoutes.js";
+import iPhoneRoutes from "./modules/product/iPhoneRoutes.js";
+import iPadRoutes from "./modules/product/iPadRoutes.js";
+import macRoutes from "./modules/product/macRoutes.js";
+import airPodsRoutes from "./modules/product/airPodsRoutes.js";
+import appleWatchRoutes from "./modules/product/appleWatchRoutes.js";
+import accessoryRoutes from "./modules/product/accessoryRoutes.js";
+import recommendationRoutes from "./modules/search/recommendationRoutes.js";
+import analyticsRoutes from "./modules/analytics/analyticsRoutes.js";
+import salesRoutes from "./modules/analytics/salesRoutes.js";
+import posRoutes from "./modules/order/posRoutes.js";
+import homePageRoutes from "./modules/content/homePageRoutes.js";
+import vnpayRoutes from "./modules/payment/vnpayRoutes.js";
+import { cancelExpiredVNPayOrders } from "./modules/order/orderCleanupService.js";
+import searchRoutes from "./modules/search/searchRoutes.js";
+import shortVideoRoutes from "./modules/content/shortVideoRoutes.js";
 
-dotenv.config();
+
 
 // ================================
 // 🔹 Khởi tạo Express App
@@ -144,7 +144,8 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/promotions", promotionRoutes);
 
-app.use("/api/products", productRoutes);
+// ✅ Replaced productRoutes with recommendationRoutes for 'related products' feature
+app.use("/api/products", recommendationRoutes);
 app.use("/api/iphones", iPhoneRoutes);
 app.use("/api/ipads", iPadRoutes);
 app.use("/api/macs", macRoutes);
