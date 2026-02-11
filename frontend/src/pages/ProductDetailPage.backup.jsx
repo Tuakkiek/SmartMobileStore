@@ -21,7 +21,6 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
-  universalProductAPI, // ✅ NEW: For universal products
 } from "@/lib/api";
 import SlideInPanel from "@/components/product/SlideInPanel";
 import QuickSpecs from "@/components/product/QuickSpecs";
@@ -58,23 +57,6 @@ const VARIANT_KEY_FIELD = {
   Accessories: "variantName",
 };
 
-// ✅ NEW: Map ProductType slug to category path for universal products
-const PRODUCT_TYPE_TO_CATEGORY = {
-  smartphone: "dien-thoai",
-  tablet: "may-tinh-bang",
-  laptop: "macbook",
-  smartwatch: "apple-watch",
-  headphone: "tai-nghe",
-  tv: "tivi",
-  monitor: "man-hinh",
-  keyboard: "ban-phim",
-  mouse: "chuot",
-  speaker: "loa",
-  camera: "may-anh",
-  "gaming-console": "may-choi-game",
-  accessories: "phu-kien",
-};
-
 const ProductDetailPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,7 +81,6 @@ const ProductDetailPage = () => {
   const [activeMediaTab, setActiveMediaTab] = useState("variant"); // 'variant' | 'featured' | 'video'
   const [showSpecsPanel, setShowSpecsPanel] = useState(false);
   const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
-  const [productSource, setProductSource] = useState(null); // ✅ NEW: 'universal' | 'legacy'
 
   // Dòng 14 - Thêm vào destructure
   const {
@@ -155,68 +136,29 @@ const ProductDetailPage = () => {
 
   useEffect(() => {
     const fetchProductData = async () => {
-      // ✅ REFACTORED: Support both universal and legacy products
+      if (!categoryInfo || !fullSlug) {
+        setError("Không tìm thấy sản phẩm");
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
       try {
-        let fetchedProduct = null;
-        let fetchedVariants = [];
-        let source = null;
+        const baseSlugMatch = fullSlug.match(/^(.+?)(?:-\d+(?:gb|tb))?$/i);
+        const baseSlug = baseSlugMatch ? baseSlugMatch[1] : fullSlug;
 
-        // STRATEGY 1: Try universal product first (by slug)
-        // This allows universal products to work without category mapping
-    // ✅ TRY FETCHING AS UNIVERSAL PRODUCT FIRST
-    try {
-      // Strip storage suffix from URL slug (e.g., "iphone-17-pro-max-512gb" → "iphone-17-pro-max")
-      const stripStorageSuffix = (slug) => {
-        // Match and remove patterns like "-256gb", "-512gb", "-1tb", "-2tb" at the end
-        return slug.replace(/-(\d+(?:gb|tb))$/i, "");
-      };
-      
-      const baseSlug = stripStorageSuffix(fullSlug);
-      console.log("🔍 Attempting to fetch as universal product:", baseSlug);
-      
-      const universalResponse = await universalProductAPI.getBySlug(baseSlug);
-          const universalData = universalResponse?.data?.data;
-          
-          if (universalData?.product) {
-            fetchedProduct = universalData.product;
-            fetchedVariants = universalData.variants || fetchedProduct.variants || [];
-            source = "universal";
-            console.log("✅ Loaded as UNIVERSAL product:", fetchedProduct.name);
-          }
-        } catch (universalError) {
-          console.log("⚠️ Universal fetch failed, trying legacy...");
-          
-          // STRATEGY 2: Fall back to legacy API if universal fails
-          if (categoryInfo && categoryInfo.api) {
-            const baseSlugMatch = fullSlug.match(/^(.+?)(?:-\d+(?:gb|tb))?$/i);
-            const baseSlug = baseSlugMatch ? baseSlugMatch[1] : fullSlug;
+        const response = await categoryInfo.api.get(baseSlug, {
+          params: sku ? { sku } : {},
+        });
+        const data = response.data.data;
+        const fetchedProduct = data.product || data;
+        const fetchedVariants = data.variants || fetchedProduct.variants || [];
 
-            const legacyResponse = await categoryInfo.api.get(baseSlug, {
-              params: sku ? { sku } : {},
-            });
-            const legacyData = legacyResponse.data.data;
-            fetchedProduct = legacyData.product || legacyData;
-            fetchedVariants = legacyData.variants || fetchedProduct.variants || [];
-            source = "legacy";
-            console.log("✅ Loaded as LEGACY product:", fetchedProduct.name);
-          } else {
-            throw new Error("❌ No category info and universal fetch failed");
-          }
-        }
-
-        if (!fetchedProduct) {
-          throw new Error("Không tìm thấy sản phẩm");
-        }
-
-        // Set product source for conditional rendering
-        setProductSource(source);
         setProduct(fetchedProduct);
         setVariants(fetchedVariants);
 
-        // Select variant
         let variantToSelect = null;
         if (sku) {
           variantToSelect = fetchedVariants.find((v) => v.sku === sku);
@@ -227,57 +169,29 @@ const ProductDetailPage = () => {
 
         if (variantToSelect) {
           setSelectedVariant(variantToSelect);
-          
-          // Determine key field based on source
-          let keyField = "storage";
-          if (source === "universal") {
-            // Universal products use variantName (e.g., "256GB - Natural Titanium")
-            // Extract storage part for grouping
-            keyField = "variantName";
-          } else if (fetchedProduct.category) {
-            keyField = VARIANT_KEY_FIELD[fetchedProduct.category] || "storage";
-          }
-          
+          const keyField =
+            VARIANT_KEY_FIELD[fetchedProduct.category] || "storage";
           setUserSelectedKey(variantToSelect[keyField]);
         }
 
-        // Set default media tab
+        // Set default tab to variant
         setActiveMediaTab("variant");
         setSelectedImage(0);
+
         setIsLoading(false);
       } catch (err) {
-        console.error("❌ Error fetching product:", err);
-        setError(err.response?.data?.message || err.message || "Không thể tải sản phẩm");
+        console.error("Error fetching product:", err);
+        setError(err.response?.data?.message || "Không thể tải sản phẩm");
         setIsLoading(false);
       }
     };
 
     fetchProductData();
-  }, [categorySlug, fullSlug, sku]);
+  }, [categorySlug, categoryInfo]);
 
   const handleVariantSelect = (variant, isColorChange = false) => {
     if (!variant) return;
 
-    // ✅ UPDATED: Generate pretty URLs for universal products
-    if (productSource === "universal") {
-      // Extract storage from variantName (e.g., "256GB - Natural Titanium" -> "256gb")
-      const extractStorage = (variantName) => {
-        const match = variantName?.match(/^([\d]+(?:GB|TB))/);
-        return match ? match[1].toLowerCase() : "";
-      };
-      
-      const storage = extractStorage(variant.variantName);
-      const categoryPath = PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
-      const baseSlug = product.baseSlug || product.slug;
-      
-      // Generate URL: /dien-thoai/iphone-17-pro-max-512gb?sku=XXX
-      const url = `/${categoryPath}/${baseSlug}${storage ? `-${storage}` : ""}?sku=${variant.sku}`;
-      window.history.replaceState(null, "", url);
-      updateVariantUI(variant);
-      return;
-    }
-
-    // LEGACY PRODUCTS: Keep original complex logic
     const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
 
     if (!isColorChange) {
@@ -335,24 +249,8 @@ const ProductDetailPage = () => {
       return;
     }
 
-    // ✅ UPDATED: Support both universal and legacy products
-    let productType;
-    if (productSource === "universal") {
-      // Universal products: use productType.name from populated field
-      productType = product.productType?.name || "Product";
-      console.log("🛌 Adding universal product to cart:", {
-        productType,
-        variantId: selectedVariant._id,
-        variantName: selectedVariant.variantName
-      });
-    } else {
-      // Legacy products: use category mapping
-      productType = categoryInfo?.category || categoryInfo?.model || product.category;
-      console.log("🛌 Adding legacy product to cart:", {
-        productType,
-        variantId: selectedVariant._id
-      });
-    }
+    const productType =
+      categoryInfo?.category || categoryInfo?.model || product.category;
 
     if (!productType) {
       alert("Lỗi: Không xác định được loại sản phẩm");
@@ -406,41 +304,18 @@ const ProductDetailPage = () => {
 
   const getVariantKeyOptions = () => {
     if (!product || !selectedVariant) return [];
-    
-    // ✅ UPDATED: Support both universal and legacy products
-    let keyField = "storage";
-    if (productSource === "universal") {
-      // Universal products: extract storage from variantName (e.g., "256GB - Natural Titanium" -> "256GB")
-      const extractStorage = (variantName) => {
-        const match = variantName?.match(/^([\d]+(?:GB|TB))/);
-        return match ? match[1] : variantName;
+    const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
+    const filtered = variants.filter((v) => v.color === selectedVariant.color);
+    return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
+      const parseStorage = (str) => {
+        const num = parseInt(str);
+        if (str.includes("TB")) return num * 1000;
+        return num;
       };
-      
-      const filtered = variants.filter((v) => v.color === selectedVariant.color);
-      const storageOptions = [...new Set(filtered.map((v) => extractStorage(v.variantName)))];
-      return storageOptions.sort((a, b) => {
-        const parseStorage = (str) => {
-          const num = parseInt(str);
-          if (str?.includes("TB")) return num * 1000;
-          return num || 0;
-        };
-        return parseStorage(a) - parseStorage(b);
-      });
-    } else {
-      // Legacy products: use VARIANT_KEY_FIELD mapping
-      keyField = VARIANT_KEY_FIELD[product.category] || "storage";
-      const filtered = variants.filter((v) => v.color === selectedVariant.color);
-      return [...new Set(filtered.map((v) => v[keyField]))].sort((a, b) => {
-        const parseStorage = (str) => {
-          const num = parseInt(str);
-          if (str?.includes("TB")) return num * 1000;
-          return num || 0;
-        };
-        const aNum = parseStorage(a) || 0;
-        const bNum = parseStorage(b) || 0;
-        return aNum - bNum;
-      });
-    }
+      const aNum = parseStorage(a) || 0;
+      const bNum = parseStorage(b) || 0;
+      return aNum - bNum;
+    });
   };
 
   if (isLoading) {
@@ -750,28 +625,16 @@ const ProductDetailPage = () => {
               {/* Storage Selection */}
               <div className="mb-4">
                 <h3 className="text-sm font-semibold mb-3">
-                  {productSource === "universal" || keyField === "storage" ? "Dung lượng" : "Phiên bản"}
+                  {keyField === "storage" ? "Dung lượng" : "Phiên bản"}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {variantKeyOptions.map((option) => {
-                    // ✅ UPDATED: Find variant differently for universal vs legacy
-                    let variant, isSelected;
-                    
-                    if (productSource === "universal") {
-                      // Universal: match by extracting storage from variantName
-                      variant = variants.find(
-                        (v) => v.color === selectedVariant.color && v.variantName?.startsWith(option)
-                      );
-                      isSelected = selectedVariant.variantName?.startsWith(option);
-                    } else {
-                      // Legacy: use keyField
-                      const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
-                      variant = variants.find(
-                        (v) => v.color === selectedVariant.color && v[keyField] === option
-                      );
-                      isSelected = selectedVariant[keyField] === option;
-                    }
-                    
+                    const variant = variants.find(
+                      (v) =>
+                        v.color === selectedVariant.color &&
+                        v[keyField] === option
+                    );
+                    const isSelected = selectedVariant[keyField] === option;
                     const hasStock = variant?.stock > 0;
 
                     return (
@@ -820,26 +683,9 @@ const ProductDetailPage = () => {
                     const hasStock = groupedVariants[color].some(
                       (v) => v.stock > 0
                     );
-                    
-                    // ✅ UPDATED: Preserve storage preference for both universal and legacy
-                    let preferredVariant;
-                    
-                    if (productSource === "universal") {
-                      // Universal: Extract current storage from selected variant
-                      const currentStorage = selectedVariant?.variantName?.match(/^([\d]+(?:GB|TB))/)?.[1];
-                      
-                      // Find variant with same storage in new color
-                      preferredVariant = groupedVariants[color].find((v) => {
-                        const vStorage = v.variantName?.match(/^([\d]+(?:GB|TB))/)?.[1];
-                        return vStorage === currentStorage && v.stock > 0;
-                      });
-                    } else {
-                      // Legacy: Use keyField matching
-                      preferredVariant = groupedVariants[color].find(
-                        (v) => v[keyField] === userSelectedKey && v.stock > 0
-                      );
-                    }
-                    
+                    const preferredVariant = groupedVariants[color].find(
+                      (v) => v[keyField] === userSelectedKey && v.stock > 0
+                    );
                     const availableVariant =
                       preferredVariant ||
                       groupedVariants[color].find((v) => v.stock > 0) ||

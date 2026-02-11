@@ -398,3 +398,38 @@ export default {
   getTopNewProducts,
   handleApiError,
 };
+
+// ============================================
+// BRAND API
+// ============================================
+export const brandAPI = {
+  getAll: (params) => api.get("/brands", { params }),
+  getOne: (id) => api.get(`/brands/${id}`),
+  create: (data) => api.post("/brands", data),
+  update: (id, data) => api.put(`/brands/${id}`, data),
+  delete: (id) => api.delete(`/brands/${id}`),
+};
+
+// ============================================
+// PRODUCT TYPE API
+// ============================================
+export const productTypeAPI = {
+  getAll: (params) => api.get("/product-types", { params }),
+  getOne: (id) => api.get(`/product-types/${id}`),
+  create: (data) => api.post("/product-types", data),
+  update: (id, data) => api.put(`/product-types/${id}`, data),
+  delete: (id) => api.delete(`/product-types/${id}`),
+};
+
+// ============================================
+// UNIVERSAL PRODUCT API
+// ============================================
+export const universalProductAPI = {
+  getAll: (params) => api.get("/universal-products", { params }),
+  getOne: (id) => api.get(`/universal-products/${id}`),
+  getBySlug: (slug) => api.get(`/universal-products/${slug}`), // ✅ NEW: Fetch by slug
+  create: (data) => api.post("/universal-products", data),
+  update: (id, data) => api.put(`/universal-products/${id}`, data),
+  delete: (id) => api.delete(`/universal-products/${id}`),
+  getVariants: (id) => api.get(`/universal-products/${id}/variants`),
+};

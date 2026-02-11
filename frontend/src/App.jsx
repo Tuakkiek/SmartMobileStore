@@ -30,6 +30,8 @@ import EmployeesPage from "@/pages/admin/EmployeesPage";
 import PromotionsPage from "@/pages/admin/PromotionsPage";
 import HomePageEditor from "@/pages/admin/HomePageEditor";
 import ShortVideoAdminPage from "@/pages/admin/ShortVideoAdminPage";
+import BrandManagementPage from "@/pages/admin/BrandManagementPage";
+import ProductTypeManagementPage from "@/pages/admin/ProductTypeManagementPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
@@ -131,7 +133,13 @@ function App() {
           {/* Search */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
 
-          {/* Product Detail */}
+          {/* ✅ NEW: Universal Product Detail (must come before legacy routes) */}
+          <Route
+            path="/products/:productSlug"
+            element={<ProductDetailPage />}
+          />
+
+          {/* Product Detail (Legacy category-based) */}
           <Route
             path="/:categorySlug/:productSlug"
             element={<ProductDetailPage />}
@@ -198,6 +206,8 @@ function App() {
           <Route path="/admin/promotions" element={<PromotionsPage />} />
           <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
+          <Route path="/admin/brands" element={<BrandManagementPage />} />
+          <Route path="/admin/product-types" element={<ProductTypeManagementPage />} />
         </Route>
 
         {/* ========================================

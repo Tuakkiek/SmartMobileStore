@@ -33,6 +33,9 @@ import vnpayRoutes from "./modules/payment/vnpayRoutes.js";
 import { cancelExpiredVNPayOrders } from "./modules/order/orderCleanupService.js";
 import searchRoutes from "./modules/search/searchRoutes.js";
 import shortVideoRoutes from "./modules/content/shortVideoRoutes.js";
+import brandRoutes from "./modules/brand/brandRoutes.js";
+import productTypeRoutes from "./modules/productType/productTypeRoutes.js";
+import universalProductRoutes from "./modules/product/universalProductRoutes.js";
 
 
 
@@ -163,6 +166,11 @@ app.use("/api/search", searchRoutes);
 
 // ✅ SHORT VIDEOS ROUTE
 app.use("/api/short-videos", shortVideoRoutes);
+
+// ✅ MULTI-BRAND MULTI-CATEGORY ROUTES
+app.use("/api/brands", brandRoutes);
+app.use("/api/product-types", productTypeRoutes);
+app.use("/api/universal-products", universalProductRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

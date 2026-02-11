@@ -266,6 +266,49 @@ const ProductCard = ({
   };
 
   const handleCardClick = () => {
+    // ✅ UPDATED: Support both universal and legacy products
+    
+    // UNIVERSAL PRODUCTS: Navigate with category path + storage suffix
+    if (product.productType && !product.category) {
+      console.log("🔗 Navigating to universal product:", product.name);
+      
+      // Map productType slug to category path
+      const PRODUCT_TYPE_TO_CATEGORY = {
+        smartphone: "dien-thoai",
+        tablet: "may-tinh-bang",
+        laptop: "macbook",
+        smartwatch: "apple-watch",
+        headphone: "tai-nghe",
+        tv: "tivi",
+        monitor: "man-hinh",
+        keyboard: "ban-phim",
+        mouse: "chuot",
+        speaker: "loa",
+        camera: "may-anh",
+        "gaming-console": "may-choi-game",
+        accessories: "phu-kien",
+      };
+      
+      const categoryPath = PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
+      const baseSlug = product.baseSlug || product.slug;
+      
+      // Extract storage from variantName if available
+      let storageSuffix = "";
+      if (selectedVariant?.variantName) {
+        const match = selectedVariant.variantName.match(/^([\d]+(?:GB|TB))/);
+        storageSuffix = match ? `-${match[1].toLowerCase()}` : "";
+      }
+      
+      // Generate URL: /dien-thoai/iphone-17-pro-max-512gb?sku=XXX
+      const url = selectedVariant?.sku 
+        ? `/${categoryPath}/${baseSlug}${storageSuffix}?sku=${selectedVariant.sku}`
+        : `/${categoryPath}/${baseSlug}`;
+      
+      navigate(url);
+      return;
+    }
+    
+    // LEGACY PRODUCTS: Use category mapping
     const categoryPath = {
       iPhone: "dien-thoai",
       iPad: "may-tinh-bang",
