@@ -28,7 +28,7 @@ export const useCartStore = create((set, get) => ({
 
   // Add to cart
   addToCart: async (variantId, quantity = 1, productType) => {
-    console.log("cartStore.addToCart called:", {
+    console.log("🔍 cartStore.addToCart called:", {
       variantId,
       quantity,
       productType,
@@ -39,50 +39,41 @@ export const useCartStore = create((set, get) => ({
     });
 
     if (!variantId) {
-      console.error("variantId is missing or invalid:", variantId);
+      console.error("❌ variantId is missing or invalid:", variantId);
       const message = "Thiếu variantId";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
     if (!productType) {
-      console.error("productType is missing:", productType);
+      console.error("❌ productType is missing:", productType);
       const message = "Thiếu productType";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
-    const validTypes = [
-      "iPhone",
-      "iPad",
-      "Mac",
-      "AirPods",
-      "AppleWatch",
-      "Accessory",
-    ];
-    if (!validTypes.includes(productType)) {
-      console.error("Invalid productType:", productType, "Valid:", validTypes);
-      const message = `productType không hợp lệ: ${productType}`;
-      set({ error: message, isLoading: false });
-      return { success: false, message };
-    }
+    // ✅ BỎ VALIDATION ENUM - CHO PHÉP MỌI LOẠI
+    // Xóa phần này:
+    // const validTypes = ["iPhone", "iPad", ...];
+    // if (!validTypes.includes(productType)) { ... }
 
     set({ isLoading: true, error: null });
 
     try {
-      console.log("Sending to cartAPI.addToCart:", {
+      console.log("📤 Sending to cartAPI.addToCart:", {
         variantId,
         quantity,
         productType,
       });
+      
       const response = await cartAPI.addToCart({
         variantId,
         quantity,
         productType,
       });
-      console.log("cartAPI response:", response);
+      
+      console.log("✅ cartAPI response:", response);
 
-      // ✅ LƯU THÔNG TIN SẢN PHẨM VỪA THÊM
       set({
         cart: response.data.data,
         isLoading: false,
@@ -94,7 +85,7 @@ export const useCartStore = create((set, get) => ({
 
       return { success: true, message: response.data.message };
     } catch (error) {
-      console.error("cartAPI error:", error.response?.data || error);
+      console.error("❌ cartAPI error:", error.response?.data || error);
       const message =
         error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
       set({ error: message, isLoading: false });

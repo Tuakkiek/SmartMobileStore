@@ -425,11 +425,10 @@ export const productTypeAPI = {
 // UNIVERSAL PRODUCT API
 // ============================================
 export const universalProductAPI = {
-  getAll: (params) => api.get("/universal-products", { params }),
-  getOne: (id) => api.get(`/universal-products/${id}`),
-  getBySlug: (slug) => api.get(`/universal-products/${slug}`), // ✅ NEW: Fetch by slug
-  create: (data) => api.post("/universal-products", data),
+  getAll: (params) => api.get('/universal-products', { params }),
+  getById: (id) => api.get(`/universal-products/${id}`),
+  getBySlug: (slug) => api.get(`/universal-products/${slug}`),
+  create: (data) => api.post('/universal-products', data),
   update: (id, data) => api.put(`/universal-products/${id}`, data),
   delete: (id) => api.delete(`/universal-products/${id}`),
-  getVariants: (id) => api.get(`/universal-products/${id}/variants`),
 };

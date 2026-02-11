@@ -22,6 +22,7 @@ const universalVariantSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    attributes: { type: mongoose.Schema.Types.Mixed, default: {} }, // Flexible attributes (storage, ram, etc.)
     salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }

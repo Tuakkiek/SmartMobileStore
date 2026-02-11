@@ -8,25 +8,8 @@ import { Loading } from "@/components/shared/Loading";
 import DynamicSection from "@/components/homepage/DynamicSection";
 import ProductEditModal from "@/components/shared/ProductEditModal";
 import { useAuthStore } from "@/store/authStore";
-import { homePageAPI } from "@/lib/api";
-import {
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
-} from "@/lib/api";
+import { homePageAPI, universalProductAPI } from "@/lib/api";
 import { toast } from "sonner";
-
-const API_MAP = {
-  iPhone: iPhoneAPI,
-  iPad: iPadAPI,
-  Mac: macAPI,
-  AirPods: airPodsAPI,
-  AppleWatch: appleWatchAPI,
-  Accessories: accessoryAPI,
-};
 
 const HomePage = () => {
   const { isAuthenticated, user } = useAuthStore();
@@ -58,33 +41,22 @@ const HomePage = () => {
   }, []);
 
   // ============================================
-  // FETCH ALL PRODUCTS
+  // FETCH ALL PRODUCTS (Universal ONLY)
   // ============================================
   const fetchAllProducts = useCallback(async () => {
-    const allProductsList = [];
-
     try {
-      await Promise.all(
-        Object.keys(API_MAP).map(async (category) => {
-          const api = API_MAP[category];
-          if (!api?.getAll) return;
+        const response = await universalProductAPI.getAll({ limit: 500 }); // Fetch enough for homepage
+        const products = response.data?.data?.products || [];
+        
+        // Normalize for display
+        const normalizedProducts = products.map((p) => ({
+            ...p,
+            category: p.productType?.name || 'Product',
+            isUniversal: true,
+        }));
 
-          try {
-            const response = await api.getAll({ limit: 100 });
-            const products =
-              response.data?.data?.products || response.data || [];
-            const productsWithCategory = products.map((p) => ({
-              ...p,
-              category,
-            }));
-            allProductsList.push(...productsWithCategory);
-          } catch (error) {
-            console.error(`Error fetching ${category}:`, error);
-          }
-        })
-      );
-
-      setAllProducts(allProductsList);
+        console.log(`📦 Loaded ${normalizedProducts.length} universal products for Homepage`);
+        setAllProducts(normalizedProducts);
     } catch (err) {
       console.error("Error loading products:", err);
       toast.error("Không thể tải dữ liệu sản phẩm");
@@ -112,15 +84,11 @@ const HomePage = () => {
     setShowEditModal(true);
   };
 
-  const handleDelete = async (productId, category) => {
-    const api = API_MAP[category];
-    if (!api?.delete) {
-      toast.error("Không hỗ trợ xóa sản phẩm này");
-      return;
-    }
+  const handleDelete = async (productId) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) return;
 
     try {
-      await api.delete(productId);
+      await universalProductAPI.delete(productId);
       toast.success("Xóa sản phẩm thành công");
       fetchAllProducts(); // Reload products
     } catch (error) {

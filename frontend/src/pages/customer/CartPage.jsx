@@ -45,6 +45,7 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
+  universalProductAPI,
 } from "@/lib/api";
 
 const CartPage = () => {
@@ -322,11 +323,25 @@ const confirmBulkDelete = async () => {
     setSelectedItems((prev) => prev.filter((id) => id !== item.variantId));
   };
 
+  // Fetch variants - SIDE EFFECT MOVED TO USEEFFECT
+  useEffect(() => {
+    const loadMissingVariants = async () => {
+      items.forEach((item) => {
+        if (
+          !variantsCache[item.productId] &&
+          !loadingVariants[item.productId]
+        ) {
+          fetchAndCacheVariants(item);
+        }
+      });
+    };
+    loadMissingVariants();
+  }, [items]); // Only run when items change
+
   // Fetch variants
   const fetchAndCacheVariants = async (item) => {
-    if (loadingVariants[item.productId])
-      return variantsCache[item.productId] || null;
-    if (variantsCache[item.productId]) return variantsCache[item.productId];
+    // Double check inside async function
+    if (loadingVariants[item.productId] || variantsCache[item.productId]) return;
 
     setLoadingVariants((prev) => ({ ...prev, [item.productId]: true }));
     try {
@@ -337,8 +352,17 @@ const confirmBulkDelete = async () => {
         AirPods: airPodsAPI,
         AppleWatch: appleWatchAPI,
         Accessory: accessoryAPI,
+        UniversalProduct: universalProductAPI, // ✅ Added UniversalProduct API support
       };
-      const api = apiMap[item.productType];
+      
+      // Determine API to use
+      let api = apiMap[item.productType];
+      
+      // Fallback for universal products if type string doesn't match keys
+      if (!api && !Object.keys(apiMap).includes(item.productType)) {
+         api = universalProductAPI;
+      }
+      
       if (!api) return null;
 
       const res = await api.getById(item.productId);
@@ -354,10 +378,8 @@ const confirmBulkDelete = async () => {
 
       const cached = { variants, storages, colors };
       setVariantsCache((prev) => ({ ...prev, [item.productId]: cached }));
-      return cached;
     } catch (err) {
       console.error(err);
-      return null;
     } finally {
       setLoadingVariants((prev) => ({ ...prev, [item.productId]: false }));
     }
@@ -366,14 +388,14 @@ const confirmBulkDelete = async () => {
   const getStorageOptions = (item) => {
     if (variantsCache[item.productId])
       return variantsCache[item.productId].storages;
-    fetchAndCacheVariants(item);
+    // Removed fetchAndCacheVariants(item) call from here
     return [item.variantStorage || item.variantName || "Standard"];
   };
 
   const getColorOptions = (item) => {
     if (variantsCache[item.productId])
       return variantsCache[item.productId].colors;
-    fetchAndCacheVariants(item);
+    // Removed fetchAndCacheVariants(item) call from here
     return [item.variantColor || "Default"];
   };
 

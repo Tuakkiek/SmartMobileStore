@@ -269,7 +269,9 @@ const ProductCard = ({
     // ✅ UPDATED: Support both universal and legacy products
     
     // UNIVERSAL PRODUCTS: Navigate with category path + storage suffix
-    if (product.productType && !product.category) {
+    const isUniversal = product.isUniversal || (product.productType && !["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"].includes(product.category));
+    
+    if (isUniversal) {
       console.log("🔗 Navigating to universal product:", product.name);
       
       // Map productType slug to category path

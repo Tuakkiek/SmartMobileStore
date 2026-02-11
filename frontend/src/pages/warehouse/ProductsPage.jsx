@@ -103,6 +103,7 @@ const ProductsPage = () => {
   const fetchProducts = async () => {
     if (!activeTab) return;
     
+    console.log("📥 Fetching products for Tab:", activeTab);
     setIsLoading(true);
     try {
       const response = await universalProductAPI.getAll({
@@ -112,15 +113,20 @@ const ProductsPage = () => {
         productType: activeTab, // Filter by product type
       });
 
+      console.log("📦 API Response:", response.data);
+
       const data = response?.data?.data;
       if (!data) throw new Error("Không có dữ liệu");
 
       const productsList = data.products || [];
       const totalCount = data.total || productsList.length;
 
+      console.log(`✅ Loaded ${productsList.length} products`);
+
       setProducts(productsList);
       setTotal(totalCount);
     } catch (error) {
+      console.error("❌ Error fetching products:", error);
       toast.error(error.response?.data?.message || "Lỗi tải sản phẩm");
       setProducts([]);
       setTotal(0);
@@ -204,10 +210,14 @@ const ProductsPage = () => {
 
       {/* CATEGORY TABS - DYNAMIC */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${productTypes.length}, minmax(0, 1fr))` }}>
+        <TabsList className="flex flex-wrap h-auto w-full gap-2 bg-transparent p-0 justify-start">
           {productTypes.map((type) => (
-            <TabsTrigger key={type._id} value={type._id}>
-              {type.icon && <span className="mr-2">{type.icon}</span>}
+            <TabsTrigger 
+              key={type._id} 
+              value={type._id}
+              className="flex-shrink-0 data-[state=active]:bg-background data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border rounded-md px-4 py-2"
+            >
+              <span className="mr-2">{type.icon}</span>
               {type.name}
             </TabsTrigger>
           ))}

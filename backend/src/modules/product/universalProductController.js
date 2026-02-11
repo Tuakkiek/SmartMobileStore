@@ -316,42 +316,93 @@ export const update = async (req, res) => {
 // ============================================
 // GET ALL PRODUCTS
 // ============================================
+// ✅ IMPORT LEGACY MODELS
+import IPhone from "./IPhone.js";
+import IPad from "./IPad.js";
+import Mac from "./Mac.js";
+import AirPods from "./AirPods.js";
+import AppleWatch from "./AppleWatch.js";
+import Accessory from "./Accessory.js";
+import ProductType from "../productType/ProductType.js"; // Adjust path if needed
+
+// ... (other imports)
+
+// ============================================
+// GET ALL PRODUCTS (Enhanced for Warehouse)
+// ============================================
 export const findAll = async (req, res) => {
   try {
     const { page = 1, limit = 12, search, status, brand, productType } = req.query;
-    const query = {};
-
+    
+    // 2. Build Query for Universal Products
+    const uniQuery = {};
     if (search) {
-      query.$or = [
+      uniQuery.$or = [
         { name: { $regex: search, $options: "i" } },
         { model: { $regex: search, $options: "i" } },
       ];
     }
-    if (status) query.status = status;
-    if (brand) query.brand = brand;
-    if (productType) query.productType = productType;
+    if (status) uniQuery.status = status;
+    if (brand) uniQuery.brand = brand;
+    if (productType) uniQuery.productType = productType; // Filter by ID
 
-    const [products, count] = await Promise.all([
-      UniversalProduct.find(query)
-        .populate("variants")
-        .populate("brand", "name logo")
-        .populate("productType", "name")
-        .populate("createdBy", "fullName")
-        .skip((page - 1) * limit)
-        .limit(+limit)
-        .sort({ createdAt: -1 }),
-      UniversalProduct.countDocuments(query),
+    // Debug Queries
+    console.log("🔎 Universal Query:", JSON.stringify(uniQuery));
+
+    // 3. Execute Query (Universal Only)
+    const [products, totalCount] = await Promise.all([
+        UniversalProduct.find(uniQuery)
+            .populate("variants")
+            .populate("brand", "name logo")
+            .populate("productType", "name slug")
+            .populate("createdBy", "fullName")
+            .sort({ createdAt: -1 })
+            .skip((Number(page) - 1) * Number(limit))
+            .limit(Number(limit))
+            .lean(),
+        UniversalProduct.countDocuments(uniQuery)
     ]);
+    
+    console.log(`📦 Universal Results: ${products.length}`);
+    console.log(`∑ Total Products: ${totalCount}`);
+
+    // 4. Normalize for frontend (mostly adding isUniversal flag and checking images)
+    const allProducts = products.map(p => ({
+        ...p,
+        isUniversal: true,
+        // Ensure featuredImages or valid image source
+        featuredImages: p.featuredImages?.length ? p.featuredImages : (p.variants?.[0]?.images || [])
+    }));
 
     res.json({
       success: true,
       data: {
-        products,
-        totalPages: Math.ceil(count / limit),
+        products: allProducts,
+        totalPages: Math.ceil(totalCount / limit),
         currentPage: +page,
-        total: count,
+        total: totalCount,
       },
     });
+
+    // 6. Sort Combined List
+    allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // 7. Pagination (In-Memory)
+    const total = allProducts.length;
+    const startIndex = (Number(page) - 1) * Number(limit);
+    const endIndex = startIndex + Number(limit);
+    const paginatedProducts = allProducts.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      data: {
+        products: paginatedProducts,
+        totalPages: Math.ceil(total / limit),
+        currentPage: +page,
+        total: total,
+      },
+    });
+
   } catch (error) {
     console.error("❌ GET PRODUCTS ERROR:", error);
     res.status(500).json({ success: false, message: error.message });

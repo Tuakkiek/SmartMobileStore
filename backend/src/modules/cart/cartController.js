@@ -9,6 +9,7 @@ import Mac, { MacVariant } from "../product/Mac.js";
 import AirPods, { AirPodsVariant } from "../product/AirPods.js";
 import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
 import Accessory, { AccessoryVariant } from "../product/Accessory.js";
+import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 
 // Helper: Lấy Model và Variant Model dựa trên productType
 const getModelsByType = (productType) => {
@@ -20,7 +21,14 @@ const getModelsByType = (productType) => {
     AppleWatch: { Product: AppleWatch, Variant: AppleWatchVariant },
     Accessory: { Product: Accessory, Variant: AccessoryVariant },
   };
-  return models[productType] || null;
+  
+  // ✅ THÊM XỬ LÝ CHO UNIVERSAL PRODUCTS
+  if (models[productType]) {
+    return models[productType];
+  }
+  
+  // Nếu không phải legacy type, coi như Universal Product
+  return { Product: UniversalProduct, Variant: UniversalVariant };
 };
 
 // Helper: Populate cart items với thông tin chi tiết

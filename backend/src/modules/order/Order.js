@@ -18,7 +18,6 @@ const orderItemSchema = new mongoose.Schema(
     productType: {
       type: String,
       required: true,
-      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
     },
     productName: { type: String, required: true, trim: true },
     variantSku: { type: String, required: true },

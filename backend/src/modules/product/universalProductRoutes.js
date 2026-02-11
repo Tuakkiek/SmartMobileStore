@@ -10,6 +10,13 @@ const router = express.Router();
 
 // Public routes
 router.get("/", controller.findAll);
+router.get("/:id", (req, res, next) => {
+  const { id } = req.params;
+  if (/^[0-9a-fA-F]{24}$/.test(id)) {
+    return controller.findOne(req, res, next);
+  }
+  return controller.getProductDetail(req, res, next);
+});
 
 // Protected routes
 router.use(protect);
@@ -20,16 +27,6 @@ router.get("/:id/variants", controller.getVariants);
 router.put("/:id", controller.update);
 router.delete("/:id", controller.deleteProduct);
 
-// Dynamic route handler (ObjectId or slug)
-const routeHandler = (req, res, next) => {
-  const { id } = req.params;
-
-  if (/^[0-9a-fA-F]{24}$/.test(id)) {
-    return controller.findOne(req, res, next);
-  }
-  return controller.getProductDetail(req, res, next);
-};
-
-router.get("/:id", routeHandler);
+// Dynamic route handler removed as it is now above
 
 export default router;

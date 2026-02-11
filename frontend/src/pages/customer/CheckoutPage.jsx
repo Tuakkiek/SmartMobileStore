@@ -18,7 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useCartStore } from "@/store/cartStore";
-import { orderAPI, promotionAPI, userAPI, vnpayAPI } from "@/lib/api";
+import { orderAPI, promotionAPI, userAPI, vnpayAPI, cartAPI } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
@@ -324,7 +324,7 @@ const CheckoutPage = () => {
         items: checkoutItemsWithFinalPrice.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
-          productType: item.productType,
+          productType: item.productType, // ✅ PHẢI CÓ FIELD NÀY
           price: item.finalizedPrice || item.originalPrice,
           originalPrice: item.originalPrice,
         })),
@@ -399,13 +399,15 @@ const CheckoutPage = () => {
         // Refresh cart từ server
         await getCart();
 
-        const remainingItems = cart?.items?.length || 0;
+        // ✅ Lấy state mới nhất từ store (tránh stale closure)
+        const freshCart = useCartStore.getState().cart;
+        const remainingItems = freshCart?.items?.length || 0;
         console.log(`🛒 Cart after order: ${remainingItems} items`);
 
         // Nếu backend không xóa, xóa thủ công (fallback)
         const selectedVariantIds = checkoutItems.map((i) => i.variantId);
         const stillInCart =
-          cart?.items?.filter((item) =>
+          freshCart?.items?.filter((item) =>
             selectedVariantIds.includes(item.variantId)
           ) || [];
 
@@ -415,9 +417,15 @@ const CheckoutPage = () => {
           );
           for (const item of stillInCart) {
             try {
+              // Dùng variantId để xóa
               await cartAPI.removeItem(item.variantId);
             } catch (err) {
-              console.error(`Failed to remove ${item.variantId}:`, err);
+              // 404 nghĩa là đã xóa rồi -> tốt
+              if (err.response?.status === 404) {
+                 console.log(`Item ${item.variantId} already removed (404)`);
+              } else {
+                 console.error(`Failed to remove ${item.variantId}:`, err);
+              }
             }
           }
           // Refresh lại lần nữa

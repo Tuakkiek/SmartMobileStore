@@ -10,6 +10,8 @@ import AirPods, { AirPodsVariant } from "../product/AirPods.js";
 import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
 import Accessory, { AccessoryVariant } from "../product/Accessory.js";
 
+import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
+
 // Helper: Lấy Model và Variant Model dựa trên productType
 const getModelsByType = (productType) => {
   const models = {
@@ -20,7 +22,8 @@ const getModelsByType = (productType) => {
     AppleWatch: { Product: AppleWatch, Variant: AppleWatchVariant },
     Accessory: { Product: Accessory, Variant: AccessoryVariant },
   };
-  return models[productType] || null;
+  // Fallback to UniversalProduct for any other type
+  return models[productType] || { Product: UniversalProduct, Variant: UniversalVariant };
 };
 
 // ============================================

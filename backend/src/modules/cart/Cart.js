@@ -18,7 +18,10 @@ const cartItemSchema = new mongoose.Schema(
     productType: {
       type: String,
       required: true,
-      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
+      // ✅ BỎ ENUM HOẶC MỞ RỘNG
+      // Nếu có enum, xóa dòng này đi:
+      // enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
+      // HOẶC mở rộng để chấp nhận mọi string
     },
     quantity: {
       type: Number,

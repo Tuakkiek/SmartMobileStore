@@ -2,63 +2,23 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   Star,
-  ShoppingCart,
   ChevronRight,
   ChevronLeft,
-  Heart,
-  Share2,
   Play,
-  Package2,
   Shield,
   Check,
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import {
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
-  universalProductAPI, // ✅ NEW: For universal products
+  universalProductAPI,
 } from "@/lib/api";
-import SlideInPanel from "@/components/product/SlideInPanel";
 import QuickSpecs from "@/components/product/QuickSpecs";
-import { SpecificationsTab } from "@/components/product/SpecificationsTab";
-import { WarrantyTab } from "@/components/product/WarrantyTab";
 import AddToCartModal from "@/components/product/AddToCartModal";
-import { ReviewsTab } from "@/components/product/ReviewsTab";
-import SimilarProducts from "@/components/product/SimilarProducts";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
-const CATEGORY_MAP = {
-  "dien-thoai": { model: "iPhone", api: iPhoneAPI, category: "iPhone" },
-  "may-tinh-bang": { model: "iPad", api: iPadAPI, category: "iPad" },
-  macbook: { model: "Mac", api: macAPI, category: "Mac" },
-  "tai-nghe": { model: "AirPods", api: airPodsAPI, category: "AirPods" },
-  "apple-watch": {
-    model: "AppleWatch",
-    api: appleWatchAPI,
-    category: "AppleWatch",
-  },
-  "phu-kien": {
-    model: "Accessory",
-    api: accessoryAPI,
-    category: "Accessory",
-  },
-};
-
-const VARIANT_KEY_FIELD = {
-  iPhone: "storage",
-  iPad: "storage",
-  Mac: "storage",
-  AirPods: "variantName",
-  AppleWatch: "variantName",
-  Accessories: "variantName",
-};
-
-// ✅ NEW: Map ProductType slug to category path for universal products
+// ✅ Map ProductType slug to category path for URL generation
 const PRODUCT_TYPE_TO_CATEGORY = {
   smartphone: "dien-thoai",
   tablet: "may-tinh-bang",
@@ -82,9 +42,7 @@ const ProductDetailPage = () => {
   const topRef = useRef(null);
 
   const pathParts = location.pathname.split("/").filter(Boolean);
-  const categorySlug = pathParts[0];
   const fullSlug = pathParts.slice(1).join("/");
-  const categoryInfo = CATEGORY_MAP[categorySlug];
   const sku = searchParams.get("sku");
 
   const [product, setProduct] = useState(null);
@@ -93,19 +51,16 @@ const ProductDetailPage = () => {
   const [selectedImage, setSelectedImage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("info");
-  const [userSelectedKey, setUserSelectedKey] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState("variant"); // 'variant' | 'featured' | 'video'
   const [showSpecsPanel, setShowSpecsPanel] = useState(false);
   const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
-  const [productSource, setProductSource] = useState(null); // ✅ NEW: 'universal' | 'legacy'
+  
+  // Product is always universal now
+  const productSource = "universal";
 
-  // Dòng 14 - Thêm vào destructure
   const {
     addToCart,
-    isLoading: cartLoading,
-    setSelectedForCheckout,
   } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
 
@@ -123,96 +78,45 @@ const ProductDetailPage = () => {
       return [];
     }
 
-    // Default: variant images (logic cũ)
+    // Default: variant images
     return selectedVariant?.images?.filter(Boolean) || [];
   };
+
   const handleBuyNow = async () => {
     if (!selectedVariant?._id) {
       toast.error("Vui lòng chọn phiên bản sản phẩm");
       return;
     }
-
-    setIsAddingToCart(true);
-
-    try {
-      const result = await addToCart(selectedVariant._id, 1, categoryType);
-
-      if (result.success) {
-        // Set sản phẩm này làm selected
-        setSelectedForCheckout([selectedVariant._id]);
-
-        // Chuyển thẳng đến checkout
-        navigate("/checkout");
-      } else {
-        toast.error(result.message);
-      }
-    } catch (error) {
-      toast.error("Có lỗi xảy ra");
-    } finally {
-      setIsAddingToCart(false);
-    }
+    
+    // Logic for buy now (reuse addToCart logic but redirect)
+    handleAddToCart(true);
   };
 
   useEffect(() => {
     const fetchProductData = async () => {
-      // ✅ REFACTORED: Support both universal and legacy products
       setIsLoading(true);
       setError(null);
 
       try {
-        let fetchedProduct = null;
-        let fetchedVariants = [];
-        let source = null;
-
-        // STRATEGY 1: Try universal product first (by slug)
-        // This allows universal products to work without category mapping
-    // ✅ TRY FETCHING AS UNIVERSAL PRODUCT FIRST
-    try {
-      // Strip storage suffix from URL slug (e.g., "iphone-17-pro-max-512gb" → "iphone-17-pro-max")
-      const stripStorageSuffix = (slug) => {
-        // Match and remove patterns like "-256gb", "-512gb", "-1tb", "-2tb" at the end
-        return slug.replace(/-(\d+(?:gb|tb))$/i, "");
-      };
-      
-      const baseSlug = stripStorageSuffix(fullSlug);
-      console.log("🔍 Attempting to fetch as universal product:", baseSlug);
-      
-      const universalResponse = await universalProductAPI.getBySlug(baseSlug);
-          const universalData = universalResponse?.data?.data;
-          
-          if (universalData?.product) {
-            fetchedProduct = universalData.product;
-            fetchedVariants = universalData.variants || fetchedProduct.variants || [];
-            source = "universal";
-            console.log("✅ Loaded as UNIVERSAL product:", fetchedProduct.name);
-          }
-        } catch (universalError) {
-          console.log("⚠️ Universal fetch failed, trying legacy...");
-          
-          // STRATEGY 2: Fall back to legacy API if universal fails
-          if (categoryInfo && categoryInfo.api) {
-            const baseSlugMatch = fullSlug.match(/^(.+?)(?:-\d+(?:gb|tb))?$/i);
-            const baseSlug = baseSlugMatch ? baseSlugMatch[1] : fullSlug;
-
-            const legacyResponse = await categoryInfo.api.get(baseSlug, {
-              params: sku ? { sku } : {},
-            });
-            const legacyData = legacyResponse.data.data;
-            fetchedProduct = legacyData.product || legacyData;
-            fetchedVariants = legacyData.variants || fetchedProduct.variants || [];
-            source = "legacy";
-            console.log("✅ Loaded as LEGACY product:", fetchedProduct.name);
-          } else {
-            throw new Error("❌ No category info and universal fetch failed");
-          }
-        }
-
-        if (!fetchedProduct) {
+        // Strip storage suffix from URL slug (e.g., "iphone-17-pro-max-512gb" → "iphone-17-pro-max")
+        const stripStorageSuffix = (slug) => {
+          // Replace suffix like -256gb, -1tb, etc. with empty string
+          return slug.replace(/-(\d+(?:gb|tb))$/i, "");
+        };
+        
+        const baseSlug = stripStorageSuffix(fullSlug);
+        console.log("🔍 Fetching universal product:", baseSlug);
+        
+        const response = await universalProductAPI.getBySlug(baseSlug);
+        const data = response?.data?.data;
+        
+        if (!data?.product) {
           throw new Error("Không tìm thấy sản phẩm");
         }
 
-        // Set product source for conditional rendering
-        setProductSource(source);
+        const fetchedProduct = data.product;
+        const fetchedVariants = data.variants || fetchedProduct.variants || [];
+
         setProduct(fetchedProduct);
         setVariants(fetchedVariants);
 
@@ -222,38 +126,27 @@ const ProductDetailPage = () => {
           variantToSelect = fetchedVariants.find((v) => v.sku === sku);
         }
         if (!variantToSelect && fetchedVariants.length > 0) {
-          variantToSelect = fetchedVariants[0];
+          // Default: pick first in stock, or just first
+          variantToSelect = fetchedVariants.find(v => v.stock > 0) || fetchedVariants[0];
         }
 
         if (variantToSelect) {
           setSelectedVariant(variantToSelect);
-          
-          // Determine key field based on source
-          let keyField = "storage";
-          if (source === "universal") {
-            // Universal products use variantName (e.g., "256GB - Natural Titanium")
-            // Extract storage part for grouping
-            keyField = "variantName";
-          } else if (fetchedProduct.category) {
-            keyField = VARIANT_KEY_FIELD[fetchedProduct.category] || "storage";
-          }
-          
-          setUserSelectedKey(variantToSelect[keyField]);
         }
 
         // Set default media tab
         setActiveMediaTab("variant");
         setSelectedImage(0);
-        setIsLoading(false);
       } catch (err) {
         console.error("❌ Error fetching product:", err);
         setError(err.response?.data?.message || err.message || "Không thể tải sản phẩm");
+      } finally {
         setIsLoading(false);
       }
     };
 
     fetchProductData();
-  }, [categorySlug, fullSlug, sku]);
+  }, [fullSlug, sku]);
 
   const handleVariantSelect = (variant, isColorChange = false) => {
     if (!variant) return;
@@ -316,6 +209,7 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async (isBuyNow = false) => {
+    // ... code kiểm tra đăng nhập giữ nguyên ...
     // ✅ KIỂM TRA ĐĂNG NHẬP TRƯỚC
     if (!isAuthenticated || !user) {
       const currentPath = location.pathname + location.search;
@@ -335,20 +229,32 @@ const ProductDetailPage = () => {
       return;
     }
 
-    // ✅ UPDATED: Support both universal and legacy products
+    // ✅ SỬA PHẦN NÀY
     let productType;
+    
     if (productSource === "universal") {
-      // Universal products: use productType.name from populated field
-      productType = product.productType?.name || "Product";
-      console.log("🛌 Adding universal product to cart:", {
+      // Universal products: Lấy từ productType.name (đã populate)
+      // hoặc từ productType._id nếu chưa populate
+      if (typeof product.productType === 'object' && product.productType?.name) {
+        productType = product.productType.name;
+      } else if (product.productType) {
+        // Nếu chỉ có ID, dùng fallback
+        productType = "Product"; 
+      } else {
+        productType = "Product";
+      }
+      
+      console.log("🛒 Adding universal product to cart:", {
         productType,
+        productTypeObject: product.productType,
         variantId: selectedVariant._id,
         variantName: selectedVariant.variantName
       });
     } else {
-      // Legacy products: use category mapping
+      // Legacy products
       productType = categoryInfo?.category || categoryInfo?.model || product.category;
-      console.log("🛌 Adding legacy product to cart:", {
+      
+      console.log("🛒 Adding legacy product to cart:", {
         productType,
         variantId: selectedVariant._id
       });
@@ -356,10 +262,15 @@ const ProductDetailPage = () => {
 
     if (!productType) {
       alert("Lỗi: Không xác định được loại sản phẩm");
-      console.error("❌ productType is undefined", { product, categoryInfo });
+      console.error("❌ productType is undefined", { 
+        product, 
+        categoryInfo,
+        productSource 
+      });
       return;
     }
 
+    // ... phần còn lại giữ nguyên ...
     if (!selectedVariant._id) {
       alert("Lỗi: Không xác định được variant ID");
       console.error("❌ variantId is undefined", selectedVariant);
