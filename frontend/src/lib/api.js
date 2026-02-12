@@ -17,6 +17,9 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// ✅ Export axios instance for direct API calls
+export { api };
+
 // ============================================
 // INTERCEPTORS
 // ============================================

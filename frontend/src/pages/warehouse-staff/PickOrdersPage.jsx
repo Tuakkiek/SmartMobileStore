@@ -26,7 +26,7 @@ const PickOrdersPage = () => {
   const loadPendingOrders = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/orders?status=PENDING");
+      const res = await api.get("/orders/all?status=PENDING");
       setOrders(res.data.orders || []);
     } catch (e) { toast.error("Không thể tải đơn hàng"); } finally { setLoading(false); }
   };

@@ -1,10 +1,11 @@
 // ============================================
 // FILE: frontend/src/pages/warehouse-staff/ReceiveGoodsPage.jsx
-// Trang nhận hàng từ nhà cung cấp (theo luồng)
+// Trang nhận hàng từ nhà cung cấp - FIXED VERSION
 // ============================================
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
 import { 
   ScanBarcode, 
   Package, 
@@ -19,15 +20,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
 const ReceiveGoodsPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore(); // Get user from auth store
   
   // Step 1: Quét mã PO
-  const [step, setStep] = useState(1); // 1: Scan PO, 2: Check items, 3: Receive items, 4: Complete
+  const [step, setStep] = useState(1);
   const [poNumber, setPoNumber] = useState("");
   const [purchaseOrder, setPurchaseOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -44,9 +45,8 @@ const ReceiveGoodsPage = () => {
 
   // Step 4: Hoàn tất
   const [signature, setSignature] = useState("");
-  const [showSignatureModal, setShowSignatureModal] = useState(false);
 
-  // Bước 1: Quét mã PO hoặc nhập số PO
+  // Bước 1: Quét mã PO
   const handleScanPO = async () => {
     if (!poNumber.trim()) {
       toast.error("Vui lòng nhập mã PO");
@@ -69,7 +69,7 @@ const ReceiveGoodsPage = () => {
     }
   };
 
-  // Load đề xuất vị trí cho SKU hiện tại
+  // Load đề xuất vị trí
   useEffect(() => {
     if (step === 3 && purchaseOrder) {
       const currentItem = purchaseOrder.items[currentItemIndex];
@@ -81,22 +81,19 @@ const ReceiveGoodsPage = () => {
 
   const loadLocationSuggestions = async (item) => {
     try {
-      // Giả sử sản phẩm có category, thực tế cần lấy từ UniversalProduct
       const response = await api.post("/warehouse/locations/suggest", {
         sku: item.sku,
-        category: "Điện thoại", // TODO: Lấy từ product data
+        category: "Điện thoại",
         quantity: item.remainingQuantity,
       });
       
       setSuggestedLocations(response.data.suggestions || []);
       
-      // Auto select first suggestion
       if (response.data.suggestions && response.data.suggestions.length > 0) {
         setSelectedLocation(response.data.suggestions[0]);
       }
     } catch (error) {
       console.error("Error loading location suggestions:", error);
-      toast.error("Không thể tải đề xuất vị trí");
     }
   };
 
@@ -134,7 +131,6 @@ const ReceiveGoodsPage = () => {
         notes,
       });
 
-      // Lưu thông tin đã nhận
       const newReceivedItems = [...receivedItems];
       newReceivedItems[currentItemIndex] = {
         sku: currentItem.sku,
@@ -143,6 +139,7 @@ const ReceiveGoodsPage = () => {
         damagedQuantity: damaged,
         locationCode: selectedLocation.locationCode,
         qualityStatus,
+        notes,
       };
       setReceivedItems(newReceivedItems);
 
@@ -155,11 +152,11 @@ const ReceiveGoodsPage = () => {
       setQualityStatus("GOOD");
       setSelectedLocation(null);
 
-      // Chuyển sang SKU tiếp theo hoặc hoàn tất
+      // Next item or complete
       if (currentItemIndex < purchaseOrder.items.length - 1) {
         setCurrentItemIndex(currentItemIndex + 1);
       } else {
-        setStep(4); // Hoàn tất
+        setStep(4);
       }
     } catch (error) {
       console.error("Error receiving item:", error);
@@ -174,7 +171,7 @@ const ReceiveGoodsPage = () => {
     try {
       setLoading(true);
       
-      const response = await api.post("/warehouse/goods-receipt/complete", {
+      await api.post("/warehouse/goods-receipt/complete", {
         poId: purchaseOrder._id,
         deliverySignature: signature,
         notes: "Đã nhận đủ hàng",
@@ -182,10 +179,6 @@ const ReceiveGoodsPage = () => {
 
       toast.success("Đã hoàn tất nhận hàng!");
       
-      // In phiếu nhập kho (optional)
-      // printGRN(response.data.goodsReceipt);
-      
-      // Redirect về dashboard
       setTimeout(() => {
         navigate("/warehouse-staff");
       }, 2000);
@@ -197,7 +190,7 @@ const ReceiveGoodsPage = () => {
     }
   };
 
-  // RENDER STEP 1: Quét mã PO
+  // STEP 1: Quét mã PO
   if (step === 1) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -210,7 +203,7 @@ const ReceiveGoodsPage = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <Label>Quét QR Code trên phiếu giao hàng hoặc nhập mã PO</Label>
+              <Label>Quét QR Code hoặc nhập mã PO</Label>
               <div className="flex space-x-2 mt-2">
                 <Input
                   placeholder="Nhập mã PO (VD: PO-202502-001)"
@@ -231,9 +224,9 @@ const ReceiveGoodsPage = () => {
                 <div className="text-sm">
                   <p className="font-medium text-blue-900">Hướng dẫn:</p>
                   <ol className="list-decimal list-inside mt-2 space-y-1 text-blue-800">
-                    <li>Quét QR code trên phiếu giao hàng từ nhà cung cấp</li>
+                    <li>Quét QR code trên phiếu giao hàng</li>
                     <li>Hoặc nhập mã PO thủ công</li>
-                    <li>Hệ thống sẽ hiển thị danh sách hàng hóa cần nhận</li>
+                    <li>Hệ thống sẽ hiển thị danh sách hàng cần nhận</li>
                   </ol>
                 </div>
               </div>
@@ -244,7 +237,7 @@ const ReceiveGoodsPage = () => {
     );
   }
 
-  // RENDER STEP 2: Hiển thị danh sách sản phẩm
+  // STEP 2: Danh sách sản phẩm
   if (step === 2) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -289,7 +282,7 @@ const ReceiveGoodsPage = () => {
     );
   }
 
-  // RENDER STEP 3: Nhận từng SKU
+  // STEP 3: Nhận từng SKU
   if (step === 3 && purchaseOrder) {
     const currentItem = purchaseOrder.items[currentItemIndex];
     
@@ -380,35 +373,39 @@ const ReceiveGoodsPage = () => {
                 </Label>
                 
                 <div className="space-y-2 mt-2">
-                  {suggestedLocations.map((loc, index) => (
-                    <div
-                      key={index}
-                      onClick={() => setSelectedLocation(loc)}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedLocation?.locationCode === loc.locationCode
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{loc.locationCode}</p>
-                          <p className="text-sm text-gray-600">{loc.zoneName}</p>
-                          {loc.reason && (
-                            <p className="text-xs text-blue-600 mt-1">{loc.reason}</p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <Badge variant={loc.priority === "HIGH" ? "default" : "outline"}>
-                            {loc.priority === "HIGH" ? "Đề xuất" : "Khả dụng"}
-                          </Badge>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Còn chỗ: {loc.capacity - loc.currentLoad}/{loc.capacity}
-                          </p>
+                  {suggestedLocations.length === 0 ? (
+                    <p className="text-sm text-gray-500">Đang tải vị trí...</p>
+                  ) : (
+                    suggestedLocations.map((loc, index) => (
+                      <div
+                        key={index}
+                        onClick={() => setSelectedLocation(loc)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedLocation?.locationCode === loc.locationCode
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold">{loc.locationCode}</p>
+                            <p className="text-sm text-gray-600">{loc.zoneName}</p>
+                            {loc.reason && (
+                              <p className="text-xs text-blue-600 mt-1">{loc.reason}</p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <Badge variant={loc.priority === "HIGH" ? "default" : "outline"}>
+                              {loc.priority === "HIGH" ? "Đề xuất" : "Khả dụng"}
+                            </Badge>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Còn chỗ: {loc.capacity - loc.currentLoad}/{loc.capacity}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -443,7 +440,7 @@ const ReceiveGoodsPage = () => {
     );
   }
 
-  // RENDER STEP 4: Hoàn tất
+  // STEP 4: Hoàn tất
   if (step === 4) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -475,27 +472,17 @@ const ReceiveGoodsPage = () => {
               ))}
             </div>
 
-            {/* Signature */}
-            <div>
-              <Label>Chữ ký người giao hàng</Label>
-              <div className="mt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowSignatureModal(true)}
-                  className="w-full"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Chụp ảnh chữ ký
-                </Button>
-                {signature && (
-                  <p className="text-sm text-green-600 mt-2">✓ Đã có chữ ký</p>
-                )}
-              </div>
+            {/* Signature Note */}
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-blue-900">
+                <Camera className="w-4 h-4 inline mr-1" />
+                Có thể chụp ảnh chữ ký người giao hàng (tùy chọn)
+              </p>
             </div>
 
             {/* Actions */}
             <div className="flex space-x-3 pt-4 border-t">
-              <Button variant="outline" className="flex-1">
+              <Button variant="outline" className="flex-1" disabled>
                 <Printer className="w-4 h-4 mr-2" />
                 In phiếu
               </Button>

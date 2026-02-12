@@ -32,6 +32,7 @@ import HomePageEditor from "@/pages/admin/HomePageEditor";
 import ShortVideoAdminPage from "@/pages/admin/ShortVideoAdminPage";
 import BrandManagementPage from "@/pages/admin/BrandManagementPage";
 import ProductTypeManagementPage from "@/pages/admin/ProductTypeManagementPage";
+import WarehouseConfigPage from "@/pages/admin/WarehouseConfigPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import WarehouseStaffDashboard from "@/pages/warehouse-staff/WarehouseStaffDashboard";
@@ -212,6 +213,7 @@ function App() {
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
           <Route path="/admin/brands" element={<BrandManagementPage />} />
           <Route path="/admin/product-types" element={<ProductTypeManagementPage />} />
+          <Route path="/admin/warehouse-config" element={<WarehouseConfigPage />} />
         </Route>
 
         {/* ========================================

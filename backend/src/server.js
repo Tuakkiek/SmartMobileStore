@@ -37,6 +37,7 @@ import brandRoutes from "./modules/brand/brandRoutes.js";
 import productTypeRoutes from "./modules/productType/productTypeRoutes.js";
 import universalProductRoutes from "./modules/product/universalProductRoutes.js";
 import warehouseRoutes from "./modules/warehouse/warehouseRoutes.js";
+import warehouseConfigRoutes from "./modules/warehouse/warehouseConfigRoutes.js";
 
 
 
@@ -174,6 +175,7 @@ app.use("/api/product-types", productTypeRoutes);
 app.use("/api/universal-products", universalProductRoutes);
 
 // ✅ WAREHOUSE MANAGEMENT ROUTES
+app.use("/api/warehouse/config", warehouseConfigRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 
 // ================================

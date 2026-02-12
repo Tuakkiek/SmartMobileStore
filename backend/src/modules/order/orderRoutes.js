@@ -23,7 +23,7 @@ router.post("/:id/cancel", restrictTo("CUSTOMER"), cancelOrder);
 // Order Manager routes
 router.get(
   "/all",
-  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER"), // ✅ THÊM SHIPPER
+  restrictTo("ORDER_MANAGER", "ADMIN", "SHIPPER", "WAREHOUSE_STAFF"), // ✅ THÊM SHIPPER & WAREHOUSE_STAFF
   getAllOrders
 );
 router.put(

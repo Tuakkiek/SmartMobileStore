@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/warehouse-staff/WarehouseStaffDashboard.jsx
-// Dashboard cho nhân viên thủ kho
+// Dashboard cho nhân viên thủ kho - FIXED VERSION
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -10,7 +10,6 @@ import {
   TruckIcon, 
   RefreshCw, 
   ClipboardList, 
-  BarChart3,
   AlertCircle,
   CheckCircle,
   Clock
@@ -28,7 +27,6 @@ const WarehouseStaffDashboard = () => {
     lowStockItems: 0,
   });
 
-  const [recentActivities, setRecentActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,24 +37,26 @@ const WarehouseStaffDashboard = () => {
     try {
       setLoading(true);
       
-      // Fetch stats
-      const [posRes, receiptsRes, ordersRes, stockRes] = await Promise.all([
-        api.get("/warehouse/purchase-orders?status=CONFIRMED"),
-        api.get("/warehouse/goods-receipt"),
-        api.get("/orders?status=PENDING"),
-        api.get("/warehouse/inventory/low-stock"),
-      ]);
+      // Fetch Purchase Orders với status CONFIRMED
+      const posRes = await api.get("/warehouse/purchase-orders?status=CONFIRMED");
+      
+      // Fetch Goods Receipts hôm nay
+      const today = new Date().toISOString().split('T')[0];
+      const receiptsRes = await api.get(`/warehouse/goods-receipt?page=1&limit=100`);
+      const todayReceipts = receiptsRes.data.goodsReceipts?.filter(gr => {
+        const grDate = new Date(gr.receivedDate).toISOString().split('T')[0];
+        return grDate === today;
+      }) || [];
+
+      // Fetch Pending Orders (Orders cần pick)
+      const ordersRes = await api.get("/orders?status=PENDING&limit=100");
 
       setStats({
-        pendingPOs: posRes.data.total || 0,
-        todayReceipts: receiptsRes.data.total || 0,
-        pendingPicks: ordersRes.data.total || 0,
-        lowStockItems: stockRes.data.total || 0,
+        pendingPOs: posRes.data.pagination?.total || posRes.data.purchaseOrders?.length || 0,
+        todayReceipts: todayReceipts.length,
+        pendingPicks: ordersRes.data.pagination?.total || ordersRes.data.orders?.length || 0,
+        lowStockItems: 0, // TODO: Implement low stock API
       });
-
-      // Fetch recent activities (Stock Movements)
-      const movementsRes = await api.get("/warehouse/stock-movements?limit=10");
-      setRecentActivities(movementsRes.data.movements || []);
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -88,38 +88,13 @@ const WarehouseStaffDashboard = () => {
       link: "/warehouse-staff/transfer",
     },
     {
-      title: "Kiểm Kê",
-      description: "Kiểm tra tồn kho định kỳ",
+      title: "Sản Phẩm",
+      description: "Quản lý sản phẩm trong kho",
       icon: ClipboardList,
       color: "bg-orange-500",
-      link: "/warehouse-staff/cycle-count",
+      link: "/warehouse/products",
     },
   ];
-
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case "INBOUND":
-        return <TruckIcon className="w-4 h-4 text-blue-500" />;
-      case "OUTBOUND":
-        return <Package className="w-4 h-4 text-green-500" />;
-      case "TRANSFER":
-        return <RefreshCw className="w-4 h-4 text-purple-500" />;
-      case "ADJUSTMENT":
-        return <ClipboardList className="w-4 h-4 text-orange-500" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const getActivityLabel = (type) => {
-    const labels = {
-      INBOUND: "Nhập kho",
-      OUTBOUND: "Xuất kho",
-      TRANSFER: "Chuyển kho",
-      ADJUSTMENT: "Điều chỉnh",
-    };
-    return labels[type] || type;
-  };
 
   if (loading) {
     return (
@@ -153,11 +128,7 @@ const WarehouseStaffDashboard = () => {
                 <Clock className="w-6 h-6 text-blue-600" />
               </div>
             </div>
-            <Link to="/warehouse-staff/purchase-orders">
-              <Button variant="link" className="p-0 h-auto mt-2 text-sm">
-                Xem chi tiết →
-              </Button>
-            </Link>
+            <p className="text-xs text-gray-500 mt-2">PO đã được duyệt</p>
           </CardContent>
         </Card>
 
@@ -172,11 +143,7 @@ const WarehouseStaffDashboard = () => {
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
             </div>
-            <Link to="/warehouse-staff/goods-receipt">
-              <Button variant="link" className="p-0 h-auto mt-2 text-sm">
-                Xem lịch sử →
-              </Button>
-            </Link>
+            <p className="text-xs text-gray-500 mt-2">Phiếu nhập đã hoàn thành</p>
           </CardContent>
         </Card>
 
@@ -203,18 +170,16 @@ const WarehouseStaffDashboard = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Sản Phẩm Sắp Hết</p>
-                <p className="text-3xl font-bold text-orange-600 mt-2">{stats.lowStockItems}</p>
+                <p className="text-sm text-gray-600">Tổng Đơn Hàng</p>
+                <p className="text-3xl font-bold text-orange-600 mt-2">
+                  {stats.pendingPOs + stats.todayReceipts + stats.pendingPicks}
+                </p>
               </div>
               <div className="bg-orange-100 p-3 rounded-full">
                 <AlertCircle className="w-6 h-6 text-orange-600" />
               </div>
             </div>
-            <Link to="/warehouse-staff/inventory">
-              <Button variant="link" className="p-0 h-auto mt-2 text-sm">
-                Xem chi tiết →
-              </Button>
-            </Link>
+            <p className="text-xs text-gray-500 mt-2">Tổng hoạt động</p>
           </CardContent>
         </Card>
       </div>
@@ -239,56 +204,69 @@ const WarehouseStaffDashboard = () => {
         </div>
       </div>
 
-      {/* Recent Activities */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Hoạt Động Gần Đây</span>
-            <Link to="/warehouse-staff/activities">
-              <Button variant="outline" size="sm">
-                Xem tất cả
-              </Button>
-            </Link>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentActivities.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">Chưa có hoạt động nào</p>
-          ) : (
-            <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-4 pb-4 border-b last:border-b-0">
-                  <div className="mt-1">{getActivityIcon(activity.type)}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-medium text-sm">
-                        {getActivityLabel(activity.type)} - {activity.productName}
-                      </p>
-                      <Badge variant="outline" className="text-xs">
-                        {activity.quantity} chiếc
-                      </Badge>
-                    </div>
-                    <div className="flex items-center space-x-2 text-xs text-gray-600">
-                      <span>SKU: {activity.sku}</span>
-                      {activity.toLocationCode && (
-                        <>
-                          <span>•</span>
-                          <span>Vị trí: {activity.toLocationCode}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
-                      <span>{activity.performedByName}</span>
-                      <span>•</span>
-                      <span>{new Date(activity.createdAt).toLocaleString("vi-VN")}</span>
-                    </div>
-                  </div>
+      {/* Info Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Hướng Dẫn Sử Dụng</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-start space-x-3">
+                <div className="bg-blue-100 p-2 rounded-full">
+                  <TruckIcon className="w-4 h-4 text-blue-600" />
                 </div>
-              ))}
+                <div>
+                  <p className="font-medium text-sm">Nhận Hàng</p>
+                  <p className="text-xs text-gray-600">Quét mã PO → Kiểm hàng → Chọn vị trí → Hoàn tất</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
+                <div className="bg-green-100 p-2 rounded-full">
+                  <Package className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Xuất Kho</p>
+                  <p className="text-xs text-gray-600">Chọn đơn → Quét vị trí → Lấy hàng → In phiếu</p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <div className="bg-purple-100 p-2 rounded-full">
+                  <RefreshCw className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Chuyển Kho</p>
+                  <p className="text-xs text-gray-600">Nhập SKU → Chọn vị trí nguồn/đích → Xác nhận</p>
+                </div>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Thống Kê Hôm Nay</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Phiếu nhập kho</span>
+                <Badge variant="outline">{stats.todayReceipts}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Đơn chờ xuất</span>
+                <Badge variant="outline">{stats.pendingPicks}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">PO chờ nhận</span>
+                <Badge variant="outline">{stats.pendingPOs}</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
