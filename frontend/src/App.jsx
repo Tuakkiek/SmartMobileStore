@@ -34,6 +34,10 @@ import BrandManagementPage from "@/pages/admin/BrandManagementPage";
 import ProductTypeManagementPage from "@/pages/admin/ProductTypeManagementPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
+import WarehouseStaffDashboard from "@/pages/warehouse-staff/WarehouseStaffDashboard";
+import ReceiveGoodsPage from "@/pages/warehouse-staff/ReceiveGoodsPage";
+import PickOrdersPage from "@/pages/warehouse-staff/PickOrdersPage";
+import TransferStockPage from "@/pages/warehouse-staff/TransferStockPage";
 import OrderManagementPage from "@/pages/order-manager/OrderManagementPage";
 
 import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
@@ -224,6 +228,10 @@ function App() {
             path="/warehouse/products"
             element={<WarehouseProductsPage />}
           />
+          <Route path="/warehouse-staff" element={<WarehouseStaffDashboard />} />
+          <Route path="/warehouse-staff/receive-goods" element={<ReceiveGoodsPage />} />
+          <Route path="/warehouse-staff/pick-orders" element={<PickOrdersPage />} />
+          <Route path="/warehouse-staff/transfer" element={<TransferStockPage />} />
         </Route>
 
         {/* ========================================

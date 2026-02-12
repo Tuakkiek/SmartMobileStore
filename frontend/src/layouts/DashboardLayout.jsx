@@ -21,6 +21,8 @@ import {
   Video,
   Tags,
   Layers,
+  ClipboardList,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -65,6 +67,10 @@ const DashboardLayout = () => {
         { path: "/admin/homepage-editor", icon: Layout, label: "Giao diện trang chủ" },
         { path: "/admin/short-videos", icon: Video, label: "Video ngắn" },
         { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
+        { path: "/warehouse-staff", icon: Package, label: "Dashboard Kho" },
+        { path: "/warehouse-staff/receive-goods", icon: Truck, label: "Nhận hàng" },
+        { path: "/warehouse-staff/pick-orders", icon: ClipboardList, label: "Xuất kho" },
+        { path: "/warehouse-staff/transfer", icon: RefreshCw, label: "Chuyển kho" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
         { path: "/shipper/dashboard", icon: Truck, label: "Giao hàng" },
         { path: "/pos/dashboard", icon: Receipt, label: "POS - Bán hàng" },
@@ -80,11 +86,33 @@ const DashboardLayout = () => {
         { path: "/CASHIER/dashboard", icon: TrendingUp, label: "Thu ngân" }
       );
     } else if (user?.role === "WAREHOUSE_STAFF") {
-      items.push({
-        path: "/warehouse/products",
-        icon: Package,
-        label: "Quản lý sản phẩm",
-      });
+      items.push(
+        {
+          path: "/warehouse-staff",
+          icon: Package,
+          label: "Dashboard Kho",
+        },
+        {
+          path: "/warehouse/products",
+          icon: Package,
+          label: "Quản lý sản phẩm",
+        },
+        {
+          path: "/warehouse-staff/receive-goods",
+          icon: Package,
+          label: "Nhận hàng",
+        },
+        {
+          path: "/warehouse-staff/pick-orders",
+          icon: Package,
+          label: "Xuất kho",
+        },
+        {
+          path: "/warehouse-staff/transfer",
+          icon: Package,
+          label: "Chuyển kho",
+        }
+      );
     } else if (user?.role === "ORDER_MANAGER") {
       items.push({
         path: "/order-manager/orders",

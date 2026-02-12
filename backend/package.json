@@ -23,6 +23,7 @@
     "mongoose": "^8.19.0",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
     "qs": "^6.14.0",
     "querystring": "^0.2.1",
     "remove-vietnamese-accents": "^1.0.7",
