@@ -34,7 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import api from "@/lib/api";
+import { api } from "@/lib/api";
 
 const OrderManagementPage = () => {
   const [orders, setOrders] = useState([]);
