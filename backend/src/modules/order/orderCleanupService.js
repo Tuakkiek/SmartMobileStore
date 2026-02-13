@@ -39,6 +39,10 @@ export const cancelExpiredVNPayOrders = async () => {
     );
 
     for (const order of expiredOrders) {
+      const orderOwnerId = order.customerId || order.userId;
+      if (!Array.isArray(order.statusHistory)) {
+        order.statusHistory = [];
+      }
       // Hoàn lại kho
       for (const item of order.items) {
         const models = getModelsByType(item.productType);
@@ -72,9 +76,9 @@ export const cancelExpiredVNPayOrders = async () => {
       if (order.pointsUsed > 0) {
         const user = await mongoose
           .model("User")
-          .findById(order.customerId)
+          .findById(orderOwnerId)
           .session(session);
-        if (user) {
+        if (user && typeof user.rewardPoints === "number") {
           user.rewardPoints += order.pointsUsed;
           await user.save({ session });
         }
@@ -86,7 +90,7 @@ export const cancelExpiredVNPayOrders = async () => {
       order.cancelReason = "Hết thời gian thanh toán VNPay (15 phút)";
       order.statusHistory.push({
         status: "CANCELLED",
-        updatedBy: order.customerId,
+        updatedBy: orderOwnerId,
         updatedAt: new Date(),
         note: "Tự động hủy do hết thời gian thanh toán",
       });
@@ -108,3 +112,7 @@ export const cancelExpiredVNPayOrders = async () => {
     session.endSession();
   }
 };
+
+
+
+

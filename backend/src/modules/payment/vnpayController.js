@@ -52,7 +52,9 @@ export const createPaymentUrl = async (req, res) => {
       });
     }
 
-    if (order.customerId.toString() !== req.user._id.toString()) {
+    const orderOwnerId = order.customerId || order.userId;
+
+    if (!orderOwnerId || orderOwnerId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
         message: "Không có quyền truy cập đơn hàng này",
@@ -213,7 +215,7 @@ export const vnpayIPN = async (req, res) => {
       // ✅ THÊM DÒNG NÀY: Tự động chuyển sang CONFIRMED sau 2 giây
       order.statusHistory.push({
         status: "PAYMENT_VERIFIED",
-        updatedBy: order.customerId,
+        updatedBy: order.customerId || order.userId,
         updatedAt: new Date(),
         note: `Thanh toán VNPay thành công - Mã giao dịch: ${transactionNo}`,
       });
@@ -226,7 +228,7 @@ export const vnpayIPN = async (req, res) => {
           order.confirmedAt = new Date();
           order.statusHistory.push({
             status: "CONFIRMED",
-            updatedBy: order.customerId,
+            updatedBy: order.customerId || order.userId,
             updatedAt: new Date(),
             note: "Tự động xác nhận sau thanh toán thành công",
           });
@@ -252,7 +254,7 @@ export const vnpayIPN = async (req, res) => {
       // ✅ XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
       try {
         const Cart = (await import("../cart/Cart.js")).default;
-        const cart = await Cart.findOne({ customerId: order.customerId });
+        const cart = await Cart.findOne({ customerId: order.customerId || order.userId });
 
         if (cart && cart.items.length > 0) {
           const selectedVariantIds = order.items.map((item) =>
@@ -291,7 +293,7 @@ export const vnpayIPN = async (req, res) => {
 
       order.statusHistory.push({
         status: "PENDING",
-        updatedBy: order.customerId,
+        updatedBy: order.customerId || order.userId,
         updatedAt: new Date(),
         note: `Thanh toán VNPay thất bại - Mã lỗi: ${rspCode}`,
       });
@@ -301,7 +303,7 @@ export const vnpayIPN = async (req, res) => {
       // ✅ THÊM: XÓA GIỎ HÀNG SAU KHI THANH TOÁN THÀNH CÔNG
       try {
         const Cart = (await import("../cart/Cart.js")).default;
-        const cart = await Cart.findOne({ customerId: order.customerId });
+        const cart = await Cart.findOne({ customerId: order.customerId || order.userId });
 
         if (cart) {
           const selectedVariantIds = order.items.map((item) =>
@@ -391,3 +393,5 @@ export const vnpayReturn = async (req, res) => {
     });
   }
 };
+
+

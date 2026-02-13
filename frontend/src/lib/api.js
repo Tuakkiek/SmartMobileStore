@@ -435,3 +435,30 @@ export const universalProductAPI = {
   update: (id, data) => api.put(`/universal-products/${id}`, data),
   delete: (id) => api.delete(`/universal-products/${id}`),
 };
+
+// ============================================
+// OMNICHANNEL STORE API
+// ============================================
+export const storeAPI = {
+  getAll: (params = {}) => api.get("/stores", { params }),
+  getById: (storeId) => api.get(`/stores/${storeId}`),
+  getNearby: (params = {}) => api.get("/stores/nearby", { params }),
+  checkStock: (storeId, items = []) =>
+    api.post(`/stores/${storeId}/check-stock`, { items }),
+};
+
+// ============================================
+// OMNICHANNEL INVENTORY API
+// ============================================
+export const inventoryAPI = {
+  checkAvailability: (productId, variantSku, province) =>
+    api.get(`/inventory/check/${productId}/${variantSku}`, {
+      params: { province },
+    }),
+  getByStore: (storeId, params = {}) =>
+    api.get(`/inventory/store/${storeId}`, { params }),
+};
+
+
+
+

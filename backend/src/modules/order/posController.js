@@ -358,7 +358,19 @@ export const cancelPendingOrder = async (req, res) => {
       }
     }
 
-    await order.cancel(req.user._id, reason || "Hủy bởi Thu ngân");
+    order.status = "CANCELLED";
+    order.cancelledAt = new Date();
+    order.cancelReason = reason || "Huy boi Thu ngan";
+    if (!Array.isArray(order.statusHistory)) {
+      order.statusHistory = [];
+    }
+    order.statusHistory.push({
+      status: "CANCELLED",
+      updatedBy: req.user._id,
+      updatedAt: new Date(),
+      note: order.cancelReason,
+    });
+    await order.save({ session });
 
     await session.commitTransaction();
 
@@ -605,3 +617,5 @@ export default {
   getPOSOrderHistory,
   getPOSStats, // ✅ NEW
 };
+
+

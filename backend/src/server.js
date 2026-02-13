@@ -31,6 +31,8 @@ import productTypeRoutes from "./modules/productType/productTypeRoutes.js";
 import universalProductRoutes from "./modules/product/universalProductRoutes.js";
 import warehouseRoutes from "./modules/warehouse/warehouseRoutes.js";
 import warehouseConfigRoutes from "./modules/warehouse/warehouseConfigRoutes.js";
+import storeRoutes from "./modules/store/storeRoutes.js";
+import inventoryRoutes from "./modules/inventory/inventoryRoutes.js";
 
 
 
@@ -164,6 +166,8 @@ app.use("/api/universal-products", universalProductRoutes);
 // ✅ WAREHOUSE MANAGEMENT ROUTES
 app.use("/api/warehouse/config", warehouseConfigRoutes);
 app.use("/api/warehouse", warehouseRoutes);
+app.use("/api/stores", storeRoutes);
+app.use("/api/inventory", inventoryRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint
@@ -287,3 +291,4 @@ const startServer = () => {
 mongoose.connection.once("open", startServer);
 
 export default app;
+
