@@ -163,8 +163,14 @@ const processAllData = ({
   employeeKPI, // ✅ NEW
 }) => {
   const { startDate, endDate } = getDateRange(timeRange); // Tính lại ở đây
-  const orders = ordersRes?.data?.data?.orders || [];
-  const totalOrders = ordersRes?.data?.data?.total || 0;
+  const orders =
+    ordersRes?.data?.data?.orders ||
+    ordersRes?.data?.orders ||
+    [];
+  const totalOrders =
+    ordersRes?.data?.data?.total ||
+    ordersRes?.data?.pagination?.total ||
+    orders.length;
   const filteredOrders = orders.filter((o) => {
     const createdAt = new Date(o.createdAt);
     return (
@@ -172,7 +178,10 @@ const processAllData = ({
       (!endDate || createdAt <= new Date(endDate))
     );
   });
-  const deliveredOrders = deliveredRes?.data?.data?.orders || [];
+  const deliveredOrders =
+    deliveredRes?.data?.data?.orders ||
+    deliveredRes?.data?.orders ||
+    [];
   const filteredDelivered = deliveredOrders.filter((o) => {
     const createdAt = new Date(o.createdAt);
     return (
@@ -183,7 +192,7 @@ const processAllData = ({
 
   // Sử dụng filteredOrders và filteredDelivered trong các phép tính
   const totalRevenue = filteredDelivered.reduce(
-    (sum, order) => sum + (order.totalAmount || 0),
+    (sum, order) => sum + (Number(order.totalAmount ?? order.total) || 0),
     0
   );
 
@@ -191,7 +200,7 @@ const processAllData = ({
   today.setHours(0, 0, 0, 0);
   const todayRevenue = filteredDelivered
     .filter((order) => new Date(order.createdAt) >= today)
-    .reduce((sum, order) => sum + order.totalAmount, 0);
+    .reduce((sum, order) => sum + (Number(order.totalAmount ?? order.total) || 0), 0);
 
   const avgOrderValue =
     filteredDelivered.length > 0 ? totalRevenue / filteredDelivered.length : 0;

@@ -19,7 +19,18 @@ router.use(protect);
 // Get all orders (with filters)
 // CUSTOMER: see only their orders
 // ADMIN/ORDER_MANAGER: see all orders
+router.get("/all", orderController.getAllOrders);
 router.get("/", orderController.getAllOrders);
+
+// Legacy endpoint used by old frontend builds
+router.get("/my-orders", orderController.getAllOrders);
+
+// Get order statistics
+router.get(
+  "/stats/summary",
+  restrictTo("ADMIN", "ORDER_MANAGER"),
+  orderController.getOrderStats
+);
 
 // Get order by ID
 router.get("/:id", orderController.getOrderById);
@@ -46,13 +57,6 @@ router.patch(
   "/:id/payment",
   restrictTo("ADMIN", "ORDER_MANAGER"),
   orderController.updatePaymentStatus
-);
-
-// Get order statistics
-router.get(
-  "/stats/summary",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
-  orderController.getOrderStats
 );
 
 export default router;

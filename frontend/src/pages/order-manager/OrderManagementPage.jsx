@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import OrderDetailDialog from "@/components/employee/OrderDetailDialog";
 
 const OrderManagementPage = () => {
   const [orders, setOrders] = useState([]);
@@ -43,6 +44,8 @@ const OrderManagementPage = () => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const limit = 20;
 
   useEffect(() => {
@@ -124,11 +127,31 @@ const OrderManagementPage = () => {
     );
   };
 
+  const getOrderTotal = (order) => {
+    const total = Number(order?.total);
+    if (Number.isFinite(total) && total >= 0) return total;
+
+    const subtotal = Number(order?.subtotal);
+    if (Number.isFinite(subtotal) && subtotal >= 0) {
+      return subtotal + (Number(order?.shippingFee) || 0) - (Number(order?.discount) || 0);
+    }
+
+    return (order?.items || []).reduce((sum, item) => {
+      return sum + (Number(item?.price) || 0) * (Number(item?.quantity) || 0);
+    }, 0);
+  };
+
   const formatCurrency = (amount) => {
+    const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
-    }).format(amount);
+    }).format(safeAmount);
+  };
+
+  const openOrderDetail = (order) => {
+    setSelectedOrder(order);
+    setIsDetailOpen(true);
   };
 
   const formatDate = (dateString) => {
@@ -296,7 +319,7 @@ const OrderManagementPage = () => {
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(getOrderTotal(order))}
                       </TableCell>
                       <TableCell>
                         {getPaymentBadge(order.paymentStatus)}
@@ -313,7 +336,7 @@ const OrderManagementPage = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => window.open(`/orders/${order._id}`, "_blank")}
+                            onClick={() => openOrderDetail(order)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -354,6 +377,11 @@ const OrderManagementPage = () => {
           )}
         </CardContent>
       </Card>
+      <OrderDetailDialog
+        order={selectedOrder}
+        open={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+      />
     </div>
   );
 };

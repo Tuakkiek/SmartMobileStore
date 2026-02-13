@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Package, MapPin, Navigation, CheckCircle, Printer } from "lucide-react";
+import { Package, MapPin, Navigation, CheckCircle, Printer, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ const PickOrdersPage = () => {
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [currentLocationIndex, setCurrentLocationIndex] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [unpickableItems, setUnpickableItems] = useState([]);
 
   useEffect(() => {
     if (orderId) { loadPickList(orderId); } else { loadPendingOrders(); }
@@ -36,18 +37,43 @@ const PickOrdersPage = () => {
       setLoading(true);
       const res = await api.get(`/warehouse/pick-list/${id}`);
       setSelectedOrder({ _id: res.data.orderId, orderNumber: res.data.orderNumber });
-      setPickList(res.data.pickList || []);
-      setStep(2);
+
+      const rawPickList = Array.isArray(res.data.pickList) ? res.data.pickList : [];
+      const pickable = rawPickList
+        .map((item) => ({
+          ...item,
+          locations: Array.isArray(item?.locations) ? item.locations : [],
+        }))
+        .filter((item) => item.locations.length > 0);
+
+      const unpickable = rawPickList.filter((item) => !Array.isArray(item?.locations) || item.locations.length === 0);
+
+      setPickList(pickable);
+      setUnpickableItems(unpickable);
+      setCurrentItemIndex(0);
+      setCurrentLocationIndex(0);
+
+      if (pickable.length === 0) {
+        setStep(3);
+        toast.error("Không có vị trí kho khả dụng để lấy hàng cho đơn này");
+      } else {
+        setStep(2);
+      }
     } catch (e) { toast.error("Không thể tải pick list"); } finally { setLoading(false); }
   };
 
   const handlePickItem = async () => {
     const item = pickList[currentItemIndex];
-    const loc = item.locations[currentLocationIndex];
+    const loc = item?.locations?.[currentLocationIndex];
+
+    if (!item || !loc) {
+      toast.error("Không tìm thấy thông tin vị trí lấy hàng");
+      return;
+    }
     try {
       setLoading(true);
-      await api.post("/warehouse/pick", { orderId: selectedOrder._id, sku: item.sku, locationCode: loc.locationCode, quantity: loc.pickQty });
-      toast.success(`Đã lấy ${loc.pickQty} ${item.productName}`);
+      await api.post("/warehouse/pick", { orderId: selectedOrder._id, sku: item.sku, locationCode: loc.locationCode, quantity: Number(loc.pickQty || loc.quantity || 0) });
+      toast.success(`Đã lấy ${Number(loc.pickQty || loc.quantity || 0)} ${item.productName}`);
       if (currentLocationIndex < item.locations.length - 1) { setCurrentLocationIndex(currentLocationIndex + 1); }
       else if (currentItemIndex < pickList.length - 1) { setCurrentItemIndex(currentItemIndex + 1); setCurrentLocationIndex(0); }
       else { setStep(3); }
@@ -86,7 +112,21 @@ const PickOrdersPage = () => {
 
   if (step === 2 && pickList.length > 0) {
     const item = pickList[currentItemIndex];
-    const loc = item.locations[currentLocationIndex];
+    const loc = item?.locations?.[currentLocationIndex];
+
+    if (!item || !loc) {
+      return (
+        <div className="container mx-auto px-4 py-8">
+          <Card className="max-w-2xl mx-auto">
+            <CardContent className="p-6 text-center">
+              <p className="text-gray-600 mb-4">Không thể xác định vị trí lấy hàng cho mục hiện tại.</p>
+              <Button onClick={() => { setCurrentItemIndex(0); setCurrentLocationIndex(0); }}>Tải lại bước lấy hàng</Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     const progress = Math.round(((currentItemIndex + (currentLocationIndex + 1) / item.locations.length) / pickList.length) * 100);
 
     return (
@@ -102,7 +142,7 @@ const PickOrdersPage = () => {
             <CardContent className="space-y-6">
               <div className="bg-blue-50 p-6 rounded-lg text-center">
                 <p className="text-sm text-gray-600 mb-2">Số lượng cần lấy</p>
-                <p className="text-5xl font-bold text-blue-600">{loc.pickQty}</p>
+                <p className="text-5xl font-bold text-blue-600">{Number(loc.pickQty || loc.quantity || 0)}</p>
               </div>
 
               <div className="border-2 border-green-500 rounded-lg p-6 bg-green-50">
@@ -129,18 +169,65 @@ const PickOrdersPage = () => {
   }
 
   if (step === 3) {
+    const isFullSuccess = unpickableItems.length === 0;
+    const isPartial = pickList.length > 0 && unpickableItems.length > 0;
+    const isFailed = pickList.length === 0;
+
     return (
       <div className="container mx-auto px-4 py-8">
         <Card className="max-w-2xl mx-auto">
-          <CardHeader><CardTitle className="flex items-center text-green-600"><CheckCircle className="w-6 h-6 mr-2" />Đã Lấy Đủ Hàng</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className={`flex items-center ${isFailed ? "text-red-600" : isPartial ? "text-yellow-600" : "text-green-600"}`}>
+              {isFailed ? <AlertTriangle className="w-6 h-6 mr-2" /> : <CheckCircle className="w-6 h-6 mr-2" />}
+              {isFailed ? "Không Thể Lấy Hàng" : isPartial ? "Hoàn Tất Có Cảnh Báo" : "Đã Lấy Đủ Hàng"}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="space-y-6">
-            <div className="text-center py-8"><CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-4" /><h3 className="text-2xl font-bold mb-2">Hoàn tất!</h3><p className="text-gray-600">Đã lấy đủ hàng cho đơn {selectedOrder.orderNumber}</p></div>
+            <div className="text-center py-8">
+              {isFailed ? (
+                <AlertTriangle className="w-24 h-24 text-red-500 mx-auto mb-4" />
+              ) : isPartial ? (
+                <AlertTriangle className="w-24 h-24 text-yellow-500 mx-auto mb-4" />
+              ) : (
+                <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-4" />
+              )}
+              <h3 className="text-2xl font-bold mb-2">
+                {isFailed ? "Thiếu vị trí kho!" : "Hoàn tất!"}
+              </h3>
+              <p className="text-gray-600">
+                {isFailed
+                  ? `Đơn hàng ${selectedOrder.orderNumber} không có vị trí lấy hàng khả dụng.`
+                  : `Đã xử lý xong yêu cầu lấy hàng cho đơn ${selectedOrder.orderNumber}`}
+              </p>
+            </div>
             <div className="space-y-2">
-              {pickList.map((item, i) => (<div key={i} className="flex items-center justify-between p-3 bg-green-50 rounded-lg"><div><p className="font-medium">✓ {item.productName}</p><p className="text-sm text-gray-600">SKU: {item.sku}</p></div><Badge variant="outline">{item.requiredQty} chiếc</Badge></div>))}
+              {pickList.map((item, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div>
+                    <p className="font-medium">✓ {item.productName || "Sản phẩm không tên"}</p>
+                    <p className="text-sm text-gray-600">SKU: {item.sku}</p>
+                  </div>
+                  <Badge variant="outline">{item.requiredQty} chiếc</Badge>
+                </div>
+              ))}
+              {unpickableItems.map((item, i) => (
+                <div key={`u-${i}`} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-red-700">⚠ {item.productName || "Sản phẩm không tên"}</p>
+                    <p className="text-sm text-gray-600">SKU: {item.sku}</p>
+                  </div>
+                  <Badge variant="destructive">Thiếu vị trí kho</Badge>
+                </div>
+              ))}
             </div>
             <div className="flex space-x-3 pt-4 border-t">
-              <Button variant="outline" className="flex-1"><Printer className="w-4 h-4 mr-2" />In phiếu xuất</Button>
-              <Button onClick={() => navigate("/warehouse-staff")} className="flex-1">Hoàn tất</Button>
+              <Button variant="outline" className="flex-1" disabled={isFailed}>
+                <Printer className="w-4 h-4 mr-2" />
+                In phiếu xuất
+              </Button>
+              <Button onClick={() => navigate("/warehouse-staff")} className="flex-1">
+                Hoàn tất
+              </Button>
             </div>
           </CardContent>
         </Card>

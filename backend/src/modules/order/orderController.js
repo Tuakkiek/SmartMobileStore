@@ -18,6 +18,8 @@ export const getAllOrders = async (req, res) => {
       search,
       paymentStatus,
       paymentMethod,
+      startDate,
+      endDate,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
@@ -51,6 +53,16 @@ export const getAllOrders = async (req, res) => {
       ];
     }
 
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
     // Pagination
     const skip = (page - 1) * limit;
     const sortOptions = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
@@ -65,9 +77,11 @@ export const getAllOrders = async (req, res) => {
       Order.countDocuments(filter),
     ]);
 
+    const normalizedOrders = orders.map(normalizeOrderForResponse);
+
     res.json({
       success: true,
-      orders,
+      orders: normalizedOrders,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -104,7 +118,7 @@ export const getOrderById = async (req, res) => {
 
     res.json({
       success: true,
-      order,
+      order: normalizeOrderForResponse(order),
     });
   } catch (error) {
     console.error("Error getting order:", error);
@@ -230,16 +244,41 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    order.status = status;
+    const normalizedCurrentStatus = normalizeLegacyStatus(order.status);
+    const normalizedTargetStatus = normalizeLegacyStatus(status);
+
+    const nextAllowedStatuses = {
+      PENDING: ["CONFIRMED", "CANCELLED"],
+      CONFIRMED: ["PREPARING", "CANCELLED"],
+      PREPARING: ["SHIPPING", "CANCELLED"],
+      SHIPPING: ["DELIVERED", "CANCELLED"],
+      DELIVERED: [],
+      CANCELLED: [],
+    };
+
+    const allowed =
+      normalizedCurrentStatus === normalizedTargetStatus ||
+      nextAllowedStatuses[normalizedCurrentStatus]?.includes(
+        normalizedTargetStatus
+      );
+
+    if (!allowed) {
+      return res.status(400).json({
+        success: false,
+        message: `Không thể chuyển trạng thái từ ${normalizedCurrentStatus} sang ${normalizedTargetStatus}`,
+      });
+    }
+
+    order.status = normalizedTargetStatus;
 
     // Update timestamps
-    if (status === "CONFIRMED") {
+    if (normalizedTargetStatus === "CONFIRMED") {
       order.confirmedAt = new Date();
-    } else if (status === "SHIPPING") {
+    } else if (normalizedTargetStatus === "SHIPPING") {
       order.shippedAt = new Date();
-    } else if (status === "DELIVERED") {
+    } else if (normalizedTargetStatus === "DELIVERED") {
       order.deliveredAt = new Date();
-    } else if (status === "CANCELLED") {
+    } else if (normalizedTargetStatus === "CANCELLED") {
       order.cancelledAt = new Date();
     }
 
@@ -247,8 +286,8 @@ export const updateOrderStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Đã cập nhật trạng thái đơn hàng: ${status}`,
-      order,
+      message: `Đã cập nhật trạng thái đơn hàng: ${normalizedTargetStatus}`,
+      order: normalizeOrderForResponse(order),
     });
   } catch (error) {
     console.error("Error updating order status:", error);
@@ -407,4 +446,45 @@ export default {
   updatePaymentStatus,
   getOrderStats,
   cancelOrder,
+};
+
+const normalizeLegacyStatus = (status) => {
+  const statusMapping = {
+    NEW: "PENDING",
+    PROCESSING: "CONFIRMED",
+    PACKING: "PREPARING",
+    READY_TO_SHIP: "PREPARING",
+    IN_TRANSIT: "SHIPPING",
+    COMPLETED: "DELIVERED",
+    RETURNED: "CANCELLED",
+  };
+
+  return statusMapping[status] || status;
+};
+
+const normalizeOrderForResponse = (order) => {
+  const source = order?.toObject ? order.toObject() : order;
+  const items = Array.isArray(source?.items) ? source.items : [];
+
+  const subtotalFromItems = items.reduce((sum, item) => {
+    const unitPrice = Number(item?.price) || 0;
+    const quantity = Number(item?.quantity) || 0;
+    return sum + unitPrice * quantity;
+  }, 0);
+
+  const subtotal = Number(source?.subtotal);
+  const shippingFee = Number(source?.shippingFee) || 0;
+  const discount = Number(source?.discount) || 0;
+  const safeSubtotal = Number.isFinite(subtotal) && subtotal >= 0 ? subtotal : subtotalFromItems;
+  const total = Number(source?.total);
+  const safeTotal =
+    Number.isFinite(total) && total >= 0 ? total : safeSubtotal + shippingFee - discount;
+
+  return {
+    ...source,
+    status: normalizeLegacyStatus(source?.status),
+    subtotal: safeSubtotal,
+    total: safeTotal,
+    totalAmount: safeTotal,
+  };
 };
