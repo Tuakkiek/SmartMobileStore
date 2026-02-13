@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   Star,
+  ShoppingCart,
   ChevronRight,
   ChevronLeft,
   Play,
@@ -10,13 +11,14 @@ import {
 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
-import {
-  universalProductAPI,
-} from "@/lib/api";
+import { universalProductAPI } from "@/lib/api";
+import SlideInPanel from "@/components/product/SlideInPanel";
 import QuickSpecs from "@/components/product/QuickSpecs";
+import { SpecificationsTab } from "@/components/product/SpecificationsTab";
+import { WarrantyTab } from "@/components/product/WarrantyTab";
+import { ReviewsTab } from "@/components/product/ReviewsTab";
+import SimilarProducts from "@/components/product/SimilarProducts";
 import AddToCartModal from "@/components/product/AddToCartModal";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 
 // ✅ Map ProductType slug to category path for URL generation
 const PRODUCT_TYPE_TO_CATEGORY = {
@@ -35,6 +37,21 @@ const PRODUCT_TYPE_TO_CATEGORY = {
   accessories: "phu-kien",
 };
 
+const getVariantStorageLabel = (variantName = "") => {
+  const match = String(variantName).match(/^([\d]+(?:GB|TB))/i);
+  return match ? match[1].toUpperCase() : String(variantName || "");
+};
+
+const VARIANT_KEY_FIELD = {
+  iPhone: "storage",
+  iPad: "storage",
+  Mac: "storage",
+  AirPods: "variantName",
+  AppleWatch: "variantName",
+  Accessory: "variantName",
+  Accessories: "variantName",
+};
+
 const ProductDetailPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,25 +59,28 @@ const ProductDetailPage = () => {
   const topRef = useRef(null);
 
   const pathParts = location.pathname.split("/").filter(Boolean);
+  const categorySlug = pathParts[0];
   const fullSlug = pathParts.slice(1).join("/");
+  const categoryInfo = null;
   const sku = searchParams.get("sku");
 
   const [product, setProduct] = useState(null);
   const [variants, setVariants] = useState([]);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [userSelectedKey, setUserSelectedKey] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState("variant"); // 'variant' | 'featured' | 'video'
   const [showSpecsPanel, setShowSpecsPanel] = useState(false);
   const [showWarrantyPanel, setShowWarrantyPanel] = useState(false);
-  
-  // Product is always universal now
   const productSource = "universal";
 
   const {
     addToCart,
+    isLoading: cartLoading,
+    setSelectedForCheckout,
   } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
 
@@ -80,16 +100,6 @@ const ProductDetailPage = () => {
 
     // Default: variant images
     return selectedVariant?.images?.filter(Boolean) || [];
-  };
-
-  const handleBuyNow = async () => {
-    if (!selectedVariant?._id) {
-      toast.error("Vui lòng chọn phiên bản sản phẩm");
-      return;
-    }
-    
-    // Logic for buy now (reuse addToCart logic but redirect)
-    handleAddToCart(true);
   };
 
   useEffect(() => {
@@ -146,55 +156,20 @@ const ProductDetailPage = () => {
     };
 
     fetchProductData();
-  }, [fullSlug, sku]);
+    }, [fullSlug, sku]);
 
-  const handleVariantSelect = (variant, isColorChange = false) => {
+  const handleVariantSelect = (variant) => {
     if (!variant) return;
 
-    // ✅ UPDATED: Generate pretty URLs for universal products
-    if (productSource === "universal") {
-      // Extract storage from variantName (e.g., "256GB - Natural Titanium" -> "256gb")
-      const extractStorage = (variantName) => {
-        const match = variantName?.match(/^([\d]+(?:GB|TB))/);
-        return match ? match[1].toLowerCase() : "";
-      };
-      
-      const storage = extractStorage(variant.variantName);
-      const categoryPath = PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
-      const baseSlug = product.baseSlug || product.slug;
-      
-      // Generate URL: /dien-thoai/iphone-17-pro-max-512gb?sku=XXX
-      const url = `/${categoryPath}/${baseSlug}${storage ? `-${storage}` : ""}?sku=${variant.sku}`;
-      window.history.replaceState(null, "", url);
-      updateVariantUI(variant);
-      return;
-    }
+    const storage = getVariantStorageLabel(variant.variantName).toLowerCase();
+    const categoryPath =
+      PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
+    const baseSlug = product.baseSlug || product.slug;
+    const url =
+      `/${categoryPath}/${baseSlug}${storage ? `-${storage}` : ""}?sku=${variant.sku}`;
 
-    // LEGACY PRODUCTS: Keep original complex logic
-    const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
-
-    if (!isColorChange) {
-      setUserSelectedKey(variant[keyField]);
-      const newUrl = `/${categorySlug}/${fullSlug
-        .split("-")
-        .slice(0, -1)
-        .join("-")}-${variant[keyField]
-        .toLowerCase()
-        .replace(/\s+/g, "")}?sku=${variant.sku}`;
-      window.history.replaceState(null, "", newUrl);
-      updateVariantUI(variant);
-    } else {
-      const targetVariant = variants.find(
-        (v) => v.color === variant.color && v[keyField] === userSelectedKey
-      );
-      const finalVariant = targetVariant || variant;
-      const baseSlug = fullSlug.split("-").slice(0, -1).join("-");
-      const newUrl = `/${categorySlug}/${baseSlug}-${finalVariant[keyField]
-        .toLowerCase()
-        .replace(/\s+/g, "")}?sku=${finalVariant.sku}`;
-      window.history.replaceState(null, "", newUrl);
-      updateVariantUI(finalVariant);
-    }
+    window.history.replaceState(null, "", url);
+    updateVariantUI(variant);
   };
 
   const updateVariantUI = (variant) => {
@@ -230,36 +205,19 @@ const ProductDetailPage = () => {
     }
 
     // ✅ SỬA PHẦN NÀY
-    let productType;
-    
-    if (productSource === "universal") {
-      // Universal products: Lấy từ productType.name (đã populate)
-      // hoặc từ productType._id nếu chưa populate
-      if (typeof product.productType === 'object' && product.productType?.name) {
-        productType = product.productType.name;
-      } else if (product.productType) {
-        // Nếu chỉ có ID, dùng fallback
-        productType = "Product"; 
-      } else {
-        productType = "Product";
-      }
-      
-      console.log("🛒 Adding universal product to cart:", {
-        productType,
-        productTypeObject: product.productType,
-        variantId: selectedVariant._id,
-        variantName: selectedVariant.variantName
-      });
-    } else {
-      // Legacy products
-      productType = categoryInfo?.category || categoryInfo?.model || product.category;
-      
-      console.log("🛒 Adding legacy product to cart:", {
-        productType,
-        variantId: selectedVariant._id
-      });
+    let productType = "Product";
+    if (typeof product.productType === "object" && product.productType?.name) {
+      productType = product.productType.name;
+    } else if (product.productType) {
+      productType = String(product.productType);
     }
 
+    console.log("Adding universal product to cart:", {
+      productType,
+      productTypeObject: product.productType,
+      variantId: selectedVariant._id,
+      variantName: selectedVariant.variantName,
+    });
     if (!productType) {
       alert("Lỗi: Không xác định được loại sản phẩm");
       console.error("❌ productType is undefined", { 
@@ -993,3 +951,9 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
+
+
+
+
+
+

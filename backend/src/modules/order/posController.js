@@ -5,23 +5,13 @@
 
 import mongoose from "mongoose";
 import Order from "./Order.js";
-import IPhone, { IPhoneVariant } from "../product/IPhone.js";
-import IPad, { IPadVariant } from "../product/IPad.js";
-import Mac, { MacVariant } from "../product/Mac.js";
-import AirPods, { AirPodsVariant } from "../product/AirPods.js";
-import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
-import Accessory, { AccessoryVariant } from "../product/Accessory.js";
+import UniversalProduct, {
+  UniversalVariant,
+} from "../product/UniversalProduct.js";
 
 const getModelsByType = (productType) => {
-  const map = {
-    iPhone: { Product: IPhone, Variant: IPhoneVariant },
-    iPad: { Product: IPad, Variant: IPadVariant },
-    Mac: { Product: Mac, Variant: MacVariant },
-    AirPods: { Product: AirPods, Variant: AirPodsVariant },
-    AppleWatch: { Product: AppleWatch, Variant: AppleWatchVariant },
-    Accessory: { Product: Accessory, Variant: AccessoryVariant },
-  };
-  return map[productType] || null;
+  // Unified catalog: all product types now point to Universal models
+  return { Product: UniversalProduct, Variant: UniversalVariant };
 };
 
 // ============================================

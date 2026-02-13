@@ -1,61 +1,65 @@
-// ============================================
-// FILE: backend/src/services/productSalesService.js
-// ✅ Service tự động cập nhật salesCount
-// ============================================
+import mongoose from "mongoose";
+import UniversalProduct, {
+  UniversalVariant,
+} from "../product/UniversalProduct.js";
+import ProductType from "../productType/ProductType.js";
 
-import IPhone, { IPhoneVariant } from "../product/IPhone.js";
-import IPad, { IPadVariant } from "../product/IPad.js";
-import Mac, { MacVariant } from "../product/Mac.js";
-import AirPods, { AirPodsVariant } from "../product/AirPods.js";
-import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
-import Accessory, { AccessoryVariant } from "../product/Accessory.js";
-
-// ============================================
-// CATEGORY MODELS MAPPING
-// ============================================
-const modelMap = {
-  iPhone: { main: IPhone, variant: IPhoneVariant },
-  iPad: { main: IPad, variant: IPadVariant },
-  Mac: { main: Mac, variant: MacVariant },
-  AirPods: { main: AirPods, variant: AirPodsVariant },
-  AppleWatch: { main: AppleWatch, variant: AppleWatchVariant },
-  Accessories: { main: Accessory, variant: AccessoryVariant },
+const LEGACY_CATEGORY_TO_SLUG = {
+  iphone: "smartphone",
+  ipad: "tablet",
+  mac: "laptop",
+  airpods: "headphone",
+  applewatch: "smartwatch",
+  accessory: "accessories",
+  accessories: "accessories",
 };
 
-// ============================================
-// TÌM SẢN PHẨM THEO VARIANT ID
-// ============================================
-async function findProductByVariantId(variantId) {
-  for (const [category, models] of Object.entries(modelMap)) {
-    try {
-      const variant = await models.variant
-        .findById(variantId)
-        .select("productId")
-        .lean();
-      if (variant) {
-        const product = await models.main.findById(variant.productId);
-        return { product, category };
-      }
-    } catch (error) {
-      continue;
-    }
+const normalizeVietnamese = (text) => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+};
+
+const normalizeCategoryKey = (text) =>
+  normalizeVietnamese(text).replace(/[\s_-]+/g, "");
+
+const resolveProductTypeFilter = async (category) => {
+  if (!category) return null;
+
+  if (mongoose.Types.ObjectId.isValid(category)) {
+    return [category];
   }
-  return null;
+
+  const normalizedKey = normalizeCategoryKey(category);
+  const mappedSlug =
+    LEGACY_CATEGORY_TO_SLUG[normalizedKey] ||
+    normalizeVietnamese(category).replace(/\s+/g, "-");
+
+  const docs = await ProductType.find({
+    $or: [
+      { slug: mappedSlug },
+      { slug: normalizeVietnamese(category).replace(/\s+/g, "-") },
+    ],
+  })
+    .select("_id")
+    .lean();
+
+  return docs.map((doc) => doc._id);
+};
+
+async function findProductByVariantId(variantId) {
+  const variant = await UniversalVariant.findById(variantId).select("productId");
+  if (!variant) return null;
+
+  const product = await UniversalProduct.findById(variant.productId);
+  if (!product) return null;
+
+  return { product, variant };
 }
 
-// ============================================
-// TÌM SẢN PHẨM THEO PRODUCT ID + CATEGORY
-// ============================================
-async function findProductById(productId, category) {
-  const models = modelMap[category];
-  if (!models) return null;
-
-  return await models.main.findById(productId);
-}
-
-// ============================================
-// CẬP NHẬT SALES COUNT CHO SẢN PHẨM
-// ============================================
 export async function updateProductSalesCount(
   productId,
   variantId,
@@ -63,213 +67,136 @@ export async function updateProductSalesCount(
   category = null
 ) {
   try {
-    let product;
-    let foundCategory = category;
+    let product = null;
 
-    // Nếu có variantId, tìm product qua variant
     if (variantId) {
-      const result = await findProductByVariantId(variantId);
-      if (!result) {
-        console.warn(`⚠️ Variant ${variantId} not found`);
-        return null;
-      }
-      product = result.product;
-      foundCategory = result.category;
-    }
-    // Nếu không có variantId, dùng productId + category
-    else if (productId && foundCategory) {
-      product = await findProductById(productId, foundCategory);
+      const found = await findProductByVariantId(variantId);
+      product = found?.product || null;
+    } else if (productId) {
+      product = await UniversalProduct.findById(productId);
     }
 
     if (!product) {
-      console.warn(`⚠️ Product not found: ${productId}`);
+      console.warn(`Product not found: ${productId || variantId}`);
       return null;
     }
 
-    // Cập nhật salesCount
-    product.salesCount = (product.salesCount || 0) + quantity;
+    product.salesCount = (product.salesCount || 0) + Number(quantity || 0);
     await product.save();
 
     console.log(
-      `✅ Updated salesCount for ${foundCategory} - ${product.name}: +${quantity} = ${product.salesCount}`
+      `Updated salesCount for ${category || "universal"} - ${product.name}: +${quantity}`
     );
 
     return product;
   } catch (error) {
-    console.error("❌ Error updating salesCount:", error);
+    console.error("Error updating salesCount:", error);
     throw error;
   }
 }
 
-// ============================================
-// XỬ LÝ ĐƠN HÀNG - CẬP NHẬT SALESCOUNT
-// ============================================
 export async function processOrderSales(order) {
-  if (!order || !order.items || order.items.length === 0) {
-    console.warn("⚠️ No items in order");
-    return;
+  if (!order?.items?.length) {
+    console.warn("No items in order");
+    return [];
   }
-
-  console.log(`📊 Processing sales count for order: ${order.orderNumber}`);
 
   const results = [];
 
   for (const item of order.items) {
     try {
       const productId = item.productId;
-      const quantity = item.quantity;
+      const variantId = item.variantId || null;
+      const quantity = Number(item.quantity || 0);
+      const category = item.productType || null;
 
-      // Tìm category của product
-      let foundCategory = null;
-      let foundVariant = null;
-
-      for (const [category, models] of Object.entries(modelMap)) {
-        const product = await models.main
-          .findById(productId)
-          .populate("variants");
-
-        if (product) {
-          foundCategory = category;
-
-          // Tìm variant phù hợp dựa trên specifications
-          if (product.variants && product.variants.length > 0) {
-            foundVariant = product.variants[0]; // Default
-
-            if (item.specifications) {
-              const matchedVariant = product.variants.find((v) => {
-                if (
-                  item.specifications.color &&
-                  v.color !== item.specifications.color
-                )
-                  return false;
-                if (
-                  item.specifications.storage &&
-                  v.storage !== item.specifications.storage
-                )
-                  return false;
-                return true;
-              });
-              if (matchedVariant) foundVariant = matchedVariant;
-            }
-          }
-          break;
-        }
-      }
-
-      if (!foundCategory) {
-        console.warn(`⚠️ Category not found for product ${productId}`);
-        continue;
-      }
-
-      // Cập nhật salesCount
       const updatedProduct = await updateProductSalesCount(
         productId,
-        foundVariant?._id,
+        variantId,
         quantity,
-        foundCategory
+        category
       );
 
       if (updatedProduct) {
         results.push({
-          productId,
-          category: foundCategory,
+          productId: updatedProduct._id,
+          category,
           name: updatedProduct.name,
           quantity,
           totalSales: updatedProduct.salesCount,
         });
-        console.log(`  ✅ ${updatedProduct.name}: +${quantity} sales`);
       }
     } catch (error) {
-      console.error(`  ❌ Failed to update item:`, error.message);
+      console.error("Failed to update order item salesCount:", error.message);
     }
   }
 
-  console.log(`✅ Sales count update completed for order ${order.orderNumber}`);
   return results;
 }
 
-// ============================================
-// LẤY TOP SẢN PHẨM BÁN CHẠY THEO CATEGORY
-// ============================================
 export async function getTopSellingProducts(category, limit = 10) {
-  const models = modelMap[category];
-  if (!models) {
-    throw new Error(`Invalid category: ${category}`);
+  const parsedLimit = Math.max(1, parseInt(limit, 10) || 10);
+  const query = { status: "AVAILABLE" };
+
+  if (category) {
+    const productTypeIds = await resolveProductTypeFilter(category);
+    if (!productTypeIds?.length) {
+      return [];
+    }
+    query.productType = { $in: productTypeIds };
   }
 
-  return await models.main
-    .find({ status: "AVAILABLE" })
+  return UniversalProduct.find(query)
     .sort({ salesCount: -1 })
-    .limit(limit)
-    .select("name model salesCount averageRating variants")
+    .limit(parsedLimit)
+    .select("name model salesCount averageRating variants productType")
     .populate("variants", "price images")
+    .populate("productType", "name slug")
     .lean();
 }
 
-// ============================================
-// LẤY TOP SẢN PHẨM BÁN CHẠY TẤT CẢ CATEGORY
-// ============================================
 export async function getAllTopSellingProducts(limit = 10) {
-  const allProducts = [];
+  const parsedLimit = Math.max(1, parseInt(limit, 10) || 10);
 
-  for (const [category, models] of Object.entries(modelMap)) {
-    const products = await models.main
-      .find({ status: "AVAILABLE" })
-      .sort({ salesCount: -1 })
-      .limit(limit)
-      .select("name model salesCount averageRating variants")
-      .populate("variants", "price images")
-      .lean();
-
-    allProducts.push(...products.map((p) => ({ ...p, category })));
-  }
-
-  // Sắp xếp và lấy top
-  return allProducts
-    .sort((a, b) => b.salesCount - a.salesCount)
-    .slice(0, limit);
+  return UniversalProduct.find({ status: "AVAILABLE" })
+    .sort({ salesCount: -1 })
+    .limit(parsedLimit)
+    .select("name model salesCount averageRating variants productType")
+    .populate("variants", "price images")
+    .populate("productType", "name slug")
+    .lean();
 }
 
-// ============================================
-// RESET SALES COUNT (ADMIN ONLY)
-// ============================================
 export async function resetSalesCount(category = null) {
   if (category) {
-    const models = modelMap[category];
-    if (models) {
-      await models.main.updateMany({}, { $set: { salesCount: 0 } });
-      console.log(`✅ Reset salesCount for ${category}`);
-    }
-  } else {
-    for (const models of Object.values(modelMap)) {
-      await models.main.updateMany({}, { $set: { salesCount: 0 } });
-    }
-    console.log(`✅ Reset salesCount for all categories`);
+    const productTypeIds = await resolveProductTypeFilter(category);
+    if (!productTypeIds?.length) return;
+    await UniversalProduct.updateMany(
+      { productType: { $in: productTypeIds } },
+      { $set: { salesCount: 0 } }
+    );
+    return;
   }
+
+  await UniversalProduct.updateMany({}, { $set: { salesCount: 0 } });
 }
 
-// ============================================
-// SYNC SALESCOUNT TỪ SALESANALYTICS (NẾU CẦN)
-// ============================================
 export async function syncSalesCountFromAnalytics() {
   const SalesAnalytics = (await import("./SalesAnalytics.js")).default;
-
   const analytics = await SalesAnalytics.find().lean();
 
-  for (const data of analytics) {
+  for (const row of analytics) {
     try {
       await updateProductSalesCount(
-        data.productId,
-        data.variantId,
-        data.sales.total,
-        data.category
+        row.productId,
+        row.variantId,
+        row.sales?.total || 0,
+        row.category || null
       );
     } catch (error) {
-      console.error(`Failed to sync ${data.productId}:`, error.message);
+      console.error(`Failed to sync ${row.productId}:`, error.message);
     }
   }
-
-  console.log("✅ Sales count synced from analytics");
 }
 
 export default {

@@ -1,64 +1,65 @@
-// backend/src/services/salesAnalyticsService.js
-import SalesAnalytics from './SalesAnalytics.js';
-import IPhone, { IPhoneVariant } from '../product/IPhone.js';
-import IPad, { IPadVariant } from '../product/IPad.js';
-import Mac, { MacVariant } from '../product/Mac.js';
-import AirPods, { AirPodsVariant } from '../product/AirPods.js';
-import AppleWatch, { AppleWatchVariant } from '../product/AppleWatch.js';
-import Accessory, { AccessoryVariant } from '../product/Accessory.js';
+import SalesAnalytics from "./SalesAnalytics.js";
+import UniversalProduct, {
+  UniversalVariant,
+} from "../product/UniversalProduct.js";
 
-// ============================================
-// CATEGORY MAPPING
-// ============================================
-const categoryMap = [
-  { name: 'iPhone', variantModel: IPhoneVariant, mainModel: IPhone },
-  { name: 'iPad', variantModel: IPadVariant, mainModel: IPad },
-  { name: 'Mac', variantModel: MacVariant, mainModel: Mac },
-  { name: 'AirPods', variantModel: AirPodsVariant, mainModel: AirPods },
-  { name: 'AppleWatch', variantModel: AppleWatchVariant, mainModel: AppleWatch },
-  { name: 'Accessories', variantModel: AccessoryVariant, mainModel: Accessory },
-];
-
-// ============================================
-// HELPER: GET ISO WEEK NUMBER
-// ============================================
 function getISOWeek(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
   const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return weekNo.toString().padStart(2, '0');
+  return weekNo.toString().padStart(2, "0");
 }
 
-// ============================================
-// FIND CATEGORY BY VARIANT ID
-// ============================================
+const normalizeVietnamese = (text) => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+};
+
+const normalizeCategory = (value) => {
+  const raw = normalizeVietnamese(value || "");
+  return raw.replace(/\s+/g, "-") || "unknown";
+};
+
 async function findCategoryByVariantId(variantId) {
-  for (const cat of categoryMap) {
-    const variant = await cat.variantModel.findById(variantId).select('productId');
-    if (variant) {
-      return {
-        category: cat.name,
-        productId: variant.productId,
-        variant
-      };
-    }
-  }
-  return null;
+  const variant = await UniversalVariant.findById(variantId).select("productId");
+  if (!variant) return null;
+
+  const product = await UniversalProduct.findById(variant.productId)
+    .populate("productType", "name slug")
+    .lean();
+
+  if (!product) return null;
+
+  const category =
+    normalizeCategory(product.productType?.slug) ||
+    normalizeCategory(product.productType?.name);
+
+  return {
+    category,
+    productId: product._id,
+    variantId: variant._id,
+  };
 }
 
-// ============================================
-// UPDATE SALES
-// ============================================
+const getSalesMapEntries = (salesMapLike) => {
+  if (!salesMapLike) return [];
+  if (salesMapLike instanceof Map) return Array.from(salesMapLike.entries());
+  return Object.entries(salesMapLike);
+};
+
 export async function updateSales(variantId, quantity, revenue) {
-  const result = await findCategoryByVariantId(variantId);
-  
-  if (!result) {
-    throw new Error('Variant not found in any category');
+  const found = await findCategoryByVariantId(variantId);
+  if (!found) {
+    throw new Error("Variant not found");
   }
 
-  const { category, productId } = result;
+  const { category, productId } = found;
 
   let analytic = await SalesAnalytics.findOne({ productId, variantId, category });
   if (!analytic) {
@@ -66,175 +67,138 @@ export async function updateSales(variantId, quantity, revenue) {
   }
 
   const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
-  const monthStr = now.toISOString().slice(0, 7);
+  const day = now.toISOString().split("T")[0];
+  const month = now.toISOString().slice(0, 7);
   const year = now.getFullYear();
-  const weekStr = `${year}-W${getISOWeek(now)}`;
+  const week = `${year}-W${getISOWeek(now)}`;
 
-  // Update sales
-  analytic.sales.total += quantity;
-  analytic.sales.daily.set(dateStr, (analytic.sales.daily.get(dateStr) || 0) + quantity);
-  analytic.sales.weekly.set(weekStr, (analytic.sales.weekly.get(weekStr) || 0) + quantity);
-  analytic.sales.monthly.set(monthStr, (analytic.sales.monthly.get(monthStr) || 0) + quantity);
+  const qty = Number(quantity || 0);
+  const amount = Number(revenue || 0);
 
-  // Update revenue
-  analytic.revenue.total += revenue;
-  analytic.revenue.daily.set(dateStr, (analytic.revenue.daily.get(dateStr) || 0) + revenue);
-  analytic.revenue.weekly.set(weekStr, (analytic.revenue.weekly.get(weekStr) || 0) + revenue);
-  analytic.revenue.monthly.set(monthStr, (analytic.revenue.monthly.get(monthStr) || 0) + revenue);
+  analytic.sales.total += qty;
+  analytic.sales.daily.set(day, (analytic.sales.daily.get(day) || 0) + qty);
+  analytic.sales.weekly.set(week, (analytic.sales.weekly.get(week) || 0) + qty);
+  analytic.sales.monthly.set(
+    month,
+    (analytic.sales.monthly.get(month) || 0) + qty
+  );
+
+  analytic.revenue.total += amount;
+  analytic.revenue.daily.set(
+    day,
+    (analytic.revenue.daily.get(day) || 0) + amount
+  );
+  analytic.revenue.weekly.set(
+    week,
+    (analytic.revenue.weekly.get(week) || 0) + amount
+  );
+  analytic.revenue.monthly.set(
+    month,
+    (analytic.revenue.monthly.get(month) || 0) + amount
+  );
 
   analytic.lastUpdated = now;
   await analytic.save();
-
-  console.log(`✅ Sales updated: ${category} - Product ${productId} - Variant ${variantId}`);
   return analytic;
 }
 
-// ============================================
-// RECORD ORDER SALES (✅ FIXED FOR ORDER SCHEMA)
-// ============================================
 export async function recordOrderSales(order) {
-  if (!order || !order.items || order.items.length === 0) {
-    console.warn('⚠️ No items in order to record sales');
+  if (!order?.items?.length) {
     return;
   }
 
-  console.log(`📊 Recording sales for order: ${order.orderNumber}`);
-
   for (const item of order.items) {
     try {
-      // ✅ Order items contain: productId, productName, specifications, quantity, price
-      // We need to find the variant based on productId + specifications
-      
-      const productId = item.productId;
-      const quantity = item.quantity;
-      const revenue = item.price * item.quantity;
+      const quantity = Number(item.quantity || 0);
+      const revenue = Number(item.price || 0) * quantity;
 
-      // Find which category this product belongs to
-      let foundCategory = null;
-      let foundVariant = null;
-
-      for (const cat of categoryMap) {
-        const product = await cat.mainModel.findById(productId).populate('variants');
-        if (product) {
-          foundCategory = cat.name;
-          
-          // Try to find matching variant based on specifications
-          // This is a simplified approach - you may need more sophisticated matching
-          if (product.variants && product.variants.length > 0) {
-            foundVariant = product.variants[0]; // Default to first variant
-            
-            // Try to match by color/storage if available in specifications
-            if (item.specifications) {
-              const matchedVariant = product.variants.find(v => {
-                if (item.specifications.color && v.color !== item.specifications.color) return false;
-                if (item.specifications.storage && v.storage !== item.specifications.storage) return false;
-                return true;
-              });
-              if (matchedVariant) foundVariant = matchedVariant;
-            }
-          }
-          break;
-        }
+      let variantId = item.variantId || null;
+      if (!variantId && item.variantSku) {
+        const variant = await UniversalVariant.findOne({ sku: item.variantSku })
+          .select("_id")
+          .lean();
+        variantId = variant?._id || null;
+      }
+      if (!variantId && item.productId) {
+        const fallback = await UniversalVariant.findOne({ productId: item.productId })
+          .select("_id")
+          .lean();
+        variantId = fallback?._id || null;
       }
 
-      if (!foundCategory || !foundVariant) {
-        console.warn(`⚠️ Could not find category/variant for product ${productId} in order ${order.orderNumber}`);
-        continue;
-      }
-
-      await updateSales(foundVariant._id, quantity, revenue);
-      
-      console.log(`  ✅ Recorded: ${quantity}x ${foundCategory} - Revenue: ${revenue.toLocaleString()}đ`);
+      if (!variantId) continue;
+      await updateSales(variantId, quantity, revenue);
     } catch (error) {
-      console.error(`  ❌ Failed to record item:`, error.message);
+      console.error("Failed to record item sale:", error.message);
     }
   }
-
-  console.log(`✅ Sales recording completed for order ${order.orderNumber}`);
 }
 
-// ============================================
-// GET TOP PRODUCTS BY CATEGORY
-// ============================================
 export async function getTopProducts(category, limit = 10) {
-  const top = await SalesAnalytics.aggregate([
-    { $match: { category } },
-    { $group: { _id: '$productId', totalSales: { $sum: '$sales.total' } } },
+  const rows = await SalesAnalytics.aggregate([
+    { $match: { category: normalizeCategory(category) } },
+    { $group: { _id: "$productId", totalSales: { $sum: "$sales.total" } } },
     { $sort: { totalSales: -1 } },
-    { $limit: limit },
-    { $project: { _id: 0, productId: '$_id' } },
+    { $limit: Math.max(1, parseInt(limit, 10) || 10) },
+    { $project: { _id: 0, productId: "$_id" } },
   ]);
-  
-  return top.map(r => r.productId.toString());
+
+  return rows.map((row) => row.productId.toString());
 }
 
-// ============================================
-// GET TOP SELLERS BY CATEGORY (FOR API)
-// ============================================
 export async function getTopSellersByCategory(category, limit = 10) {
-  return await SalesAnalytics.find({ category })
-    .sort({ 'sales.total': -1 })
-    .limit(limit)
-    .select('productId variantId sales.total revenue.total')
+  return SalesAnalytics.find({ category: normalizeCategory(category) })
+    .sort({ "sales.total": -1 })
+    .limit(Math.max(1, parseInt(limit, 10) || 10))
+    .select("productId variantId category sales.total revenue.total")
     .lean();
 }
 
-// ============================================
-// GET TOP SELLERS ACROSS ALL CATEGORIES
-// ============================================
 export async function getTopSellers(limit = 10) {
-  return await SalesAnalytics.find()
-    .sort({ 'sales.total': -1 })
-    .limit(limit)
-    .select('productId variantId category sales.total revenue.total')
+  return SalesAnalytics.find()
+    .sort({ "sales.total": -1 })
+    .limit(Math.max(1, parseInt(limit, 10) || 10))
+    .select("productId variantId category sales.total revenue.total")
     .lean();
 }
 
-// ============================================
-// GET PRODUCT SALES DATA
-// ============================================
 export async function getProductSales(productId, variantId = null) {
   const query = { productId };
   if (variantId) query.variantId = variantId;
-
-  return await SalesAnalytics.findOne(query).lean();
+  return SalesAnalytics.findOne(query).lean();
 }
 
-// ============================================
-// GET SALES BY TIME PERIOD
-// ============================================
-export async function getSalesByTimePeriod(category, startDate, endDate, period = 'daily') {
-  const analytics = await SalesAnalytics.find({ category }).lean();
+export async function getSalesByTimePeriod(
+  category,
+  startDate,
+  endDate,
+  period = "daily"
+) {
+  const analytics = await SalesAnalytics.find({
+    category: normalizeCategory(category),
+  }).lean();
 
-  const result = {};
+  const output = {};
 
-  analytics.forEach(analytic => {
-    const salesMap = analytic.sales[period] || new Map();
-    salesMap.forEach((value, key) => {
+  for (const row of analytics) {
+    const entries = getSalesMapEntries(row.sales?.[period]);
+    for (const [key, value] of entries) {
       const date = new Date(key);
       if (date >= startDate && date <= endDate) {
-        result[key] = (result[key] || 0) + value;
+        output[key] = (output[key] || 0) + Number(value || 0);
       }
-    });
-  });
+    }
+  }
 
-  return result;
+  return output;
 }
 
-// ============================================
-// RESET SALES DATA
-// ============================================
 export async function resetSalesData(productId, variantId = null) {
   const query = { productId };
   if (variantId) query.variantId = variantId;
-
-  return await SalesAnalytics.deleteMany(query);
+  return SalesAnalytics.deleteMany(query);
 }
 
-// ============================================
-// DEFAULT EXPORT
-// ============================================
 export default {
   updateSales,
   recordOrderSales,

@@ -316,15 +316,6 @@ export const update = async (req, res) => {
 // ============================================
 // GET ALL PRODUCTS
 // ============================================
-// ✅ IMPORT LEGACY MODELS
-import IPhone from "./IPhone.js";
-import IPad from "./IPad.js";
-import Mac from "./Mac.js";
-import AirPods from "./AirPods.js";
-import AppleWatch from "./AppleWatch.js";
-import Accessory from "./Accessory.js";
-import ProductType from "../productType/ProductType.js"; // Adjust path if needed
-
 // ... (other imports)
 
 // ============================================
@@ -333,6 +324,8 @@ import ProductType from "../productType/ProductType.js"; // Adjust path if neede
 export const findAll = async (req, res) => {
   try {
     const { page = 1, limit = 12, search, status, brand, productType } = req.query;
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 12;
     
     // 2. Build Query for Universal Products
     const uniQuery = {};
@@ -357,8 +350,8 @@ export const findAll = async (req, res) => {
             .populate("productType", "name slug")
             .populate("createdBy", "fullName")
             .sort({ createdAt: -1 })
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit))
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum)
             .lean(),
         UniversalProduct.countDocuments(uniQuery)
     ]);
@@ -374,32 +367,13 @@ export const findAll = async (req, res) => {
         featuredImages: p.featuredImages?.length ? p.featuredImages : (p.variants?.[0]?.images || [])
     }));
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products: allProducts,
-        totalPages: Math.ceil(totalCount / limit),
-        currentPage: +page,
+        totalPages: Math.ceil(totalCount / limitNum),
+        currentPage: pageNum,
         total: totalCount,
-      },
-    });
-
-    // 6. Sort Combined List
-    allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // 7. Pagination (In-Memory)
-    const total = allProducts.length;
-    const startIndex = (Number(page) - 1) * Number(limit);
-    const endIndex = startIndex + Number(limit);
-    const paginatedProducts = allProducts.slice(startIndex, endIndex);
-
-    res.json({
-      success: true,
-      data: {
-        products: paginatedProducts,
-        totalPages: Math.ceil(total / limit),
-        currentPage: +page,
-        total: total,
       },
     });
 

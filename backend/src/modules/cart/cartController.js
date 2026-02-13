@@ -3,31 +3,11 @@
 // ✅ UPDATED: Multi-model support for Cart
 // ============================================
 import Cart from "./Cart.js";
-import IPhone, { IPhoneVariant } from "../product/IPhone.js";
-import IPad, { IPadVariant } from "../product/IPad.js";
-import Mac, { MacVariant } from "../product/Mac.js";
-import AirPods, { AirPodsVariant } from "../product/AirPods.js";
-import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
-import Accessory, { AccessoryVariant } from "../product/Accessory.js";
 import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 
-// Helper: Lấy Model và Variant Model dựa trên productType
+// Helper: Lay Model va Variant Model dua tren productType
 const getModelsByType = (productType) => {
-  const models = {
-    iPhone: { Product: IPhone, Variant: IPhoneVariant },
-    iPad: { Product: IPad, Variant: IPadVariant },
-    Mac: { Product: Mac, Variant: MacVariant },
-    AirPods: { Product: AirPods, Variant: AirPodsVariant },
-    AppleWatch: { Product: AppleWatch, Variant: AppleWatchVariant },
-    Accessory: { Product: Accessory, Variant: AccessoryVariant },
-  };
-  
-  // ✅ THÊM XỬ LÝ CHO UNIVERSAL PRODUCTS
-  if (models[productType]) {
-    return models[productType];
-  }
-  
-  // Nếu không phải legacy type, coi như Universal Product
+  // ✅ UPDATED: All products now use UniversalProduct
   return { Product: UniversalProduct, Variant: UniversalVariant };
 };
 
@@ -575,3 +555,4 @@ export default {
   clearCart,
   validateCart,
 };
+

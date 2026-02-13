@@ -15,7 +15,15 @@ const reviewSchema = new mongoose.Schema(
     productModel: {
       type: String,
       required: true,
-      enum: ["IPhone", "IPad", "Mac", "AirPods", "AppleWatch", "Accessory"],
+      enum: [
+        "UniversalProduct",
+        "IPhone",
+        "IPad",
+        "Mac",
+        "AirPods",
+        "AppleWatch",
+        "Accessory",
+      ],
     },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,

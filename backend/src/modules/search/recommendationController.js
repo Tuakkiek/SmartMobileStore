@@ -1,35 +1,43 @@
 import mongoose from "mongoose";
-import IPhone from "../product/IPhone.js";
-import IPad from "../product/IPad.js";
-import Mac from "../product/Mac.js";
-import AirPods from "../product/AirPods.js";
-import AppleWatch from "../product/AppleWatch.js";
-import Accessory from "../product/Accessory.js";
+import UniversalProduct from "../product/UniversalProduct.js";
 
-const PRODUCT_MODELS = {
-  iPhone: IPhone,
-  iPad: IPad,
-  Mac: Mac,
-  AirPods: AirPods,
-  AppleWatch: AppleWatch,
-  Accessory: Accessory,
+const CATEGORY_ROUTE_MAP = {
+  smartphone: "dien-thoai",
+  tablet: "may-tinh-bang",
+  laptop: "macbook",
+  headphone: "tai-nghe",
+  smartwatch: "apple-watch",
+  accessories: "phu-kien",
+};
+
+const normalizeVietnamese = (text) => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+};
+
+const getCategoryRoute = (productType) => {
+  const slug = normalizeVietnamese(productType?.slug || "").replace(
+    /\s+/g,
+    "-"
+  );
+  const nameSlug = normalizeVietnamese(productType?.name || "").replace(
+    /\s+/g,
+    "-"
+  );
+  return CATEGORY_ROUTE_MAP[slug] || CATEGORY_ROUTE_MAP[nameSlug] || "san-pham";
 };
 
 const findProductById = async (id) => {
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return null;
-  }
-
-  for (const [category, Model] of Object.entries(PRODUCT_MODELS)) {
-    const product = await Model.findById(id);
-    if (product) {
-      return product;
-    }
-  }
-  return null;
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  return UniversalProduct.findById(id)
+    .populate("productType", "name slug")
+    .lean();
 };
 
-// Get related products
 export const getRelatedProducts = async (req, res) => {
   try {
     const product = await findProductById(req.params.id);
@@ -37,74 +45,68 @@ export const getRelatedProducts = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy sản phẩm",
+        message: "Khong tim thay san pham",
       });
     }
 
-    // Get the correct model for this product's category
-    const Model = PRODUCT_MODELS[product.category];
-    if (!Model) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy danh mục sản phẩm",
-      });
-    }
-
-    // Get collection name for variants based on category
-    const variantCollectionMap = {
-      iPhone: "iphonevariants",
-      iPad: "ipadvariant", // Note: Check consistency of collection names in DB vs Model
-      Mac: "macvariant",
-      AirPods: "airpodsvariant",
-      AppleWatch: "applewatchvariant",
-      Accessory: "accessoryvariant",
+    const query = {
+      _id: { $ne: product._id },
+      status: "AVAILABLE",
     };
 
-    // Fallback if not mapped explicitly
-    const variantCollection = variantCollectionMap[product.category] || `${product.category.toLowerCase()}variants`;
+    if (product.productType?._id) {
+      query.productType = product.productType._id;
+    }
 
-    const pipeline = [
-      {
-        $match: {
-          _id: { $ne: product._id },
-          category: product.category,
-          condition: product.condition,
-          status: "AVAILABLE",
-        },
-      },
-      {
-        $lookup: {
-          from: variantCollection,
-          localField: "_id",
-          foreignField: "productId",
-          as: "variants",
-        },
-      },
-      { $limit: 4 },
-      { $sort: { averageRating: -1 } },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          model: 1,
-          category: 1,
-          images: 1,
-          price: 1,
-          originalPrice: 1,
-          averageRating: 1,
-          totalReviews: 1,
-          variants: 1,
-          baseSlug: 1,
-          installmentBadge: 1,
-        },
-      },
-    ];
+    if (product.condition) {
+      query.condition = product.condition;
+    }
 
-    const products = await Model.aggregate(pipeline);
+    const products = await UniversalProduct.find(query)
+      .populate("variants")
+      .populate("productType", "name slug")
+      .sort({ averageRating: -1, salesCount: -1, createdAt: -1 })
+      .limit(4)
+      .lean();
+
+    const normalized = products.map((item) => {
+      const variants = Array.isArray(item.variants) ? item.variants : [];
+      const prices = variants
+        .map((variant) => Number(variant.price))
+        .filter((price) => Number.isFinite(price));
+      const originalPrices = variants
+        .map((variant) => Number(variant.originalPrice))
+        .filter((price) => Number.isFinite(price));
+
+      const minPrice = prices.length ? Math.min(...prices) : 0;
+      const minOriginalPrice = originalPrices.length
+        ? Math.min(...originalPrices)
+        : minPrice;
+      const images =
+        item.featuredImages?.length > 0
+          ? item.featuredImages
+          : variants[0]?.images || [];
+
+      return {
+        _id: item._id,
+        name: item.name,
+        model: item.model,
+        category: item.productType?.name || "",
+        categoryRoute: getCategoryRoute(item.productType),
+        images,
+        price: minPrice,
+        originalPrice: minOriginalPrice,
+        averageRating: item.averageRating || 0,
+        totalReviews: item.totalReviews || 0,
+        variants,
+        baseSlug: item.baseSlug || item.slug,
+        installmentBadge: item.installmentBadge || "NONE",
+      };
+    });
 
     res.json({
       success: true,
-      data: { products },
+      data: { products: normalized },
     });
   } catch (error) {
     console.error("Error getting related products:", error);
@@ -116,5 +118,5 @@ export const getRelatedProducts = async (req, res) => {
 };
 
 export default {
-  getRelatedProducts
+  getRelatedProducts,
 };

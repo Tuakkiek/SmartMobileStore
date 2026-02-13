@@ -16,7 +16,6 @@ const salesAnalyticsSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"],
       required: true,
        
     },

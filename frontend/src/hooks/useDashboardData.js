@@ -1,23 +1,30 @@
-// ============================================
-// FILE: frontend/src/hooks/useDashboardData.js
-// UPDATED: Thêm employee KPI data
-// ============================================
-
 import { useState, useEffect } from "react";
 import axios from "axios";
 import {
   orderAPI,
   userAPI,
   promotionAPI,
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
+  universalProductAPI,
 } from "@/lib/api";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
+const toNumber = (value) => Number(value || 0);
+
+const normalizeKey = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+const getProductCategoryName = (product) => {
+  const type = product?.productType;
+  if (typeof type === "object") {
+    return type?.name || type?.slug || product?.category || "Product";
+  }
+  return type || product?.category || "Product";
+};
 
 export const useDashboardData = (timeRange) => {
   const [stats, setStats] = useState(null);
@@ -29,64 +36,46 @@ export const useDashboardData = (timeRange) => {
     setError(null);
 
     try {
-      // Tính startDate/endDate từ timeRange
       const { startDate, endDate } = getDateRange(timeRange);
 
       const [
         ordersRes,
         deliveredRes,
         employeesRes,
-        iphonesRes,
-        ipadsRes,
-        macsRes,
-        airpodsRes,
-        applewatchesRes,
-        accessoriesRes,
+        productsRes,
         promotionsRes,
-        employeeKPIRes, // ✅ NEW
+        employeeKPIRes,
       ] = await Promise.all([
-        orderAPI.getAll({ limit: 1000, startDate, endDate }), // Thêm tham số ngày
+        orderAPI.getAll({ limit: 1000, startDate, endDate }),
         orderAPI.getAll({
           status: "DELIVERED",
           limit: 2000,
           startDate,
           endDate,
-        }), // Thêm tham số ngày
+        }),
         userAPI.getAllEmployees(),
-        iPhoneAPI.getAll({ limit: 1000 }),
-        iPadAPI.getAll({ limit: 1000 }),
-        macAPI.getAll({ limit: 1000 }),
-        airPodsAPI.getAll({ limit: 1000 }),
-        appleWatchAPI.getAll({ limit: 1000 }),
-        accessoryAPI.getAll({ limit: 1000 }),
+        universalProductAPI.getAll({ limit: 1000 }),
         promotionAPI.getAllPromotions(),
         axios.get(`${BASE_URL}/analytics/employee/kpi`, {
           params: { startDate, endDate },
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-          },
-        }), // ✅ NEW
+          headers: { Authorization: `Bearer ${getToken()}` },
+        }),
       ]);
 
       const processedStats = processAllData({
         ordersRes,
         deliveredRes,
         employeesRes,
-        iphonesRes,
-        ipadsRes,
-        macsRes,
-        airpodsRes,
-        applewatchesRes,
-        accessoriesRes,
+        productsRes,
         promotionsRes,
         timeRange,
-        employeeKPI: employeeKPIRes.data.data, // ✅ NEW
+        employeeKPI: employeeKPIRes?.data?.data || {},
       });
 
       setStats(processedStats);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
-      setError(err.response?.data?.message || "Lỗi khi tải dữ liệu");
+      setError(err?.response?.data?.message || "Loi khi tai du lieu");
     } finally {
       setIsLoading(false);
     }
@@ -99,17 +88,14 @@ export const useDashboardData = (timeRange) => {
   return { stats, isLoading, error, refetch: fetchData };
 };
 
-// ============================================
-// HELPER: Get date range
-// ============================================
 const getDateRange = (timeRange) => {
   const now = new Date();
   const endDate = new Date(now);
-  let startDate = new Date(now);
+  const startDate = new Date(now);
 
   switch (timeRange) {
     case "7days":
-      startDate.setDate(startDate.getDate() - 6); // Bao gồm 7 ngày
+      startDate.setDate(startDate.getDate() - 6);
       break;
     case "30days":
       startDate.setDate(startDate.getDate() - 29);
@@ -121,357 +107,277 @@ const getDateRange = (timeRange) => {
       startDate.setFullYear(startDate.getFullYear() - 1);
       break;
     default:
-      startDate.setDate(startDate.getDate() - 29); // Mặc định là 30 ngày
+      startDate.setDate(startDate.getDate() - 29);
   }
 
   startDate.setHours(0, 0, 0, 0);
   endDate.setHours(23, 59, 59, 999);
-  return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  };
 };
 
-// ============================================
-// HELPER: Get token
-// ============================================
 const getToken = () => {
   const authStorage = localStorage.getItem("auth-storage");
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage);
-      return state?.token;
-    } catch (e) {
-      return null;
-    }
+  if (!authStorage) return null;
+
+  try {
+    const { state } = JSON.parse(authStorage);
+    return state?.token || null;
+  } catch {
+    return null;
   }
-  return null;
 };
 
-// ============================================
-// HELPER: Process all data
-// ============================================
 const processAllData = ({
   ordersRes,
   deliveredRes,
   employeesRes,
-  iphonesRes,
-  ipadsRes,
-  macsRes,
-  airpodsRes,
-  applewatchesRes,
-  accessoriesRes,
+  productsRes,
   promotionsRes,
   timeRange,
-  employeeKPI, // ✅ NEW
+  employeeKPI,
 }) => {
-  const { startDate, endDate } = getDateRange(timeRange); // Tính lại ở đây
+  const { startDate, endDate } = getDateRange(timeRange);
+
   const orders =
-    ordersRes?.data?.data?.orders ||
-    ordersRes?.data?.orders ||
-    [];
+    ordersRes?.data?.data?.orders || ordersRes?.data?.orders || [];
+  const deliveredOrders =
+    deliveredRes?.data?.data?.orders || deliveredRes?.data?.orders || [];
+
   const totalOrders =
     ordersRes?.data?.data?.total ||
     ordersRes?.data?.pagination?.total ||
     orders.length;
-  const filteredOrders = orders.filter((o) => {
-    const createdAt = new Date(o.createdAt);
-    return (
-      (!startDate || createdAt >= new Date(startDate)) &&
-      (!endDate || createdAt <= new Date(endDate))
-    );
-  });
-  const deliveredOrders =
-    deliveredRes?.data?.data?.orders ||
-    deliveredRes?.data?.orders ||
-    [];
-  const filteredDelivered = deliveredOrders.filter((o) => {
-    const createdAt = new Date(o.createdAt);
-    return (
-      (!startDate || createdAt >= new Date(startDate)) &&
-      (!endDate || createdAt <= new Date(endDate))
-    );
+
+  const allProducts =
+    productsRes?.data?.data?.products || productsRes?.data?.products || [];
+
+  const filteredOrders = orders.filter((order) => {
+    const createdAt = new Date(order.createdAt);
+    return createdAt >= new Date(startDate) && createdAt <= new Date(endDate);
   });
 
-  // Sử dụng filteredOrders và filteredDelivered trong các phép tính
+  const filteredDelivered = deliveredOrders.filter((order) => {
+    const createdAt = new Date(order.createdAt);
+    return createdAt >= new Date(startDate) && createdAt <= new Date(endDate);
+  });
+
   const totalRevenue = filteredDelivered.reduce(
-    (sum, order) => sum + (Number(order.totalAmount ?? order.total) || 0),
+    (sum, order) => sum + toNumber(order.totalAmount ?? order.total),
     0
   );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
   const todayRevenue = filteredDelivered
     .filter((order) => new Date(order.createdAt) >= today)
-    .reduce((sum, order) => sum + (Number(order.totalAmount ?? order.total) || 0), 0);
+    .reduce((sum, order) => sum + toNumber(order.totalAmount ?? order.total), 0);
 
   const avgOrderValue =
     filteredDelivered.length > 0 ? totalRevenue / filteredDelivered.length : 0;
 
-  // Cập nhật số lượng trạng thái đơn hàng
   const pendingOrders = filteredOrders.filter(
-    (o) => o.status === "PENDING"
+    (order) => order.status === "PENDING"
   ).length;
-  const completedOrders = filteredDelivered.length; // Vì filteredDelivered đã được lọc theo trạng thái DELIVERED
+  const completedOrders = filteredDelivered.length;
   const cancelledOrders = filteredOrders.filter(
-    (o) => o.status === "CANCELLED"
+    (order) => order.status === "CANCELLED"
   ).length;
 
-  // Products data processing (giữ nguyên code cũ)
-  const iPhones = Array.isArray(iphonesRes?.data?.data?.products)
-    ? iphonesRes.data.data.products
-    : [];
-  const iPads = Array.isArray(ipadsRes?.data?.data?.products)
-    ? ipadsRes.data.data.products
-    : [];
-  const macs = Array.isArray(macsRes?.data?.data?.products)
-    ? macsRes.data.data.products
-    : Array.isArray(macsRes?.data)
-    ? macsRes.data
-    : [];
-  const airPods = Array.isArray(airpodsRes?.data?.data?.products)
-    ? airpodsRes.data.data.products
-    : [];
-  const watches = Array.isArray(applewatchesRes?.data?.data?.products)
-    ? applewatchesRes.data.data.products
-    : [];
-  const accessories = Array.isArray(accessoriesRes?.data?.data?.products)
-    ? accessoriesRes.data.data.products
-    : [];
+  let totalStock = 0;
+  let totalVariants = 0;
+  let inventoryValue = 0;
+  let totalRatings = 0;
+  let ratedProducts = 0;
+  let totalReviews = 0;
 
-  const allProducts = [
-    ...iPhones,
-    ...iPads,
-    ...macs,
-    ...airPods,
-    ...watches,
-    ...accessories,
-  ];
-  const totalProducts = allProducts.length;
+  const productIdToCategory = new Map();
+  const categoryStatsMap = new Map();
 
-  // Stock and inventory (giữ nguyên)
-  let totalStock = 0,
-    totalVariants = 0,
-    inventoryValue = 0;
-  let totalRatings = 0,
-    ratedProducts = 0,
-    totalReviews = 0;
-
-  allProducts.forEach((product) => {
-    const variants = product.variants || [];
-    totalVariants += variants.length;
-    totalReviews += product.totalReviews || 0;
-
-    variants.forEach((v) => {
-      totalStock += v.stock || 0;
-      inventoryValue += (v.price || 0) * (v.stock || 0);
-    });
-
-    if (product.averageRating > 0) {
-      totalRatings += product.averageRating;
-      ratedProducts++;
+  for (const product of allProducts) {
+    const productId = String(product?._id || "");
+    const categoryName = getProductCategoryName(product);
+    const categoryKey = normalizeKey(categoryName);
+    if (productId) {
+      productIdToCategory.set(productId, categoryName);
     }
-  });
+
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    const productStock = variants.reduce(
+      (sum, variant) => sum + toNumber(variant.stock),
+      0
+    );
+    const productValue = variants.reduce(
+      (sum, variant) => sum + toNumber(variant.price) * toNumber(variant.stock),
+      0
+    );
+
+    totalVariants += variants.length;
+    totalStock += productStock;
+    inventoryValue += productValue;
+    totalReviews += toNumber(product.totalReviews);
+
+    if (toNumber(product.averageRating) > 0) {
+      totalRatings += toNumber(product.averageRating);
+      ratedProducts += 1;
+    }
+
+    if (!categoryStatsMap.has(categoryKey)) {
+      categoryStatsMap.set(categoryKey, {
+        name: categoryName,
+        key: categoryKey,
+        products: 0,
+        stock: 0,
+        value: 0,
+        revenue: 0,
+      });
+    }
+
+    const categoryStats = categoryStatsMap.get(categoryKey);
+    categoryStats.products += 1;
+    categoryStats.stock += productStock;
+    categoryStats.value += productValue;
+  }
 
   const avgRating = ratedProducts > 0 ? totalRatings / ratedProducts : 0;
 
   const lowStockProducts = allProducts.filter((product) => {
-    const variants = product.variants || [];
-    return variants.some((v) => v.stock > 0 && v.stock < 10);
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    return variants.some((variant) => toNumber(variant.stock) > 0 && toNumber(variant.stock) < 10);
   }).length;
 
   const outOfStockProducts = allProducts.filter((product) => {
-    const variants = product.variants || [];
-    return variants.every((v) => v.stock === 0);
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    return variants.length > 0 && variants.every((variant) => toNumber(variant.stock) === 0);
   }).length;
 
-  // Category data (giữ nguyên)
-  const categoryStock = [
-    {
-      name: "iPhone",
-      products: iphonesRes?.data?.data?.total || 0,
-      stock: iPhones.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: iPhones.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-    {
-      name: "iPad",
-      products: ipadsRes?.data?.data?.total || 0,
-      stock: iPads.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: iPads.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-    {
-      name: "Mac",
-      products: macsRes?.data?.data?.total || macsRes?.data?.length || 0,
-      stock: macs.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: macs.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-    {
-      name: "AirPods",
-      products: airpodsRes?.data?.data?.total || 0,
-      stock: airPods.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: airPods.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-    {
-      name: "Watch",
-      products: applewatchesRes?.data?.data?.total || 0,
-      stock: watches.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: watches.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-    {
-      name: "Phụ kiện",
-      products: accessoriesRes?.data?.data?.total || 0,
-      stock: accessories.reduce(
-        (sum, p) =>
-          sum + (p.variants || []).reduce((s, v) => s + (v.stock || 0), 0),
-        0
-      ),
-      value: accessories.reduce(
-        (sum, p) =>
-          sum +
-          (p.variants || []).reduce(
-            (s, v) => s + (v.price || 0) * (v.stock || 0),
-            0
-          ),
-        0
-      ),
-    },
-  ];
+  for (const order of filteredDelivered) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    for (const item of items) {
+      const productId =
+        typeof item.productId === "object"
+          ? String(item.productId?._id || item.productId)
+          : String(item.productId || "");
 
-  // Promotions
+      const fallbackCategory = item.productType || "Product";
+      const categoryName = productIdToCategory.get(productId) || fallbackCategory;
+      const categoryKey = normalizeKey(categoryName);
+
+      if (!categoryStatsMap.has(categoryKey)) {
+        categoryStatsMap.set(categoryKey, {
+          name: categoryName,
+          key: categoryKey,
+          products: 0,
+          stock: 0,
+          value: 0,
+          revenue: 0,
+        });
+      }
+
+      const categoryStats = categoryStatsMap.get(categoryKey);
+      categoryStats.revenue += toNumber(item.total);
+    }
+  }
+
+  const categoryStock = Array.from(categoryStatsMap.values()).sort(
+    (a, b) => b.products - a.products
+  );
+
+  const categoryRevenue = categoryStock.map((category) => ({
+    ...category,
+    revenue: toNumber(category.revenue),
+  }));
+
+  const categoryDistribution = categoryStock.map((category) => ({
+    name: category.name,
+    value: category.products,
+    revenue: category.revenue,
+  }));
+
   const promotions = promotionsRes?.data?.data?.promotions || [];
   const now = new Date();
 
-  const activePromotions = promotions.filter((p) => {
-    const start = new Date(p.startDate);
-    const end = new Date(p.endDate);
-    return now >= start && now <= end && p.usedCount < p.usageLimit;
+  const activePromotions = promotions.filter((promotion) => {
+    const start = new Date(promotion.startDate);
+    const end = new Date(promotion.endDate);
+    return now >= start && now <= end && promotion.usedCount < promotion.usageLimit;
   }).length;
 
   const usedPromotions = promotions.reduce(
-    (sum, p) => sum + (p.usedCount || 0),
+    (sum, promotion) => sum + toNumber(promotion.usedCount),
     0
   );
 
   const topPromotions = [...promotions]
-    .sort((a, b) => b.usedCount - a.usedCount)
+    .sort((a, b) => toNumber(b.usedCount) - toNumber(a.usedCount))
     .slice(0, 10)
-    .map((p) => ({
-      name: p.name,
-      code: p.code,
-      used: p.usedCount,
-      limit: p.usageLimit,
+    .map((promotion) => ({
+      name: promotion.name,
+      code: promotion.code,
+      used: toNumber(promotion.usedCount),
+      limit: toNumber(promotion.usageLimit),
       discount:
-        p.discountType === "PERCENTAGE"
-          ? `${p.discountValue}%`
-          : `${p.discountValue.toLocaleString()}₫`,
+        promotion.discountType === "PERCENTAGE"
+          ? `${promotion.discountValue}%`
+          : `${toNumber(promotion.discountValue).toLocaleString()}d`,
     }));
 
-  // Best selling products
   const bestSellingProducts = [...allProducts]
-    .filter((p) => p.salesCount > 0)
-    .sort((a, b) => b.salesCount - a.salesCount)
+    .filter((product) => toNumber(product.salesCount) > 0)
+    .sort((a, b) => toNumber(b.salesCount) - toNumber(a.salesCount))
     .slice(0, 20)
-    .map((p) => ({
-      name: p.name,
-      sales: p.salesCount || 0,
-      rating: p.averageRating || 0,
-      reviews: p.totalReviews || 0,
-      category: p.category,
+    .map((product) => ({
+      name: product.name,
+      sales: toNumber(product.salesCount),
+      rating: toNumber(product.averageRating),
+      reviews: toNumber(product.totalReviews),
+      category: getProductCategoryName(product),
     }));
 
-  // Category revenue
-  const categoryRevenue = categoryStock.map((cat) => {
-    const revenue = deliveredOrders
-      .flatMap((o) => o.items)
-      .filter((item) => {
-        if (cat.name === "Watch") return item.productType === "AppleWatch";
-        if (cat.name === "Phụ kiện") return item.productType === "Accessory";
-        return item.productType === cat.name;
-      })
-      .reduce((sum, item) => sum + item.total, 0);
+  const productRevenue = new Map();
+  for (const order of filteredDelivered) {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    for (const item of items) {
+      const key = item.productName || item.name || "Unknown Product";
+      productRevenue.set(key, toNumber(productRevenue.get(key)) + toNumber(item.total));
+    }
+  }
 
-    return { ...cat, revenue };
-  });
+  const topProducts = Array.from(productRevenue.entries())
+    .sort((a, b) => toNumber(b[1]) - toNumber(a[1]))
+    .slice(0, 10)
+    .map(([name, revenue]) => ({ name, revenue }));
 
-  const categoryDistribution = categoryRevenue.map((cat) => ({
-    name: cat.name,
-    value: cat.products,
-    revenue: cat.revenue,
-  }));
+  const productPerformance = [...allProducts]
+    .map((product) => ({
+      name: product.name,
+      salesCount: toNumber(product.salesCount),
+      rating: toNumber(product.averageRating),
+      reviews: toNumber(product.totalReviews),
+    }))
+    .sort((a, b) => b.salesCount - a.salesCount)
+    .slice(0, 10);
 
-  // Growth calculations
-  const last30Days = deliveredOrders.filter((o) => {
-    const orderDate = new Date(o.createdAt);
-    const daysAgo = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
+  const last30Days = filteredDelivered.filter((order) => {
+    const daysAgo = Math.floor((Date.now() - new Date(order.createdAt)) / 86400000);
     return daysAgo <= 30;
   });
 
-  const previous30Days = deliveredOrders.filter((o) => {
-    const orderDate = new Date(o.createdAt);
-    const daysAgo = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
+  const previous30Days = filteredDelivered.filter((order) => {
+    const daysAgo = Math.floor((Date.now() - new Date(order.createdAt)) / 86400000);
     return daysAgo > 30 && daysAgo <= 60;
   });
 
-  const currentRevenue = last30Days.reduce((sum, o) => sum + o.totalAmount, 0);
+  const currentRevenue = last30Days.reduce(
+    (sum, order) => sum + toNumber(order.totalAmount ?? order.total),
+    0
+  );
   const previousRevenue = previous30Days.reduce(
-    (sum, o) => sum + o.totalAmount,
+    (sum, order) => sum + toNumber(order.totalAmount ?? order.total),
     0
   );
 
@@ -482,67 +388,35 @@ const processAllData = ({
 
   const orderGrowth =
     previous30Days.length > 0
-      ? ((last30Days.length - previous30Days.length) / previous30Days.length) *
-        100
+      ? ((last30Days.length - previous30Days.length) / previous30Days.length) * 100
       : 0;
 
-  // Hourly orders
-  const hourlyOrders = Array.from({ length: 24 }, (_, hour) => {
-    const count = orders.filter((o) => {
-      const orderHour = new Date(o.createdAt).getHours();
-      return orderHour === hour;
-    }).length;
-    return { hour: `${hour}:00`, orders: count };
-  });
+  const hourlyOrders = Array.from({ length: 24 }, (_, hour) => ({
+    hour: `${hour}:00`,
+    orders: filteredOrders.filter(
+      (order) => new Date(order.createdAt).getHours() === hour
+    ).length,
+  }));
 
-  // Revenue by month
-  const revenueByMonth = generateRevenueByMonth(deliveredOrders);
+  const revenueByMonth = generateRevenueByMonth(filteredDelivered);
+  const salesTrend = generateSalesTrend(filteredDelivered);
 
-  // Orders by status
   const ordersByStatus = [
-    { name: "Chờ xác nhận", value: pendingOrders, color: "#f59e0b" },
-    { name: "Đã giao", value: completedOrders, color: "#10b981" },
-    { name: "Đã hủy", value: cancelledOrders, color: "#ef4444" },
+    { name: "Cho xac nhan", value: pendingOrders, color: "#f59e0b" },
+    { name: "Da giao", value: completedOrders, color: "#10b981" },
+    { name: "Da huy", value: cancelledOrders, color: "#ef4444" },
     {
-      name: "Đang xử lý",
-      value: orders.filter(
-        (o) => o.status === "CONFIRMED" || o.status === "SHIPPING"
+      name: "Dang xu ly",
+      value: filteredOrders.filter(
+        (order) => order.status === "CONFIRMED" || order.status === "SHIPPING"
       ).length,
       color: "#3b82f6",
     },
   ];
 
-  // Sales trend
-  const salesTrend = generateSalesTrend(deliveredOrders);
-
-  // Top products by revenue
-  const productRevenue = new Map();
-  deliveredOrders.forEach((order) => {
-    order.items.forEach((item) => {
-      const key = item.productName;
-      productRevenue.set(key, (productRevenue.get(key) || 0) + item.total);
-    });
-  });
-
-  const topProducts = Array.from(productRevenue.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([name, revenue]) => ({ name, revenue }));
-
-  // Product performance
-  const productPerformance = allProducts
-    .map((p) => ({
-      name: p.name,
-      salesCount: p.salesCount || 0,
-      rating: p.averageRating || 0,
-      reviews: p.totalReviews || 0,
-    }))
-    .sort((a, b) => b.salesCount - a.salesCount)
-    .slice(0, 10);
-
   return {
     totalOrders,
-    totalProducts,
+    totalProducts: allProducts.length,
     totalEmployees: employeesRes?.data?.data?.employees?.length || 0,
     totalRevenue,
     pendingOrders,
@@ -551,7 +425,7 @@ const processAllData = ({
     lowStockProducts,
     avgOrderValue,
     todayRevenue,
-    recentOrders: orders.slice(0, 5),
+    recentOrders: filteredOrders.slice(0, 5),
     topProducts,
     categoryDistribution,
     revenueByMonth,
@@ -574,22 +448,18 @@ const processAllData = ({
     inventoryValue,
     avgRating,
     totalReviews,
-    ...employeeKPI, // ✅ NEW
+    ...employeeKPI,
   };
 };
 
-// Generate revenue by month
 const generateRevenueByMonth = (orders) => {
   const monthlyData = {};
   const months = [];
 
-  for (let i = 5; i >= 0; i--) {
+  for (let i = 5; i >= 0; i -= 1) {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}`;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     monthlyData[key] = 0;
     months.push({
       key,
@@ -600,26 +470,25 @@ const generateRevenueByMonth = (orders) => {
     });
   }
 
-  orders.forEach((order) => {
+  for (const order of orders) {
     const date = new Date(order.createdAt);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}`;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     if (monthlyData[key] !== undefined) {
-      monthlyData[key] += order.totalAmount;
+      monthlyData[key] += toNumber(order.totalAmount ?? order.total);
     }
-  });
+  }
 
-  return months.map((m) => ({ name: m.name, revenue: monthlyData[m.key] }));
+  return months.map((month) => ({
+    name: month.name,
+    revenue: monthlyData[month.key],
+  }));
 };
 
-// Generate sales trend
 const generateSalesTrend = (orders) => {
   const dailyData = {};
   const days = [];
 
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 29; i >= 0; i -= 1) {
     const date = new Date();
     date.setDate(date.getDate() - i);
     const key = date.toISOString().split("T")[0];
@@ -633,17 +502,17 @@ const generateSalesTrend = (orders) => {
     });
   }
 
-  orders.forEach((order) => {
+  for (const order of orders) {
     const key = new Date(order.createdAt).toISOString().split("T")[0];
     if (dailyData[key]) {
       dailyData[key].orders += 1;
-      dailyData[key].revenue += order.totalAmount;
+      dailyData[key].revenue += toNumber(order.totalAmount ?? order.total);
     }
-  });
+  }
 
-  return days.map((d) => ({
-    name: d.name,
-    orders: dailyData[d.key].orders,
-    revenue: dailyData[d.key].revenue,
+  return days.map((day) => ({
+    name: day.name,
+    orders: dailyData[day.key].orders,
+    revenue: dailyData[day.key].revenue,
   }));
 };

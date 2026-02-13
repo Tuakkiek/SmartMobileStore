@@ -5,24 +5,15 @@
 
 import Order from "./Order.js";
 import mongoose from "mongoose";
-import IPhone, { IPhoneVariant } from "../product/IPhone.js";
-import IPad, { IPadVariant } from "../product/IPad.js";
-import Mac, { MacVariant } from "../product/Mac.js";
-import AirPods, { AirPodsVariant } from "../product/AirPods.js";
-import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
-import Accessory, { AccessoryVariant } from "../product/Accessory.js";
+import UniversalProduct, {
+  UniversalVariant,
+} from "../product/UniversalProduct.js";
 
 // ✅ THÊM: Helper function
+// ✅ THÊM: Helper function - Unified for UniversalProduct
 const getModelsByType = (productType) => {
-  const models = {
-    iPhone: { Product: IPhone, Variant: IPhoneVariant },
-    iPad: { Product: IPad, Variant: IPadVariant },
-    Mac: { Product: Mac, Variant: MacVariant },
-    AirPods: { Product: AirPods, Variant: AirPodsVariant },
-    AppleWatch: { Product: AppleWatch, Variant: AppleWatchVariant },
-    Accessory: { Product: Accessory, Variant: AccessoryVariant },
-  };
-  return models[productType] || null;
+  // All product types now use the same Universal Product/Variant models
+  return { Product: UniversalProduct, Variant: UniversalVariant };
 };
 
 export const cancelExpiredVNPayOrders = async () => {

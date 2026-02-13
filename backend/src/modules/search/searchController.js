@@ -1,177 +1,159 @@
-// ============================================
-// FILE: backend/src/controllers/searchController.js
-// ✅ FULL-TEXT SEARCH với AI-powered ranking
-// ============================================
+import mongoose from "mongoose";
+import UniversalProduct from "../product/UniversalProduct.js";
+import ProductType from "../productType/ProductType.js";
 
-import IPhone, { IPhoneVariant } from "../product/IPhone.js";
-import IPad, { IPadVariant } from "../product/IPad.js";
-import Mac, { MacVariant } from "../product/Mac.js";
-import AirPods, { AirPodsVariant } from "../product/AirPods.js";
-import AppleWatch, { AppleWatchVariant } from "../product/AppleWatch.js";
-import Accessory, { AccessoryVariant } from "../product/Accessory.js";
-
-// ============================================
-// SYNONYM DICTIONARY (Từ điển đồng nghĩa)
-// ============================================
 const SYNONYM_MAP = {
-  // Laptop / Mac
-  laptop: ["macbook", "mac", "máy tính xách tay"],
-  "máy tính xách tay": ["macbook", "mac", "laptop"],
+  laptop: ["macbook", "mac", "may tinh xach tay"],
+  "may tinh xach tay": ["macbook", "mac", "laptop"],
   macbook: ["mac", "laptop"],
-
-  // Tai nghe
   "tai nghe": ["airpods", "tai nghe bluetooth"],
   "tai phone": ["airpods", "tai nghe"],
-
-  // Dây đeo / Strap
-  "dây đeo": ["strap", "dây watch", "dây apple watch"],
-  strap: ["dây đeo", "dây watch"],
-
-  // Chuột
-  chuột: ["mouse", "magic mouse"],
-  mouse: ["chuột", "magic mouse"],
-
-  // Bàn phím
-  "bàn phím": ["keyboard", "magic keyboard"],
-  keyboard: ["bàn phím"],
-
-  // Sạc / Cáp
-  sạc: ["charger", "củ sạc", "adapter"],
-  "củ sạc": ["sạc", "charger", "adapter"],
-  cáp: ["cable", "dây cáp"],
-  cable: ["cáp", "dây"],
-
-  // Ốp lưng / Case
-  "ốp lưng": ["case", "vỏ máy"],
-  case: ["ốp lưng", "vỏ"],
-
-  // Máy tính bảng
-  "máy tính bảng": ["ipad", "tablet"],
-  tablet: ["ipad", "máy tính bảng"],
-
-  // Đồng hồ
-  "đồng hồ": ["apple watch", "watch"],
-  "đồng hồ thông minh": ["apple watch", "smartwatch"],
-
-  // Điện thoại
-  "điện thoại": ["iphone", "phone", "smartphone"],
-  "di động": ["iphone", "điện thoại"],
-  phone: ["iphone", "điện thoại"],
+  "day deo": ["strap", "day watch", "day apple watch"],
+  strap: ["day deo", "day watch"],
+  chuot: ["mouse", "magic mouse"],
+  mouse: ["chuot", "magic mouse"],
+  "ban phim": ["keyboard", "magic keyboard"],
+  keyboard: ["ban phim"],
+  sac: ["charger", "cu sac", "adapter"],
+  "cu sac": ["sac", "charger", "adapter"],
+  cap: ["cable", "day cap"],
+  cable: ["cap", "day"],
+  "op lung": ["case", "vo may"],
+  case: ["op lung", "vo"],
+  "may tinh bang": ["ipad", "tablet"],
+  tablet: ["ipad", "may tinh bang"],
+  "dong ho": ["apple watch", "watch"],
+  "dong ho thong minh": ["apple watch", "smartwatch"],
+  "dien thoai": ["iphone", "phone", "smartphone"],
+  "di dong": ["iphone", "dien thoai"],
+  phone: ["iphone", "dien thoai"],
 };
 
-// ============================================
-// TYPO CORRECTION (Sửa lỗi chính tả)
-// ============================================
 const TYPO_MAP = {
-  // iPhone variations
   ipone: "iphone",
   ifone: "iphone",
   aiphon: "iphone",
   iphoen: "iphone",
   ipohne: "iphone",
-  
-  // iPad
   iapd: "ipad",
   iapad: "ipad",
-
-  // MacBook
   macbok: "macbook",
   macboo: "macbook",
   makbook: "macbook",
-  mắcbúc: "macbook",
-
-  // AirPods
   aripod: "airpods",
   airpod: "airpods",
   "ari pod": "airpods",
-
-  // Watch
   wach: "watch",
   wacth: "watch",
   watc: "watch",
-
-  // Common Vietnamese typos
-  sac: "sạc",
-  cap: "cáp",
-  "op lung": "ốp lưng",
-  chuot: "chuột",
-  "ban phim": "bàn phím",
+  "op lung": "op lung",
+  "ban phim": "ban phim",
 };
 
-// ============================================
-// CATEGORY MAPPING
-// ============================================
-const CATEGORY_MAP = {
-  iPhone: { model: IPhone, variant: IPhoneVariant, route: "dien-thoai" },
-  iPad: { model: IPad, variant: IPadVariant, route: "may-tinh-bang" },
-  Mac: { model: Mac, variant: MacVariant, route: "macbook" },
-  AirPods: { model: AirPods, variant: AirPodsVariant, route: "tai-nghe" },
-  AppleWatch: {
-    model: AppleWatch,
-    variant: AppleWatchVariant,
-    route: "apple-watch",
-  },
-  Accessory: { model: Accessory, variant: AccessoryVariant, route: "phu-kien" },
+const LEGACY_CATEGORY_TO_SLUG = {
+  iphone: "smartphone",
+  ipad: "tablet",
+  mac: "laptop",
+  airpods: "headphone",
+  applewatch: "smartwatch",
+  accessory: "accessories",
+  accessories: "accessories",
+  smartphone: "smartphone",
+  tablet: "tablet",
+  laptop: "laptop",
+  headphone: "headphone",
+  smartwatch: "smartwatch",
 };
 
-// ============================================
-// HELPER: Normalize Vietnamese text
-// ============================================
+const CATEGORY_ROUTE_MAP = {
+  smartphone: "dien-thoai",
+  tablet: "may-tinh-bang",
+  laptop: "macbook",
+  headphone: "tai-nghe",
+  smartwatch: "apple-watch",
+  accessories: "phu-kien",
+};
+
 const normalizeVietnamese = (text) => {
   if (!text) return "";
   return text
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 };
 
-// ============================================
-// HELPER: Correct typos
-// ============================================
-const correctTypos = (query) => {
-  let corrected = normalizeVietnamese(query);
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // Check exact match first
-  if (TYPO_MAP[corrected]) {
-    return TYPO_MAP[corrected];
+const normalizeCategoryKey = (text) =>
+  normalizeVietnamese(text).replace(/[\s_-]+/g, "");
+
+const getCategoryRoute = (productType) => {
+  const slug = normalizeVietnamese(productType?.slug || "").replace(
+    /\s+/g,
+    "-"
+  );
+  const nameSlug = normalizeVietnamese(productType?.name || "").replace(
+    /\s+/g,
+    "-"
+  );
+  return CATEGORY_ROUTE_MAP[slug] || CATEGORY_ROUTE_MAP[nameSlug] || "san-pham";
+};
+
+const resolveProductTypeIds = async (categoryInput) => {
+  if (!categoryInput) return null;
+
+  if (mongoose.Types.ObjectId.isValid(categoryInput)) {
+    return [categoryInput];
   }
 
-  // Replace word by word
-  Object.entries(TYPO_MAP).forEach(([typo, correct]) => {
-    const regex = new RegExp(`\\b${typo}\\b`, "gi");
-    corrected = corrected.replace(regex, correct);
-  });
+  const normalizedKey = normalizeCategoryKey(categoryInput);
+  const mappedSlug =
+    LEGACY_CATEGORY_TO_SLUG[normalizedKey] ||
+    normalizeVietnamese(categoryInput).replace(/\s+/g, "-");
+
+  const docs = await ProductType.find({
+    $or: [
+      { slug: mappedSlug },
+      { slug: normalizeVietnamese(categoryInput).replace(/\s+/g, "-") },
+      { name: { $regex: new RegExp(`^${escapeRegex(categoryInput)}$`, "i") } },
+    ],
+  })
+    .select("_id")
+    .lean();
+
+  return docs.map((doc) => doc._id);
+};
+
+const correctTypos = (query) => {
+  let corrected = normalizeVietnamese(query);
+  if (TYPO_MAP[corrected]) return TYPO_MAP[corrected];
+
+  for (const [typo, value] of Object.entries(TYPO_MAP)) {
+    corrected = corrected.replace(new RegExp(`\\b${typo}\\b`, "gi"), value);
+  }
 
   return corrected;
 };
 
-// ============================================
-// HELPER: Expand synonyms
-// ============================================
-const expandSynonyms = (originalQuery) => {
-  const normalized = normalizeVietnamese(originalQuery);
+const expandSynonyms = (query) => {
+  const normalized = normalizeVietnamese(query);
   const terms = new Set([normalized]);
 
-  Object.entries(SYNONYM_MAP).forEach(([key, synonyms]) => {
+  for (const [key, synonyms] of Object.entries(SYNONYM_MAP)) {
     const normalizedKey = normalizeVietnamese(key);
-    
-    // Chỉ kích hoạt nếu query chứa ĐÚNG cụm từ đó (không tách từ)
-    if (normalized.includes(normalizedKey)) {
-      synonyms.forEach(syn => {
-        const normSyn = normalizeVietnamese(syn);
-        if (normSyn && normSyn !== normalizedKey) {
-          terms.add(normSyn);
-        }
-      });
+    if (!normalized.includes(normalizedKey)) continue;
+    for (const synonym of synonyms) {
+      const normSynonym = normalizeVietnamese(synonym);
+      if (normSynonym && normSynonym !== normalizedKey) {
+        terms.add(normSynonym);
+      }
     }
-  });
+  }
 
   return Array.from(terms);
 };
-// ============================================
-// HELPER: Extract attributes from query
-// ============================================
+
 const extractAttributes = (query) => {
   const normalized = normalizeVietnamese(query);
   const attributes = {
@@ -180,101 +162,76 @@ const extractAttributes = (query) => {
     model: null,
   };
 
-  // Storage detection
   const storageMatch = normalized.match(/(\d+)\s*(gb|tb)/i);
   if (storageMatch) {
-    attributes.storage = storageMatch[1] + storageMatch[2].toUpperCase();
+    attributes.storage = `${storageMatch[1]}${storageMatch[2].toUpperCase()}`;
   }
 
-  // Color detection (Vietnamese)
-  const colors = [
-    "đen",
-    "trắng",
-    "xanh",
-    "đỏ",
-    "hồng",
-    "tím",
-    "vàng",
-    "bạc",
-    "gold",
-  ];
-  colors.forEach((color) => {
+  const colors = ["den", "trang", "xanh", "do", "hong", "tim", "vang", "bac", "gold"];
+  for (const color of colors) {
     if (normalized.includes(color)) {
       attributes.color = color;
+      break;
     }
-  });
+  }
 
-  // Model detection (e.g., "15 pro max", "14 plus")
   const modelMatch = normalized.match(
     /(iphone|ip)\s*(\d+)\s*(pro\s*max|pro|plus|mini)?/i
   );
   if (modelMatch) {
     attributes.model = modelMatch[2];
     if (modelMatch[3]) {
-      attributes.model += " " + modelMatch[3].replace(/\s+/g, " ");
+      attributes.model += ` ${modelMatch[3].replace(/\s+/g, " ")}`;
     }
   }
 
   return attributes;
 };
 
-// ============================================
-// HELPER: Calculate relevance score
-// ============================================
 const calculateRelevance = (product, query, attributes) => {
   let score = 0;
   const normalizedQuery = normalizeVietnamese(query);
   const normalizedName = normalizeVietnamese(product.name);
   const normalizedModel = normalizeVietnamese(product.model);
 
-  // 1. EXACT MATCH (100 points)
-  if (
-    normalizedName === normalizedQuery ||
-    normalizedModel === normalizedQuery
-  ) {
+  if (normalizedName === normalizedQuery || normalizedModel === normalizedQuery) {
     score += 100;
   }
 
-  // 2. NAME MATCH (30 points for word boundary, 15 for partial)
   const queryWords = normalizedQuery.split(/\s+/);
-  queryWords.forEach((word) => {
-    const wordBoundaryRegex = new RegExp(`\\b${word}\\b`, "i");
-    if (wordBoundaryRegex.test(normalizedName)) {
+  for (const word of queryWords) {
+    const boundary = new RegExp(`\\b${word}\\b`, "i");
+
+    if (boundary.test(normalizedName)) {
       score += 30;
-      // Bonus if at start
       if (normalizedName.startsWith(word)) score += 15;
     } else if (normalizedName.includes(word)) {
       score += 15;
     }
 
-    // Same for model
-    if (wordBoundaryRegex.test(normalizedModel)) {
+    if (boundary.test(normalizedModel)) {
       score += 25;
     } else if (normalizedModel.includes(word)) {
       score += 10;
     }
-  });
+  }
 
-  // 3. ATTRIBUTE MATCH (20 points each)
   if (
     attributes.storage &&
-    product.specifications?.storage?.includes(attributes.storage)
-  ) {
-    score += 20;
-  }
-  if (
-    attributes.color &&
-    product.specifications?.colors?.some((c) =>
-      normalizeVietnamese(c).includes(attributes.color)
+    normalizeVietnamese(String(product.specifications?.storage || "")).includes(
+      normalizeVietnamese(attributes.storage)
     )
   ) {
     score += 20;
   }
-  if (attributes.model && normalizedModel.includes(attributes.model)) {
+
+  if (
+    attributes.model &&
+    normalizedModel.includes(normalizeVietnamese(attributes.model))
+  ) {
     score += 25;
   }
 
-  // 4. DESCRIPTION MATCH (5 points)
   if (
     product.description &&
     normalizeVietnamese(product.description).includes(normalizedQuery)
@@ -282,146 +239,120 @@ const calculateRelevance = (product, query, attributes) => {
     score += 5;
   }
 
-  // 5. BOOST FOR POPULAR PRODUCTS
   if (product.salesCount > 0) {
-    score += Math.min(product.salesCount / 10, 10); // Max 10 points
+    score += Math.min(product.salesCount / 10, 10);
   }
 
-  // 6. BOOST FOR IN-STOCK
-  const hasStock = product.variants?.some((v) => v.stock > 0);
-  if (hasStock) {
+  if (product.variants?.some((v) => v.stock > 0)) {
     score += 5;
   }
 
-  // 7. BOOST FOR NEW PRODUCTS (within 30 days)
   const daysSinceCreation =
     (Date.now() - new Date(product.createdAt)) / (1000 * 60 * 60 * 24);
   if (daysSinceCreation <= 30) {
     score += 10;
   }
 
-  return Math.min(score, 100); // Cap at 100
+  return Math.min(score, 100);
 };
 
-// ============================================
-// MAIN SEARCH FUNCTION
-// ============================================
 export const search = async (req, res) => {
   try {
     const { q, limit = 20, category } = req.query;
+    const parsedLimit = Math.max(1, parseInt(limit, 10) || 20);
 
     if (!q || q.trim().length < 2) {
       return res.status(400).json({
         success: false,
-        message: "Query phải có ít nhất 2 ký tự",
+        message: "Query phai co it nhat 2 ky tu",
       });
     }
 
-    // STEP 1: Normalize & correct query
     const correctedQuery = correctTypos(q);
-
-    // STEP 2: Extract attributes (storage, color, model)
     const attributes = extractAttributes(correctedQuery);
-
-    // STEP 3: Expand with synonyms
     const expandedQueries = expandSynonyms(correctedQuery);
-
-    // STEP 4: Build MongoDB text search query
     const searchTerms = expandedQueries.join(" ");
+    const baseQuery = {};
 
-    // STEP 5: Search in relevant categories
-    const categoriesToSearch = category
-      ? [CATEGORY_MAP[category]]
-      : Object.values(CATEGORY_MAP);
-
-    const searchPromises = categoriesToSearch.map(async (cat) => {
-      if (!cat) return [];
-
-      try {
-        // Text search with scoring
-        const products = await cat.model
-          .find(
-            { $text: { $search: searchTerms } },
-            { score: { $meta: "textScore" } }
-          )
-          .populate("variants")
-          .sort({ score: { $meta: "textScore" } })
-          .limit(parseInt(limit) * 2) // Get more for re-ranking
-          .lean();
-
-        // Fallback: Regex search if text search returns nothing
-        if (products.length === 0) {
-          const regexQuery = new RegExp(
-            correctedQuery.split(/\s+/).join("|"),
-            "i"
-          );
-          const fallbackProducts = await cat.model
-            .find({
-              $or: [
-                { name: regexQuery },
-                { model: regexQuery },
-                { description: regexQuery },
-              ],
-            })
-            .populate("variants")
-            .limit(parseInt(limit))
-            .lean();
-
-          return fallbackProducts.map((p) => ({
-            ...p,
-            _category: cat.route,
-            _relevance: calculateRelevance(p, correctedQuery, attributes),
-          }));
-        }
-
-        // Calculate custom relevance score
-        return products.map((p) => ({
-          ...p,
-          _category: cat.route,
-          _relevance: calculateRelevance(p, correctedQuery, attributes),
-        }));
-      } catch (error) {
-        console.error(`Search error in ${cat.route}:`, error);
-        return [];
+    if (category) {
+      const productTypeIds = await resolveProductTypeIds(category);
+      if (!productTypeIds.length) {
+        return res.json({
+          success: true,
+          data: {
+            query: q,
+            correctedQuery: correctedQuery !== q ? correctedQuery : null,
+            extractedAttributes: attributes,
+            totalResults: 0,
+            results: [],
+          },
+        });
       }
-    });
+      baseQuery.productType = { $in: productTypeIds };
+    }
 
-    const results = await Promise.all(searchPromises);
-    let allProducts = results.flat();
+    let products = await UniversalProduct.find(
+      { ...baseQuery, $text: { $search: searchTerms } },
+      { score: { $meta: "textScore" } }
+    )
+      .populate("variants")
+      .populate("productType", "name slug")
+      .sort({ score: { $meta: "textScore" } })
+      .limit(parsedLimit * 2)
+      .lean();
 
-    // STEP 6: Re-rank by relevance score
-    allProducts.sort((a, b) => b._relevance - a._relevance);
+    if (!products.length) {
+      const regexQuery = new RegExp(
+        correctedQuery.split(/\s+/).map(escapeRegex).join("|"),
+        "i"
+      );
 
-    // STEP 7: Apply limit
-    const topProducts = allProducts.slice(0, parseInt(limit));
+      products = await UniversalProduct.find({
+        ...baseQuery,
+        $or: [
+          { name: regexQuery },
+          { model: regexQuery },
+          { description: regexQuery },
+        ],
+      })
+        .populate("variants")
+        .populate("productType", "name slug")
+        .limit(parsedLimit)
+        .lean();
+    }
 
-    // STEP 8: Return with metadata
+    const ranked = products
+      .map((product) => ({
+        ...product,
+        _category: getCategoryRoute(product.productType),
+        _relevance: calculateRelevance(product, correctedQuery, attributes),
+      }))
+      .sort((a, b) => b._relevance - a._relevance);
+
     return res.json({
       success: true,
       data: {
         query: q,
         correctedQuery: correctedQuery !== q ? correctedQuery : null,
         extractedAttributes: attributes,
-        totalResults: allProducts.length,
-        results: topProducts,
+        totalResults: ranked.length,
+        results: ranked.slice(0, parsedLimit),
       },
     });
   } catch (error) {
     console.error("Search error:", error);
     return res.status(500).json({
       success: false,
-      message: "Lỗi khi tìm kiếm",
+      message: "Loi khi tim kiem",
       error: error.message,
     });
   }
 };
 
-// ============================================
-// AUTOCOMPLETE / SUGGESTIONS
-// ============================================
 export const autocomplete = async (req, res) => {
   try {
-    const { q, limit = 5 } = req.query;
+    const { q, limit = 5, category } = req.query;
+    const parsedLimit = Math.max(1, parseInt(limit, 10) || 5);
 
     if (!q || q.trim().length < 2) {
       return res.json({
@@ -432,53 +363,61 @@ export const autocomplete = async (req, res) => {
 
     const correctedQuery = correctTypos(q);
     const normalized = normalizeVietnamese(correctedQuery);
+    const baseQuery = {};
 
-    // Get suggestions from all categories
-    const suggestionPromises = Object.values(CATEGORY_MAP).map(async (cat) => {
-      try {
-        const products = await cat.model
-          .find({
-            $or: [
-              { name: new RegExp(`^${normalized}`, "i") },
-              { model: new RegExp(`^${normalized}`, "i") },
-            ],
-          })
-          .select("name model")
-          .limit(parseInt(limit))
-          .lean();
-
-        return products.map((p) => ({
-          text: p.name,
-          model: p.model,
-          category: cat.route,
-        }));
-      } catch (error) {
-        return [];
+    if (category) {
+      const productTypeIds = await resolveProductTypeIds(category);
+      if (!productTypeIds.length) {
+        return res.json({
+          success: true,
+          data: {
+            query: q,
+            suggestions: [],
+          },
+        });
       }
-    });
+      baseQuery.productType = { $in: productTypeIds };
+    }
 
-    const suggestions = await Promise.all(suggestionPromises);
-    const uniqueSuggestions = [
-      ...new Map(suggestions.flat().map((item) => [item.text, item])).values(),
-    ].slice(0, parseInt(limit));
+    const products = await UniversalProduct.find({
+      ...baseQuery,
+      $or: [
+        { name: new RegExp(`^${escapeRegex(normalized)}`, "i") },
+        { model: new RegExp(`^${escapeRegex(normalized)}`, "i") },
+      ],
+    })
+      .select("name model productType")
+      .populate("productType", "name slug")
+      .limit(parsedLimit * 3)
+      .lean();
+
+    const suggestions = [
+      ...new Map(
+        products.map((product) => [
+          product.name,
+          {
+            text: product.name,
+            model: product.model,
+            category: getCategoryRoute(product.productType),
+          },
+        ])
+      ).values(),
+    ].slice(0, parsedLimit);
 
     return res.json({
       success: true,
       data: {
         query: q,
-        suggestions: uniqueSuggestions,
+        suggestions,
       },
     });
   } catch (error) {
     console.error("Autocomplete error:", error);
     return res.status(500).json({
       success: false,
-      message: "Lỗi khi lấy gợi ý",
+      message: "Loi khi lay goi y",
     });
   }
 };
 
-// ============================================
-// EXPORT
-// ============================================
 export default { search, autocomplete };

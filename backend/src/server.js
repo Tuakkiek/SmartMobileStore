@@ -17,13 +17,6 @@ import cartRoutes from "./modules/cart/cartRoutes.js";
 import orderRoutes from "./modules/order/orderRoutes.js";
 import reviewRoutes from "./modules/review/reviewRoutes.js";
 import promotionRoutes from "./modules/promotion/promotionRoutes.js";
-
-import iPhoneRoutes from "./modules/product/iPhoneRoutes.js";
-import iPadRoutes from "./modules/product/iPadRoutes.js";
-import macRoutes from "./modules/product/macRoutes.js";
-import airPodsRoutes from "./modules/product/airPodsRoutes.js";
-import appleWatchRoutes from "./modules/product/appleWatchRoutes.js";
-import accessoryRoutes from "./modules/product/accessoryRoutes.js";
 import recommendationRoutes from "./modules/search/recommendationRoutes.js";
 import analyticsRoutes from "./modules/analytics/analyticsRoutes.js";
 import salesRoutes from "./modules/analytics/salesRoutes.js";
@@ -151,13 +144,7 @@ app.use("/api/promotions", promotionRoutes);
 
 // ✅ Replaced productRoutes with recommendationRoutes for 'related products' feature
 app.use("/api/products", recommendationRoutes);
-app.use("/api/iphones", iPhoneRoutes);
-app.use("/api/ipads", iPadRoutes);
-app.use("/api/macs", macRoutes);
-app.use("/api/airpods", airPodsRoutes);
-app.use("/api/applewatches", appleWatchRoutes);
 app.use("/api/analytics", analyticsRoutes);
-app.use("/api/accessories", accessoryRoutes);
 app.use("/api/sales", salesRoutes);
 app.use("/api/pos", posRoutes);
 
@@ -199,6 +186,10 @@ app.get("/api/health", (req, res) => {
 // ================================
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.stack);
+
+  if (res.headersSent) {
+    return next(err);
+  }
 
   // Xử lý lỗi Multer (file upload)
   if (err.name === "MulterError") {

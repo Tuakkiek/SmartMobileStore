@@ -5,39 +5,27 @@
 
 import Review from "./Review.js";
 import Order from "../order/Order.js";
-import IPhone from "../product/IPhone.js";
-import IPad from "../product/IPad.js";
-import Mac from "../product/Mac.js";
-import AirPods from "../product/AirPods.js";
-import AppleWatch from "../product/AppleWatch.js";
-import Accessory from "../product/Accessory.js";
+import UniversalProduct from "../product/UniversalProduct.js";
 
 const MAX_REVIEWS_PER_ORDER = 20; // ✅ Giới hạn 20 reviews/đơn
 
 // Helper: Find product and update rating
 const findProductAndUpdateRating = async (productId) => {
-  const models = [IPhone, IPad, Mac, AirPods, AppleWatch, Accessory];
+  const product = await UniversalProduct.findById(productId);
+  if (!product) return null;
 
-  for (const Model of models) {
-    const product = await Model.findById(productId);
-    if (product) {
-      const reviews = await Review.find({ productId, isHidden: false });
-
-      if (reviews.length > 0) {
-        const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-        product.averageRating = Math.round((sum / reviews.length) * 10) / 10;
-        product.totalReviews = reviews.length;
-      } else {
-        product.averageRating = 0;
-        product.totalReviews = 0;
-      }
-
-      await product.save();
-      return product;
-    }
+  const reviews = await Review.find({ productId, isHidden: false });
+  if (reviews.length > 0) {
+    const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
+    product.averageRating = Math.round((sum / reviews.length) * 10) / 10;
+    product.totalReviews = reviews.length;
+  } else {
+    product.averageRating = 0;
+    product.totalReviews = 0;
   }
 
-  return null;
+  await product.save();
+  return product;
 };
 
 // ============================================
@@ -169,8 +157,7 @@ export const getProductReviews = async (req, res) => {
 // ============================================
 export const createReview = async (req, res) => {
   try {
-    const { productId, orderId, rating, comment, images, productModel } =
-      req.body;
+    const { productId, orderId, rating, comment, images } = req.body;
     const customerId = req.user._id;
 
     // ✅ VERIFY ORDER
@@ -210,7 +197,7 @@ export const createReview = async (req, res) => {
     // ✅ CREATE REVIEW
     const review = await Review.create({
       productId,
-      productModel,
+      productModel: "UniversalProduct",
       customerId,
       orderId,
       rating,
