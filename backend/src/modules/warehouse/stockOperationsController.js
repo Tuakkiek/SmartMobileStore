@@ -10,6 +10,15 @@ import CycleCount from "./CycleCount.js";
 import Order from "../order/Order.js";
 import mongoose from "mongoose";
 
+const getActorName = (user) =>
+  user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
+
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+};
+
 // ============================================
 // PHẦN 1: XUẤT KHO (PICK)
 // ============================================
@@ -51,14 +60,20 @@ export const getPickList = async (req, res) => {
       for (const inv of inventoryItems) {
         if (remainingQty <= 0) break;
 
-        const pickQty = Math.min(inv.quantity, remainingQty);
+        const availableQty = Number.isFinite(inv.quantity) ? inv.quantity : 0;
+        if (availableQty <= 0) continue;
+
+        const resolvedLocationCode = inv.locationCode || inv.locationId?.locationCode || "";
+        if (!resolvedLocationCode) continue;
+
+        const pickQty = Math.min(availableQty, remainingQty);
         locations.push({
-          locationCode: inv.locationCode,
+          locationCode: resolvedLocationCode,
           zoneName: inv.locationId?.zoneName || "",
           aisle: inv.locationId?.aisle || "",
           shelf: inv.locationId?.shelf || "",
           bin: inv.locationId?.bin || "",
-          availableQty: inv.quantity,
+          availableQty,
           pickQty,
         });
 
@@ -103,6 +118,16 @@ export const pickItem = async (req, res) => {
 
   try {
     const { orderId, sku, locationCode, quantity } = req.body;
+    const pickQty = toPositiveInteger(quantity);
+    const actorName = getActorName(req.user);
+
+    if (!sku?.trim() || !locationCode?.trim() || !pickQty) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Dữ liệu lấy hàng không hợp lệ (sku, locationCode, quantity)",
+      });
+    }
 
     // Tìm inventory
     const location = await WarehouseLocation.findOne({ locationCode }).session(session);
@@ -116,20 +141,23 @@ export const pickItem = async (req, res) => {
       locationId: location._id,
     }).session(session);
 
-    if (!inventory || inventory.quantity < quantity) {
+    const availableQty = Number.isFinite(inventory?.quantity) ? inventory.quantity : 0;
+
+    if (!inventory || availableQty < pickQty) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không đủ hàng tại ${locationCode}. Tồn: ${inventory?.quantity || 0}`,
+        message: `Không đủ hàng tại ${locationCode}. Tồn: ${availableQty}`,
       });
     }
 
     // Trừ tồn kho
-    inventory.quantity -= quantity;
+    inventory.quantity = availableQty - pickQty;
     await inventory.save({ session });
 
     // Cập nhật location
-    location.currentLoad = Math.max(0, location.currentLoad - quantity);
+    const currentLoad = Number.isFinite(location.currentLoad) ? location.currentLoad : 0;
+    location.currentLoad = Math.max(0, currentLoad - pickQty);
     await location.save({ session });
 
     // Ghi log
@@ -140,11 +168,11 @@ export const pickItem = async (req, res) => {
       productName: inventory.productName,
       fromLocationId: location._id,
       fromLocationCode: locationCode,
-      quantity,
+      quantity: pickQty,
       referenceType: "ORDER",
       referenceId: orderId,
       performedBy: req.user._id,
-      performedByName: req.user.name,
+      performedByName: actorName,
     });
     await movement.save({ session });
 
@@ -152,7 +180,7 @@ export const pickItem = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Đã lấy ${quantity} ${inventory.productName}`,
+      message: `Đã lấy ${pickQty} ${inventory.productName}`,
       remaining: inventory.quantity,
     });
   } catch (error) {
@@ -178,6 +206,17 @@ export const transferStock = async (req, res) => {
 
   try {
     const { sku, fromLocationCode, toLocationCode, quantity, reason, notes } = req.body;
+    const transferQty = toPositiveInteger(quantity);
+    const actorName = getActorName(req.user);
+
+    if (!sku?.trim() || !fromLocationCode?.trim() || !toLocationCode?.trim() || !transferQty) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message:
+          "Dữ liệu chuyển kho không hợp lệ (sku, fromLocationCode, toLocationCode, quantity)",
+      });
+    }
 
     // Validate locations
     const fromLocation = await WarehouseLocation.findOne({ locationCode: fromLocationCode }).session(session);
@@ -190,30 +229,33 @@ export const transferStock = async (req, res) => {
 
     // Check source inventory
     const fromInventory = await Inventory.findOne({ sku, locationId: fromLocation._id }).session(session);
-    if (!fromInventory || fromInventory.quantity < quantity) {
+    const sourceAvailableQty = Number.isFinite(fromInventory?.quantity) ? fromInventory.quantity : 0;
+    if (!fromInventory || sourceAvailableQty < transferQty) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không đủ hàng tại ${fromLocationCode}. Tồn: ${fromInventory?.quantity || 0}`,
+        message: `Không đủ hàng tại ${fromLocationCode}. Tồn: ${sourceAvailableQty}`,
       });
     }
 
     // Check destination capacity
-    if (!toLocation.canAccommodate(quantity)) {
+    if (!toLocation.canAccommodate(transferQty)) {
       await session.abortTransaction();
       return res.status(400).json({ success: false, message: "Vị trí đích không đủ chỗ" });
     }
 
     // Trừ source
-    fromInventory.quantity -= quantity;
+    fromInventory.quantity = sourceAvailableQty - transferQty;
     await fromInventory.save({ session });
-    fromLocation.currentLoad = Math.max(0, fromLocation.currentLoad - quantity);
+    const fromCurrentLoad = Number.isFinite(fromLocation.currentLoad) ? fromLocation.currentLoad : 0;
+    fromLocation.currentLoad = Math.max(0, fromCurrentLoad - transferQty);
     await fromLocation.save({ session });
 
     // Cộng destination
     let toInventory = await Inventory.findOne({ sku, locationId: toLocation._id }).session(session);
     if (toInventory) {
-      toInventory.quantity += quantity;
+      const destinationQty = Number.isFinite(toInventory.quantity) ? toInventory.quantity : 0;
+      toInventory.quantity = destinationQty + transferQty;
       await toInventory.save({ session });
     } else {
       toInventory = new Inventory({
@@ -222,12 +264,13 @@ export const transferStock = async (req, res) => {
         productName: fromInventory.productName,
         locationId: toLocation._id,
         locationCode: toLocationCode,
-        quantity,
+        quantity: transferQty,
         status: fromInventory.status,
       });
       await toInventory.save({ session });
     }
-    toLocation.currentLoad += quantity;
+    const toCurrentLoad = Number.isFinite(toLocation.currentLoad) ? toLocation.currentLoad : 0;
+    toLocation.currentLoad = toCurrentLoad + transferQty;
     await toLocation.save({ session });
 
     // Ghi log
@@ -240,11 +283,11 @@ export const transferStock = async (req, res) => {
       fromLocationCode,
       toLocationId: toLocation._id,
       toLocationCode,
-      quantity,
+      quantity: transferQty,
       referenceType: "TRANSFER",
       referenceId: `TF-${Date.now()}`,
       performedBy: req.user._id,
-      performedByName: req.user.name,
+      performedByName: actorName,
       notes: `${reason || ""} ${notes || ""}`.trim(),
     });
     await movement.save({ session });
@@ -253,7 +296,7 @@ export const transferStock = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Đã chuyển ${quantity} từ ${fromLocationCode} đến ${toLocationCode}`,
+      message: `Đã chuyển ${transferQty} từ ${fromLocationCode} đến ${toLocationCode}`,
     });
   } catch (error) {
     await session.abortTransaction();
@@ -308,7 +351,7 @@ export const createCycleCount = async (req, res) => {
       ccNumber,
       scope: scope || "PARTIAL",
       assignedTo: req.user._id,
-      assignedToName: req.user.name,
+      assignedToName: getActorName(req.user),
       items,
       status: "IN_PROGRESS",
       startedAt: new Date(),
@@ -463,7 +506,7 @@ export const approveCycleCount = async (req, res) => {
             referenceType: "CYCLE_COUNT",
             referenceId: cycleCount.ccNumber,
             performedBy: req.user._id,
-            performedByName: req.user.name,
+            performedByName: getActorName(req.user),
             notes: `Điều chỉnh kiểm kê: ${item.variance > 0 ? "+" : ""}${item.variance}`,
           });
           await movement.save({ session });
@@ -473,7 +516,7 @@ export const approveCycleCount = async (req, res) => {
 
     cycleCount.status = "APPROVED";
     cycleCount.approvedBy = req.user._id;
-    cycleCount.approvedByName = req.user.name;
+    cycleCount.approvedByName = getActorName(req.user);
     cycleCount.approvedAt = new Date();
     await cycleCount.save({ session });
 
@@ -499,3 +542,5 @@ export default {
   completeCycleCount,
   approveCycleCount,
 };
+
+

@@ -111,7 +111,8 @@ export const getAllEmployees = async (req, res) => {
     const filter = {
       role: {
         $in: [
-          "WAREHOUSE_STAFF",
+          "WAREHOUSE_MANAGER",
+          "PRODUCT_MANAGER",
           "ORDER_MANAGER",
           "SHIPPER",
           "ADMIN",
@@ -132,7 +133,11 @@ export const getAllEmployees = async (req, res) => {
 
     // Lọc theo role cụ thể (nếu có truyền)
     if (role && role !== "ALL") {
-      filter.role = role;
+      if (role.includes(',')) {
+        filter.role = { $in: role.split(',') };
+      } else {
+        filter.role = role;
+      }
     }
 
     // Sắp xếp
@@ -317,5 +322,3 @@ export const getAllShippers = async (req, res) => {
     });
   }
 };
-
-

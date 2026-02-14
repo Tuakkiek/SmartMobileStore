@@ -158,7 +158,7 @@ router.delete("/reset/:productId", restrictTo("ADMIN"), async (req, res) => {
  */
 router.get(
   "/dashboard",
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
   async (req, res) => {
     try {
       const { category } = req.query;
@@ -218,7 +218,7 @@ router.get(
 router.get(
   "/employee/personal",
   protect,
-  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"), // ← THÊM 3 ROLE NÀY
+  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"), // <- THÊM 3 ROLE NÀY
   getPersonalStats
 );
 

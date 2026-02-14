@@ -25,6 +25,39 @@ const createVariantSlug = (baseSlug, variantName) => {
   return `${baseSlug}-${nameSlug}`;
 };
 
+const canManageVariantStock = (role) => {
+  return role === "WAREHOUSE_MANAGER";
+};
+
+const STOCK_CONTROL_OWNER_ROLE = "WAREHOUSE_MANAGER";
+
+const normalizeStockValue = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
+};
+
+const hasVariantStockInput = (variantGroups = []) => {
+  if (!Array.isArray(variantGroups) || variantGroups.length === 0) return false;
+
+  for (const group of variantGroups) {
+    const options = Array.isArray(group?.options) ? group.options : [];
+    for (const opt of options) {
+      if (Object.prototype.hasOwnProperty.call(opt || {}, "stock")) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const buildVariantStockKey = (color, variantName) => {
+  const normalizedColor = String(color || "").trim().toLowerCase();
+  const normalizedVariant = String(variantName || "").trim().toLowerCase();
+  return `${normalizedColor}::${normalizedVariant}`;
+};
+
 // ============================================
 // CREATE PRODUCT
 // ============================================
@@ -41,6 +74,8 @@ export const create = async (req, res) => {
       slug: frontendSlug,
       ...productData
     } = req.body;
+
+    const allowStockManagement = canManageVariantStock(req.user?.role);
 
     // === 1. VALIDATE REQUIRED FIELDS ===
     if (!productData.name?.trim()) {
@@ -106,6 +141,7 @@ export const create = async (req, res) => {
     // === 4. XỬ LÝ VARIANTS ===
     const variantGroups = createVariants || variants || [];
     const createdVariantIds = [];
+    const stockInputIgnored = !allowStockManagement && hasVariantStockInput(variantGroups);
 
     if (variantGroups.length > 0) {
       console.log(`📦 Processing ${variantGroups.length} variant group(s)`);
@@ -137,7 +173,7 @@ export const create = async (req, res) => {
             variantName: opt.variantName.trim(),
             originalPrice: Number(opt.originalPrice) || 0,
             price: Number(opt.price) || 0,
-            stock: Number(opt.stock) || 0,
+            stock: allowStockManagement ? normalizeStockValue(opt.stock) : 0,
             images: images.filter((img) => img?.trim()),
             sku,
             slug: variantSlug,
@@ -154,6 +190,12 @@ export const create = async (req, res) => {
       await product.save({ session });
     }
 
+    if (stockInputIgnored) {
+      console.info(
+        `[PRODUCT][CREATE] Ignored stock values from role ${req.user?.role}. Inventory quantity is controlled by ${STOCK_CONTROL_OWNER_ROLE}.`
+      );
+    }
+
     // === 5. COMMIT & RETURN ===
     await session.commitTransaction();
 
@@ -163,11 +205,17 @@ export const create = async (req, res) => {
       .populate("productType", "name specFields")
       .populate("createdBy", "fullName email");
 
-    res.status(201).json({
+    const responsePayload = {
       success: true,
       message: "Tạo sản phẩm thành công",
       data: { product: populated },
-    });
+    };
+
+    if (stockInputIgnored) {
+      responsePayload.warning = `Stock input ignored. Inventory quantity is controlled by ${STOCK_CONTROL_OWNER_ROLE}.`;
+    }
+
+    res.status(201).json(responsePayload);
   } catch (error) {
     await session.abortTransaction();
     console.error("❌ CREATE PRODUCT ERROR:", error.message);
@@ -205,7 +253,21 @@ export const update = async (req, res) => {
     console.log("📝 UPDATE UNIVERSAL PRODUCT REQUEST:", id);
 
     const product = await UniversalProduct.findById(id).session(session);
-    if (!product) throw new Error("Không tìm thấy sản phẩm");
+    if (!product) throw new Error("Khong tim thay san pham");
+    const allowStockManagement = canManageVariantStock(req.user?.role);
+    const variantGroups = createVariants || variants || [];
+    const stockInputIgnored = !allowStockManagement && hasVariantStockInput(variantGroups);
+
+    const existingVariants = await UniversalVariant.find({ productId: id })
+      .select("color variantName stock")
+      .session(session);
+    const stockByVariantKey = new Map();
+    for (const item of existingVariants) {
+      stockByVariantKey.set(
+        buildVariantStockKey(item.color, item.variantName),
+        normalizeStockValue(item.stock)
+      );
+    }
 
     // Cập nhật cơ bản
     if (data.name) product.name = data.name.trim();
@@ -246,7 +308,6 @@ export const update = async (req, res) => {
     await product.save({ session });
 
     // === XỬ LÝ VARIANTS ===
-    const variantGroups = createVariants || variants || [];
     if (variantGroups.length > 0) {
       console.log(`📦 Updating ${variantGroups.length} variant group(s)`);
 
@@ -272,7 +333,9 @@ export const update = async (req, res) => {
             variantName: opt.variantName.trim(),
             originalPrice: Number(opt.originalPrice) || 0,
             price: Number(opt.price) || 0,
-            stock: Number(opt.stock) || 0,
+            stock: allowStockManagement
+              ? normalizeStockValue(opt.stock)
+              : stockByVariantKey.get(buildVariantStockKey(color, opt.variantName)) || 0,
             images: images.filter((i) => i?.trim()),
             sku,
             slug: variantSlug,
@@ -288,6 +351,12 @@ export const update = async (req, res) => {
       await product.save({ session });
     }
 
+    if (stockInputIgnored) {
+      console.info(
+        `[PRODUCT][UPDATE] Ignored stock values from role ${req.user?.role}. Inventory quantity is controlled by ${STOCK_CONTROL_OWNER_ROLE}.`
+      );
+    }
+
     await session.commitTransaction();
 
     const populated = await UniversalProduct.findById(id)
@@ -296,11 +365,17 @@ export const update = async (req, res) => {
       .populate("productType", "name specFields")
       .populate("createdBy", "fullName email");
 
-    res.json({
+    const responsePayload = {
       success: true,
       message: "Cập nhật thành công",
       data: { product: populated },
-    });
+    };
+
+    if (stockInputIgnored) {
+      responsePayload.warning = `Stock input ignored. Inventory quantity is controlled by ${STOCK_CONTROL_OWNER_ROLE}.`;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     await session.abortTransaction();
     console.error("❌ UPDATE PRODUCT ERROR:", error);

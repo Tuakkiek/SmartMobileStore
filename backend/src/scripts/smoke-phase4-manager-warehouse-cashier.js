@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 import mongoose from "mongoose";
 
 import User from "../modules/auth/User.js";
@@ -276,3 +276,4 @@ run().catch((error) => {
   console.error("[PHASE4][SMOKE] FAILED", error.message);
   process.exit(1);
 });
+

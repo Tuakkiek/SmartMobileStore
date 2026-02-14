@@ -1,6 +1,6 @@
 ﻿// ============================================
 // FILE: frontend/src/pages/order-manager/OrderManagementPage.jsx
-// Trang quản lý đơn hàng cho ORDER_MANAGER
+// Trang quan ly don hang cho ORDER_MANAGER
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -309,6 +309,9 @@ const OrderManagementPage = () => {
       </Card>
 
       {/* Orders Table */}
+
+
+      {/* Orders Table */}
       <Card>
         <CardHeader>
           <CardTitle>Danh Sách Đơn Hàng ({total})</CardTitle>
@@ -326,106 +329,231 @@ const OrderManagementPage = () => {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mã đơn</TableHead>
-                    <TableHead>Khách hàng</TableHead>
-                    <TableHead>Sản phẩm</TableHead>
-                    <TableHead>Kênh nhận</TableHead>
-                    <TableHead>Tổng tiền</TableHead>
-                    <TableHead>Thanh toán</TableHead>
-                    <TableHead>Giai đoạn</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead>Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order._id}>
-                      <TableCell className="font-medium">
-                        {order.orderNumber}
-                      </TableCell>
-                      <TableCell>
+              {/* DESKTOP VIEW - TABLE */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mã đơn</TableHead>
+                      <TableHead>Khách hàng</TableHead>
+                      <TableHead>Sản phẩm</TableHead>
+                      <TableHead>Kênh nhận</TableHead>
+                      <TableHead>Tổng tiền</TableHead>
+                      <TableHead>Thanh toán</TableHead>
+                      <TableHead>Giai đoạn</TableHead>
+                      <TableHead>Ngày tạo</TableHead>
+                      <TableHead>Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order._id}>
+                        <TableCell className="font-medium">
+                          {order.orderNumber}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {order.shippingAddress?.fullName || "N/A"}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {order.shippingAddress?.phoneNumber || ""}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex -space-x-2 overflow-hidden">
+                              {order.items?.slice(0, 3).map((item, index) => (
+                                <img
+                                  key={index}
+                                  className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover border bg-gray-100"
+                                  src={item.image || "/placeholder.png"}
+                                  alt={item.name}
+                                  title={item.name}
+                                  onError={(e) => {
+                                    e.target.src = "https://placehold.co/32";
+                                  }}
+                                />
+                              ))}
+                              {order.items?.length > 3 && (
+                                <div className="flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 text-xs font-medium text-gray-600 border">
+                                  +{order.items.length - 3}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {order.items?.length || 0} sản phẩm
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm space-y-1">
+                            <p className="font-medium">
+                              {getFulfillmentLabel(order.fulfillmentType)}
+                            </p>
+                            {order.assignedStore?.storeName && (
+                              <p className="text-xs text-gray-500">
+                                {order.assignedStore.storeName}
+                              </p>
+                            )}
+                            {order.pickupInfo?.pickupCode && (
+                              <p className="text-xs text-blue-700 font-semibold">
+                                Mã nhận: {order.pickupInfo.pickupCode}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatCurrency(getOrderTotal(order))}
+                        </TableCell>
+                        <TableCell>
+                          {getPaymentBadge(order.paymentStatus)}
+                          <div className="text-xs text-gray-500 mt-1">
+                            {getPaymentMethodLabel(order.paymentMethod)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {getStatusBadge(resolveOrderStage(order))}
+                            {order.status && (
+                              <p className="text-xs text-gray-500">
+                                {getStatusText(order.status)}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDate(order.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={() => openStatusDialog(order)}
+                              disabled={!canUpdateOrderStatus(order)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openOrderDetail(order)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* MOBILE VIEW - CARDS */}
+              <div className="grid grid-cols-1 gap-4 md:hidden">
+                {orders.map((order) => (
+                  <Card key={order._id} className="overflow-hidden shadow-sm">
+                    <CardHeader className="bg-gray-50/50 p-4 border-b">
+                      <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-medium">
+                          <CardTitle className="text-base font-semibold text-blue-600">
+                            {order.orderNumber}
+                          </CardTitle>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatDate(order.createdAt)}
+                          </p>
+                        </div>
+                        {getStatusBadge(resolveOrderStage(order))}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                      {/* Product Thumbnails */}
+                      <div className="flex items-center space-x-2 pb-3 border-b">
+                        <div className="flex -space-x-2 overflow-hidden">
+                          {order.items?.slice(0, 4).map((item, index) => (
+                            <img
+                              key={index}
+                              className="inline-block h-10 w-10 rounded-full ring-2 ring-white object-cover border bg-gray-100"
+                              src={item.image || "/placeholder.png"}
+                              alt={item.name}
+                              onError={(e) => {
+                                e.target.src = "https://placehold.co/40";
+                              }}
+                            />
+                          ))}
+                          {order.items?.length > 4 && (
+                            <div className="flex items-center justify-center h-10 w-10 rounded-full ring-2 ring-white bg-gray-100 text-xs font-medium text-gray-600 border">
+                              +{order.items.length - 4}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500 font-medium ml-2">
+                          ({order.items?.length} sản phẩm)
+                        </span>
+                      </div>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs mb-1">Khách hàng</p>
+                          <p className="font-medium truncate">
                             {order.shippingAddress?.fullName || "N/A"}
                           </p>
-                          <p className="text-sm text-gray-500">
-                            {order.shippingAddress?.phoneNumber || ""}
+                          <p className="text-xs text-gray-500">
+                            {order.shippingAddress?.phoneNumber}
                           </p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {order.items?.length || 0} sản phẩm
+                        <div>
+                          <p className="text-gray-500 text-xs mb-1">Tổng tiền</p>
+                          <p className="font-bold text-base text-gray-900">
+                            {formatCurrency(getOrderTotal(order))}
+                          </p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm space-y-1">
-                          <p className="font-medium">
+                        <div>
+                          <p className="text-gray-500 text-xs mb-1">Thanh toán</p>
+                          <div className="flex flex-col items-start gap-1">
+                            {getPaymentBadge(order.paymentStatus)}
+                            <span className="text-xs text-gray-500">
+                              {getPaymentMethodLabel(order.paymentMethod)}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs mb-1">Kênh nhận</p>
+                          <p className="font-medium text-xs">
                             {getFulfillmentLabel(order.fulfillmentType)}
                           </p>
-                          {order.assignedStore?.storeName && (
-                            <p className="text-xs text-gray-500">
-                              {order.assignedStore.storeName}
-                            </p>
-                          )}
-                          {order.pickupInfo?.pickupCode && (
-                            <p className="text-xs text-blue-700 font-semibold">
-                              Mã nhận: {order.pickupInfo.pickupCode}
-                            </p>
-                          )}
                         </div>
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(getOrderTotal(order))}
-                      </TableCell>
-                      <TableCell>
-                        {getPaymentBadge(order.paymentStatus)}
-                        <div className="text-xs text-gray-500 mt-1">
-                          {getPaymentMethodLabel(order.paymentMethod)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {getStatusBadge(resolveOrderStage(order))}
-                          {order.status && (
-                            <p className="text-xs text-gray-500">
-                              Chi tiết: {getStatusText(order.status)}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatDate(order.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => openStatusDialog(order)}
-                            disabled={!canUpdateOrderStatus(order)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openOrderDetail(order)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          className="flex-1"
+                          onClick={() => openStatusDialog(order)}
+                          disabled={!canUpdateOrderStatus(order)}
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Cập nhật
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => openOrderDetail(order)}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Chi tiết
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
 
               {/* Pagination */}
               {Math.ceil(total / limit) > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-6">
+                <div className="flex justify-center items-center gap-4 mt-8">
                   <Button
                     variant="outline"
                     size="sm"

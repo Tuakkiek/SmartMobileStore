@@ -9,7 +9,7 @@ router.use(protect);
 // Used by checkout to evaluate per-user rollout eligibility.
 router.get("/omnichannel/rollout", monitoringController.getOmnichannelRolloutDecision);
 
-router.use(restrictTo("ADMIN", "ORDER_MANAGER"));
+router.use(restrictTo("ADMIN", "PRODUCT_MANAGER"));
 
 router.get("/omnichannel/summary", monitoringController.getOmnichannelSummary);
 router.get("/omnichannel/events", monitoringController.listOmnichannelEvents);

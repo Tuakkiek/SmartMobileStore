@@ -9,7 +9,7 @@ import { protect, restrictTo } from "../../middleware/authMiddleware.js";
 const router = express.Router();
 
 router.use(protect);
-router.use(restrictTo("ADMIN", "WAREHOUSE_STAFF"));
+router.use(restrictTo("ADMIN", "PRODUCT_MANAGER", "WAREHOUSE_MANAGER"));
 
 router.post("/", controller.create);
 router.get("/", controller.findAll);

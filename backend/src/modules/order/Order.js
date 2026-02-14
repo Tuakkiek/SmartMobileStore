@@ -417,6 +417,24 @@ const orderSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
+      pickupAt: Date,
+      deliveredAt: Date,
+      deliveryNote: String,
+    },
+
+    pickerInfo: {
+      pickerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      pickerName: String,
+      assignedAt: Date,
+      assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      pickedAt: Date,
+      note: String,
     },
 
     carrierAssignment: {

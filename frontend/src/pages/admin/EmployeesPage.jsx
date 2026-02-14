@@ -40,7 +40,8 @@ import {
 const EMPLOYEE_TABS = [
   { value: "ALL", label: "Tất cả nhân viên" },
   { value: "ADMIN", label: "Quản trị viên" },
-  { value: "WAREHOUSE_STAFF", label: "Nhân viên kho" },
+  { value: "WAREHOUSE_MANAGER", label: "Quản lý kho" },
+  { value: "PRODUCT_MANAGER", label: "Quản lý sản phẩm" },
   { value: "ORDER_MANAGER", label: "Quản lý đơn hàng" },
   { value: "SHIPPER", label: "Shipper" },
   { value: "POS_STAFF", label: "Nhân viên bán hàng" },
@@ -266,7 +267,7 @@ const EmployeesPage = () => {
 
       {/* TABS */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 w-full">
+        <TabsList className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-9 w-full">
           {EMPLOYEE_TABS.map((tab) => (
             <TabsTrigger
               key={tab.value}
@@ -413,7 +414,7 @@ const EmployeesPage = () => {
           ))}
         </div>
       )}
-      {/* PHÂN TRANG ĐẸP – GIỐNG CASHIER */}
+      {/* PHÂN TRANG ĐẸP - GIỐNG CASHIER */}
       {pagination.totalPages > 1 && (
         <div className="flex justify-center items-center gap-8 mt-12">
           <Button

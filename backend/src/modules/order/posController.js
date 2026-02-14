@@ -129,9 +129,23 @@ export const createPOSOrder = async (req, res) => {
     const receiptNumber = `TMP${Date.now().toString().slice(-8)}`;
     const finalTotal = totalAmount ?? subtotal;
 
+    // Generate Order Number
+    const now = new Date();
+    const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const randomPart = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0");
+    const orderNumber = `POS-${datePart}-${Date.now().toString().slice(-6)}${randomPart}`;
+
+    const status = req.body.instantFulfillment ? "DELIVERED" : "CONFIRMED";
+    const paymentStatus = req.body.instantFulfillment ? "PAID" : "UNPAID";
+    const paidAt = req.body.instantFulfillment ? new Date() : null;
+    const deliveredAt = req.body.instantFulfillment ? new Date() : null;
+
     const order = await Order.create(
       [
         {
+          orderNumber,
           orderSource: "IN_STORE",
           fulfillmentType: "IN_STORE",
           customerId: req.user._id,
@@ -144,8 +158,10 @@ export const createPOSOrder = async (req, res) => {
             detailAddress: "Mua tại cửa hàng",
           },
           paymentMethod: "CASH",
-          paymentStatus: "UNPAID",
-          status: "CONFIRMED",
+          paymentStatus,
+          paidAt,
+          status,
+          deliveredAt,
           subtotal,
           shippingFee: 0,
           promotionDiscount: 0,
@@ -158,6 +174,9 @@ export const createPOSOrder = async (req, res) => {
             staffName: req.user.fullName,
             storeLocation: storeLocation || "Ninh Kiều iStore",
             receiptNumber,
+            // For instant fulfillment, implied cashier is same as staff or auto-verified
+            paymentReceived: req.body.instantFulfillment ? finalTotal : 0,
+            changeGiven: 0,
           },
         },
       ],

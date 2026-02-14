@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Package, MapPin, Navigation, CheckCircle, Printer, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { api, orderAPI } from "@/lib/api";
 import { getStatusStage, getStatusText } from "@/lib/utils";
 
+import { useAuthStore } from "@/store/authStore";
+
 const PickOrdersPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId");
   const [step, setStep] = useState(1);
   const [orders, setOrders] = useState([]);
+  const [filterMode, setFilterMode] = useState("MY_TASKS"); // MY_TASKS, ALL
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [pickList, setPickList] = useState([]);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -44,6 +49,11 @@ const PickOrdersPage = () => {
       );
       setOrders(uniqueById);
     } catch { toast.error("Không thể tải đơn hàng"); } finally { setLoading(false); }
+  };
+
+  const getFilteredOrders = () => {
+      if (filterMode === "ALL") return orders;
+      return orders.filter(o => o.pickerInfo?.pickerId === user?._id);
   };
 
   const loadPickList = async (id) => {
@@ -127,35 +137,91 @@ const PickOrdersPage = () => {
     }
   };
 
+  const handleReportIssue = async () => {
+       const note = prompt("Nhập nội dung sự cố (Ví dụ: Hàng hỏng, không tìm thấy):");
+       if (!note) return;
+
+       try {
+           setLoading(true);
+           // Update note but keep status same or move to CONFIRMED pending review?
+           // Just add note for now to Order Manager
+           await orderAPI.updateStatus(selectedOrder._id, {
+               status: selectedOrder.status, // Keep same status
+               note: `SỰ CỐ KHO: ${note}`,
+           });
+           toast.success("Đã báo cáo sự cố");
+       } catch (e) {
+           toast.error("Lỗi khi báo cáo sự cố");
+       } finally {
+           setLoading(false);
+       }
+  };
+
   const handlePickItem = async () => {
     const item = pickList[currentItemIndex];
     const loc = item?.locations?.[currentLocationIndex];
+    const quantity = Number(loc?.pickQty || loc?.quantity || 0);
 
     if (!item || !loc) {
-      toast.error("Không tìm thấy thông tin vị trí lấy hàng");
+      toast.error("Khong tim thay thong tin vi tri lay hang");
       return;
     }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error("So luong lay hang khong hop le");
+      return;
+    }
+
     try {
       setLoading(true);
-      await api.post("/warehouse/pick", { orderId: selectedOrder._id, sku: item.sku, locationCode: loc.locationCode, quantity: Number(loc.pickQty || loc.quantity || 0) });
-      toast.success(`Đã lấy ${Number(loc.pickQty || loc.quantity || 0)} ${item.productName}`);
-      if (currentLocationIndex < item.locations.length - 1) { setCurrentLocationIndex(currentLocationIndex + 1); }
-      else if (currentItemIndex < pickList.length - 1) { setCurrentItemIndex(currentItemIndex + 1); setCurrentLocationIndex(0); }
-      else { setStep(3); }
-    } catch (e) { toast.error(e.response?.data?.message || "Lỗi khi lấy hàng"); } finally { setLoading(false); }
+      await api.post("/warehouse/pick", {
+        orderId: selectedOrder._id,
+        sku: item.sku,
+        locationCode: loc.locationCode,
+        quantity,
+      });
+      toast.success(`Da lay ${quantity} ${item.productName}`);
+
+      if (currentLocationIndex < item.locations.length - 1) {
+        setCurrentLocationIndex(currentLocationIndex + 1);
+      } else if (currentItemIndex < pickList.length - 1) {
+        setCurrentItemIndex(currentItemIndex + 1);
+        setCurrentLocationIndex(0);
+      } else {
+        setStep(3);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Loi khi lay hang");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (step === 1) {
+    const displayOrders = getFilteredOrders();
+
     return (
       <div className="container mx-auto px-4 py-8">
         <Card className="max-w-4xl mx-auto">
-          <CardHeader><CardTitle className="flex items-center"><Package className="w-6 h-6 mr-2" />Chọn Đơn Hàng Cần Xuất Kho</CardTitle></CardHeader>
+          <CardHeader>
+              <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center"><Package className="w-6 h-6 mr-2" />Chọn Đơn Hàng Cần Xuất Kho</CardTitle>
+                  <div className="flex space-x-2">
+                      <Button variant={filterMode === "MY_TASKS" ? "default" : "outline"} onClick={() => setFilterMode("MY_TASKS")} size="sm">
+                          Được giao cho tôi
+                      </Button>
+                      <Button variant={filterMode === "ALL" ? "default" : "outline"} onClick={() => setFilterMode("ALL")} size="sm">
+                          Tất cả
+                      </Button>
+                  </div>
+              </div>
+          </CardHeader>
           <CardContent>
             {loading ? (<div className="text-center py-8"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" /><p className="mt-4 text-gray-600">Đang tải...</p></div>
-            ) : orders.length === 0 ? (<p className="text-center text-gray-500 py-12">Không có đơn hàng nào cần xuất kho</p>
+            ) : displayOrders.length === 0 ? (<p className="text-center text-gray-500 py-12">Không có đơn hàng nào</p>
             ) : (
               <div className="space-y-3">
-                {orders.map((order) => (
+                {displayOrders.map((order) => (
                   <div key={order._id} onClick={() => loadPickList(order._id)} className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
                     <div className="flex items-center justify-between">
                       <div>
@@ -164,6 +230,9 @@ const PickOrdersPage = () => {
                         <p className="text-sm text-gray-600">
                           Hình thức: {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
                         </p>
+                        {order.pickerInfo?.pickerName && (
+                            <p className="text-xs text-blue-600 font-medium">Picker: {order.pickerInfo.pickerName} {order.pickerInfo.pickerId === user?._id && "(Tôi)"}</p>
+                        )}
                         {order.assignedStore?.storeName && (
                           <p className="text-xs text-gray-500">
                             Cửa hàng xử lý: {order.assignedStore.storeName}
@@ -239,6 +308,10 @@ const PickOrdersPage = () => {
 
               <div className="flex space-x-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => { if (currentLocationIndex > 0) setCurrentLocationIndex(currentLocationIndex - 1); else if (currentItemIndex > 0) { setCurrentItemIndex(currentItemIndex - 1); setCurrentLocationIndex(pickList[currentItemIndex - 1].locations.length - 1); } else setStep(1); }} className="flex-1">Quay lại</Button>
+                <Button variant="outline" className="flex-1 text-red-600 border-red-200 hover:bg-red-50" onClick={handleReportIssue}>
+                     <AlertTriangle className="w-4 h-4 mr-2" />
+                     Báo sự cố
+                </Button>
                 <Button onClick={handlePickItem} disabled={loading} className="flex-1">
                   {loading ? "Đang xử lý..." : "Đã lấy hàng"}
                 </Button>
@@ -340,7 +413,3 @@ const PickOrdersPage = () => {
 };
 
 export default PickOrdersPage;
-
-
-
-

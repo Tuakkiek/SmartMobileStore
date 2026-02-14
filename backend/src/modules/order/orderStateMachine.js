@@ -1,7 +1,8 @@
 import { mapStatusToStage } from "./Order.js";
 
-const MANAGER_ROLES = new Set(["ADMIN", "ORDER_MANAGER"]);
-const WAREHOUSE_ROLES = new Set(["WAREHOUSE_STAFF"]);
+const MANAGER_ROLES = new Set(["ADMIN"]);
+const ORDER_MANAGER_ROLES = new Set(["ORDER_MANAGER"]);
+const WAREHOUSE_ROLES = new Set(["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"]);
 const SHIPPER_ROLES = new Set(["SHIPPER"]);
 
 const STATUS_ALIASES = Object.freeze({
@@ -71,8 +72,19 @@ const getTransitions = (order) => {
 };
 
 const isRoleAllowedTarget = (role, targetStatus) => {
+  // Picking completion must be confirmed by warehouse manager only.
+  if (targetStatus === "PREPARING_SHIPMENT") {
+    return ["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(role);
+  }
+
   if (MANAGER_ROLES.has(role)) {
     return true;
+  }
+
+  if (ORDER_MANAGER_ROLES.has(role)) {
+    return ["CONFIRMED", "PROCESSING", "SHIPPING", "CANCELLED"].includes(
+      targetStatus
+    );
   }
 
   if (WAREHOUSE_ROLES.has(role)) {
@@ -125,4 +137,3 @@ export const getStatusTransitionView = ({ order, currentStatus, targetStatus }) 
     inStore: isInStoreOrder(order),
   };
 };
-

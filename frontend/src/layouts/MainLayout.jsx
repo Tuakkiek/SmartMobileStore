@@ -120,7 +120,8 @@ const MainLayout = () => {
   const handleProfileNavigation = () => {
     if (user?.role === "CUSTOMER") navigate("/profile");
     else if (user?.role === "ADMIN") navigate("/admin");
-    else if (user?.role === "WAREHOUSE_STAFF") navigate("/warehouse/products");
+    else if (user?.role === "WAREHOUSE_MANAGER") navigate("/warehouse-staff");
+    else if (user?.role === "PRODUCT_MANAGER") navigate("/kho/san-pham");
     else if (user?.role === "ORDER_MANAGER") navigate("/order-manager/orders");
     else if (user?.role === "POS_STAFF") navigate("/pos/dashboard");
     else if (user?.role === "CASHIER") navigate("/CASHIER/dashboard");

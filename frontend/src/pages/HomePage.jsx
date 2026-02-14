@@ -24,7 +24,7 @@ const HomePage = () => {
 
   const isAdmin =
     isAuthenticated &&
-    ["ADMIN", "WAREHOUSE_STAFF", "ORDER_MANAGER"].includes(user?.role);
+    ["ADMIN", "WAREHOUSE_MANAGER", "PRODUCT_MANAGER"].includes(user?.role);
 
   // ============================================
   // FETCH HOMEPAGE LAYOUT

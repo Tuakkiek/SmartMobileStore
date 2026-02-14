@@ -27,23 +27,23 @@ router.post("/:id/cancel", orderController.cancelOrder);
 
 router.patch(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF", "SHIPPER"),
+  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "SHIPPER"),
   orderController.updateOrderStatus
 );
 router.put(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF", "SHIPPER"),
+  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "SHIPPER"),
   orderController.updateOrderStatus
 );
 
 router.patch(
   "/:id/assign-carrier",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "ORDER_MANAGER"),
   orderController.assignCarrier
 );
 router.put(
   "/:id/assign-carrier",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "ORDER_MANAGER"),
   orderController.assignCarrier
 );
 

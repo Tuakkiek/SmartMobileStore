@@ -20,7 +20,7 @@ router.get("/:id", (req, res, next) => {
 
 // Protected routes
 router.use(protect);
-router.use(restrictTo("ADMIN", "WAREHOUSE_STAFF"));
+router.use(restrictTo("ADMIN", "PRODUCT_MANAGER"));
 
 router.post("/", controller.create);
 router.get("/:id/variants", controller.getVariants);

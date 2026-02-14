@@ -87,7 +87,7 @@ const DashboardLayout = () => {
 
         { path: "/CASHIER/dashboard", icon: TrendingUp, label: "Thu ngân" }
       );
-    } else if (user?.role === "WAREHOUSE_STAFF") {
+    } else if (user?.role === "WAREHOUSE_MANAGER") {
       items.push(
         {
           path: "/warehouse-staff",
@@ -95,9 +95,32 @@ const DashboardLayout = () => {
           label: "Dashboard Kho",
         },
         {
-          path: "/warehouse/products",
+          path: "/warehouse-staff/receive-goods",
           icon: Package,
-          label: "Quản lý sản phẩm",
+          label: "Nhận hàng",
+        },
+        {
+          path: "/warehouse-staff/pick-orders",
+          icon: Package,
+          label: "Xuất kho",
+        },
+        {
+          path: "/warehouse-staff/transfer",
+          icon: Package,
+          label: "Chuyển kho",
+        },
+        {
+          path: "/admin/warehouse-config",
+          icon: Warehouse,
+          label: "Cấu hình kho",
+        }
+      );
+    } else if (user?.role === "WAREHOUSE_STAFF") {
+      items.push(
+        {
+          path: "/warehouse-staff",
+          icon: Package,
+          label: "Dashboard Kho",
         },
         {
           path: "/warehouse-staff/receive-goods",
@@ -115,6 +138,12 @@ const DashboardLayout = () => {
           label: "Chuyển kho",
         }
       );
+    } else if (user?.role === "PRODUCT_MANAGER") {
+      items.push({
+        path: "/warehouse/products",
+        icon: ShoppingBag,
+        label: "Quản lý sản phẩm",
+      });
     } else if (user?.role === "ORDER_MANAGER") {
       items.push({
         path: "/order-manager/orders",
@@ -170,11 +199,13 @@ const DashboardLayout = () => {
   const getRoleLabel = (role) => {
     const roleMap = {
       ADMIN: "Quản trị viên",
+      WAREHOUSE_MANAGER: "Quản lý kho",
       WAREHOUSE_STAFF: "Nhân viên kho",
+      PRODUCT_MANAGER: "Quản lý sản phẩm",
       ORDER_MANAGER: "Quản lý đơn hàng",
       SHIPPER: "Nhân viên giao hàng",
-      POS_STAFF: "Nhân viên bán hàng", // ✅ MỚI
-      CASHIER: "Thu ngân", // ✅ MỚI
+      POS_STAFF: "Nhân viên bán hàng",
+      CASHIER: "Thu ngân",
     };
     return roleMap[role] || role;
   };

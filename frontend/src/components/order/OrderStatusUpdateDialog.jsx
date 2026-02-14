@@ -20,17 +20,27 @@ import { toast } from "sonner";
 import { orderAPI, userAPI } from "@/lib/api";
 import { getStatusColor, getStatusStage, getStatusText } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
 
 const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
+  const { user } = useAuthStore();
   const [newStatus, setNewStatus] = useState("");
   const [note, setNote] = useState("");
   const [shippers, setShippers] = useState([]);
+
+
   const [selectedShipper, setSelectedShipper] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingShippers, setIsFetchingShippers] = useState(false);
   const currentStage = order?.statusStage || getStatusStage(order?.status);
   const requiresCarrierSelection =
     newStatus === "IN_TRANSIT" || newStatus === "SHIPPING";
+  const requiresPickerSelection =
+    newStatus === "PROCESSING" || newStatus === "PREPARING";
+
+  const [pickers, setPickers] = useState([]);
+  const [selectedPicker, setSelectedPicker] = useState("");
+  const [isFetchingPickers, setIsFetchingPickers] = useState(false);
 
   // Fetch danh sách Shipper khi cần chuyển sang IN_TRANSIT
   useEffect(() => {
@@ -39,6 +49,13 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
     }
   }, [open, order, requiresCarrierSelection]);
 
+  // Fetch danh sách Picker khi cần chuyển sang PICKING
+  useEffect(() => {
+    if (open && order && requiresPickerSelection) {
+      fetchPickers();
+    }
+  }, [open, order, requiresPickerSelection]);
+
   // Reset form khi mở dialog
   useEffect(() => {
     if (open) {
@@ -46,6 +63,8 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       setNote("");
       setSelectedShipper("");
       setShippers([]);
+      setSelectedPicker("");
+      setPickers([]);
     }
   }, [open]);
 
@@ -63,7 +82,38 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
     }
   };
 
+  const fetchPickers = async () => {
+    setIsFetchingPickers(true);
+    try {
+      const response = await userAPI.getAllEmployees({ role: "WAREHOUSE_STAFF,WAREHOUSE_MANAGER" });
+      setPickers(response.data.data.employees || []);
+    } catch (error) {
+      console.error("Lỗi tải danh sách Picker:", error);
+      toast.error("Không thể tải danh sách Nhân viên kho");
+      setPickers([]);
+    } finally {
+      setIsFetchingPickers(false);
+    }
+  };
+
   const getValidTransitions = (orderData) => {
+    const filterByRole = (transitions) => {
+      if (user?.role === "ORDER_MANAGER") {
+          // Order Manager updates:
+          // CONFIRMED -> PICKING (Assign Picker)
+          // PICKUP_COMPLETED -> IN_TRANSIT (Assign Shipper)
+          return transitions.filter(
+            (item) => 
+               item.value === "PICKING" || 
+               item.value === "IN_TRANSIT" || 
+               item.value === "SHIPPING" ||
+               item.value === "CONFIRMED" || // Sometimes they confirm
+               item.value === "CANCELLED"
+          );
+      }
+      return transitions;
+    };
+
     const currentOrderStage = orderData?.statusStage || getStatusStage(orderData?.status);
     const isInStoreOrder =
       orderData?.orderSource === "IN_STORE" ||
@@ -79,12 +129,12 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         CONFIRMED: [
-          { value: "PICKING", label: "Bắt đầu lấy hàng" },
+          { value: "PROCESSING", label: "Bắt đầu lấy hàng" },
           { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
           { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
-        PICKING: [
+        PROCESSING: [
           { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
           { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
           { value: "CANCELLED", label: "Hủy đơn" },
@@ -101,7 +151,7 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
         RETURNED: [],
         CANCELLED: [],
       };
-      return inStoreTransitionsByStage[currentOrderStage] || [];
+      return filterByRole(inStoreTransitionsByStage[currentOrderStage] || []);
     }
 
     const onlineTransitionsByStage = {
@@ -119,11 +169,11 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       CONFIRMED: [
-        { value: "PICKING", label: "Bắt đầu lấy hàng" },
+        { value: "PROCESSING", label: "Bắt đầu lấy hàng" },
         { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
-      PICKING: [
+      PROCESSING: [
         { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
@@ -141,7 +191,7 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       CANCELLED: [],
     };
 
-    return onlineTransitionsByStage[currentOrderStage] || [];
+    return filterByRole(onlineTransitionsByStage[currentOrderStage] || []);
   };
 
   const handleSubmit = async () => {
@@ -156,6 +206,15 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       return;
     }
 
+    // ✅ Kiểm tra nếu chuyển sang PICKING phải chọn Picker
+    if (requiresPickerSelection && !selectedPicker) {
+         // Warning but maybe allow optional? No, let's enforce for now.
+         // Actually, if they don't select, it just goes to "Picking" without specific assignment?
+         // Let's enforce assignment for better tracking.
+         toast.error("Vui lòng chọn Nhân viên kho để lấy hàng");
+         return;
+    }
+
     setIsLoading(true);
     try {
       if (requiresCarrierSelection && selectedShipper) {
@@ -165,10 +224,16 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
         });
       }
 
-      await orderAPI.updateStatus(order._id, {
-        status: newStatus,
-        note: note.trim() || undefined,
-      });
+      const updateData = {
+          status: newStatus,
+          note: note.trim() || undefined,
+      };
+
+      if (requiresPickerSelection && selectedPicker) {
+          updateData.pickerId = selectedPicker;
+      }
+
+      await orderAPI.updateStatus(order._id, updateData);
 
       toast.success("Cập nhật trạng thái thành công");
       onSuccess?.();
@@ -218,6 +283,7 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
               onChange={(e) => {
                 setNewStatus(e.target.value);
                 setSelectedShipper(""); // Reset shipper khi đổi trạng thái
+                setSelectedPicker(""); // Reset picker
               }}
               className="w-full px-3 py-2 border rounded-md"
               disabled={validTransitions.length === 0}
@@ -261,6 +327,43 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
                     <p className="text-sm text-yellow-600 flex items-center gap-2 mt-1">
                       <AlertCircle className="w-4 h-4" />
                       Không có Shipper nào khả dụng
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ✅ Dropdown chọn Picker (chỉ hiện khi chuyển sang PICKING) */}
+          {requiresPickerSelection && (
+            <div className="space-y-2">
+              <Label htmlFor="picker">Chọn Nhân viên kho (Picker) *</Label>
+              {isFetchingPickers ? (
+                <div className="flex items-center justify-center p-3 border rounded-md">
+                  <AlertCircle className="w-4 h-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">
+                    Đang tải danh sách Nhân viên kho...
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <select
+                    id="picker"
+                    value={selectedPicker}
+                    onChange={(e) => setSelectedPicker(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md"
+                  >
+                    <option value="">-- Chọn Nhân viên kho --</option>
+                    {pickers.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.fullName} - {p.email}
+                      </option>
+                    ))}
+                  </select>
+                  {pickers.length === 0 && (
+                    <p className="text-sm text-yellow-600 flex items-center gap-2 mt-1">
+                      <AlertCircle className="w-4 h-4" />
+                      Không có Nhân viên kho nào khả dụng
                     </p>
                   )}
                 </>

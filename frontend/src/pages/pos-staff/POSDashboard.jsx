@@ -64,6 +64,9 @@ const POSDashboard = () => {
   const [promotionCode, setPromotionCode] = useState("");
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  
+  // Fulfillment state
+  const [instantFulfillment, setInstantFulfillment] = useState(false);
 
   // ============================================
   // HELPER FOR IMAGE URL
@@ -371,10 +374,13 @@ const POSDashboard = () => {
         totalAmount,
         storeLocation: "Ninh Kiều iStore",
         promotionCode: appliedPromotion?.code || null,
+        instantFulfillment, // ✅ Added flag
       });
 
       toast.success(
-        "Tạo đơn thành công! Đơn hàng đã được chuyển sang kho để lấy hàng."
+        instantFulfillment 
+          ? "Đơn hàng đã hoàn tất thành công!" 
+          : "Tạo đơn thành công! Đơn hàng đã được chuyển sang kho để lấy hàng."
       );
 
       // Reset form
@@ -383,6 +389,7 @@ const POSDashboard = () => {
       setCustomerPhone("");
       setAppliedPromotion(null);
       setPromotionCode("");
+      setInstantFulfillment(false);
     } catch (error) {
       console.error("Lỗi tạo đơn:", error);
       toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
@@ -704,15 +711,28 @@ const POSDashboard = () => {
                 </div>
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleCreateOrder}
-                disabled={isLoading || cart.length === 0}
-              >
-                <ArrowRight className="w-5 h-5 mr-2" />
-                {isLoading ? "Đang xử lý..." : "Tạo đơn & Chuyển Kho"}
-              </Button>
+                <div className="flex items-center space-x-2 py-2">
+                  <input
+                    type="checkbox"
+                    id="instantFulfillment"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={instantFulfillment}
+                    onChange={(e) => setInstantFulfillment(e.target.checked)}
+                  />
+                  <Label htmlFor="instantFulfillment" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Giao hàng ngay (Khách nhận tại quầy)
+                  </Label>
+                </div>
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={handleCreateOrder}
+                  disabled={isLoading || cart.length === 0}
+                >
+                  <ArrowRight className="w-5 h-5 mr-2" />
+                  {isLoading ? "Đang xử lý..." : instantFulfillment ? "Thanh toán & Hoàn tất" : "Tạo đơn & Chuyển Kho"}
+                </Button>
             </CardContent>
           </Card>
         </div>

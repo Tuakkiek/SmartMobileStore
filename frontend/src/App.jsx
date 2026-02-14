@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+﻿import React, { useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -51,7 +51,7 @@ import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
 
 import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
-import VideosPage from "@/pages/VideosPage"; // ✅ NEW
+import VideosPage from "@/pages/VideosPage"; // ï¿½o. NEW
 
 import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
 
@@ -106,7 +106,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
 
-          {/* ✅ NEW: Videos Page */}
+          {/* ï¿½o. NEW: Videos Page */}
           <Route path="/videos" element={<VideosPage />} />
 
           {/* Products */}
@@ -138,7 +138,7 @@ function App() {
           {/* Search */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
 
-          {/* ✅ NEW: Universal Product Detail (must come before legacy routes) */}
+          {/* ï¿½o. NEW: Universal Product Detail (must come before legacy routes) */}
           <Route
             path="/products/:productSlug"
             element={<ProductDetailPage />}
@@ -213,7 +213,30 @@ function App() {
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
           <Route path="/admin/brands" element={<BrandManagementPage />} />
           <Route path="/admin/product-types" element={<ProductTypeManagementPage />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "WAREHOUSE_MANAGER"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/admin/warehouse-config" element={<WarehouseConfigPage />} />
+        </Route>
+
+        {/* ========================================
+            PRODUCT MANAGER
+        ======================================== */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["PRODUCT_MANAGER", "ADMIN"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/warehouse/products" element={<WarehouseProductsPage />} />
+
         </Route>
 
         {/* ========================================
@@ -221,15 +244,11 @@ function App() {
         ======================================== */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["WAREHOUSE_STAFF", "ADMIN"]}>
+            <ProtectedRoute allowedRoles={["WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route
-            path="/warehouse/products"
-            element={<WarehouseProductsPage />}
-          />
           <Route path="/warehouse-staff" element={<WarehouseStaffDashboard />} />
           <Route path="/warehouse-staff/receive-goods" element={<ReceiveGoodsPage />} />
           <Route path="/warehouse-staff/pick-orders" element={<PickOrdersPage />} />
@@ -306,3 +325,4 @@ function App() {
 }
 
 export default App;
+

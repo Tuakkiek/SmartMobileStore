@@ -98,7 +98,7 @@ const ProductCard = ({
   const [isVariantReady, setIsVariantReady] = useState(false); // Sẵn sàng navigate
 
   // Kiểm tra quyền Admin/Kho
-  const isAdmin = user?.role === "ADMIN" || user?.role === "WAREHOUSE_STAFF";
+  const isAdmin = ["ADMIN", "PRODUCT_MANAGER"].includes(user?.role);
 
   // Đảm bảo variants luôn là array
   const safeVariants = Array.isArray(product?.variants) ? product.variants : [];

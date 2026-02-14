@@ -41,7 +41,9 @@ const userSchema = new mongoose.Schema(
       enum: [
         "USER",
         "CUSTOMER",
-        "WAREHOUSE_STAFF",
+        "WAREHOUSE_MANAGER",
+        "WAREHOUSE_STAFF", // Added missing role
+        "PRODUCT_MANAGER",
         "ORDER_MANAGER",
         "SHIPPER",
         "POS_STAFF",

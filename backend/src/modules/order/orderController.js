@@ -836,10 +836,39 @@ export const createOrder = async (req, res) => {
 
     await order.save({ session });
 
+    await order.save({ session });
+
     if (assignedStore) {
       assignedStore.capacity.currentOrders = toNumber(assignedStore.capacity?.currentOrders, 0) + 1;
       assignedStore.stats.totalOrders = toNumber(assignedStore.stats?.totalOrders, 0) + 1;
       await assignedStore.save({ session });
+    }
+
+    if (req.body.instantFulfillment && effectiveOrderSource === "IN_STORE") {
+       // Instant fulfillment logic:
+       // 1. Mark as COMPLETED / DELIVERED
+       // 2. Mark as PAID (if not already)
+       // 3. Deduct inventory immediately
+       
+       order.status = "COMPLETED";
+       order.statusStage = "DELIVERED";
+       order.paymentStatus = "PAID";
+       order.paidAt = new Date();
+       order.confirmedAt = new Date();
+       order.shippedAt = new Date();
+       order.deliveredAt = new Date();
+       
+       // Deduct inventory
+        if (assignedStore) {
+            await routingService.deductInventory(assignedStore._id, order.items, { session });
+            order.inventoryDeductedAt = new Date();
+            // Release capacity since it is done immediately
+             assignedStore.capacity.currentOrders = Math.max(0, toNumber(assignedStore.capacity?.currentOrders, 1) - 1);
+             await assignedStore.save({ session });
+        }
+        
+        appendHistory(order, "COMPLETED", req.user._id, "Instant fulfillment at POS");
+        await order.save({ session });
     }
 
     if (!isVNPay) {
@@ -932,7 +961,7 @@ export const updateOrderStatus = async (req, res) => {
     const { status, note, shipperId } = req.body;
     const targetStatus = normalizeRequestedOrderStatus(status);
     const isManagerRole = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
-    const canAssignCarrier = ["ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF"].includes(
+    const canAssignCarrier = ["ADMIN", "ORDER_MANAGER"].includes(
       req.user.role
     );
 
@@ -995,6 +1024,48 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    if (
+      (targetStatus === "PROCESSING" || targetStatus === "PREPARING") &&
+      req.body.pickerId
+    ) {
+      // Allow assigning picker during status update
+      const picker = await User.findById(req.body.pickerId).session(session);
+      if (
+        picker &&
+        ["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker.role)
+      ) {
+        order.pickerInfo = {
+          pickerId: picker._id,
+          pickerName: picker.fullName,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          note: req.body.note || "",
+        };
+      }
+    }
+
+    if (
+      req.user.role === "ORDER_MANAGER" &&
+      !["CONFIRMED", "PROCESSING", "SHIPPING", "CANCELLED"].includes(
+        targetStatus
+      )
+    ) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message:
+          "ORDER_MANAGER chi duoc dieu phoi don sang trang thai Xac nhan, Lay hang, Dang giao hoac Huy",
+      });
+    }
+
+    if (targetStatus === "PREPARING_SHIPMENT" && !["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(req.user.role)) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message: "Chi WAREHOUSE_MANAGER hoac WAREHOUSE_STAFF moi duoc xac nhan hoan tat lay hang",
+      });
+    }
+
     if (targetStatus === "PENDING_PAYMENT" && !inStoreOrder && !isManagerRole) {
       await session.abortTransaction();
       return res.status(400).json({
@@ -1007,7 +1078,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(403).json({
         success: false,
-        message: "Chi ORDER_MANAGER, ADMIN hoac WAREHOUSE_STAFF moi duoc giao shipper",
+        message: "Chi ORDER_MANAGER hoac ADMIN moi duoc giao shipper",
       });
     }
 
@@ -1566,6 +1637,78 @@ export const handleCarrierWebhook = async (req, res) => {
   }
 };
 
+export const assignPicker = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { pickerId, note } = req.body;
+
+    if (!pickerId) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Vui long chon nhan vien kho",
+      });
+    }
+
+    const order = await Order.findById(req.params.id).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay don hang",
+      });
+    }
+
+    const picker = await User.findById(pickerId).session(session);
+    if (!picker || !["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker.role)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Nhan vien kho khong hop le",
+      });
+    }
+
+    order.pickerInfo = {
+      pickerId: picker._id,
+      pickerName: picker.fullName,
+      assignedAt: new Date(),
+      assignedBy: req.user._id,
+      note: note || order.pickerInfo?.note || "",
+    };
+
+    // Auto transition to CONFIRMED or PICKING if needed?
+    // For now, just assign.
+
+    appendHistory(order, order.status, req.user._id, `Assigned picker: ${picker.fullName}`);
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    const normalizedOrder = normalizeOrderForResponse(order);
+    res.json({
+      success: true,
+      message: `Da phan cong nhan vien lay hang: ${picker.fullName}`,
+      order: normalizedOrder,
+      data: { order: normalizedOrder },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    omniLog.error("assignPicker failed", {
+      orderId: req.params.id,
+      error: error.message,
+    });
+    res.status(500).json({
+      success: false,
+      message: "Loi khi phan cong nhan vien lay hang",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 export const updatePaymentStatus = async (req, res) => {
   try {
     const { paymentStatus } = req.body;
@@ -1804,7 +1947,3 @@ export default {
   getOrderStats,
   cancelOrder,
 };
-
-
-
-

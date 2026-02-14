@@ -19,35 +19,35 @@ router.use(protect);
 // Get all warehouses
 router.get(
   "/",
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.getAllWarehouses
 );
 
 // Get warehouse by ID
 router.get(
   "/:id",
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.getWarehouseById
 );
 
 // Create new warehouse
 router.post(
   "/",
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.createWarehouse
 );
 
 // Update warehouse
 router.put(
   "/:id",
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.updateWarehouse
 );
 
 // Delete warehouse
 router.delete(
   "/:id",
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.deleteWarehouse
 );
 
@@ -58,14 +58,14 @@ router.delete(
 // Generate locations from configuration
 router.post(
   "/:id/generate-locations",
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.generateLocationsFromConfig
 );
 
 // Get warehouse statistics
 router.get(
   "/:id/stats",
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   configController.getWarehouseStats
 );
 

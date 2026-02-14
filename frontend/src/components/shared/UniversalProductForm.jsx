@@ -42,6 +42,7 @@ const UniversalProductForm = ({
 }) => {
   const { user } = useAuthStore();
   const isEdit = mode === "edit";
+  const canEditVariantStock = isEdit && user?.role === "WAREHOUSE_MANAGER";
   const [activeTab, setActiveTab] = useState("basic");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -303,6 +304,10 @@ const UniversalProductForm = ({
   };
 
   const handleVariantOptionChange = (vIdx, oIdx, field, value) => {
+    if (field === "stock" && !canEditVariantStock) {
+      return;
+    }
+
     if (field === "price" || field === "originalPrice") {
       const price =
         field === "price"
@@ -890,6 +895,7 @@ const UniversalProductForm = ({
                               <Input
                                 type="number"
                                 value={opt.stock}
+                                min="0"
                                 onChange={(e) =>
                                   handleVariantOptionChange(
                                     vIdx,
@@ -898,7 +904,8 @@ const UniversalProductForm = ({
                                     e.target.value
                                   )
                                 }
-                                required
+                                required={canEditVariantStock}
+                                disabled={!canEditVariantStock}
                               />
                             </div>
 
@@ -925,6 +932,12 @@ const UniversalProductForm = ({
                       </div>
                     </div>
                   ))}
+                  {!canEditVariantStock && (
+                    <p className="text-sm text-muted-foreground">
+                      Quyền cập nhật số lượng tồn kho thuộc về Quản lý kho.
+                    </p>
+                  )}
+
                 </div>
               </TabsContent>
             </Tabs>
@@ -950,3 +963,4 @@ const UniversalProductForm = ({
 };
 
 export default UniversalProductForm;
+

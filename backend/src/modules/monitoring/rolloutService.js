@@ -2,10 +2,11 @@ import crypto from "crypto";
 
 const DEFAULT_INTERNAL_ROLES = [
   "ADMIN",
+  "PRODUCT_MANAGER",
   "ORDER_MANAGER",
+  "WAREHOUSE_MANAGER",
   "POS_STAFF",
   "CASHIER",
-  "WAREHOUSE_STAFF",
   "SHIPPER",
 ];
 

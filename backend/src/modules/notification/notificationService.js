@@ -140,7 +140,7 @@ export const sendOrderStageNotifications = async ({
       eventType: stageConfig.warehouse.eventType,
       stage: currentStage,
       recipientType: "WAREHOUSE",
-      recipientRole: "WAREHOUSE_STAFF",
+      recipientRole: "WAREHOUSE_MANAGER",
       channels: ["IN_APP"],
       title: stageConfig.warehouse.title,
       message: createWarehouseMessage(orderLabel),

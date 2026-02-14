@@ -9,7 +9,6 @@ import {
   Package, 
   TruckIcon, 
   RefreshCw, 
-  ClipboardList, 
   AlertCircle,
   CheckCircle,
   Clock
@@ -96,13 +95,6 @@ const WarehouseStaffDashboard = () => {
       icon: RefreshCw,
       color: "bg-purple-500",
       link: "/warehouse-staff/transfer",
-    },
-    {
-      title: "Sản Phẩm",
-      description: "Quản lý sản phẩm trong kho",
-      icon: ClipboardList,
-      color: "bg-orange-500",
-      link: "/warehouse/products",
     },
   ];
 
@@ -197,7 +189,7 @@ const WarehouseStaffDashboard = () => {
       {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Tác Vụ Nhanh</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {quickActions.map((action, index) => (
             <Link key={index} to={action.link}>
               <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">

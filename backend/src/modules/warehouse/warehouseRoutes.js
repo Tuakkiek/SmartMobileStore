@@ -19,7 +19,7 @@ const router = express.Router();
 router.post(
   "/locations/generate",
   protect,
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.generateWarehouseStructure
 );
 
@@ -27,7 +27,7 @@ router.post(
 router.get(
   "/locations",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.getAllLocations
 );
 
@@ -35,7 +35,7 @@ router.get(
 router.get(
   "/locations/:locationCode",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.getLocationDetail
 );
 
@@ -43,7 +43,7 @@ router.get(
 router.post(
   "/locations/suggest",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   warehouseController.suggestLocation
 );
 
@@ -55,7 +55,7 @@ router.post(
 router.get(
   "/inventory/search",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.searchInventory
 );
 
@@ -67,7 +67,7 @@ router.get(
 router.post(
   "/purchase-orders",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.createPurchaseOrder
 );
 
@@ -75,7 +75,7 @@ router.post(
 router.get(
   "/purchase-orders",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.getPurchaseOrders
 );
 
@@ -83,7 +83,7 @@ router.get(
 router.get(
   "/purchase-orders/:id",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.getPurchaseOrderDetail
 );
 
@@ -91,7 +91,7 @@ router.get(
 router.put(
   "/purchase-orders/:id/approve",
   protect,
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   warehouseController.approvePurchaseOrder
 );
 
@@ -103,7 +103,7 @@ router.put(
 router.post(
   "/goods-receipt/start",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   goodsReceiptController.startGoodsReceipt
 );
 
@@ -111,7 +111,7 @@ router.post(
 router.post(
   "/goods-receipt/receive-item",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   goodsReceiptController.receiveItem
 );
 
@@ -119,7 +119,7 @@ router.post(
 router.post(
   "/goods-receipt/complete",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   goodsReceiptController.completeGoodsReceipt
 );
 
@@ -127,7 +127,7 @@ router.post(
 router.get(
   "/goods-receipt",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   goodsReceiptController.getGoodsReceipts
 );
 
@@ -139,7 +139,7 @@ router.get(
 router.get(
   "/pick-list/:orderId",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   stockOperationsController.getPickList
 );
 
@@ -147,7 +147,7 @@ router.get(
 router.post(
   "/pick",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   stockOperationsController.pickItem
 );
 
@@ -155,7 +155,7 @@ router.post(
 router.post(
   "/transfer",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   stockOperationsController.transferStock
 );
 
@@ -167,7 +167,7 @@ router.post(
 router.post(
   "/cycle-count",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   stockOperationsController.createCycleCount
 );
 
@@ -175,7 +175,7 @@ router.post(
 router.get(
   "/cycle-count",
   protect,
-  restrictTo("ADMIN", "WAREHOUSE_STAFF"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   stockOperationsController.getCycleCounts
 );
 
@@ -183,7 +183,7 @@ router.get(
 router.put(
   "/cycle-count/:id/update-item",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   stockOperationsController.updateCycleCountItem
 );
 
@@ -191,7 +191,7 @@ router.put(
 router.put(
   "/cycle-count/:id/complete",
   protect,
-  restrictTo("WAREHOUSE_STAFF", "ADMIN"),
+  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
   stockOperationsController.completeCycleCount
 );
 
@@ -199,7 +199,7 @@ router.put(
 router.put(
   "/cycle-count/:id/approve",
   protect,
-  restrictTo("ADMIN"),
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
   stockOperationsController.approveCycleCount
 );
 
