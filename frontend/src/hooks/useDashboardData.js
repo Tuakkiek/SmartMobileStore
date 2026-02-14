@@ -75,7 +75,7 @@ export const useDashboardData = (timeRange) => {
       setStats(processedStats);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
-      setError(err?.response?.data?.message || "Loi khi tai du lieu");
+      setError(err?.response?.data?.message || "Lỗi khi tải dữ liệu");
     } finally {
       setIsLoading(false);
     }
@@ -402,11 +402,11 @@ const processAllData = ({
   const salesTrend = generateSalesTrend(filteredDelivered);
 
   const ordersByStatus = [
-    { name: "Cho xac nhan", value: pendingOrders, color: "#f59e0b" },
-    { name: "Da giao", value: completedOrders, color: "#10b981" },
-    { name: "Da huy", value: cancelledOrders, color: "#ef4444" },
+    { name: "Chờ xác nhận", value: pendingOrders, color: "#f59e0b" },
+    { name: "Đã giao", value: completedOrders, color: "#10b981" },
+    { name: "Đã hủy", value: cancelledOrders, color: "#ef4444" },
     {
-      name: "Dang xu ly",
+      name: "Đang xử lý",
       value: filteredOrders.filter(
         (order) => order.status === "CONFIRMED" || order.status === "SHIPPING"
       ).length,

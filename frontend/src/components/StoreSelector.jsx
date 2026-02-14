@@ -34,13 +34,13 @@ const StoreSelector = ({ onSelectStore, selectedStoreId, customerAddress }) => {
   }, [customerAddress?.province, customerAddress?.district]);
 
   if (isLoading) {
-    return <div className="py-6 text-center text-sm text-muted-foreground">Dang tim cua hang gan ban...</div>;
+    return <div className="py-6 text-center text-sm text-muted-foreground">Đang tìm cửa hàng gần bạn...</div>;
   }
 
   if (stores.length === 0) {
     return (
       <Card className="p-4 text-center text-sm text-muted-foreground">
-        Khong tim thay cua hang phu hop
+        Không tìm thấy cửa hàng phù hợp
       </Card>
     );
   }
@@ -91,7 +91,7 @@ const StoreSelector = ({ onSelectStore, selectedStoreId, customerAddress }) => {
                   onSelectStore?.(store);
                 }}
               >
-                {selected ? "Da chon" : "Chon"}
+                {selected ? "Đã chọn" : "Chọn"}
               </Button>
             </div>
           </Card>

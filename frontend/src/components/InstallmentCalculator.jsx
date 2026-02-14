@@ -77,21 +77,21 @@ const InstallmentCalculator = ({ totalAmount, onCalculate }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Tra gop</CardTitle>
+        <CardTitle className="text-lg">Trả góp</CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Chon ky han</Label>
+          <Label>Chọn kỳ hạn</Label>
           <Select value={selectedMonths} onValueChange={setSelectedMonths}>
             <SelectTrigger>
-              <SelectValue placeholder="Chon ky han" />
+              <SelectValue placeholder="Chọn kỳ hạn" />
             </SelectTrigger>
             <SelectContent>
               {defaultPlans.map((plan) => (
                 <SelectItem key={plan.months} value={String(plan.months)}>
-                  {plan.months} thang - {plan.provider}{" "}
-                  {plan.interestRate === 0 ? "(0%)" : `(${plan.interestRate}%/nam)`}
+                  {plan.months} tháng - {plan.provider}{" "}
+                  {plan.interestRate === 0 ? "(0%)" : `(${plan.interestRate}%/năm)`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -101,22 +101,22 @@ const InstallmentCalculator = ({ totalAmount, onCalculate }) => {
         {calculation ? (
           <div className="space-y-2 rounded-lg bg-muted/30 p-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Gia san pham</span>
+              <span className="text-muted-foreground">Giá sản phẩm</span>
               <span className="font-medium">{formatPrice(totalAmount)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tra moi thang</span>
+              <span className="text-muted-foreground">Trả mỗi tháng</span>
               <span className="font-semibold text-primary">
                 {formatPrice(calculation.monthlyPayment)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tong tien tra</span>
+              <span className="text-muted-foreground">Tổng tiền trả</span>
               <span className="font-medium">{formatPrice(calculation.totalPayment)}</span>
             </div>
             {calculation.totalInterest > 0 ? (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Tien lai</span>
+                <span className="text-muted-foreground">Tiền lãi</span>
                 <span className="font-medium text-red-600">
                   {formatPrice(calculation.totalInterest)}
                 </span>
