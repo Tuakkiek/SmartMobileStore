@@ -11,6 +11,7 @@ import GoodsReceipt from "./GoodsReceipt.js";
 import CycleCount from "./CycleCount.js";
 import UniversalProduct from "../product/UniversalProduct.js";
 import QRCode from "qrcode";
+import { normalizeWarehouseCategory } from "../../lib/productClassification.js";
 
 // ============================================
 // PHẦN 1: QUẢN LÝ CẤU TRÚC KHO
@@ -200,18 +201,37 @@ export const searchInventory = async (req, res) => {
 export const suggestLocation = async (req, res) => {
   try {
     const { sku, category, quantity } = req.body;
+    const requiredQuantity = Math.max(1, Number(quantity) || 1);
+    const normalizedCategory = normalizeWarehouseCategory(category);
 
-    // Tìm vị trí phù hợp
-    const suggestions = await WarehouseLocation.find({
-      productCategories: category,
+    // Lấy toàn bộ vị trí còn sức chứa, sau đó lọc category theo normalized slug để tránh mismatch dữ liệu.
+    const availableLocations = await WarehouseLocation.find({
       status: "ACTIVE",
       $expr: { $lt: ["$currentLoad", "$capacity"] },
-    })
-      .sort({
-        currentLoad: -1, // Ưu tiên ô gần đầy
-        aisle: 1, // Ưu tiên dãy gần cửa
-      })
-      .limit(5);
+    }).sort({
+      currentLoad: -1, // Ưu tiên ô gần đầy
+      aisle: 1, // Ưu tiên dãy gần cửa
+    });
+
+    let suggestions = availableLocations;
+
+    if (normalizedCategory) {
+      const categoryMatched = availableLocations.filter((loc) => {
+        const normalizedLocCategories = (loc.productCategories || [])
+          .map((item) => normalizeWarehouseCategory(item))
+          .filter(Boolean);
+
+        // Nếu location chưa gắn category thì vẫn cho dùng như fallback.
+        if (normalizedLocCategories.length === 0) return true;
+        return normalizedLocCategories.includes(normalizedCategory);
+      });
+
+      if (categoryMatched.length > 0) {
+        suggestions = categoryMatched;
+      }
+    }
+
+    suggestions = suggestions.slice(0, 5);
 
     // Check xem có vị trí nào đang chứa cùng SKU không
     const locationsWithSameSKU = await Inventory.find({ sku })
@@ -222,7 +242,7 @@ export const suggestLocation = async (req, res) => {
 
     // Ưu tiên vị trí đang có cùng SKU
     for (const inv of locationsWithSameSKU) {
-      if (inv.locationId && inv.locationId.canAccommodate(quantity)) {
+      if (inv.locationId && inv.locationId.canAccommodate(requiredQuantity)) {
         recommended.push({
           ...inv.locationId.toObject(),
           priority: "HIGH",
@@ -235,7 +255,7 @@ export const suggestLocation = async (req, res) => {
     // Thêm các vị trí khác
     for (const loc of suggestions) {
       if (!recommended.find((r) => r.locationCode === loc.locationCode)) {
-        if (loc.canAccommodate(quantity)) {
+        if (loc.canAccommodate(requiredQuantity)) {
           recommended.push({
             ...loc.toObject(),
             priority: "MEDIUM",

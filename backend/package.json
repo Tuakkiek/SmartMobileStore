@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "uat:omnichannel": "node scripts/run_omnichannel_uat.js",
     "migrate:order-status-stage": "node src/scripts/migrate-order-status-stage.js",
+    "migrate:product-warehouse-sync": "node src/scripts/migrate-product-warehouse-sync.js",
     "smoke:phase5": "node src/scripts/smoke-phase5-carrier-notifications.js",
     "test:order-state-machine": "node src/scripts/test-order-state-machine.js",
     "test:vnpay-integration": "node src/scripts/test-vnpay-integration.js",
