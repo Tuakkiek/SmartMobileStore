@@ -84,6 +84,8 @@ const ProductCard = ({
   isTopSeller = false, // Badge "Bán chạy"
   onEdit, // Callback sửa sản phẩm (Admin)
   onDelete, // Callback xóa sản phẩm (Admin)
+  onClick, // Optional: override default click behavior
+  openInNewTab = false, // Optional: open URL in new tab
 }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
@@ -265,15 +267,14 @@ const ProductCard = ({
     setShowDeleteDialog(false);
   };
 
-  const handleCardClick = () => {
-    // ✅ UPDATED: Support both universal and legacy products
+  const handleCardClick = (e) => {
+    // 1. Calculate the target URL (consolidated logic)
+    let url = "";
     
-    // UNIVERSAL PRODUCTS: Navigate with category path + storage suffix
+    // CASE A: UNIVERSAL PRODUCTS
     const isUniversal = product.isUniversal || (product.productType && !["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"].includes(product.category));
     
     if (isUniversal) {
-      console.log("🔗 Navigating to universal product:", product.name);
-      
       // Map productType slug to category path
       const PRODUCT_TYPE_TO_CATEGORY = {
         smartphone: "dien-thoai",
@@ -301,43 +302,52 @@ const ProductCard = ({
         storageSuffix = match ? `-${match[1].toLowerCase()}` : "";
       }
       
-      // Generate URL: /dien-thoai/iphone-17-pro-max-512gb?sku=XXX
-      const url = selectedVariant?.sku 
+      url = selectedVariant?.sku 
         ? `/${categoryPath}/${baseSlug}${storageSuffix}?sku=${selectedVariant.sku}`
         : `/${categoryPath}/${baseSlug}`;
-      
-      navigate(url);
-      return;
+
+    } else {
+      // CASE B: LEGACY PRODUCTS
+      const categoryPath = {
+        iPhone: "dien-thoai",
+        iPad: "may-tinh-bang",
+        Mac: "macbook",
+        AppleWatch: "apple-watch",
+        AirPods: "tai-nghe",
+        Accessories: "phu-kien",
+      }[product.category];
+
+      if (!categoryPath) {
+        console.warn("Unknown category:", product.category);
+        return;
+      }
+
+      if (selectedVariant?.sku && selectedVariant?.slug) {
+        url = `/${categoryPath}/${selectedVariant.slug}?sku=${selectedVariant.sku}`;
+      } else if (product.baseSlug) {
+        url = `/${categoryPath}/${product.baseSlug}`;
+      } else {
+         toast.error("Không thể xem chi tiết sản phẩm");
+         return;
+      }
     }
+
+    // 2. Handle Navigation Action
     
-    // LEGACY PRODUCTS: Use category mapping
-    const categoryPath = {
-      iPhone: "dien-thoai",
-      iPad: "may-tinh-bang",
-      Mac: "macbook",
-      AppleWatch: "apple-watch",
-      AirPods: "tai-nghe",
-      Accessories: "phu-kien",
-    }[product.category];
-
-    if (!categoryPath) {
-      console.warn("Unknown category:", product.category);
+    // Option A: Parent override (e.g. for custom action)
+    if (onClick) {
+      onClick(product);
       return;
     }
 
-    if (selectedVariant?.sku && selectedVariant?.slug) {
-      const url = `/${categoryPath}/${selectedVariant.slug}?sku=${selectedVariant.sku}`;
-      navigate(url);
+    // Option B: Open in new tab (e.g. for Warehouse)
+    if (openInNewTab) {
+      window.open(url, '_blank');
       return;
     }
 
-    if (product.baseSlug) {
-      const url = `/${categoryPath}/${product.baseSlug}`;
-      navigate(url);
-      return;
-    }
-
-    toast.error("Không thể xem chi tiết sản phẩm");
+    // Option C: Default navigation (single page app)
+    navigate(url);
   };
 
   const getVariantLabel = (variant) => {

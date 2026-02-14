@@ -39,7 +39,7 @@ const PRODUCT_TYPE_TO_CATEGORY = {
 
 const getVariantStorageLabel = (variantName = "") => {
   const match = String(variantName).match(/^([\d]+(?:GB|TB))/i);
-  return match ? match[1].toUpperCase() : String(variantName || "");
+  return match ? match[1].toUpperCase() : ""; // Return empty string if no storage found
 };
 
 const VARIANT_KEY_FIELD = {
@@ -58,9 +58,20 @@ const ProductDetailPage = () => {
   const [searchParams] = useSearchParams();
   const topRef = useRef(null);
 
+
   const pathParts = location.pathname.split("/").filter(Boolean);
-  const categorySlug = pathParts[0];
-  const fullSlug = pathParts.slice(1).join("/");
+  
+  // ✅ FIX: Handle warehouse route /warehouse/products/:slug
+  let categorySlug, fullSlug;
+  
+  if (pathParts[0] === "warehouse" && pathParts[1] === "products") {
+    categorySlug = "warehouse";
+    fullSlug = pathParts[2]; // Slug is at index 2
+  } else {
+    // Standard routes: /category/slug
+    categorySlug = pathParts[0];
+    fullSlug = pathParts.slice(1).join("/");
+  }
   const categoryInfo = null;
   const sku = searchParams.get("sku");
 
@@ -162,11 +173,20 @@ const ProductDetailPage = () => {
     if (!variant) return;
 
     const storage = getVariantStorageLabel(variant.variantName).toLowerCase();
-    const categoryPath =
-      PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
-    const baseSlug = product.baseSlug || product.slug;
-    const url =
-      `/${categoryPath}/${baseSlug}${storage ? `-${storage}` : ""}?sku=${variant.sku}`;
+    
+    // ✅ FIX: Preserve warehouse context if present
+    let url;
+    if (categorySlug === "warehouse") {
+       url = `/warehouse/products/${product.baseSlug || product.slug}?sku=${variant.sku}`;
+    } else {
+      const categoryPath =
+        PRODUCT_TYPE_TO_CATEGORY[product.productType?.slug] || "products";
+      const baseSlug = product.baseSlug || product.slug;
+      
+      // Only append storage if it's a valid storage string
+      const storageSuffix = storage ? `-${storage}` : "";
+      url = `/${categoryPath}/${baseSlug}${storageSuffix}?sku=${variant.sku}`;
+    }
 
     window.history.replaceState(null, "", url);
     updateVariantUI(variant);
@@ -339,7 +359,18 @@ const ProductDetailPage = () => {
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
-      <div className="container mx-auto px-2 sm:px-4">
+      <div className="container mx-auto px-2 sm:px-4 py-4">
+        {/* Back Button */}
+        {(categorySlug === "warehouse" || location.state?.canGoBack) && (
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 transition-colors font-medium"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            Quay lại danh sách
+          </button>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
           {/* LEFT: Image Gallery - 7 cols */}
           <div className="lg:col-span-7">
@@ -619,7 +650,10 @@ const ProductDetailPage = () => {
               {/* Storage Selection */}
               <div className="mb-4">
                 <h3 className="text-sm font-semibold mb-3">
-                  {productSource === "universal" || keyField === "storage" ? "Dung lượng" : "Phiên bản"}
+                  {/* Show "Dung lượng" ONLY if keys look like storage, otherwise "Phiên bản" */}
+                  {(productSource === "universal" && variantKeyOptions.some(opt => opt.match(/^[\d]+(?:GB|TB)$/i))) || keyField === "storage" 
+                    ? "Dung lượng" 
+                    : "Phiên bản"}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {variantKeyOptions.map((option) => {

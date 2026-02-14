@@ -236,6 +236,7 @@ function App() {
           }
         >
           <Route path="/warehouse/products" element={<WarehouseProductsPage />} />
+          <Route path="/warehouse/products/:productSlug" element={<ProductDetailPage />} />
 
         </Route>
 
