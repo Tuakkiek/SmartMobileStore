@@ -36,6 +36,7 @@ export const getStatusColor = (status) => {
     PENDING_PAYMENT: "bg-orange-100 text-orange-800",
     PAYMENT_CONFIRMED: "bg-emerald-100 text-emerald-800",
     PAYMENT_VERIFIED: "bg-emerald-100 text-emerald-800",
+    PAYMENT_FAILED: "bg-red-100 text-red-800",
     CONFIRMED: "bg-blue-100 text-blue-800",
     PROCESSING: "bg-indigo-100 text-indigo-800",
     PREPARING: "bg-purple-100 text-purple-800",
@@ -50,6 +51,9 @@ export const getStatusColor = (status) => {
     RETURN_REQUESTED: "bg-yellow-100 text-yellow-800",
     RETURNED: "bg-red-100 text-red-800",
     CANCELLED: "bg-gray-100 text-gray-800",
+    PICKING: "bg-indigo-100 text-indigo-800",
+    PICKUP_COMPLETED: "bg-violet-100 text-violet-800",
+    IN_TRANSIT: "bg-sky-100 text-sky-800",
     PAID: "bg-green-100 text-green-800",
     UNPAID: "bg-red-100 text-red-800",
   };
@@ -58,15 +62,16 @@ export const getStatusColor = (status) => {
 
 export const getStatusText = (status) => {
   const map = {
-    PENDING: "Cho xac nhan",
+    PENDING: "Cho xu ly",
     PENDING_PAYMENT: "Cho thanh toan",
     PAYMENT_CONFIRMED: "Da thanh toan",
-    PAYMENT_VERIFIED: "Da xac thuc thanh toan",
+    PAYMENT_VERIFIED: "Da thanh toan online",
+    PAYMENT_FAILED: "Thanh toan that bai",
     CONFIRMED: "Da xac nhan",
     PROCESSING: "Dang xu ly",
     PREPARING: "Dang chuan bi",
     READY_FOR_PICKUP: "San sang lay hang",
-    PREPARING_SHIPMENT: "Dang dong goi",
+    PREPARING_SHIPMENT: "Da hoan tat lay hang",
     SHIPPING: "Dang giao hang",
     OUT_FOR_DELIVERY: "Dang giao den khach",
     DELIVERED: "Da giao hang",
@@ -76,6 +81,9 @@ export const getStatusText = (status) => {
     RETURN_REQUESTED: "Yeu cau tra hang",
     RETURNED: "Da tra hang",
     CANCELLED: "Da huy",
+    PICKING: "Dang lay hang",
+    PICKUP_COMPLETED: "Da hoan tat lay hang",
+    IN_TRANSIT: "Dang van chuyen",
     PAID: "Da thanh toan",
     UNPAID: "Chua thanh toan",
     COD: "Thanh toan khi nhan hang",
@@ -88,6 +96,38 @@ export const getStatusText = (status) => {
     IN_STORE: "Mua tai cua hang",
   };
   return map[status] || status;
+};
+
+export const getStatusStage = (status) => {
+  if (!status) return null;
+
+  const normalized = String(status).trim().toUpperCase();
+  const map = {
+    PENDING: "PENDING",
+    PENDING_PAYMENT: "PENDING_PAYMENT",
+    PAYMENT_CONFIRMED: "PENDING",
+    PAYMENT_VERIFIED: "PENDING",
+    PAYMENT_FAILED: "PAYMENT_FAILED",
+    CONFIRMED: "CONFIRMED",
+    PROCESSING: "PICKING",
+    PREPARING: "PICKING",
+    PICKING: "PICKING",
+    PREPARING_SHIPMENT: "PICKUP_COMPLETED",
+    READY_FOR_PICKUP: "PICKUP_COMPLETED",
+    PICKUP_COMPLETED: "PICKUP_COMPLETED",
+    SHIPPING: "IN_TRANSIT",
+    OUT_FOR_DELIVERY: "IN_TRANSIT",
+    IN_TRANSIT: "IN_TRANSIT",
+    DELIVERED: "DELIVERED",
+    PICKED_UP: "DELIVERED",
+    COMPLETED: "DELIVERED",
+    DELIVERY_FAILED: "CANCELLED",
+    CANCELLED: "CANCELLED",
+    RETURN_REQUESTED: "RETURNED",
+    RETURNED: "RETURNED",
+  };
+
+  return map[normalized] || normalized;
 };
 
 export const fetchAllProducts = async (params = {}) => {

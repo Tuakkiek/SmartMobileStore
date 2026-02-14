@@ -70,7 +70,7 @@ const OrderDetailPage = () => {
     setIsLoading(true);
     try {
       const response = await orderAPI.getById(id);
-      setOrder(response.data.data.order);
+      setOrder(response?.data?.order || response?.data?.data?.order || null);
     } catch (error) {
       console.error("Lỗi tải đơn hàng:", error);
       toast.error("Không thể tải thông tin đơn hàng");
@@ -82,6 +82,7 @@ const OrderDetailPage = () => {
   // =============== DERIVED VALUES (SAU KHI CÓ ORDER) ===============
   const isCancelled = order?.status === "CANCELLED";
   const isReturned = order?.status === "RETURNED";
+  const isClickAndCollect = order?.fulfillmentType === "CLICK_AND_COLLECT";
   const isPaymentVerified =
     order?.status === "PAYMENT_VERIFIED" || order?.paymentInfo?.vnpayVerified;
 
@@ -318,6 +319,30 @@ const OrderDetailPage = () => {
                   <p className="text-sm text-muted-foreground mt-1">
                     {formatDate(order.createdAt)}
                   </p>
+                  <div className="mt-2 space-y-1 text-sm">
+                    <p className="text-muted-foreground">
+                      Hình thức nhận:{" "}
+                      <span className="font-medium text-foreground">
+                        {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
+                      </span>
+                    </p>
+                    {order.assignedStore?.storeName && (
+                      <p className="text-muted-foreground">
+                        Cửa hàng xử lý:{" "}
+                        <span className="font-medium text-foreground">
+                          {order.assignedStore.storeName}
+                        </span>
+                      </p>
+                    )}
+                    {order.pickupInfo?.pickupCode && (
+                      <p className="text-muted-foreground">
+                        Mã nhận hàng:{" "}
+                        <span className="font-semibold text-foreground">
+                          {order.pickupInfo.pickupCode}
+                        </span>
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <Badge className={getStatusColor(order.status)}>
                   {getStatusText(order.status)}
@@ -368,23 +393,60 @@ const OrderDetailPage = () => {
             </CardContent>
           </Card>
 
-          {/* Địa chỉ giao */}
+          {/* Thông tin nhận hàng */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <MapPin className="w-5 h-5 mr-2" />
-                Địa chỉ giao hàng
+                {isClickAndCollect
+                  ? "Thông tin nhận tại cửa hàng"
+                  : "Địa chỉ giao hàng"}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-medium">{order.shippingAddress.fullName}</p>
-              <p className="text-sm text-muted-foreground">
-                {order.shippingAddress.phoneNumber}
+              <p className="text-sm text-muted-foreground mb-2">
+                Hình thức nhận:{" "}
+                <span className="font-medium text-foreground">
+                  {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
+                </span>
               </p>
-              <p className="text-sm text-muted-foreground">
-                {order.shippingAddress.detailAddress},{" "}
-                {order.shippingAddress.ward}, {order.shippingAddress.province}
-              </p>
+
+              {isClickAndCollect ? (
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    {order.assignedStore?.storeName || "Chưa gán cửa hàng"}
+                  </p>
+                  {order.assignedStore?.storePhone && (
+                    <p className="text-sm text-muted-foreground">
+                      {order.assignedStore.storePhone}
+                    </p>
+                  )}
+                  {order.assignedStore?.storeAddress && (
+                    <p className="text-sm text-muted-foreground">
+                      {order.assignedStore.storeAddress}
+                    </p>
+                  )}
+                  {order.pickupInfo?.pickupCode && (
+                    <p className="text-sm text-primary font-semibold">
+                      Mã nhận hàng: {order.pickupInfo.pickupCode}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    {order.shippingAddress?.fullName || "N/A"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.shippingAddress?.phoneNumber || "N/A"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.shippingAddress?.detailAddress || ""},{" "}
+                    {order.shippingAddress?.ward || ""},{" "}
+                    {order.shippingAddress?.province || ""}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

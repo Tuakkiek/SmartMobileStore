@@ -618,6 +618,34 @@ const ShipperDashboard = () => {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">
+                                Hình thức nhận:
+                              </span>
+                              <span className="font-medium">
+                                {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
+                              </span>
+                            </div>
+                            {order.assignedStore?.storeName && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">
+                                  Cửa hàng xử lý:
+                                </span>
+                                <span className="font-medium text-right">
+                                  {order.assignedStore.storeName}
+                                </span>
+                              </div>
+                            )}
+                            {order.pickupInfo?.pickupCode && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">
+                                  Mã nhận hàng:
+                                </span>
+                                <span className="font-semibold text-blue-700">
+                                  {order.pickupInfo.pickupCode}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
                                 Tổng tiền:
                               </span>
                               <span className="font-bold text-primary">
@@ -847,6 +875,28 @@ const ShipperDashboard = () => {
                     </p>
                   </div>
                 )}
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-3">Thông tin thực hiện đơn</h4>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1 text-sm">
+                  <p>
+                    <strong>Hình thức nhận:</strong>{" "}
+                    {getStatusText(selectedOrder.fulfillmentType || "HOME_DELIVERY")}
+                  </p>
+                  {selectedOrder.assignedStore?.storeName && (
+                    <p>
+                      <strong>Cửa hàng xử lý:</strong>{" "}
+                      {selectedOrder.assignedStore.storeName}
+                    </p>
+                  )}
+                  {selectedOrder.pickupInfo?.pickupCode && (
+                    <p>
+                      <strong>Mã nhận hàng:</strong>{" "}
+                      {selectedOrder.pickupInfo.pickupCode}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Địa chỉ giao hàng */}

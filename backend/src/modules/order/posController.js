@@ -4,14 +4,22 @@
 // ============================================
 
 import mongoose from "mongoose";
-import Order from "./Order.js";
+import Order, { mapStatusToStage } from "./Order.js";
 import UniversalProduct, {
   UniversalVariant,
 } from "../product/UniversalProduct.js";
+import Inventory from "../warehouse/Inventory.js";
+import WarehouseLocation from "../warehouse/WarehouseLocation.js";
+import StockMovement from "../warehouse/StockMovement.js";
+import { sendOrderStageNotifications } from "../notification/notificationService.js";
 
 const getModelsByType = (productType) => {
   // Unified catalog: all product types now point to Universal models
   return { Product: UniversalProduct, Variant: UniversalVariant };
+};
+
+const resolveOrderStage = (order) => {
+  return order?.statusStage || mapStatusToStage(order?.status);
 };
 
 // ============================================
@@ -125,6 +133,7 @@ export const createPOSOrder = async (req, res) => {
       [
         {
           orderSource: "IN_STORE",
+          fulfillmentType: "IN_STORE",
           customerId: req.user._id,
           items: orderItems,
           shippingAddress: {
@@ -136,7 +145,7 @@ export const createPOSOrder = async (req, res) => {
           },
           paymentMethod: "CASH",
           paymentStatus: "UNPAID",
-          status: "PENDING_PAYMENT",
+          status: "CONFIRMED",
           subtotal,
           shippingFee: 0,
           promotionDiscount: 0,
@@ -157,9 +166,16 @@ export const createPOSOrder = async (req, res) => {
 
     await session.commitTransaction();
 
+    await sendOrderStageNotifications({
+      order: order[0],
+      previousStage: "PENDING",
+      triggeredBy: req.user?._id,
+      source: "create_pos_order",
+    });
+
     res.status(201).json({
       success: true,
-      message: "Tạo đơn thành công. Đã chuyển cho Thu ngân.",
+      message: "Tạo đơn thành công. Đã chuyển cho kho lấy hàng.",
       data: { order: order[0] },
     });
   } catch (error) {
@@ -179,7 +195,10 @@ export const createPOSOrder = async (req, res) => {
 export const getPendingOrders = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
-    const query = { orderSource: "IN_STORE", status: "PENDING_PAYMENT" };
+    const query = {
+      orderSource: "IN_STORE",
+      $or: [{ statusStage: "PENDING_PAYMENT" }, { status: "PENDING_PAYMENT" }],
+    };
 
     const [orders, total] = await Promise.all([
       Order.find(query)
@@ -229,7 +248,15 @@ export const processPayment = async (req, res) => {
         .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
 
-    if (order.status !== "PENDING_PAYMENT") {
+    if (order.orderSource !== "IN_STORE") {
+      return res.status(400).json({
+        success: false,
+        message: "Only in-store POS orders can be paid at cashier",
+      });
+    }
+
+    const currentStage = resolveOrderStage(order);
+    if (currentStage !== "PENDING_PAYMENT") {
       return res
         .status(400)
         .json({
@@ -290,6 +317,13 @@ export const processPayment = async (req, res) => {
 
     await order.save();
 
+    await sendOrderStageNotifications({
+      order,
+      previousStage: currentStage,
+      triggeredBy: req.user?._id,
+      source: "pos_process_payment",
+    });
+
     res.json({
       success: true,
       message: "Thanh toán thành công!",
@@ -320,7 +354,16 @@ export const cancelPendingOrder = async (req, res) => {
         .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
 
-    if (order.status !== "PENDING_PAYMENT") {
+    if (order.orderSource !== "IN_STORE") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Only in-store POS orders can be canceled at cashier",
+      });
+    }
+
+    const currentStage = resolveOrderStage(order);
+    if (currentStage !== "PENDING_PAYMENT") {
       await session.abortTransaction();
       return res
         .status(400)
@@ -328,6 +371,92 @@ export const cancelPendingOrder = async (req, res) => {
           success: false,
           message: "Chỉ hủy được đơn đang chờ thanh toán",
         });
+    }
+
+    // Restore warehouse-location inventory for already picked items
+    const pickMovements = await StockMovement.find({
+      type: "OUTBOUND",
+      referenceType: "ORDER",
+      referenceId: String(order._id),
+    }).session(session);
+
+    const restoreBatches = new Map();
+    for (const movement of pickMovements) {
+      const locationId = movement.fromLocationId?.toString();
+      if (!locationId) continue;
+
+      const key = `${movement.sku}::${locationId}`;
+      const prev = restoreBatches.get(key);
+      if (prev) {
+        prev.quantity += Number(movement.quantity) || 0;
+        continue;
+      }
+
+      restoreBatches.set(key, {
+        sku: movement.sku,
+        locationId: movement.fromLocationId,
+        locationCode: movement.fromLocationCode,
+        productId: movement.productId,
+        productName: movement.productName,
+        quantity: Number(movement.quantity) || 0,
+      });
+    }
+
+    for (const batch of restoreBatches.values()) {
+      if (!batch.quantity) continue;
+
+      const inventory = await Inventory.findOne({
+        sku: batch.sku,
+        locationId: batch.locationId,
+      }).session(session);
+
+      if (inventory) {
+        inventory.quantity += batch.quantity;
+        await inventory.save({ session });
+      } else {
+        await Inventory.create(
+          [
+            {
+              sku: batch.sku,
+              productId: batch.productId,
+              productName: batch.productName,
+              locationId: batch.locationId,
+              locationCode: batch.locationCode,
+              quantity: batch.quantity,
+              status: "GOOD",
+            },
+          ],
+          { session }
+        );
+      }
+
+      const location = await WarehouseLocation.findById(batch.locationId).session(
+        session
+      );
+      if (location) {
+        location.currentLoad += batch.quantity;
+        await location.save({ session });
+      }
+
+      await StockMovement.create(
+        [
+          {
+            type: "INBOUND",
+            sku: batch.sku,
+            productId: batch.productId,
+            productName: batch.productName,
+            toLocationId: batch.locationId,
+            toLocationCode: batch.locationCode,
+            quantity: batch.quantity,
+            referenceType: "ORDER",
+            referenceId: String(order._id),
+            performedBy: req.user._id,
+            performedByName: req.user.fullName || req.user.name || "Cashier",
+            notes: "Inventory restored from cashier cancellation",
+          },
+        ],
+        { session }
+      );
     }
 
     for (const item of order.items) {

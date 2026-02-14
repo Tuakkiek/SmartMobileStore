@@ -2,11 +2,12 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatPrice, formatDate, getStatusColor, getStatusText } from "@/lib/utils";
+import { formatPrice, formatDate, getStatusColor, getStatusStage, getStatusText } from "@/lib/utils";
 import { MapPin, User, Phone, Truck, Clock } from "lucide-react";
 
 const OrderDetailDialog = ({ order, open, onClose }) => {
   if (!order) return null;
+  const stage = order.statusStage || getStatusStage(order.status);
 
   const getImageUrl = (path) => {
     if (!path) return "/placeholder.png";
@@ -24,13 +25,35 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
         <div className="space-y-6">
           {/* Status Badge */}
           <div className="flex items-center gap-3">
-            <Badge className={getStatusColor(order.status)}>
-              {getStatusText(order.status)}
+            <Badge className={getStatusColor(stage)}>
+              {getStatusText(stage)}
             </Badge>
+            {order.status && stage !== order.status && (
+              <Badge variant="outline">
+                Chi tiết: {getStatusText(order.status)}
+              </Badge>
+            )}
             {order.paymentMethod === "VNPAY" && order.paymentInfo?.vnpayVerified && (
               <Badge className="bg-green-100 text-green-800">
                 Đã thanh toán VNPay
               </Badge>
+            )}
+          </div>
+
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-sm space-y-1">
+            <p>
+              <strong>Hình thức nhận:</strong>{" "}
+              {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
+            </p>
+            {order.assignedStore?.storeName && (
+              <p>
+                <strong>Cửa hàng xử lý:</strong> {order.assignedStore.storeName}
+              </p>
+            )}
+            {order.pickupInfo?.pickupCode && (
+              <p>
+                <strong>Mã nhận hàng:</strong> {order.pickupInfo.pickupCode}
+              </p>
             )}
           </div>
 
@@ -72,18 +95,34 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
             </div>
           </div>
 
-          {/* Shipping Address */}
+          {/* Shipping/Pickup Info */}
           <div className="p-4 bg-muted/50 rounded-lg">
             <h3 className="font-semibold mb-2 flex items-center gap-2">
               <MapPin className="w-4 h-4" />
-              Địa chỉ giao hàng
+              {order.fulfillmentType === "CLICK_AND_COLLECT"
+                ? "Thông tin nhận tại cửa hàng"
+                : "Địa chỉ giao hàng"}
             </h3>
-            <p>
-              {order.shippingAddress?.fullName} - {order.shippingAddress?.phoneNumber}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {order.shippingAddress?.detailAddress}, {order.shippingAddress?.ward}, {order.shippingAddress?.province}
-            </p>
+            {order.fulfillmentType === "CLICK_AND_COLLECT" ? (
+              <>
+                <p>
+                  {order.assignedStore?.storeName || "Chưa gán cửa hàng"} -{" "}
+                  {order.assignedStore?.storePhone || "N/A"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {order.assignedStore?.storeAddress || "N/A"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p>
+                  {order.shippingAddress?.fullName} - {order.shippingAddress?.phoneNumber}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {order.shippingAddress?.detailAddress}, {order.shippingAddress?.ward}, {order.shippingAddress?.province}
+                </p>
+              </>
+            )}
           </div>
 
           {/* ✅ NEW: Shipper Info */}

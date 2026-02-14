@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/pos-staff/POSDashboard.jsx
-// ✅ V3: Fixed - Chọn sản phẩm → Tạo đơn → Chuyển Thu ngân
+// ✅ V3: Fixed - Chọn sản phẩm → Tạo đơn → Chuyển Kho
 // ============================================
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -374,7 +374,7 @@ const POSDashboard = () => {
       });
 
       toast.success(
-        "Tạo đơn thành công! Đơn hàng đã được chuyển sang Thu ngân."
+        "Tạo đơn thành công! Đơn hàng đã được chuyển sang kho để lấy hàng."
       );
 
       // Reset form
@@ -711,7 +711,7 @@ const POSDashboard = () => {
                 disabled={isLoading || cart.length === 0}
               >
                 <ArrowRight className="w-5 h-5 mr-2" />
-                {isLoading ? "Đang xử lý..." : "Tạo đơn & Chuyển Thu ngân"}
+                {isLoading ? "Đang xử lý..." : "Tạo đơn & Chuyển Kho"}
               </Button>
             </CardContent>
           </Card>

@@ -1,17 +1,27 @@
 import mongoose from "mongoose";
-import Order from "./Order.js";
+import crypto from "crypto";
+import Order, { ORDER_STATUS_STAGES, mapStatusToStage } from "./Order.js";
 import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 import Store from "../store/Store.js";
 import User from "../auth/User.js";
 import Cart from "../cart/Cart.js";
 import routingService from "../../services/routingService.js";
+import { trackOmnichannelEvent } from "../monitoring/omnichannelMonitoringService.js";
+import { sendOrderStageNotifications } from "../notification/notificationService.js";
 import { omniLog } from "../../utils/logger.js";
+import {
+  canTransitionOrderStatus,
+  getStatusTransitionView,
+  isInStoreOrder,
+  normalizeRequestedOrderStatus,
+} from "./orderStateMachine.js";
 
 const ORDER_STATUSES = new Set([
   "PENDING",
   "PENDING_PAYMENT",
   "PAYMENT_CONFIRMED",
   "PAYMENT_VERIFIED",
+  "PAYMENT_FAILED",
   "CONFIRMED",
   "PROCESSING",
   "PREPARING",
@@ -27,8 +37,31 @@ const ORDER_STATUSES = new Set([
   "RETURN_REQUESTED",
   "RETURNED",
 ]);
+const ORDER_STATUS_STAGES_SET = new Set(ORDER_STATUS_STAGES);
 
 const PAYMENT_STATUSES = new Set(["PENDING", "UNPAID", "PAID", "FAILED", "REFUNDED"]);
+
+const CARRIER_EVENT_ALIASES = Object.freeze({
+  SHIPPED: "IN_TRANSIT",
+  SHIPPING: "IN_TRANSIT",
+  OUT_FOR_DELIVERY: "IN_TRANSIT",
+  PICKED_UP: "IN_TRANSIT",
+  DELIVERY_SUCCESS: "DELIVERED",
+  COMPLETED: "DELIVERED",
+  DELIVERY_FAILED: "DELIVERY_FAILED",
+  RETURN_TO_SENDER: "RETURNED",
+  RETURNED_TO_SENDER: "RETURNED",
+  CANCELLED: "CANCELLED",
+  CANCELED: "CANCELLED",
+});
+
+const CARRIER_EVENT_TO_STATUS = Object.freeze({
+  IN_TRANSIT: "SHIPPING",
+  DELIVERED: "DELIVERED",
+  DELIVERY_FAILED: "DELIVERY_FAILED",
+  RETURNED: "RETURNED",
+  CANCELLED: "CANCELLED",
+});
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -42,15 +75,7 @@ const badRequest = (message) => {
 };
 
 const normalizeLegacyStatus = (status) => {
-  const statusMapping = {
-    NEW: "PENDING",
-    PACKING: "PREPARING",
-    READY_TO_SHIP: "PREPARING_SHIPMENT",
-    IN_TRANSIT: "SHIPPING",
-    PROCESSING: "PROCESSING",
-  };
-
-  return statusMapping[status] || status;
+  return normalizeRequestedOrderStatus(status);
 };
 
 const generateOrderNumber = () => {
@@ -66,10 +91,17 @@ const generatePickupCode = () => {
   return `P${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 };
 
+const toIdString = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (value?._id) return value._id.toString();
+  return value.toString ? value.toString() : String(value);
+};
+
 const isOrderOwnedByUser = (order, userId) => {
-  const customerId = order?.customerId ? order.customerId.toString() : null;
-  const ownerId = order?.userId ? order.userId.toString() : null;
-  const requester = userId?.toString();
+  const customerId = toIdString(order?.customerId);
+  const ownerId = toIdString(order?.userId);
+  const requester = toIdString(userId);
 
   return requester && (customerId === requester || ownerId === requester);
 };
@@ -108,6 +140,11 @@ const appendHistory = (order, status, updatedBy, note = "") => {
     order.statusHistory = [];
   }
 
+  const latest = order.statusHistory[order.statusHistory.length - 1];
+  if (latest?.status === status && latest?.note === note) {
+    return;
+  }
+
   order.statusHistory.push({
     status,
     updatedBy,
@@ -118,6 +155,77 @@ const appendHistory = (order, status, updatedBy, note = "") => {
 
 const getOrderSourceFromRequest = (fulfillmentType) => {
   return fulfillmentType === "IN_STORE" ? "IN_STORE" : "ONLINE";
+};
+
+const normalizeOrderSource = (orderSource) => {
+  if (!orderSource || typeof orderSource !== "string") {
+    return null;
+  }
+
+  const normalized = orderSource.trim().toUpperCase();
+  return ["ONLINE", "IN_STORE"].includes(normalized) ? normalized : null;
+};
+
+const normalizeFulfillmentType = (fulfillmentType) => {
+  if (!fulfillmentType || typeof fulfillmentType !== "string") {
+    return null;
+  }
+
+  const normalized = fulfillmentType.trim().toUpperCase();
+  return ["HOME_DELIVERY", "CLICK_AND_COLLECT", "IN_STORE"].includes(normalized)
+    ? normalized
+    : null;
+};
+
+const normalizeStatusStage = (statusStage) => {
+  if (!statusStage || typeof statusStage !== "string") {
+    return null;
+  }
+
+  const normalized = statusStage.trim().toUpperCase();
+  if (ORDER_STATUS_STAGES_SET.has(normalized)) {
+    return normalized;
+  }
+
+  if (ORDER_STATUSES.has(normalized)) {
+    return mapStatusToStage(normalized);
+  }
+
+  return null;
+};
+
+const normalizeCarrierEventType = (value) => {
+  if (!value || typeof value !== "string") {
+    return "";
+  }
+
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+
+  return CARRIER_EVENT_ALIASES[normalized] || normalized;
+};
+
+const resolveCarrierTargetStatus = (eventType) => {
+  return CARRIER_EVENT_TO_STATUS[eventType] || "";
+};
+
+const buildPayloadHash = (payload) => {
+  try {
+    const text = JSON.stringify(payload ?? {});
+    return crypto.createHash("sha256").update(text).digest("hex");
+  } catch {
+    return "";
+  }
+};
+
+const parseDateOrNow = (value) => {
+  if (!value) {
+    return new Date();
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 const buildProcessedItems = async (rawItems, session) => {
@@ -286,12 +394,14 @@ const decrementStoreCapacity = async (storeId, session) => {
 const buildFilter = (req) => {
   const {
     status,
+    statusStage,
     paymentStatus,
     paymentMethod,
     search,
     startDate,
     endDate,
     fulfillmentType,
+    orderSource,
   } = req.query;
 
   const andClauses = [];
@@ -310,6 +420,14 @@ const buildFilter = (req) => {
     andClauses.push({ status: normalizeLegacyStatus(status) });
   }
 
+  if (statusStage) {
+    const normalizedStage = normalizeStatusStage(statusStage);
+    if (!normalizedStage) {
+      throw badRequest("Trang thai giai doan khong hop le");
+    }
+    andClauses.push({ statusStage: normalizedStage });
+  }
+
   if (paymentStatus) {
     andClauses.push({ paymentStatus });
   }
@@ -319,7 +437,19 @@ const buildFilter = (req) => {
   }
 
   if (fulfillmentType) {
-    andClauses.push({ fulfillmentType });
+    const normalizedFulfillment = normalizeFulfillmentType(fulfillmentType);
+    if (!normalizedFulfillment) {
+      throw badRequest("Kieu hoan tat don hang khong hop le");
+    }
+    andClauses.push({ fulfillmentType: normalizedFulfillment });
+  }
+
+  if (orderSource) {
+    const normalizedSource = normalizeOrderSource(orderSource);
+    if (!normalizedSource) {
+      throw badRequest("Nguon don hang khong hop le");
+    }
+    andClauses.push({ orderSource: normalizedSource });
   }
 
   if (search) {
@@ -341,6 +471,15 @@ const buildFilter = (req) => {
       createdAt.$lte = new Date(endDate);
     }
     andClauses.push({ createdAt });
+  }
+
+  if (req.user.role === "POS_STAFF") {
+    andClauses.push({ orderSource: "IN_STORE" });
+    andClauses.push({ "posInfo.staffId": req.user._id });
+  }
+
+  if (req.user.role === "CASHIER") {
+    andClauses.push({ orderSource: "IN_STORE" });
   }
 
   if (andClauses.length === 0) {
@@ -402,9 +541,11 @@ export const getAllOrders = async (req, res) => {
       error: error.message,
     });
 
-    res.status(500).json({
+    const statusCode = error.httpStatus || 500;
+    res.status(statusCode).json({
       success: false,
-      message: "Khong the lay danh sach don hang",
+      message:
+        statusCode === 500 ? "Khong the lay danh sach don hang" : error.message,
       error: error.message,
     });
   }
@@ -418,7 +559,6 @@ export const getOrderById = async (req, res) => {
       .populate("shipperInfo.shipperId", "fullName phoneNumber");
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Khong tim thay don hang",
@@ -426,7 +566,6 @@ export const getOrderById = async (req, res) => {
     }
 
     if (req.user.role === "CUSTOMER" && !isOrderOwnedByUser(order, req.user._id)) {
-      await session.abortTransaction();
       return res.status(403).json({
         success: false,
         message: "Ban khong co quyen xem don hang nay",
@@ -441,6 +580,24 @@ export const getOrderById = async (req, res) => {
           message: "Ban khong co quyen xem don hang nay",
         });
       }
+    }
+
+    if (req.user.role === "POS_STAFF") {
+      const isInStore = isInStoreOrder(order);
+      const staffId = order?.posInfo?.staffId?.toString();
+      if (!isInStore || !staffId || staffId !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Ban khong co quyen xem don hang nay",
+        });
+      }
+    }
+
+    if (req.user.role === "CASHIER" && !isInStoreOrder(order)) {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen xem don hang nay",
+      });
     }
 
     const normalizedOrder = normalizeOrderForResponse(order);
@@ -483,6 +640,8 @@ export const createOrder = async (req, res) => {
       notes,
       note,
       fulfillmentType,
+      orderSource,
+      statusStage,
       preferredStoreId,
       installmentInfo,
       tradeInInfo,
@@ -493,9 +652,28 @@ export const createOrder = async (req, res) => {
       throw badRequest("Don hang phai co it nhat 1 san pham");
     }
 
+    const normalizedOrderSource = normalizeOrderSource(orderSource);
+    if (orderSource && !normalizedOrderSource) {
+      throw badRequest("Nguon don hang khong hop le");
+    }
+
+    const normalizedFulfillment = normalizeFulfillmentType(fulfillmentType);
+    if (fulfillmentType && !normalizedFulfillment) {
+      throw badRequest("Kieu hoan tat don hang khong hop le");
+    }
+
     const effectiveFulfillment =
-      fulfillmentType ||
-      (req.body?.orderSource === "IN_STORE" ? "IN_STORE" : "HOME_DELIVERY");
+      normalizedFulfillment || (normalizedOrderSource === "IN_STORE" ? "IN_STORE" : "HOME_DELIVERY");
+    const effectiveOrderSource =
+      normalizedOrderSource || getOrderSourceFromRequest(effectiveFulfillment);
+
+    if (effectiveOrderSource === "IN_STORE" && effectiveFulfillment !== "IN_STORE") {
+      throw badRequest("Don IN_STORE phai co fulfillmentType IN_STORE");
+    }
+
+    if (effectiveOrderSource === "ONLINE" && effectiveFulfillment === "IN_STORE") {
+      throw badRequest("Don ONLINE khong duoc co fulfillmentType IN_STORE");
+    }
 
     if (effectiveFulfillment !== "IN_STORE") {
       if (!shippingAddress?.fullName || !shippingAddress?.phoneNumber || !shippingAddress?.detailAddress) {
@@ -593,18 +771,32 @@ export const createOrder = async (req, res) => {
     const orderNumber = generateOrderNumber();
     const isVNPay = paymentMethod === "VNPAY";
     const pickupCode = effectiveFulfillment === "CLICK_AND_COLLECT" ? generatePickupCode() : null;
+    const initialStatus = isVNPay ? "PENDING_PAYMENT" : "PENDING";
+    const initialStatusStage = mapStatusToStage(initialStatus);
+    const requestedStatusStage = normalizeStatusStage(statusStage);
+
+    if (statusStage && !requestedStatusStage) {
+      throw badRequest("Trang thai giai doan khoi tao khong hop le");
+    }
+
+    if (requestedStatusStage && requestedStatusStage !== initialStatusStage) {
+      throw badRequest(
+        `statusStage khoi tao phai la ${initialStatusStage} cho trang thai ${initialStatus}`
+      );
+    }
 
     const order = new Order({
       userId: req.user._id,
       customerId: req.user._id,
       orderNumber,
-      orderSource: getOrderSourceFromRequest(effectiveFulfillment),
+      orderSource: effectiveOrderSource,
       fulfillmentType: effectiveFulfillment,
       items: processedItems,
       shippingAddress,
       paymentMethod: paymentMethod || "COD",
       paymentStatus: "PENDING",
-      status: isVNPay ? "PENDING_PAYMENT" : "PENDING",
+      status: initialStatus,
+      statusStage: initialStatusStage,
       subtotal,
       shippingFee: finalShippingFee,
       discount: totalDiscount,
@@ -668,6 +860,23 @@ export const createOrder = async (req, res) => {
       usedStoreRouting,
     });
 
+    await trackOmnichannelEvent({
+      eventType: "CREATE_ORDER_SUCCESS",
+      operation: "create_order",
+      level: "INFO",
+      success: true,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      userId: req.user?._id,
+      fulfillmentType: effectiveFulfillment,
+      storeId: assignedStore?._id,
+      itemCount: processedItems.length,
+      metadata: {
+        totalAmount: normalizedOrder.totalAmount,
+        usedStoreRouting,
+      },
+    });
+
     res.status(201).json({
       success: true,
       message: "Da tao don hang thanh cong",
@@ -688,6 +897,22 @@ export const createOrder = async (req, res) => {
 
     const status = error.httpStatus || 500;
 
+    await trackOmnichannelEvent({
+      eventType: "CREATE_ORDER_FAILED",
+      operation: "create_order",
+      level: "ERROR",
+      success: false,
+      userId: req.user?._id,
+      fulfillmentType: req.body?.fulfillmentType,
+      storeId: req.body?.preferredStoreId,
+      itemCount: Array.isArray(req.body?.items) ? req.body.items.length : 0,
+      httpStatus: status,
+      errorMessage: error.message,
+      metadata: {
+        usedStoreRouting,
+      },
+    });
+
     res.status(status).json({
       success: false,
       message: status === 500 ? "Loi khi tao don hang" : error.message,
@@ -705,7 +930,11 @@ export const updateOrderStatus = async (req, res) => {
 
   try {
     const { status, note, shipperId } = req.body;
-    const targetStatus = normalizeLegacyStatus(status);
+    const targetStatus = normalizeRequestedOrderStatus(status);
+    const isManagerRole = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
+    const canAssignCarrier = ["ADMIN", "ORDER_MANAGER", "WAREHOUSE_STAFF"].includes(
+      req.user.role
+    );
 
     if (!ORDER_STATUSES.has(targetStatus)) {
       await session.abortTransaction();
@@ -745,40 +974,44 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const currentStatus = normalizeLegacyStatus(order.status);
+    const inStoreOrder = isInStoreOrder(order);
+    const transitionCheck = canTransitionOrderStatus({
+      order,
+      currentStatus,
+      targetStatus,
+      role: req.user.role,
+    });
+    const transitionView = getStatusTransitionView({
+      order,
+      currentStatus,
+      targetStatus,
+    });
 
-    const transitions = {
-      PENDING: ["CONFIRMED", "CANCELLED", "PENDING_PAYMENT", "PAYMENT_CONFIRMED"],
-      PENDING_PAYMENT: ["PAYMENT_VERIFIED", "CANCELLED", "PAYMENT_CONFIRMED"],
-      PAYMENT_CONFIRMED: ["CONFIRMED", "PROCESSING", "CANCELLED"],
-      PAYMENT_VERIFIED: ["CONFIRMED", "PROCESSING", "CANCELLED"],
-      CONFIRMED: ["PROCESSING", "PREPARING", "PREPARING_SHIPMENT", "SHIPPING", "CANCELLED", "READY_FOR_PICKUP"],
-      PROCESSING: ["PREPARING", "PREPARING_SHIPMENT", "SHIPPING", "READY_FOR_PICKUP", "CANCELLED"],
-      PREPARING: ["SHIPPING", "PREPARING_SHIPMENT", "CANCELLED"],
-      PREPARING_SHIPMENT: ["SHIPPING", "OUT_FOR_DELIVERY", "CANCELLED"],
-      READY_FOR_PICKUP: ["PICKED_UP", "CANCELLED"],
-      SHIPPING: ["OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "DELIVERY_FAILED", "CANCELLED"],
-      OUT_FOR_DELIVERY: ["DELIVERED", "RETURNED", "DELIVERY_FAILED", "CANCELLED"],
-      DELIVERED: ["COMPLETED", "RETURN_REQUESTED", "RETURNED"],
-      PICKED_UP: ["COMPLETED", "RETURN_REQUESTED", "RETURNED"],
-      RETURN_REQUESTED: ["RETURNED", "COMPLETED"],
-      DELIVERY_FAILED: ["CANCELLED", "RETURNED", "SHIPPING"],
-      COMPLETED: [],
-      RETURNED: [],
-      CANCELLED: [],
-    };
-
-    const sameStatus = currentStatus === targetStatus;
-    const allowedTransition = transitions[currentStatus]?.includes(targetStatus);
-
-    if (!sameStatus && !allowedTransition) {
+    if (!transitionCheck.allowed) {
       await session.abortTransaction();
-      return res.status(400).json({
+      return res.status(transitionCheck.reason?.startsWith("Role") ? 403 : 400).json({
         success: false,
-        message: `Khong the chuyen trang thai tu ${currentStatus} sang ${targetStatus}`,
+        message: transitionCheck.reason || "Khong the chuyen trang thai",
       });
     }
 
-    if (targetStatus === "SHIPPING" && shipperId) {
+    if (targetStatus === "PENDING_PAYMENT" && !inStoreOrder && !isManagerRole) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Chi don hang tai cua hang moi duoc chuyen sang cho thanh toan",
+      });
+    }
+
+    if (shipperId && !canAssignCarrier) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        message: "Chi ORDER_MANAGER, ADMIN hoac WAREHOUSE_STAFF moi duoc giao shipper",
+      });
+    }
+
+    if (shipperId) {
       const shipper = await User.findById(shipperId).session(session);
       if (!shipper || shipper.role !== "SHIPPER") {
         await session.abortTransaction();
@@ -789,6 +1022,7 @@ export const updateOrderStatus = async (req, res) => {
       }
 
       order.shipperInfo = {
+        ...order.shipperInfo,
         shipperId: shipper._id,
         shipperName: shipper.fullName,
         shipperPhone: shipper.phoneNumber,
@@ -797,18 +1031,42 @@ export const updateOrderStatus = async (req, res) => {
       };
     }
 
+    if (targetStatus === "SHIPPING") {
+      const requiresShipper = !inStoreOrder;
+      const hasAssignedShipper = Boolean(order?.shipperInfo?.shipperId);
+      const hasCarrierAssignment = Boolean(
+        order?.carrierAssignment?.trackingNumber ||
+          order?.carrierAssignment?.carrierCode ||
+          order?.carrierAssignment?.carrierName
+      );
+
+      if (requiresShipper && !hasAssignedShipper && !hasCarrierAssignment) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Vui long chon shipper hoac gan carrier truoc khi chuyen sang dang giao",
+        });
+      }
+    }
+
     order.status = targetStatus;
 
     if (targetStatus === "CONFIRMED") {
       order.confirmedAt = new Date();
     }
 
-    if (["SHIPPING", "OUT_FOR_DELIVERY"].includes(targetStatus)) {
+    if (targetStatus === "SHIPPING") {
       order.shippedAt = new Date();
     }
 
     if (["DELIVERED", "PICKED_UP", "COMPLETED"].includes(targetStatus)) {
       order.deliveredAt = new Date();
+      if (order.shipperInfo) {
+        order.shipperInfo.deliveredAt = new Date();
+        if (note) {
+          order.shipperInfo.deliveryNote = note;
+        }
+      }
 
       if (order.assignedStore?.storeId && !order.inventoryDeductedAt) {
         await routingService.deductInventory(order.assignedStore.storeId, order.items, {
@@ -851,8 +1109,16 @@ export const updateOrderStatus = async (req, res) => {
       orderId: order._id,
       from: currentStatus,
       to: targetStatus,
+      stage: transitionView,
       userId: req.user._id,
       role: req.user.role,
+    });
+
+    await sendOrderStageNotifications({
+      order: normalizedOrder,
+      previousStage: transitionView.currentStage,
+      triggeredBy: req.user?._id,
+      source: "update_order_status",
     });
 
     res.json({
@@ -881,6 +1147,425 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
+export const assignCarrier = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      shipperId,
+      carrierCode,
+      carrierName,
+      trackingNumber,
+      externalOrderRef,
+      note,
+    } = req.body;
+
+    const normalizedTrackingNumber =
+      typeof trackingNumber === "string" ? trackingNumber.trim() : "";
+    const normalizedCarrierCode =
+      typeof carrierCode === "string" && carrierCode.trim()
+        ? carrierCode.trim().toUpperCase()
+        : "";
+    const normalizedCarrierName =
+      typeof carrierName === "string" ? carrierName.trim() : "";
+
+    if (!shipperId && !normalizedTrackingNumber && !normalizedCarrierCode && !normalizedCarrierName) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Vui long cung cap shipper hoac thong tin carrier",
+      });
+    }
+
+    const order = await Order.findById(req.params.id).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay don hang",
+      });
+    }
+
+    if (isInStoreOrder(order)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Don hang tai cua hang khong can gan shipper",
+      });
+    }
+
+    let shipper = null;
+    if (shipperId) {
+      shipper = await User.findById(shipperId).session(session);
+      if (!shipper || shipper.role !== "SHIPPER") {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Shipper duoc chon khong hop le",
+        });
+      }
+    }
+
+    const previousShipperId = order?.shipperInfo?.shipperId?.toString() || null;
+    const previousAssignment = order.carrierAssignment || {};
+    const previousCarrierSnapshot = {
+      shipperId: previousShipperId,
+      carrierCode: previousAssignment.carrierCode || "",
+      carrierName: previousAssignment.carrierName || "",
+      trackingNumber: previousAssignment.trackingNumber || order.trackingNumber || "",
+      externalOrderRef: previousAssignment.externalOrderRef || "",
+    };
+
+    if (shipper) {
+      order.shipperInfo = {
+        ...order.shipperInfo,
+        shipperId: shipper._id,
+        shipperName: shipper.fullName,
+        shipperPhone: shipper.phoneNumber,
+        assignedAt: new Date(),
+        assignedBy: req.user._id,
+      };
+    }
+
+    const resolvedCarrierName =
+      normalizedCarrierName || shipper?.fullName || previousAssignment.carrierName || "";
+
+    const nextAssignment = {
+      ...previousAssignment,
+      carrierCode: normalizedCarrierCode || previousAssignment.carrierCode || "",
+      carrierName: resolvedCarrierName,
+      trackingNumber:
+        normalizedTrackingNumber || previousAssignment.trackingNumber || order.trackingNumber || "",
+      externalOrderRef:
+        typeof externalOrderRef === "string" && externalOrderRef.trim()
+          ? externalOrderRef.trim()
+          : previousAssignment.externalOrderRef || "",
+      assignedAt: new Date(),
+      assignedBy: req.user._id,
+      note: note || previousAssignment.note || "",
+    };
+
+    const hasPreviousAssignment = Boolean(
+      previousCarrierSnapshot.shipperId ||
+        previousCarrierSnapshot.carrierCode ||
+        previousCarrierSnapshot.carrierName ||
+        previousCarrierSnapshot.trackingNumber
+    );
+
+    const shipperChanged = Boolean(
+      shipper && previousShipperId && previousShipperId !== shipper._id.toString()
+    );
+
+    const carrierChanged =
+      previousCarrierSnapshot.carrierCode !== nextAssignment.carrierCode ||
+      previousCarrierSnapshot.carrierName !== nextAssignment.carrierName ||
+      previousCarrierSnapshot.trackingNumber !== nextAssignment.trackingNumber ||
+      previousCarrierSnapshot.externalOrderRef !== nextAssignment.externalOrderRef;
+
+    const changedCarrier = Boolean(shipperChanged || carrierChanged);
+    if (changedCarrier && hasPreviousAssignment) {
+      nextAssignment.transferredAt = new Date();
+    }
+
+    order.carrierAssignment = nextAssignment;
+
+    if (nextAssignment.trackingNumber) {
+      order.trackingNumber = nextAssignment.trackingNumber;
+    }
+    if (nextAssignment.carrierName) {
+      order.shippingProvider = nextAssignment.carrierName;
+    }
+
+    const statusForHistory = normalizeLegacyStatus(order.status);
+    const assigneeName =
+      shipper?.fullName ||
+      nextAssignment.carrierName ||
+      nextAssignment.carrierCode ||
+      "carrier";
+    const defaultNote = changedCarrier
+      ? `Carrier transferred to ${assigneeName}`
+      : `Carrier assigned to ${assigneeName}`;
+
+    appendHistory(order, statusForHistory, req.user._id, note || defaultNote);
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    const normalizedOrder = normalizeOrderForResponse(order);
+    return res.json({
+      success: true,
+      message: changedCarrier ? "Da chuyen carrier" : "Da cap nhat carrier",
+      order: normalizedOrder,
+      data: { order: normalizedOrder },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    return res.status(500).json({
+      success: false,
+      message: "Loi khi gan shipper",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+export const handleCarrierWebhook = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const expectedToken = process.env.CARRIER_WEBHOOK_TOKEN;
+    const requestToken = req.headers["x-carrier-token"] || req.headers["x-webhook-token"];
+
+    if (expectedToken && String(requestToken || "") !== String(expectedToken)) {
+      await session.abortTransaction();
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized carrier webhook",
+      });
+    }
+
+    const {
+      eventId,
+      eventType,
+      status,
+      trackingNumber,
+      orderNumber,
+      orderId,
+      carrierCode,
+      carrierName,
+      note,
+      occurredAt,
+      proof,
+      metadata,
+    } = req.body || {};
+
+    const normalizedEventType = normalizeCarrierEventType(eventType || status);
+    if (!normalizedEventType) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Missing carrier event type",
+      });
+    }
+
+    const normalizedTracking =
+      typeof trackingNumber === "string" ? trackingNumber.trim() : "";
+    const normalizedOrderNumber =
+      typeof orderNumber === "string" ? orderNumber.trim() : "";
+    const normalizedOrderId =
+      typeof orderId === "string" && mongoose.Types.ObjectId.isValid(orderId)
+        ? orderId
+        : "";
+    const normalizedEventId = eventId ? String(eventId).trim() : "";
+    const normalizedCarrierCode =
+      typeof carrierCode === "string" && carrierCode.trim()
+        ? carrierCode.trim().toUpperCase()
+        : "";
+    const normalizedCarrierName =
+      typeof carrierName === "string" ? carrierName.trim() : "";
+
+    if (!normalizedTracking && !normalizedOrderNumber && !normalizedOrderId) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Missing order reference (orderId, orderNumber, or trackingNumber)",
+      });
+    }
+
+    const orderQueries = [];
+    if (normalizedOrderId) {
+      orderQueries.push({ _id: normalizedOrderId });
+    }
+    if (normalizedOrderNumber) {
+      orderQueries.push({ orderNumber: normalizedOrderNumber });
+    }
+    if (normalizedTracking) {
+      orderQueries.push({ "carrierAssignment.trackingNumber": normalizedTracking });
+      orderQueries.push({ trackingNumber: normalizedTracking });
+    }
+
+    const order = await Order.findOne({ $or: orderQueries }).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found for carrier webhook",
+      });
+    }
+
+    if (isInStoreOrder(order)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Carrier webhook is not supported for in-store orders",
+      });
+    }
+
+    const isDuplicateEvent =
+      normalizedEventId &&
+      Array.isArray(order.carrierWebhookEvents) &&
+      order.carrierWebhookEvents.some((entry) => entry?.eventId === normalizedEventId);
+
+    if (isDuplicateEvent) {
+      await session.abortTransaction();
+      return res.json({
+        success: true,
+        duplicated: true,
+        message: "Duplicate carrier event ignored",
+        orderId: order._id,
+        status: order.status,
+        statusStage: order.statusStage,
+      });
+    }
+
+    const currentStatus = normalizeLegacyStatus(order.status);
+    const previousStage = order.statusStage || mapStatusToStage(currentStatus);
+    const targetStatus = resolveCarrierTargetStatus(normalizedEventType);
+    const webhookNote =
+      typeof note === "string" && note.trim()
+        ? note.trim()
+        : `Carrier event ${normalizedEventType}`;
+    const eventTime = parseDateOrNow(occurredAt);
+
+    order.carrierAssignment = {
+      ...(order.carrierAssignment || {}),
+      carrierCode: normalizedCarrierCode || order?.carrierAssignment?.carrierCode || "",
+      carrierName: normalizedCarrierName || order?.carrierAssignment?.carrierName || "",
+      trackingNumber: normalizedTracking || order?.carrierAssignment?.trackingNumber || "",
+      assignedAt: order?.carrierAssignment?.assignedAt || new Date(),
+      assignedBy: order?.carrierAssignment?.assignedBy,
+      lastWebhookAt: new Date(),
+    };
+
+    if (normalizedTracking) {
+      order.trackingNumber = normalizedTracking;
+    }
+    if (order?.carrierAssignment?.carrierName) {
+      order.shippingProvider = order.carrierAssignment.carrierName;
+    }
+
+    let statusChanged = false;
+    if (targetStatus && targetStatus !== currentStatus) {
+      order.status = targetStatus;
+      appendHistory(order, targetStatus, undefined, webhookNote);
+      statusChanged = true;
+
+      if (targetStatus === "SHIPPING") {
+        order.shippedAt = order.shippedAt || eventTime;
+      }
+
+      if (targetStatus === "DELIVERED") {
+        order.deliveredAt = eventTime;
+      }
+
+      if (targetStatus === "CANCELLED") {
+        order.cancelledAt = eventTime;
+        if (!order.cancelReason) {
+          order.cancelReason = webhookNote;
+        }
+      }
+    }
+
+    if (proof && typeof proof === "object") {
+      const proofPhotos = Array.isArray(proof.photos)
+        ? proof.photos
+            .map((item) => (typeof item === "string" ? item.trim() : ""))
+            .filter(Boolean)
+        : [];
+
+      order.deliveryProof = {
+        ...(order.deliveryProof || {}),
+        proofType: String(proof.proofType || order?.deliveryProof?.proofType || "PHOTO")
+          .trim()
+          .toUpperCase(),
+        deliveredAt: parseDateOrNow(proof.deliveredAt || order.deliveredAt || occurredAt),
+        receivedAt: new Date(),
+        signedBy:
+          proof.signedBy || proof.receiverName || order?.deliveryProof?.signedBy || "",
+        signatureImageUrl:
+          proof.signatureImageUrl ||
+          proof.signatureUrl ||
+          order?.deliveryProof?.signatureImageUrl ||
+          "",
+        photos: proofPhotos.length ? proofPhotos : order?.deliveryProof?.photos || [],
+        geo: {
+          lat: Number.isFinite(Number(proof?.geo?.lat))
+            ? Number(proof.geo.lat)
+            : order?.deliveryProof?.geo?.lat,
+          lng: Number.isFinite(Number(proof?.geo?.lng))
+            ? Number(proof.geo.lng)
+            : order?.deliveryProof?.geo?.lng,
+        },
+        note: proof.note || webhookNote,
+        raw: proof.raw || proof,
+      };
+    }
+
+    if (!Array.isArray(order.carrierWebhookEvents)) {
+      order.carrierWebhookEvents = [];
+    }
+    order.carrierWebhookEvents.push({
+      eventId: normalizedEventId || undefined,
+      eventType: normalizedEventType,
+      rawStatus: typeof status === "string" ? status.trim().toUpperCase() : undefined,
+      mappedStatus: targetStatus || undefined,
+      mappedStage: targetStatus ? mapStatusToStage(targetStatus) : undefined,
+      occurredAt: eventTime,
+      receivedAt: new Date(),
+      payloadHash: buildPayloadHash(req.body || {}),
+      note: webhookNote,
+      payload: {
+        carrierCode: normalizedCarrierCode || undefined,
+        carrierName: normalizedCarrierName || undefined,
+        trackingNumber: normalizedTracking || undefined,
+        proof: proof || undefined,
+        metadata: metadata || undefined,
+      },
+    });
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    const normalizedOrder = normalizeOrderForResponse(order);
+
+    if (statusChanged) {
+      await sendOrderStageNotifications({
+        order: normalizedOrder,
+        previousStage,
+        triggeredBy: undefined,
+        source: "carrier_webhook",
+      });
+    }
+
+    return res.json({
+      success: true,
+      duplicated: false,
+      message: "Carrier webhook processed",
+      statusChanged,
+      order: normalizedOrder,
+      data: { order: normalizedOrder },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+
+    omniLog.error("handleCarrierWebhook failed", {
+      error: error.message,
+      payload: req.body,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to process carrier webhook",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 export const updatePaymentStatus = async (req, res) => {
   try {
     const { paymentStatus } = req.body;
@@ -895,7 +1580,6 @@ export const updatePaymentStatus = async (req, res) => {
     const order = await Order.findById(req.params.id);
 
     if (!order) {
-      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Khong tim thay don hang",
@@ -906,10 +1590,14 @@ export const updatePaymentStatus = async (req, res) => {
 
     if (paymentStatus === "PAID") {
       order.paidAt = new Date();
-      if (order.status === "PENDING_PAYMENT") {
-        order.status = "PAYMENT_VERIFIED";
-        appendHistory(order, "PAYMENT_VERIFIED", req.user._id, "Payment marked as paid");
+      if (order.status === "PENDING_PAYMENT" && order.orderSource !== "IN_STORE") {
+        order.status = "PENDING";
+        appendHistory(order, "PENDING", req.user._id, "Payment marked as paid");
       }
+    } else if (paymentStatus === "FAILED" && order.orderSource !== "IN_STORE") {
+      order.status = "PAYMENT_FAILED";
+      order.paymentFailureAt = new Date();
+      appendHistory(order, "PAYMENT_FAILED", req.user._id, "Payment marked as failed");
     }
 
     await order.save();
@@ -965,7 +1653,9 @@ export const getOrderStats = async (req, res) => {
       }),
       Order.countDocuments({ status: { $in: ["SHIPPING", "OUT_FOR_DELIVERY"] } }),
       Order.countDocuments({ status: { $in: ["DELIVERED", "PICKED_UP", "COMPLETED"] } }),
-      Order.countDocuments({ status: { $in: ["CANCELLED", "RETURNED", "DELIVERY_FAILED"] } }),
+      Order.countDocuments({
+        status: { $in: ["CANCELLED", "RETURNED", "DELIVERY_FAILED", "PAYMENT_FAILED"] },
+      }),
       Order.aggregate([
         {
           $match: {
@@ -1108,6 +1798,8 @@ export default {
   getOrderById,
   createOrder,
   updateOrderStatus,
+  assignCarrier,
+  handleCarrierWebhook,
   updatePaymentStatus,
   getOrderStats,
   cancelOrder,

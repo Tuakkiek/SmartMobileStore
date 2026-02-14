@@ -1,3 +1,4 @@
+# File Tree: v-23
 # Dependencies
 node_modules/
 
@@ -6,6 +7,9 @@ node_modules/
 .env.local
 .env.*.local
 .env.production
+
+# Scripts
+backend/scripts/
 
 # Logs
 *.log

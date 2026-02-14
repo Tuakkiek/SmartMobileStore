@@ -3,7 +3,7 @@
 // ✅ UPDATED: Thêm KPI filters thay vì PersonalStatsWidget
 // ============================================
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ import {
   formatPrice,
   formatDate,
   getStatusColor,
+  getStatusStage,
   getStatusText,
 } from "@/lib/utils";
 
@@ -65,6 +66,10 @@ const POSOrderHistory = () => {
     return `${import.meta.env.VITE_API_URL}${
       path.startsWith("/") ? "" : "/"
     }${path}`;
+  };
+
+  const resolveOrderStage = (order) => {
+    return order?.statusStage || getStatusStage(order?.status) || "PENDING";
   };
 
   // ✅ Tính KPI dựa trên period
@@ -112,11 +117,7 @@ const POSOrderHistory = () => {
   }, [orders, kpiPeriod, customStartDate, customEndDate]);
 
   // Load đơn hàng
-  useEffect(() => {
-    fetchOrders();
-  }, [searchTerm, pagination.currentPage]);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setIsLoading(true);
     try {
       const params = {
@@ -141,9 +142,13 @@ const POSOrderHistory = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [pagination.currentPage, searchTerm]);
 
   // Xem chi tiết
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
   const handleViewDetail = async (orderId) => {
     if (!orderId) {
       toast.error("Không có ID đơn hàng");
@@ -174,9 +179,11 @@ const POSOrderHistory = () => {
   const basicStats = useMemo(
     () => ({
       total: orders.length,
-      pending: orders.filter((o) => o.status === "PENDING_PAYMENT").length,
+      pending: orders.filter((o) => resolveOrderStage(o) === "PENDING_PAYMENT")
+        .length,
       paid: orders.filter((o) => o.paymentStatus === "PAID").length,
-      cancelled: orders.filter((o) => o.status === "CANCELLED").length,
+      cancelled: orders.filter((o) => resolveOrderStage(o) === "CANCELLED")
+        .length,
     }),
     [orders]
   );
@@ -334,14 +341,15 @@ const POSOrderHistory = () => {
           </div>
         ) : (
           orders.map((order) => {
-            const isPending = order.status === "PENDING_PAYMENT";
+            const stage = resolveOrderStage(order);
+            const isPending = stage === "PENDING_PAYMENT";
             const isPaid = order.paymentStatus === "PAID";
             const StatusIcon = isPending
               ? Clock
               : isPaid
               ? CheckCircle
               : XCircle;
-            const statusColorClass = getStatusColor(order.status || "UNKNOWN");
+            const statusColorClass = getStatusColor(stage || "UNKNOWN");
             const bgColor = statusColorClass.includes("bg-")
               ? statusColorClass.split(" ")[0]
               : "bg-gray-500";
@@ -363,15 +371,11 @@ const POSOrderHistory = () => {
                               #{order.orderNumber}
                             </h3>
                             <Badge
-                              className={getStatusColor(
-                                order.status || "UNKNOWN"
-                              )}
+                              className={getStatusColor(stage || "UNKNOWN")}
                             >
                               {isPending
                                 ? "Chờ thanh toán"
-                                : getStatusText(
-                                    order.paymentStatus || order.status
-                                  )}
+                                : getStatusText(stage)}
                             </Badge>
                             {order.posInfo?.receiptNumber && (
                               <Badge variant="outline">

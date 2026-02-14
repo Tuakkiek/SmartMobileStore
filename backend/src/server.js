@@ -33,6 +33,7 @@ import warehouseRoutes from "./modules/warehouse/warehouseRoutes.js";
 import warehouseConfigRoutes from "./modules/warehouse/warehouseConfigRoutes.js";
 import storeRoutes from "./modules/store/storeRoutes.js";
 import inventoryRoutes from "./modules/inventory/inventoryRoutes.js";
+import monitoringRoutes from "./modules/monitoring/monitoringRoutes.js";
 
 
 
@@ -168,6 +169,7 @@ app.use("/api/warehouse/config", warehouseConfigRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/stores", storeRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/monitoring", monitoringRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

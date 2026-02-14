@@ -1,10 +1,11 @@
 import mongoose from "mongoose";
 
-const ORDER_STATUSES = [
+export const ORDER_STATUSES = [
   "PENDING",
   "PENDING_PAYMENT",
   "PAYMENT_CONFIRMED",
   "PAYMENT_VERIFIED",
+  "PAYMENT_FAILED",
   "CONFIRMED",
   "PROCESSING",
   "PREPARING",
@@ -20,6 +21,45 @@ const ORDER_STATUSES = [
   "RETURN_REQUESTED",
   "RETURNED",
 ];
+
+export const ORDER_STATUS_STAGES = [
+  "PENDING",
+  "PENDING_PAYMENT",
+  "PAYMENT_FAILED",
+  "CONFIRMED",
+  "PICKING",
+  "PICKUP_COMPLETED",
+  "IN_TRANSIT",
+  "DELIVERED",
+  "CANCELLED",
+  "RETURNED",
+];
+
+export const STATUS_TO_STAGE = Object.freeze({
+  PENDING: "PENDING",
+  PENDING_PAYMENT: "PENDING_PAYMENT",
+  PAYMENT_CONFIRMED: "PENDING",
+  PAYMENT_VERIFIED: "PENDING",
+  PAYMENT_FAILED: "PAYMENT_FAILED",
+  CONFIRMED: "CONFIRMED",
+  PROCESSING: "PICKING",
+  PREPARING: "PICKING",
+  READY_FOR_PICKUP: "PICKUP_COMPLETED",
+  PREPARING_SHIPMENT: "PICKUP_COMPLETED",
+  SHIPPING: "IN_TRANSIT",
+  OUT_FOR_DELIVERY: "IN_TRANSIT",
+  DELIVERED: "DELIVERED",
+  PICKED_UP: "DELIVERED",
+  COMPLETED: "DELIVERED",
+  DELIVERY_FAILED: "CANCELLED",
+  CANCELLED: "CANCELLED",
+  RETURN_REQUESTED: "RETURNED",
+  RETURNED: "RETURNED",
+});
+
+export const mapStatusToStage = (status) => {
+  return STATUS_TO_STAGE[status] || "PENDING";
+};
 
 const PAYMENT_STATUSES = ["PENDING", "UNPAID", "PAID", "FAILED", "REFUNDED"];
 const PAYMENT_METHODS = [
@@ -120,6 +160,115 @@ const statusHistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const statusStageHistorySchema = new mongoose.Schema(
+  {
+    stage: {
+      type: String,
+      enum: ORDER_STATUS_STAGES,
+      required: true,
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    note: String,
+  },
+  { _id: false }
+);
+
+const carrierWebhookEventSchema = new mongoose.Schema(
+  {
+    eventId: {
+      type: String,
+      trim: true,
+    },
+    eventType: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+    rawStatus: {
+      type: String,
+      trim: true,
+    },
+    mappedStatus: {
+      type: String,
+      enum: ORDER_STATUSES,
+    },
+    mappedStage: {
+      type: String,
+      enum: ORDER_STATUS_STAGES,
+    },
+    occurredAt: {
+      type: Date,
+      default: Date.now,
+    },
+    receivedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    payloadHash: {
+      type: String,
+      trim: true,
+    },
+    note: {
+      type: String,
+      trim: true,
+    },
+    payload: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  { _id: false }
+);
+
+const deliveryProofSchema = new mongoose.Schema(
+  {
+    proofType: {
+      type: String,
+      trim: true,
+      default: "PHOTO",
+    },
+    deliveredAt: Date,
+    receivedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    signedBy: {
+      type: String,
+      trim: true,
+    },
+    signatureImageUrl: {
+      type: String,
+      trim: true,
+    },
+    photos: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    geo: {
+      lat: Number,
+      lng: Number,
+    },
+    note: {
+      type: String,
+      trim: true,
+    },
+    raw: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
     userId: {
@@ -175,11 +324,24 @@ const orderSchema = new mongoose.Schema(
       default: "PENDING",
     },
 
+    paymentFailureReason: {
+      type: String,
+      trim: true,
+    },
+
+    paymentFailureAt: Date,
+
     paidAt: Date,
 
     status: {
       type: String,
       enum: ORDER_STATUSES,
+      default: "PENDING",
+    },
+
+    statusStage: {
+      type: String,
+      enum: ORDER_STATUS_STAGES,
       default: "PENDING",
     },
 
@@ -257,6 +419,36 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    carrierAssignment: {
+      carrierCode: {
+        type: String,
+        trim: true,
+      },
+      carrierName: {
+        type: String,
+        trim: true,
+      },
+      trackingNumber: {
+        type: String,
+        trim: true,
+      },
+      externalOrderRef: {
+        type: String,
+        trim: true,
+      },
+      assignedAt: Date,
+      assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      transferredAt: Date,
+      note: {
+        type: String,
+        trim: true,
+      },
+      lastWebhookAt: Date,
+    },
+
     installmentInfo: {
       provider: String,
       months: Number,
@@ -328,6 +520,9 @@ const orderSchema = new mongoose.Schema(
     },
 
     statusHistory: [statusHistorySchema],
+    statusStageHistory: [statusStageHistorySchema],
+    carrierWebhookEvents: [carrierWebhookEventSchema],
+    deliveryProof: deliveryProofSchema,
 
     confirmedAt: Date,
     shippedAt: Date,
@@ -350,12 +545,16 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ customerId: 1, createdAt: -1 });
-orderSchema.index({ orderNumber: 1 });
 orderSchema.index({ status: 1 });
+orderSchema.index({ statusStage: 1 });
 orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ createdAt: -1 });
+orderSchema.index({ orderSource: 1 });
+orderSchema.index({ fulfillmentType: 1 });
 orderSchema.index({ "assignedStore.storeId": 1 });
 orderSchema.index({ "shipperInfo.shipperId": 1 });
+orderSchema.index({ "carrierAssignment.trackingNumber": 1 });
+orderSchema.index({ "carrierWebhookEvents.eventId": 1 });
 
 orderSchema.pre("validate", function normalizeCustomerAndSource(next) {
   if (!this.customerId && this.userId) {
@@ -379,6 +578,24 @@ orderSchema.pre("validate", function normalizeCustomerAndSource(next) {
 
 orderSchema.pre("save", function normalizeTotals(next) {
   const items = Array.isArray(this.items) ? this.items : [];
+
+  if (!this.carrierAssignment) {
+    this.carrierAssignment = {};
+  }
+
+  if (!this.carrierAssignment.trackingNumber && this.trackingNumber) {
+    this.carrierAssignment.trackingNumber = this.trackingNumber;
+  }
+  if (!this.trackingNumber && this.carrierAssignment.trackingNumber) {
+    this.trackingNumber = this.carrierAssignment.trackingNumber;
+  }
+
+  if (!this.carrierAssignment.carrierName && this.shippingProvider) {
+    this.carrierAssignment.carrierName = this.shippingProvider;
+  }
+  if (!this.shippingProvider && this.carrierAssignment.carrierName) {
+    this.shippingProvider = this.carrierAssignment.carrierName;
+  }
 
   for (const item of items) {
     if (!item.name && item.productName) {
@@ -415,6 +632,29 @@ orderSchema.pre("save", function normalizeTotals(next) {
     this.paidAt = new Date();
   }
 
+  if (this.paymentStatus === "FAILED") {
+    if (!this.paymentFailureAt) {
+      this.paymentFailureAt = new Date();
+    }
+
+    if (!this.paymentFailureReason) {
+      const paymentInfo = this.paymentInfo || {};
+      const failCode = paymentInfo.vnpayFailReason || paymentInfo.vnpayResponseCode;
+      if (failCode) {
+        this.paymentFailureReason = String(failCode);
+      }
+    }
+
+    if (this.status === "PENDING_PAYMENT") {
+      this.status = "PAYMENT_FAILED";
+    }
+  }
+
+  const computedStage = mapStatusToStage(this.status);
+  if (!this.statusStage || this.isModified("status")) {
+    this.statusStage = computedStage;
+  }
+
   if (this.isNew && (!this.statusHistory || this.statusHistory.length === 0)) {
     this.statusHistory = [
       {
@@ -424,6 +664,25 @@ orderSchema.pre("save", function normalizeTotals(next) {
         note: "Order created",
       },
     ];
+  }
+
+  if (!Array.isArray(this.statusStageHistory)) {
+    this.statusStageHistory = [];
+  }
+
+  const latestStatusEntry = Array.isArray(this.statusHistory)
+    ? this.statusHistory[this.statusHistory.length - 1]
+    : null;
+  const latestStageEntry = this.statusStageHistory[this.statusStageHistory.length - 1];
+  const stageChanged = latestStageEntry?.stage !== this.statusStage;
+
+  if (this.statusStage && (this.statusStageHistory.length === 0 || stageChanged)) {
+    this.statusStageHistory.push({
+      stage: this.statusStage,
+      updatedBy: latestStatusEntry?.updatedBy || this.customerId || this.userId,
+      updatedAt: latestStatusEntry?.updatedAt || new Date(),
+      note: latestStatusEntry?.note || "Status stage synchronized",
+    });
   }
 
   next();

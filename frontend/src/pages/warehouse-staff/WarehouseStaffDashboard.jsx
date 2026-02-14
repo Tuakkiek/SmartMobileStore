@@ -17,7 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
+import { api, orderAPI } from "@/lib/api";
 
 const WarehouseStaffDashboard = () => {
   const [stats, setStats] = useState({
@@ -48,13 +48,23 @@ const WarehouseStaffDashboard = () => {
         return grDate === today;
       }) || [];
 
-      // Fetch Pending Orders (Orders cần pick)
-      const ordersRes = await api.get("/orders?status=PENDING&limit=100");
+      // Fetch Orders that are in warehouse queue stages (confirmed + picking)
+      const pickStages = ["CONFIRMED", "PICKING"];
+      const orderResponses = await Promise.all(
+        pickStages.map((statusStage) =>
+          orderAPI.getByStage(statusStage, { limit: 100 })
+        )
+      );
+      const pendingPicks = orderResponses.reduce((sum, response) => {
+        const byPagination = response.data.pagination?.total;
+        if (Number.isFinite(byPagination)) return sum + byPagination;
+        return sum + (response.data.orders?.length || 0);
+      }, 0);
 
       setStats({
         pendingPOs: posRes.data.pagination?.total || posRes.data.purchaseOrders?.length || 0,
         todayReceipts: todayReceipts.length,
-        pendingPicks: ordersRes.data.pagination?.total || ordersRes.data.orders?.length || 0,
+        pendingPicks,
         lowStockItems: 0, // TODO: Implement low stock API
       });
 

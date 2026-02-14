@@ -1,5 +1,6 @@
 import Store from "../modules/store/Store.js";
 import StoreInventory from "../modules/inventory/StoreInventory.js";
+import { trackOmnichannelEvent } from "../modules/monitoring/omnichannelMonitoringService.js";
 import { omniLog } from "../utils/logger.js";
 
 const getItemIdentity = (item = {}) => ({
@@ -157,6 +158,7 @@ export const findNearestStoreWithStock = async (
 
 export const reserveInventory = async (storeId, orderItems, options = {}) => {
   const { session = null } = options;
+  const itemCount = Array.isArray(orderItems) ? orderItems.length : 0;
 
   try {
     for (const rawItem of orderItems) {
@@ -188,8 +190,27 @@ export const reserveInventory = async (storeId, orderItems, options = {}) => {
       });
     }
 
+    await trackOmnichannelEvent({
+      eventType: "RESERVE_INVENTORY_SUCCESS",
+      operation: "reserve_inventory",
+      level: "DEBUG",
+      success: true,
+      storeId,
+      itemCount,
+    });
+
     return true;
   } catch (error) {
+    await trackOmnichannelEvent({
+      eventType: "RESERVE_INVENTORY_FAILED",
+      operation: "reserve_inventory",
+      level: "ERROR",
+      success: false,
+      storeId,
+      itemCount,
+      errorMessage: error.message,
+    });
+
     omniLog.error("reserveInventory failed", {
       storeId,
       error: error.message,
@@ -200,6 +221,7 @@ export const reserveInventory = async (storeId, orderItems, options = {}) => {
 
 export const releaseInventory = async (storeId, orderItems, options = {}) => {
   const { session = null } = options;
+  const itemCount = Array.isArray(orderItems) ? orderItems.length : 0;
 
   try {
     for (const rawItem of orderItems) {
@@ -230,8 +252,27 @@ export const releaseInventory = async (storeId, orderItems, options = {}) => {
       });
     }
 
+    await trackOmnichannelEvent({
+      eventType: "RELEASE_INVENTORY_SUCCESS",
+      operation: "release_inventory",
+      level: "DEBUG",
+      success: true,
+      storeId,
+      itemCount,
+    });
+
     return true;
   } catch (error) {
+    await trackOmnichannelEvent({
+      eventType: "RELEASE_INVENTORY_FAILED",
+      operation: "release_inventory",
+      level: "ERROR",
+      success: false,
+      storeId,
+      itemCount,
+      errorMessage: error.message,
+    });
+
     omniLog.error("releaseInventory failed", {
       storeId,
       error: error.message,
@@ -242,6 +283,7 @@ export const releaseInventory = async (storeId, orderItems, options = {}) => {
 
 export const deductInventory = async (storeId, orderItems, options = {}) => {
   const { session = null } = options;
+  const itemCount = Array.isArray(orderItems) ? orderItems.length : 0;
 
   try {
     for (const rawItem of orderItems) {
@@ -274,8 +316,27 @@ export const deductInventory = async (storeId, orderItems, options = {}) => {
       });
     }
 
+    await trackOmnichannelEvent({
+      eventType: "DEDUCT_INVENTORY_SUCCESS",
+      operation: "deduct_inventory",
+      level: "DEBUG",
+      success: true,
+      storeId,
+      itemCount,
+    });
+
     return true;
   } catch (error) {
+    await trackOmnichannelEvent({
+      eventType: "DEDUCT_INVENTORY_FAILED",
+      operation: "deduct_inventory",
+      level: "ERROR",
+      success: false,
+      storeId,
+      itemCount,
+      errorMessage: error.message,
+    });
+
     omniLog.error("deductInventory failed", {
       storeId,
       error: error.message,

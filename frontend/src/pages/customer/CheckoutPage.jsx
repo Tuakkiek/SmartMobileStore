@@ -18,12 +18,27 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useCartStore } from "@/store/cartStore";
-import { orderAPI, promotionAPI, userAPI, vnpayAPI, cartAPI } from "@/lib/api";
+import {
+  orderAPI,
+  promotionAPI,
+  userAPI,
+  vnpayAPI,
+  cartAPI,
+  monitoringAPI,
+} from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { Plus, MapPin, ChevronRight, ArrowLeft } from "lucide-react";
 import AddressFormDialog from "@/components/shared/AddressFormDialog";
+import StoreSelector from "@/components/StoreSelector";
+
+const isTruthyEnvValue = (value, defaultValue = true) => {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  return ["1", "true", "yes", "on"].includes(
+    String(value).trim().toLowerCase()
+  );
+};
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -32,12 +47,29 @@ const CheckoutPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const { user, getCurrentUser } = useAuthStore();
+  const isLocalOmnichannelFlagEnabled = isTruthyEnvValue(
+    import.meta.env.VITE_FEATURE_OMNICHANNEL_CHECKOUT,
+    true
+  );
+  const [rolloutDecision, setRolloutDecision] = useState({
+    loading: isLocalOmnichannelFlagEnabled,
+    enabled: !isLocalOmnichannelFlagEnabled ? false : import.meta.env.DEV,
+    mode: "off",
+    percent: 0,
+    reason: isLocalOmnichannelFlagEnabled ? "initial" : "frontend_flag_off",
+    bucket: null,
+    isInternal: false,
+  });
+  const isOmnichannelCheckoutEnabled =
+    isLocalOmnichannelFlagEnabled && rolloutDecision.enabled;
 
   // Form data
   const [formData, setFormData] = useState({
     paymentMethod: "COD",
+    fulfillmentType: "HOME_DELIVERY",
     note: "",
   });
+  const [selectedPickupStore, setSelectedPickupStore] = useState(null);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [showSelectAddressDialog, setShowSelectAddressDialog] = useState(false);
 
@@ -51,6 +83,9 @@ const CheckoutPage = () => {
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
   const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
+  const effectiveFulfillmentType = isOmnichannelCheckoutEnabled
+    ? formData.fulfillmentType
+    : "HOME_DELIVERY";
 
   useEffect(() => {
     if (user?.addresses?.length > 0) {
@@ -61,12 +96,67 @@ const CheckoutPage = () => {
     }
   }, [user]);
 
-    useEffect(() => {
+  useEffect(() => {
       window.scrollTo(0, 0);
   
       // Refresh user data để có địa chỉ mới nhất
       getCurrentUser();
-    }, []);
+  }, [getCurrentUser]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (!isLocalOmnichannelFlagEnabled) {
+      setRolloutDecision({
+        loading: false,
+        enabled: false,
+        mode: "off",
+        percent: 0,
+        reason: "frontend_flag_off",
+        bucket: null,
+        isInternal: false,
+      });
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const loadRolloutDecision = async () => {
+      try {
+        const response = await monitoringAPI.getRolloutDecision();
+        const data = response?.data?.data || {};
+        if (!mounted) return;
+
+        setRolloutDecision({
+          loading: false,
+          enabled: Boolean(data.enabled),
+          mode: data.mode || "off",
+          percent: Number.isFinite(Number(data.percent)) ? Number(data.percent) : 0,
+          reason: data.reason || "unknown",
+          bucket: data.bucket ?? null,
+          isInternal: Boolean(data.isInternal),
+        });
+      } catch {
+        if (!mounted) return;
+
+        setRolloutDecision({
+          loading: false,
+          enabled: import.meta.env.DEV,
+          mode: "off",
+          percent: 0,
+          reason: "rollout_api_unavailable",
+          bucket: null,
+          isInternal: false,
+        });
+      }
+    };
+
+    loadRolloutDecision();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isLocalOmnichannelFlagEnabled, user?._id]);
 
   // Lọc sản phẩm được chọn
   const checkoutItems = useMemo(() => {
@@ -89,7 +179,12 @@ const CheckoutPage = () => {
   );
 
   // Phí vận chuyển
-  const shippingFee = subtotal >= 5000000 ? 0 : 50000;
+  const shippingFee =
+    effectiveFulfillmentType === "CLICK_AND_COLLECT"
+      ? 0
+      : subtotal >= 5000000
+      ? 0
+      : 50000;
 
   // Tổng cuối cùng
   const finalTotal =
@@ -154,7 +249,7 @@ const CheckoutPage = () => {
       return;
     }
     if (!cart) getCart();
-  }, []);
+  }, [cart, getCart, navigate, selectedForCheckout.length]);
 
   // Bỏ lỗi VNPay sandbox
   useEffect(() => {
@@ -189,8 +284,24 @@ const CheckoutPage = () => {
 
   const handleChange = (e) => {
     setError("");
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
+
+  useEffect(() => {
+    if (isOmnichannelCheckoutEnabled) return;
+
+    if (formData.fulfillmentType !== "HOME_DELIVERY") {
+      setFormData((prev) => ({ ...prev, fulfillmentType: "HOME_DELIVERY" }));
+    }
+
+    if (selectedPickupStore) {
+      setSelectedPickupStore(null);
+    }
+  }, [
+    isOmnichannelCheckoutEnabled,
+    formData.fulfillmentType,
+    selectedPickupStore,
+  ]);
 
   useEffect(() => {
     const pendingOrder = localStorage.getItem("pending_vnpay_order");
@@ -217,7 +328,9 @@ const CheckoutPage = () => {
           });
           localStorage.removeItem("pending_vnpay_order");
         }
-      } catch {}
+      } catch {
+        localStorage.removeItem("pending_vnpay_order");
+      }
     }
   }, [navigate]);
 
@@ -268,7 +381,7 @@ const CheckoutPage = () => {
       await getCurrentUser();
       setShowAddressDialog(false);
       setEditingAddressId(null);
-    } catch (error) {
+    } catch {
       toast.error("Thao tác thất bại");
     } finally {
       setIsSubmittingAddress(false);
@@ -284,11 +397,23 @@ const CheckoutPage = () => {
   const selectedAddress = user?.addresses?.find(
     (a) => a._id === selectedAddressId
   );
+  const selectedPickupStoreId = selectedPickupStore?._id || null;
+  const storeSelectorAddress = useMemo(() => {
+    if (!selectedAddress) return null;
+    return {
+      province: selectedAddress.province,
+      district: selectedAddress.district || selectedAddress.ward,
+    };
+  }, [selectedAddress]);
 
   const getFullAddress = (address) =>
     [address.detailAddress, address.ward, address.province]
       .filter(Boolean)
       .join(", ");
+
+  useEffect(() => {
+    setSelectedPickupStore(null);
+  }, [selectedAddressId]);
 
   // Xử lý đặt hàng
   const handleCheckout = async (e) => {
@@ -309,12 +434,35 @@ const CheckoutPage = () => {
       return;
     }
 
+    if (
+      effectiveFulfillmentType === "CLICK_AND_COLLECT" &&
+      !selectedPickupStoreId
+    ) {
+      const message = "Vui lòng chọn cửa hàng nhận hàng";
+      setError(message);
+      setIsLoading(false);
+      toast.error(message);
+      return;
+    }
+
+    if (!selectedAddress) {
+      setError("Không tìm thấy địa chỉ nhận hàng");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const orderData = {
+        fulfillmentType: effectiveFulfillmentType,
+        preferredStoreId:
+          effectiveFulfillmentType === "CLICK_AND_COLLECT"
+            ? selectedPickupStoreId
+            : undefined,
         shippingAddress: {
           fullName: selectedAddress.fullName,
           phoneNumber: selectedAddress.phoneNumber,
           province: selectedAddress.province,
+          district: selectedAddress.district || selectedAddress.ward,
           ward: selectedAddress.ward,
           detailAddress: selectedAddress.detailAddress,
         },
@@ -341,7 +489,10 @@ const CheckoutPage = () => {
       console.log("Payment method:", formData.paymentMethod);
 
       const response = await orderAPI.create(orderData);
-      const createdOrder = response.data.data.order;
+      const createdOrder = response?.data?.order || response?.data?.data?.order;
+      if (!createdOrder?._id) {
+        throw new Error("Không nhận được thông tin đơn hàng từ server");
+      }
 
       console.log("=== AFTER ORDER CREATION ===");
       console.log("Order ID:", createdOrder._id);
@@ -378,7 +529,7 @@ const CheckoutPage = () => {
           } else {
             throw new Error("Không thể tạo link thanh toán");
           }
-        } catch (err) {
+        } catch {
           setIsRedirectingToPayment(false);
           // ✅ HỦY ĐƠN HÀNG NẾU TẠO LINK THẤT BẠI
           await orderAPI.cancel(createdOrder._id, {
@@ -413,7 +564,7 @@ const CheckoutPage = () => {
 
         if (stillInCart.length > 0) {
           console.warn(
-            `⚠️ Backend didn't remove ${stillInCart.length} items, removing manually...`
+            `Warning Backend didn't remove ${stillInCart.length} items, removing manually...`
           );
           for (const item of stillInCart) {
             try {
@@ -468,6 +619,24 @@ const CheckoutPage = () => {
         <span className="font-medium">Quay lại giỏ hàng</span>
       </button>
       <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
+      {isLocalOmnichannelFlagEnabled && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+            {isOmnichannelCheckoutEnabled ? "Canary" : "Rollout"}
+          </Badge>
+          <span>
+            {rolloutDecision.loading
+              ? "Checking omnichannel rollout eligibility..."
+              : isOmnichannelCheckoutEnabled
+              ? `Omnichannel checkout is enabled (${rolloutDecision.mode}${
+                  rolloutDecision.mode === "percentage"
+                    ? ` ${rolloutDecision.percent}%`
+                    : ""
+                }).`
+              : "Omnichannel checkout is not enabled for this account yet."}
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleCheckout}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -508,6 +677,67 @@ const CheckoutPage = () => {
                     <ChevronRight className="w-5 h-5 text-gray-400" />
                   </div>
                 ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Hình thức nhận hàng</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
+                  <input
+                    type="radio"
+                    name="fulfillmentType"
+                    value="HOME_DELIVERY"
+                    checked={effectiveFulfillmentType === "HOME_DELIVERY"}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <div>
+                    <p className="font-medium">Giao tận nhà </p>
+                    <p className="text-sm text-muted-foreground">
+                      Nhận hàng tại địa chỉ của bạn
+                    </p>
+                  </div>
+                </label>
+
+                {isOmnichannelCheckoutEnabled && (
+                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
+                  <input
+                    type="radio"
+                    name="fulfillmentType"
+                    value="CLICK_AND_COLLECT"
+                    checked={effectiveFulfillmentType === "CLICK_AND_COLLECT"}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <div>
+                    <p className="font-medium">Click & Collect</p>
+                    <p className="text-sm text-muted-foreground">
+                      Đặt online, nhận tại cửa hàng
+                    </p>
+                  </div>
+                  </label>
+                )}
+
+                {effectiveFulfillmentType === "CLICK_AND_COLLECT" && (
+                  <div className="border rounded-lg p-3 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Chọn cửa hàng để nhận đơn hàng
+                    </p>
+                    <StoreSelector
+                      onSelectStore={setSelectedPickupStore}
+                      selectedStoreId={selectedPickupStoreId}
+                      customerAddress={storeSelectorAddress}
+                    />
+                    {!selectedPickupStoreId && (
+                      <p className="text-sm text-red-600">
+                        Vui lòng chọn cửa hàng trước khi đặt hàng.
+                      </p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -716,6 +946,8 @@ const CheckoutPage = () => {
                   </div>
                 </div>
 
+                {error && <p className="text-sm text-red-600">{error}</p>}
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -724,6 +956,8 @@ const CheckoutPage = () => {
                     isLoading ||
                     checkoutItems.length === 0 ||
                     finalTotal <= 0 ||
+                    (effectiveFulfillmentType === "CLICK_AND_COLLECT" &&
+                      !selectedPickupStoreId) ||
                     isRedirectingToPayment
                   }
                 >
@@ -823,3 +1057,7 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
+
+
+
+

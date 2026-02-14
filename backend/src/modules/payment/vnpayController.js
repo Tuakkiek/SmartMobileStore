@@ -27,6 +27,27 @@ function sortObject(obj) {
   return sorted;
 }
 
+const appendStatusHistoryIfChanged = (order, status, updatedBy, note) => {
+  if (!Array.isArray(order.statusHistory)) {
+    order.statusHistory = [];
+  }
+
+  const latest = order.statusHistory[order.statusHistory.length - 1];
+  const latestStatus = latest?.status;
+  const latestNote = latest?.note;
+
+  if (latestStatus === status && latestNote === note) {
+    return;
+  }
+
+  order.statusHistory.push({
+    status,
+    updatedBy,
+    updatedAt: new Date(),
+    note,
+  });
+};
+
 // ============================================
 // CREATE PAYMENT URL
 // ============================================
@@ -194,11 +215,21 @@ export const vnpayIPN = async (req, res) => {
       return res.status(200).json({ RspCode: "04", Message: "Invalid amount" });
     }
 
-    // ✅ SAU - Tự động hoàn thành đơn
+    // ✅ Payment success: mark paid and return order to waiting-for-processing queue
     if (rspCode === "00") {
-      // ✅ Cập nhật trạng thái thanh toán
+      const alreadyProcessedSuccess =
+        order.paymentStatus === "PAID" &&
+        order.status === "PENDING" &&
+        Boolean(order?.paymentInfo?.vnpayVerified);
+
+      if (alreadyProcessedSuccess) {
+        return res
+          .status(200)
+          .json({ RspCode: "00", Message: "Confirm Success" });
+      }
+
       order.paymentStatus = "PAID";
-      order.status = "PAYMENT_VERIFIED";
+      order.status = "PENDING";
 
       order.paymentInfo = {
         ...order.paymentInfo,
@@ -212,31 +243,12 @@ export const vnpayIPN = async (req, res) => {
         vnpayResponseCode: rspCode,
       };
 
-      // ✅ THÊM DÒNG NÀY: Tự động chuyển sang CONFIRMED sau 2 giây
-      order.statusHistory.push({
-        status: "PAYMENT_VERIFIED",
-        updatedBy: order.customerId || order.userId,
-        updatedAt: new Date(),
-        note: `Thanh toán VNPay thành công - Mã giao dịch: ${transactionNo}`,
-      });
-
-      // ✅ TỰ ĐỘNG CONFIRMED (tuỳ chọn)
-      // Nếu muốn tự động chuyển sang CONFIRMED:
-      setTimeout(async () => {
-        try {
-          order.status = "CONFIRMED";
-          order.confirmedAt = new Date();
-          order.statusHistory.push({
-            status: "CONFIRMED",
-            updatedBy: order.customerId || order.userId,
-            updatedAt: new Date(),
-            note: "Tự động xác nhận sau thanh toán thành công",
-          });
-          await order.save();
-        } catch (err) {
-          console.error("Error auto-confirming order:", err);
-        }
-      }, 2000); // 2 giây sau
+      appendStatusHistoryIfChanged(
+        order,
+        "PENDING",
+        order.customerId || order.userId,
+        `Thanh toán VNPay thành công - Mã giao dịch: ${transactionNo}. Đơn chờ xử lý.`
+      );
 
       await order.save();
 
@@ -284,6 +296,21 @@ export const vnpayIPN = async (req, res) => {
         .json({ RspCode: "00", Message: "Confirm Success" });
     } else {
       // ❌ PAYMENT FAILED
+      const alreadyProcessedFailure =
+        order.paymentStatus === "FAILED" &&
+        order.status === "PAYMENT_FAILED" &&
+        String(order?.paymentInfo?.vnpayResponseCode || "") === String(rspCode);
+
+      if (alreadyProcessedFailure) {
+        return res
+          .status(200)
+          .json({ RspCode: "00", Message: "Confirm Success" });
+      }
+
+      order.paymentStatus = "FAILED";
+      order.status = "PAYMENT_FAILED";
+      order.paymentFailureAt = new Date();
+      order.paymentFailureReason = `VNPAY_${rspCode}`;
       order.paymentInfo = {
         ...order.paymentInfo,
         vnpayFailed: true,
@@ -291,12 +318,12 @@ export const vnpayIPN = async (req, res) => {
         vnpayResponseCode: rspCode,
       };
 
-      order.statusHistory.push({
-        status: "PENDING",
-        updatedBy: order.customerId || order.userId,
-        updatedAt: new Date(),
-        note: `Thanh toán VNPay thất bại - Mã lỗi: ${rspCode}`,
-      });
+      appendStatusHistoryIfChanged(
+        order,
+        "PAYMENT_FAILED",
+        order.customerId || order.userId,
+        `Thanh toán VNPay thất bại - Mã lỗi: ${rspCode}.`
+      );
 
       await order.save();
 

@@ -428,17 +428,32 @@ const OrderCard = ({ order, onViewDetail, getImageUrl, getVariantLabel }) => (
   <Card className="overflow-hidden">
     <CardContent className="p-0">
       <div className="p-4 bg-muted/50 border-b flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div>
             <p className="text-sm text-muted-foreground">Đơn hàng:</p>
             <p className="font-semibold">#{order.orderNumber}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Nhận hàng</p>
+            <p className="text-sm text-muted-foreground">Hình thức nhận</p>
             <p className="font-medium">
-              {order.shippingAddress?.fullName} (
-              {order.shippingAddress?.phoneNumber})
+              {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
             </p>
+            {order.assignedStore?.storeName && (
+              <p className="text-xs text-muted-foreground">
+                Cửa hàng: {order.assignedStore.storeName}
+              </p>
+            )}
+            {order.pickupInfo?.pickupCode && (
+              <p className="text-xs font-semibold text-primary">
+                Mã nhận: {order.pickupInfo.pickupCode}
+              </p>
+            )}
+            {!order.assignedStore?.storeName && (
+              <p className="text-xs text-muted-foreground">
+                {order.shippingAddress?.fullName} (
+                {order.shippingAddress?.phoneNumber})
+              </p>
+            )}
           </div>
         </div>
         <Badge className={getStatusColor(order.status)}>
@@ -531,14 +546,51 @@ const OrderDetailDialog = ({
             </p>
           </div>
 
-          <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-semibold">Địa chỉ nhận hàng</h4>
-            <p className="text-sm">{order.shippingAddress?.fullName}</p>
-            <p className="text-sm">{order.shippingAddress?.phoneNumber}</p>
-            <p className="text-sm text-muted-foreground">
-              {order.shippingAddress?.detailAddress},{" "}
-              {order.shippingAddress?.ward}, {order.shippingAddress?.province}
+          <div className="space-y-1 p-4 bg-blue-50 rounded-lg border border-blue-100 text-sm">
+            <p>
+              <strong>Hình thức nhận:</strong>{" "}
+              {getStatusText(order.fulfillmentType || "HOME_DELIVERY")}
             </p>
+            {order.assignedStore?.storeName && (
+              <p>
+                <strong>Cửa hàng xử lý:</strong> {order.assignedStore.storeName}
+              </p>
+            )}
+            {order.pickupInfo?.pickupCode && (
+              <p>
+                <strong>Mã nhận hàng:</strong> {order.pickupInfo.pickupCode}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
+            <h4 className="font-semibold">
+              {order.fulfillmentType === "CLICK_AND_COLLECT"
+                ? "Thông tin nhận tại cửa hàng"
+                : "Địa chỉ nhận hàng"}
+            </h4>
+            {order.fulfillmentType === "CLICK_AND_COLLECT" ? (
+              <>
+                <p className="text-sm font-medium">
+                  {order.assignedStore?.storeName || "Chưa có cửa hàng"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {order.assignedStore?.storePhone || "N/A"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {order.assignedStore?.storeAddress || "N/A"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">{order.shippingAddress?.fullName}</p>
+                <p className="text-sm">{order.shippingAddress?.phoneNumber}</p>
+                <p className="text-sm text-muted-foreground">
+                  {order.shippingAddress?.detailAddress},{" "}
+                  {order.shippingAddress?.ward}, {order.shippingAddress?.province}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="space-y-3">

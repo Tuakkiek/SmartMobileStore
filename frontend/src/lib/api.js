@@ -112,8 +112,11 @@ export const orderAPI = {
   create: (data) => api.post("/orders", data),
   getMyOrders: (params = {}) => api.get("/orders/my-orders", { params }),
   getAll: (params) => api.get("/orders/all", { params }),
+  getByStage: (statusStage, params = {}) =>
+    api.get("/orders/all", { params: { ...params, statusStage } }),
   getById: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, data) => api.put(`/orders/${id}/status`, data),
+  assignCarrier: (id, data) => api.patch(`/orders/${id}/assign-carrier`, data),
   cancel: (id, data = {}) => api.post(`/orders/${id}/cancel`, data),
 };
 
@@ -457,6 +460,17 @@ export const inventoryAPI = {
     }),
   getByStore: (storeId, params = {}) =>
     api.get(`/inventory/store/${storeId}`, { params }),
+};
+
+// ============================================
+// OMNICHANNEL MONITORING API
+// ============================================
+export const monitoringAPI = {
+  getRolloutDecision: () => api.get("/monitoring/omnichannel/rollout"),
+  getOmnichannelSummary: (params = {}) =>
+    api.get("/monitoring/omnichannel/summary", { params }),
+  getOmnichannelEvents: (params = {}) =>
+    api.get("/monitoring/omnichannel/events", { params }),
 };
 
 

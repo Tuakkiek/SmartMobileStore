@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { orderAPI, userAPI } from "@/lib/api";
-import { getStatusColor, getStatusText } from "@/lib/utils";
+import { getStatusColor, getStatusStage, getStatusText } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
 
 const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
@@ -28,13 +28,16 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
   const [selectedShipper, setSelectedShipper] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingShippers, setIsFetchingShippers] = useState(false);
+  const currentStage = order?.statusStage || getStatusStage(order?.status);
+  const requiresCarrierSelection =
+    newStatus === "IN_TRANSIT" || newStatus === "SHIPPING";
 
-  // Fetch danh sách Shipper khi cần chuyển sang SHIPPING
+  // Fetch danh sách Shipper khi cần chuyển sang IN_TRANSIT
   useEffect(() => {
-    if (open && order && newStatus === "SHIPPING") {
+    if (open && order && requiresCarrierSelection) {
       fetchShippers();
     }
-  }, [open, order, newStatus]);
+  }, [open, order, requiresCarrierSelection]);
 
   // Reset form khi mở dialog
   useEffect(() => {
@@ -60,33 +63,85 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
     }
   };
 
-  const getValidTransitions = (currentStatus) => {
-    const transitions = {
+  const getValidTransitions = (orderData) => {
+    const currentOrderStage = orderData?.statusStage || getStatusStage(orderData?.status);
+    const isInStoreOrder =
+      orderData?.orderSource === "IN_STORE" ||
+      orderData?.fulfillmentType === "IN_STORE";
+
+    if (isInStoreOrder) {
+      const inStoreTransitionsByStage = {
+        PENDING: [
+          { value: "CONFIRMED", label: "Xác nhận đơn" },
+          { value: "PICKING", label: "Bắt đầu lấy hàng" },
+          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
+          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        CONFIRMED: [
+          { value: "PICKING", label: "Bắt đầu lấy hàng" },
+          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
+          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        PICKING: [
+          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
+          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        PICKUP_COMPLETED: [
+          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        PENDING_PAYMENT: [
+          { value: "DELIVERED", label: "Đã thanh toán xong" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        DELIVERED: [{ value: "RETURNED", label: "Trả hàng" }],
+        RETURNED: [],
+        CANCELLED: [],
+      };
+      return inStoreTransitionsByStage[currentOrderStage] || [];
+    }
+
+    const onlineTransitionsByStage = {
       PENDING: [
-        { value: "CONFIRMED", label: "Chờ lấy hàng" },
+        { value: "CONFIRMED", label: "Đã xác nhận" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       PENDING_PAYMENT: [
-        { value: "PAYMENT_VERIFIED", label: "Đã thanh toán" },
+        { value: "PENDING", label: "Chờ xử lý" },
+        { value: "PAYMENT_FAILED", label: "Thanh toán thất bại" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
-      PAYMENT_VERIFIED: [
-        { value: "CONFIRMED", label: "Chờ lấy hàng" },
+      PAYMENT_FAILED: [
+        { value: "PENDING", label: "Mở lại xử lý đơn" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       CONFIRMED: [
-        { value: "SHIPPING", label: "Đang giao hàng" },
+        { value: "PICKING", label: "Bắt đầu lấy hàng" },
+        { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
-      SHIPPING: [
+      PICKING: [
+        { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
+        { value: "CANCELLED", label: "Hủy đơn" },
+      ],
+      PICKUP_COMPLETED: [
+        { value: "IN_TRANSIT", label: "Đang giao hàng" },
+        { value: "CANCELLED", label: "Hủy đơn" },
+      ],
+      IN_TRANSIT: [
         { value: "DELIVERED", label: "Đã giao hàng" },
         { value: "RETURNED", label: "Trả hàng" },
+        { value: "CANCELLED", label: "Hủy đơn" },
       ],
       DELIVERED: [{ value: "RETURNED", label: "Trả hàng" }],
       RETURNED: [],
       CANCELLED: [],
     };
-    return transitions[currentStatus] || [];
+
+    return onlineTransitionsByStage[currentOrderStage] || [];
   };
 
   const handleSubmit = async () => {
@@ -95,32 +150,25 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       return;
     }
 
-    // ✅ Kiểm tra nếu chuyển sang SHIPPING phải chọn Shipper
-    if (newStatus === "SHIPPING" && !selectedShipper) {
+    // ✅ Kiểm tra nếu chuyển sang IN_TRANSIT phải chọn Shipper
+    if (requiresCarrierSelection && !selectedShipper) {
       toast.error("Vui lòng chọn Shipper để giao hàng");
       return;
     }
 
     setIsLoading(true);
     try {
-      const payload = {
-        status: newStatus,
-        note: note.trim() || undefined,
-      };
-
-      // ✅ Thêm shipperId nếu chuyển sang SHIPPING
-      if (newStatus === "SHIPPING" && selectedShipper) {
-        payload.shipperId = selectedShipper;
-        console.log("🚚 Giao đơn cho Shipper:", {
-          orderId: order._id,
+      if (requiresCarrierSelection && selectedShipper) {
+        await orderAPI.assignCarrier(order._id, {
           shipperId: selectedShipper,
-          shipperName: shippers.find((s) => s._id === selectedShipper)
-            ?.fullName,
+          note: note.trim() || "Carrier assigned from manager UI",
         });
       }
 
-      const response = await orderAPI.updateStatus(order._id, payload);
-      console.log("✅ Cập nhật thành công:", response.data);
+      await orderAPI.updateStatus(order._id, {
+        status: newStatus,
+        note: note.trim() || undefined,
+      });
 
       toast.success("Cập nhật trạng thái thành công");
       onSuccess?.();
@@ -135,7 +183,7 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
 
   if (!order) return null;
 
-  const validTransitions = getValidTransitions(order.status);
+  const validTransitions = getValidTransitions(order);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -149,11 +197,16 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
           {/* Trạng thái hiện tại */}
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground mb-1">
-              Trạng thái hiện tại
+              Giai đoạn hiện tại
             </p>
-            <Badge className={getStatusColor(order.status)}>
-              {getStatusText(order.status)}
+            <Badge className={getStatusColor(currentStage)}>
+              {getStatusText(currentStage)}
             </Badge>
+            {order.status && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Chi tiết: {getStatusText(order.status)}
+              </p>
+            )}
           </div>
 
           {/* Chọn trạng thái mới */}
@@ -178,8 +231,8 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
             </select>
           </div>
 
-          {/* ✅ Dropdown chọn Shipper (chỉ hiện khi chuyển sang SHIPPING) */}
-          {newStatus === "SHIPPING" && (
+          {/* ✅ Dropdown chọn Shipper (chỉ hiện khi chuyển sang IN_TRANSIT) */}
+          {requiresCarrierSelection && (
             <div className="space-y-2">
               <Label htmlFor="shipper">Chọn Shipper *</Label>
               {isFetchingShippers ? (
@@ -231,8 +284,8 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>
-                Không thể thay đổi trạng thái từ{" "}
-                <strong>{getStatusText(order.status)}</strong>
+                Không thể thay đổi giai đoạn từ{" "}
+                <strong>{getStatusText(currentStage)}</strong>
               </span>
             </div>
           )}

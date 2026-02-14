@@ -78,6 +78,9 @@ export const getPickList = async (req, res) => {
       success: true,
       orderId: order._id,
       orderNumber: order.orderNumber,
+      orderSource: order.orderSource,
+      fulfillmentType: order.fulfillmentType,
+      orderStatus: order.status,
       pickList,
     });
   } catch (error) {
