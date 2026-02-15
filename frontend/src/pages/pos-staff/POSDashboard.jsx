@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,19 +12,25 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
+  Bell,
   Search,
   ShoppingCart,
   Plus,
   Trash2,
   User,
   ArrowRight,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import ProductVariantSelector from "@/components/product/ProductVariantSelector";
 import {
+  authAPI,
+  notificationAPI,
   promotionAPI,
   posAPI,
   universalProductAPI,
+  productTypeAPI,
 } from "@/lib/api";
 import {
   Dialog,
@@ -32,21 +39,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import PersonalStatsWidget from "@/components/employee/PersonalStatsWidget";
+import CustomerCheckDialog from "@/components/pos/CustomerCheckDialog";
 
 const POSDashboard = () => {
+  const navigate = useNavigate();
+
   // ============================================
   // STATE
   // ============================================
   const [products, setProducts] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("iPhone");
+  const [selectedCategory, setSelectedCategory] = useState(""); // This will be productTypeId
   const [isLoading, setIsLoading] = useState(false);
 
   // Cart state
   const [cart, setCart] = useState([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [customerExists, setCustomerExists] = useState(null);
+  const [checkingCustomer, setCheckingCustomer] = useState(false);
+  const [showCustomerCheckDialog, setShowCustomerCheckDialog] = useState(false);
 
   // Product selection dialog
   const [showProductDialog, setShowProductDialog] = useState(false);
@@ -58,56 +75,44 @@ const POSDashboard = () => {
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
-  // Fulfillment state
-  const [instantFulfillment, setInstantFulfillment] = useState(false);
-
-  const detectCategory = (product) => {
-    const text = [
-      product?.category,
-      product?.productType?.name,
-      product?.productType?.slug,
-      product?.name,
-      product?.model,
-    ]
+  const buildCustomerPasswordPreview = (fullName, phoneNumber) => {
+    const compactName = String(fullName || "")
+      .trim()
+      .split(/\s+/)
       .filter(Boolean)
-      .join(" ")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-
-    if (text.includes("iphone")) return "iPhone";
-    if (text.includes("ipad")) return "iPad";
-    if (text.includes("airpods") || text.includes("air pods")) return "AirPods";
-    if (
-      text.includes("macbook") ||
-      text.includes("imac") ||
-      text.includes("mac")
-    ) {
-      return "Mac";
-    }
-    if (
-      text.includes("apple watch") ||
-      text.includes("applewatch") ||
-      text.includes("watch")
-    ) {
-      return "AppleWatch";
-    }
-    if (text.includes("accessor") || text.includes("phu kien")) {
-      return "Accessory";
-    }
-
-    return null;
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join("");
+    const last3Digits = String(phoneNumber || "").trim().slice(-3);
+    return `${compactName}@${last3Digits}`;
   };
+
+  // ============================================
+  // LOAD PRODUCT TYPES
+  // ============================================
+  useEffect(() => {
+    const loadTypes = async () => {
+      try {
+        const res = await productTypeAPI.getAll({ status: 'ACTIVE' });
+        const types = res.data?.data?.productTypes || res.data?.productTypes || [];
+        setProductTypes(types);
+        if (types.length > 0 && !selectedCategory) {
+          setSelectedCategory(types[0]._id);
+        }
+      } catch (e) {
+        console.error("Error loading product types:", e);
+      }
+    };
+    loadTypes();
+  }, []);
 
   // ============================================
   // HELPER FOR IMAGE URL
   // ============================================
   const getImageUrl = (path) => {
-    if (!path) return "https://via.placeholder.com/128?text=No+Image";
+    if (!path) return "https://via.placeholder.com/100?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${
-      path.startsWith("/") ? "" : "/"
-    }${path}`;
+    const baseUrl = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+    return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
   };
 
   // ============================================
@@ -217,40 +222,53 @@ const POSDashboard = () => {
   // FETCH PRODUCTS
   // ============================================
   const fetchProducts = useCallback(async () => {
+    if (!selectedCategory) return;
+
     try {
       setIsLoading(true);
-      const response = await universalProductAPI.getAll({ limit: 500 });
+      // Use the productType filter directly supported by backend
+      const response = await universalProductAPI.getAll({ 
+        limit: 100,
+        productType: selectedCategory,
+        search: searchQuery
+      });
+      
       const productData = response?.data?.data?.products || [];
-
-      if (!Array.isArray(productData)) {
-        setProducts([]);
-        return;
-      }
-
-      const filtered = productData
-        .map((product) => ({
-          ...product,
-          category: detectCategory(product),
-        }))
-        .filter(
-          (product) =>
-            product.category === selectedCategory &&
-            Array.isArray(product.variants) &&
-            product.variants.length > 0
-        );
-
-      setProducts(filtered);
+      setProducts(Array.isArray(productData) ? productData : []);
     } catch (error) {
       console.error("Lỗi tải sản phẩm:", error);
       toast.error("Không thể tải sản phẩm");
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, searchQuery]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoadingNotifications(true);
+      const response = await notificationAPI.getMyNotifications({ isRead: false });
+      setNotifications(response.data.notifications || []);
+      setUnreadCount(response.data.pagination?.total || 0);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // ============================================
   // PRODUCT SELECTION
@@ -272,6 +290,23 @@ const POSDashboard = () => {
       return;
     }
 
+    // Get the main product image (first variant's first image) 
+    // strictly as requested: "ảnh đầu tiên của màu sắc đầu tiên của biến thể đầu tiên"
+    // Ideally this is the first variant in the list.
+    // Get the main product image (first variant's first image)
+    // strictly as requested: "ảnh đầu tiên của màu sắc đầu tiên của biến thể đầu tiên"
+    // Ideally this is the first variant in the list.
+    const safeVariants = Array.isArray(selectedProduct.variants) ? selectedProduct.variants : [];
+    let firstVariant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
+    if (!firstVariant) firstVariant = safeVariants.find((v) => v.sku && v.slug);
+    if (!firstVariant) firstVariant = safeVariants.find((v) => v.sku);
+    if (!firstVariant) firstVariant = safeVariants[0];
+
+    const mainImage = firstVariant?.images?.[0] || 
+                      (Array.isArray(selectedProduct.images) ? selectedProduct.images[0] : null) || 
+                      selectedProduct.image || 
+                      selectedProduct.featuredImages?.[0];
+
     const existingIndex = cart.findIndex(
       (item) => item.variantId === selectedVariant._id
     );
@@ -291,7 +326,7 @@ const POSDashboard = () => {
         {
           productId: selectedProduct._id,
           variantId: selectedVariant._id,
-          productType: selectedProduct.category,
+          productType: selectedProduct.productType?._id || selectedProduct.category, // fallback
           productName: selectedProduct.name,
           variantSku: selectedVariant.sku,
           variantColor: selectedVariant.color,
@@ -303,7 +338,7 @@ const POSDashboard = () => {
           price: selectedVariant.price,
           quantity: 1,
           stock: selectedVariant.stock,
-          image: getImageUrl(selectedVariant.images?.[0]),
+          image: getImageUrl(mainImage),
         },
       ]);
       toast.success("Đã thêm vào giỏ hàng");
@@ -358,13 +393,8 @@ const POSDashboard = () => {
       return;
     }
 
-    if (!customerName.trim()) {
-      toast.error("Vui lòng nhập tên khách hàng");
-      return;
-    }
-
-    if (!customerPhone.trim()) {
-      toast.error("Vui lòng nhập số điện thoại");
+    if (!customerName.trim() || !customerPhone.trim()) {
+      toast.error("Vui lòng nhập thông tin khách hàng");
       return;
     }
 
@@ -376,7 +406,6 @@ const POSDashboard = () => {
         0
       );
 
-      // ✅ SỬA: Dùng posAPI.createOrder thay vì axios.post
       await posAPI.createOrder({
         orderSource: "IN_STORE",
         items: checkoutItemsWithFinalPrice.map((item) => ({
@@ -394,14 +423,9 @@ const POSDashboard = () => {
         totalAmount,
         storeLocation: "Ninh Kiều iStore",
         promotionCode: appliedPromotion?.code || null,
-        instantFulfillment, // ✅ Added flag
       });
 
-      toast.success(
-        instantFulfillment 
-          ? "Đơn hàng đã hoàn tất thành công!" 
-          : "Tạo đơn thành công! Đơn hàng đã được chuyển sang kho để lấy hàng."
-      );
+      toast.success("Tạo đơn chuyển kho thành công. Đơn đang chờ Order Manager xử lý.");
 
       // Reset form
       setCart([]);
@@ -409,396 +433,287 @@ const POSDashboard = () => {
       setCustomerPhone("");
       setAppliedPromotion(null);
       setPromotionCode("");
-      setInstantFulfillment(false);
+      setCustomerExists(null);
     } catch (error) {
       console.error("Lỗi tạo đơn:", error);
-      toast.error(error.response?.data?.message || "Tạo đơn hàng thất bại");
+      toast.error(error.response?.data?.message || "Lỗi tạo đơn hàng");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleQuickRegister = async ({ skipConfirm = false } = {}) => {
+    try {
+      if (!customerPhone.trim() || !customerName.trim()) {
+        toast.error("Thiếu thông tin khách hàng để đăng ký");
+        return;
+      }
 
-  // ============================================
-  // RENDER
-  // ============================================
+      setIsLoading(true);
+      const res = await authAPI.quickRegister({
+        fullName: customerName,
+        phoneNumber: customerPhone,
+      });
+
+      if (res.data.success) {
+        setCustomerExists(true);
+        toast.success(`Đăng ký thành công! Mật khẩu: ${res.data.password}`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Đăng ký thất bại");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCheckCustomer = async () => {
+    if (!customerPhone.trim()) return;
+
+    try {
+      setCheckingCustomer(true);
+      const response = await authAPI.checkCustomer(customerPhone.trim());
+      setCustomerExists(response.data.exists);
+
+      if (response.data.exists && response.data.customer) {
+        setCustomerName(response.data.customer.fullName);
+        toast.success("Tìm thấy khách hàng!");
+        return;
+      }
+
+      // If not found, open dialog
+      setShowCustomerCheckDialog(true);
+      
+    } catch (error) {
+      console.error("Error checking customer:", error);
+    } finally {
+      setCheckingCustomer(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 h-screen overflow-hidden">
-        {/* LEFT: Product List */}
-        <div className="lg:col-span-2 space-y-4 overflow-y-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>Chọn sản phẩm</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Category Tabs */}
-              <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {[
-                  "iPhone",
-                  "iPad",
-                  "Mac",
-                  "AirPods",
-                  "AppleWatch",
-                  "Accessory",
-                ].map((cat) => (
-                  <Button
-                    key={cat}
-                    size="sm"
-                    variant={selectedCategory === cat ? "default" : "outline"}
-                    onClick={() => setSelectedCategory(cat)}
-                  >
-                    {cat}
-                  </Button>
-                ))}
-              </div>
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      <CustomerCheckDialog 
+        open={showCustomerCheckDialog} 
+        onOpenChange={setShowCustomerCheckDialog}
+        onConfirm={() => {
+          setShowCustomerCheckDialog(false);
+          handleQuickRegister({ skipConfirm: true });
+        }}
+        customerName={customerName}
+        customerPhone={customerPhone}
+      />
 
-              {/* Search */}
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Tìm sản phẩm..."
+      {/* LEFT COLUMN: PRODUCTS */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Header & Categories */}
+        <div className="bg-white p-4 border-b flex flex-col gap-4 shadow-sm z-10">
+          <div className="flex justify-between items-center">
+             <div className="flex items-center gap-2">
+                <Search className="w-5 h-5 text-gray-500" />
+                <Input 
+                  placeholder="Tìm kiếm sản phẩm..." 
+                  className="w-64" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
                 />
-              </div>
+             </div>
+             <div className="text-sm font-medium text-gray-500">
+               {products.length} sản phẩm
+             </div>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+             {productTypes.map(type => (
+               <Button 
+                key={type._id}
+                variant={selectedCategory === type._id ? "default" : "outline"} 
+                onClick={() => setSelectedCategory(type._id)}
+                size="sm"
+                className="rounded-full px-6 whitespace-nowrap"
+               >
+                 {type.name}
+               </Button>
+             ))}
+          </div>
+        </div>
 
-              {/* Product Grid */}
-              {isLoading ? (
-                <p className="text-center py-8">Đang tải...</p>
-              ) : filteredProducts.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">
-                  Không có sản phẩm
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {filteredProducts.map((product) => (
-                    <Card
-                      key={product._id}
-                      className="cursor-pointer hover:shadow-lg transition-shadow"
-                      onClick={() => handleSelectProduct(product)}
-                    >
-                      <CardContent className="p-3">
-                        <div className="relative pb-[125%] mb-2">
-                          <img
-                            src={getImageUrl(
-                              product.variants?.[0]?.images?.[0]
+        {/* Product Grid */}
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+           {isLoading ? (
+             <div className="flex justify-center py-12">Loading...</div>
+           ) : (
+             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {products.map(product => (
+                   <Card key={product._id} className="cursor-pointer hover:shadow-lg transition-all border-none shadow-sm" onClick={() => handleSelectProduct(product)}>
+                      <div className="p-4 flex flex-col h-full bg-white rounded-lg">
+                         <div className="h-40 w-full mb-4 flex items-center justify-center bg-gray-50 rounded-md">
+                           <img 
+                              src={getImageUrl(
+                                product.variants?.[0]?.images?.[0] || 
+                                product.featuredImages?.[0] ||
+                                product.image
+                              )} 
+                              className="h-32 w-auto object-contain mix-blend-multiply"
+                              alt={product.name}
+                           />
+                         </div>
+                         <h3 className="font-semibold text-sm line-clamp-2 mb-1">{product.name}</h3>
+                         <div className="mt-auto pt-2 flex justify-between items-end">
+                            <span className="font-bold text-primary">
+                              {product.minPrice ? formatPrice(product.minPrice) : 
+                               (product.variants?.[0]?.price ? formatPrice(product.variants[0].price) : "Liên hệ")}
+                            </span>
+                            {product.variants?.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {product.variants.length} bản
+                              </Badge>
                             )}
-                            alt={product.name}
-                            className="absolute top-0 left-0 w-full h-full object-contain rounded"
-                            onError={(e) => {
-                              e.target.src =
-                                "https://via.placeholder.com/128?text=No+Image";
-                            }}
-                          />
-                        </div>
-                        <h3 className="font-semibold text-sm line-clamp-2 mb-1">
-                          {product.name}
-                        </h3>
-                        <Badge variant="outline" className="text-xs">
-                          {product.variants?.length} phiên bản
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT: Cart & Customer Info */}
-        <div className="space-y-4 overflow-y-auto">
-          {/* Customer Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Thông tin khách hàng
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label>Tên khách hàng *</Label>
-                <Input
-                  placeholder="Nguyễn Văn A"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Số điện thoại *</Label>
-                <Input
-                  placeholder="0912345678"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Cart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5" />
-                  Giỏ hàng ({cart.length})
-                </span>
-                {cart.length > 0 && (
-                  <Button size="sm" variant="ghost" onClick={clearCart}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-              {cart.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  Chưa có sản phẩm
-                </p>
-              ) : (
-                checkoutItemsWithFinalPrice.map((item) => (
-                  <div
-                    key={item.variantId}
-                    className="flex gap-3 border-b pb-3"
-                  >
-                    <img
-                      src={getImageUrl(item.image)}
-                      alt={item.productName}
-                      className="w-16 h-16 object-contain rounded"
-                      onError={(e) => {
-                        e.target.src =
-                          "https://via.placeholder.com/64?text=No+Image";
-                      }}
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm line-clamp-1">
-                        {item.productName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.variantColor}
-                        {item.variantStorage && ` • ${item.variantStorage}`}
-                      </p>
-
-                      {appliedPromotion ? (
-                        <div>
-                          <p className="text-xs line-through text-muted-foreground">
-                            {formatPrice(item.originalPrice)}
-                          </p>
-                          <p className="text-sm font-bold text-red-600">
-                            {formatPrice(item.finalizedPrice)}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm font-bold text-primary">
-                          {formatPrice(item.price)}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2"
-                          onClick={() =>
-                            updateQuantity(item.variantId, item.quantity - 1)
-                          }
-                        >
-                          -
-                        </Button>
-                        <span className="text-sm font-medium w-8 text-center">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2"
-                          onClick={() =>
-                            updateQuantity(item.variantId, item.quantity + 1)
-                          }
-                        >
-                          +
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 ml-auto"
-                          onClick={() => removeFromCart(item.variantId)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                         </div>
                       </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Promotion Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Mã giảm giá</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!appliedPromotion ? (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Nhập mã giảm giá"
-                      value={promotionCode}
-                      onChange={(e) =>
-                        setPromotionCode(e.target.value.toUpperCase())
-                      }
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && handleApplyPromotion()
-                      }
-                      disabled={isApplyingPromo || cart.length === 0}
-                      className="uppercase"
-                    />
-                    <Button
-                      onClick={handleApplyPromotion}
-                      disabled={
-                        isApplyingPromo ||
-                        !promotionCode.trim() ||
-                        cart.length === 0
-                      }
-                      variant="outline"
-                      size="sm"
-                    >
-                      {isApplyingPromo ? "..." : "Áp dụng"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-semibold text-green-700">
-                        Mã: {appliedPromotion.code}
-                      </p>
-                      <p className="text-sm text-green-600">
-                        Giảm: {formatPrice(appliedPromotion.discountAmount)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRemovePromotion}
-                      className="text-red-600 hover:bg-red-50"
-                    >
-                      Xóa
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Total & Submit */}
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Tạm tính:</span>
-                  <span>
-                    {formatPrice(
-                      cart.reduce(
-                        (sum, item) => sum + item.price * item.quantity,
-                        0
-                      )
-                    )}
-                  </span>
-                </div>
-
-                {appliedPromotion && (
-                  <div className="flex justify-between text-green-600 font-medium">
-                    <span>Giảm giá ({appliedPromotion.code}):</span>
-                    <span>-{formatPrice(appliedPromotion.discountAmount)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Tổng cộng:</span>
-                  <span className="text-primary">
-                    {formatPrice(getTotal())}
-                  </span>
-                </div>
-              </div>
-
-                <div className="flex items-center space-x-2 py-2">
-                  <input
-                    type="checkbox"
-                    id="instantFulfillment"
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    checked={instantFulfillment}
-                    onChange={(e) => setInstantFulfillment(e.target.checked)}
-                  />
-                  <Label htmlFor="instantFulfillment" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Giao hàng ngay (Khách nhận tại quầy)
-                  </Label>
-                </div>
-
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={handleCreateOrder}
-                  disabled={isLoading || cart.length === 0}
-                >
-                  <ArrowRight className="w-5 h-5 mr-2" />
-                  {isLoading ? "Đang xử lý..." : instantFulfillment ? "Thanh toán & Hoàn tất" : "Tạo đơn & Chuyển Kho"}
-                </Button>
-            </CardContent>
-          </Card>
+                   </Card>
+                ))}
+             </div>
+           )}
         </div>
-
-        {/* Product Selection Dialog */}
-        <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Chọn phiên bản sản phẩm</DialogTitle>
-              <DialogDescription>
-                Vui lòng chọn màu sắc và cấu hình
-              </DialogDescription>
-            </DialogHeader>
-
-            {selectedProduct && (
-              <div className="space-y-4">
-                <ProductVariantSelector
-                  product={selectedProduct}
-                  onVariantChange={setSelectedVariant}
-                  selectedVariant={selectedVariant}
-                />
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowProductDialog(false)}
-                  >
-                    Hủy
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={handleAddToCart}
-                    disabled={!selectedVariant || selectedVariant.stock === 0}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Thêm vào giỏ
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* RIGHT COLUMN: CART & CHECKOUT */}
+      <div className="w-[420px] bg-white border-l shadow-xl flex flex-col h-full z-20">
+         {/* Customer Info */}
+         <div className="p-5 border-b bg-gray-50 space-y-4">
+            <h2 className="font-bold flex items-center gap-2">
+              <User className="w-5 h-5" /> Thông tin khách hàng
+            </h2>
+            <div className="grid grid-cols-3 gap-2">
+               <div className="col-span-2 relative">
+                 <Input 
+                  placeholder="Số điện thoại" 
+                  value={customerPhone} 
+                  onChange={e => setCustomerPhone(e.target.value)} 
+                 />
+                 {customerExists === true && <CheckCircle className="w-4 h-4 text-green-500 absolute right-3 top-3" />}
+                 {customerExists === false && <XCircle className="w-4 h-4 text-red-500 absolute right-3 top-3" />}
+               </div>
+               <Button variant="outline" onClick={handleCheckCustomer} disabled={checkingCustomer}>
+                 {checkingCustomer ? "..." : "Kiểm tra"}
+               </Button>
+            </div>
+            <Input 
+              placeholder="Tên khách hàng" 
+              value={customerName} 
+              onChange={e => setCustomerName(e.target.value)}
+              disabled={customerExists === true} // Disable name edit if found
+            />
+         </div>
+
+         {/* Cart List */}
+         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {cart.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                <p>Giỏ hàng trống</p>
+              </div>
+            ) : (
+              cart.map((item, idx) => (
+               <div key={`${item.variantId}-${idx}`} className="flex gap-3 group relative">
+                  <div className="w-16 h-16 bg-gray-50 rounded-md border flex items-center justify-center p-1">
+                    <img src={item.image} className="max-w-full max-h-full object-contain" alt="" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                     <p className="text-sm font-medium truncate">{item.productName}</p>
+                     <p className="text-xs text-gray-500 mb-1">
+                       {[item.variantColor, item.variantStorage].filter(Boolean).join(" - ")}
+                     </p>
+                     <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm">{formatPrice(item.price)}</span>
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                           <button className="w-6 h-6 flex items-center justify-center hover:bg-white rounded" onClick={() => updateQuantity(item.variantId, item.quantity - 1)}>-</button>
+                           <span className="text-sm font-medium w-4 text-center">{item.quantity}</span>
+                           <button className="w-6 h-6 flex items-center justify-center hover:bg-white rounded" onClick={() => updateQuantity(item.variantId, item.quantity + 1)}>+</button>
+                        </div>
+                     </div>
+                  </div>
+                  <button onClick={() => removeFromCart(item.variantId)} className="absolute -right-1 -top-1 opacity-0 group-hover:opacity-100 p-1 bg-red-100 text-red-500 rounded-full">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+               </div>
+              ))
+            )}
+         </div>
+
+         {/* Footer Actions */}
+         <div className="p-5 border-t bg-gray-50 space-y-4">
+            <div className="space-y-2 text-sm">
+               <div className="flex justify-between text-gray-600">
+                 <span>Tạm tính</span>
+                 <span>{formatPrice(cart.reduce((s, i) => s + i.price * i.quantity, 0))}</span>
+               </div>
+               {appliedPromotion && (
+                 <div className="flex justify-between text-green-600">
+                   <span>Giảm giá ({appliedPromotion.code})</span>
+                   <span>-{formatPrice(appliedPromotion.discountAmount)}</span>
+                 </div>
+               )}
+               <div className="flex justify-between text-xl font-bold pt-2 border-t">
+                 <span>Tổng cộng</span>
+                 <span className="text-primary">{formatPrice(getTotal())}</span>
+               </div>
+            </div>
+
+            <Button 
+              className="w-full text-lg h-12" 
+              onClick={handleCreateOrder} 
+              disabled={cart.length === 0 || isLoading}
+            >
+               {isLoading ? "Đang xử lý..." : "Tạo đơn chuyển kho"}
+            </Button>
+            <Button variant="ghost" className="w-full text-red-500 h-8 text-xs" onClick={clearCart}>
+               Xóa giỏ hàng
+            </Button>
+         </div>
+      </div>
+
+      {/* Product Variant Selection Dialog */}
+      <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Chọn phiên bản sản phẩm</DialogTitle>
+            <DialogDescription>
+              Vui lòng chọn màu sắc và cấu hình
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProduct && (
+            <div className="space-y-4">
+              <ProductVariantSelector
+                product={selectedProduct}
+                onVariantChange={setSelectedVariant}
+                selectedVariant={selectedVariant}
+              />
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowProductDialog(false)}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleAddToCart}
+                  disabled={!selectedVariant || selectedVariant.stock === 0}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Thêm vào giỏ
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
 export default POSDashboard;
+

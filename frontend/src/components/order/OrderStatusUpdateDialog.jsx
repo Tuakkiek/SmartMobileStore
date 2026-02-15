@@ -33,8 +33,9 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingShippers, setIsFetchingShippers] = useState(false);
   const currentStage = order?.statusStage || getStatusStage(order?.status);
-  const requiresCarrierSelection =
-    newStatus === "IN_TRANSIT" || newStatus === "SHIPPING";
+  const isInStoreOrder =
+    order?.orderSource === "IN_STORE" || order?.fulfillmentType === "IN_STORE";
+  const requiresCarrierSelection = newStatus === "SHIPPING";
   const requiresPickerSelection =
     newStatus === "PROCESSING" || newStatus === "PREPARING";
 
@@ -49,7 +50,7 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
     }
   }, [open, order, requiresCarrierSelection]);
 
-  // Fetch danh sách Picker khi cần chuyển sang PICKING
+  // Fetch danh sách Warehouse Manager khi cần giao xử lý lấy hàng
   useEffect(() => {
     if (open && order && requiresPickerSelection) {
       fetchPickers();
@@ -85,11 +86,14 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
   const fetchPickers = async () => {
     setIsFetchingPickers(true);
     try {
-      const response = await userAPI.getAllEmployees({ role: "WAREHOUSE_STAFF,WAREHOUSE_MANAGER" });
+      const pickerRole = isInStoreOrder
+        ? "WAREHOUSE_MANAGER"
+        : "WAREHOUSE_STAFF,WAREHOUSE_MANAGER";
+      const response = await userAPI.getAllEmployees({ role: pickerRole });
       setPickers(response.data.data.employees || []);
     } catch (error) {
-      console.error("Lỗi tải danh sách Picker:", error);
-      toast.error("Không thể tải danh sách Nhân viên kho");
+      console.error("Lỗi tải danh sách Warehouse Manager:", error);
+      toast.error("Không thể tải danh sách Warehouse Manager");
       setPickers([]);
     } finally {
       setIsFetchingPickers(false);
@@ -99,17 +103,13 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
   const getValidTransitions = (orderData) => {
     const filterByRole = (transitions) => {
       if (user?.role === "ORDER_MANAGER") {
-          // Order Manager updates:
-          // CONFIRMED -> PICKING (Assign Picker)
-          // PICKUP_COMPLETED -> IN_TRANSIT (Assign Shipper)
-          return transitions.filter(
-            (item) => 
-               item.value === "PICKING" || 
-               item.value === "IN_TRANSIT" || 
-               item.value === "SHIPPING" ||
-               item.value === "CONFIRMED" || // Sometimes they confirm
-               item.value === "CANCELLED"
-          );
+        return transitions.filter(
+          (item) =>
+            item.value === "PROCESSING" ||
+            item.value === "SHIPPING" ||
+            item.value === "CONFIRMED" ||
+            item.value === "CANCELLED"
+        );
       }
       return transitions;
     };
@@ -123,28 +123,28 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       const inStoreTransitionsByStage = {
         PENDING: [
           { value: "CONFIRMED", label: "Xác nhận đơn" },
-          { value: "PICKING", label: "Bắt đầu lấy hàng" },
-          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
-          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "PROCESSING", label: "Giao Warehouse Manager xử lý" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        PENDING_ORDER_MANAGEMENT: [
+          { value: "PROCESSING", label: "Giao Warehouse Manager xử lý" },
+          { value: "CONFIRMED", label: "Xác nhận đơn (Bỏ qua kho)" }, // Optional shortcut
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         CONFIRMED: [
-          { value: "PROCESSING", label: "Bắt đầu lấy hàng" },
-          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
-          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "PROCESSING", label: "Giao Warehouse Manager xử lý" },
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         PROCESSING: [
-          { value: "PICKUP_COMPLETED", label: "Hoàn tất lấy hàng" },
-          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
+          { value: "CANCELLED", label: "Hủy đơn" },
+        ],
+        PICKING: [
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         PICKUP_COMPLETED: [
-          { value: "PENDING_PAYMENT", label: "Chờ thu ngân thanh toán" },
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         PENDING_PAYMENT: [
-          { value: "DELIVERED", label: "Đã thanh toán xong" },
           { value: "CANCELLED", label: "Hủy đơn" },
         ],
         DELIVERED: [{ value: "RETURNED", label: "Trả hàng" }],
@@ -170,15 +170,13 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       ],
       CONFIRMED: [
         { value: "PROCESSING", label: "Bắt đầu lấy hàng" },
-        { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       PROCESSING: [
-        { value: "PICKUP_COMPLETED", label: "Đã hoàn tất lấy hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       PICKUP_COMPLETED: [
-        { value: "IN_TRANSIT", label: "Đang giao hàng" },
+        { value: "SHIPPING", label: "Đang giao hàng" },
         { value: "CANCELLED", label: "Hủy đơn" },
       ],
       IN_TRANSIT: [
@@ -200,19 +198,20 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
       return;
     }
 
-    // ✅ Kiểm tra nếu chuyển sang IN_TRANSIT phải chọn Shipper
+    // ✅ Kiểm tra nếu chuyển sang SHIPPING phải chọn Shipper
     if (requiresCarrierSelection && !selectedShipper) {
       toast.error("Vui lòng chọn Shipper để giao hàng");
       return;
     }
 
-    // ✅ Kiểm tra nếu chuyển sang PICKING phải chọn Picker
+    // ✅ Đơn IN_STORE cần chỉ định Warehouse Manager
     if (requiresPickerSelection && !selectedPicker) {
-         // Warning but maybe allow optional? No, let's enforce for now.
-         // Actually, if they don't select, it just goes to "Picking" without specific assignment?
-         // Let's enforce assignment for better tracking.
-         toast.error("Vui lòng chọn Nhân viên kho để lấy hàng");
-         return;
+      toast.error(
+        isInStoreOrder
+          ? "Vui lòng chọn Warehouse Manager"
+          : "Vui lòng chọn nhân viên kho"
+      );
+      return;
     }
 
     setIsLoading(true);
@@ -334,15 +333,19 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
             </div>
           )}
 
-          {/* ✅ Dropdown chọn Picker (chỉ hiện khi chuyển sang PICKING) */}
+          {/* ✅ Dropdown chọn người phụ trách lấy hàng */}
           {requiresPickerSelection && (
             <div className="space-y-2">
-              <Label htmlFor="picker">Chọn Nhân viên kho (Picker) *</Label>
+              <Label htmlFor="picker">
+                {isInStoreOrder ? "Chọn Warehouse Manager *" : "Chọn nhân viên kho *"}
+              </Label>
               {isFetchingPickers ? (
                 <div className="flex items-center justify-center p-3 border rounded-md">
                   <AlertCircle className="w-4 h-4 animate-spin mr-2" />
                   <span className="text-sm text-muted-foreground">
-                    Đang tải danh sách Nhân viên kho...
+                    {isInStoreOrder
+                      ? "Đang tải danh sách Warehouse Manager..."
+                      : "Đang tải danh sách nhân viên kho..."}
                   </span>
                 </div>
               ) : (
@@ -353,7 +356,11 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
                     onChange={(e) => setSelectedPicker(e.target.value)}
                     className="w-full px-3 py-2 border rounded-md"
                   >
-                    <option value="">-- Chọn Nhân viên kho --</option>
+                    <option value="">
+                      {isInStoreOrder
+                        ? "-- Chọn Warehouse Manager --"
+                        : "-- Chọn nhân viên kho --"}
+                    </option>
                     {pickers.map((p) => (
                       <option key={p._id} value={p._id}>
                         {p.fullName} - {p.email}
@@ -363,7 +370,9 @@ const OrderStatusUpdateDialog = ({ order, open, onClose, onSuccess }) => {
                   {pickers.length === 0 && (
                     <p className="text-sm text-yellow-600 flex items-center gap-2 mt-1">
                       <AlertCircle className="w-4 h-4" />
-                      Không có Nhân viên kho nào khả dụng
+                      {isInStoreOrder
+                        ? "Không có Warehouse Manager khả dụng"
+                        : "Không có nhân viên kho khả dụng"}
                     </p>
                   )}
                 </>

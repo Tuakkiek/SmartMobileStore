@@ -92,6 +92,10 @@ export const authAPI = {
   getCurrentUser: () => api.get("/auth/me"),
   changePassword: (data) => api.put("/auth/change-password", data),
   updateAvatar: (avatar) => api.put("/auth/avatar", { avatar }),
+  checkCustomer: (phoneNumber) =>
+    api.get(`/auth/check-customer?phoneNumber=${phoneNumber}`),
+  quickRegister: (data) =>
+    api.post('/auth/quick-register', data),
 };
 
 // ============================================
@@ -120,6 +124,12 @@ export const orderAPI = {
   cancel: (id, data = {}) => api.post(`/orders/${id}/cancel`, data),
 };
 
+export const notificationAPI = {
+  getMyNotifications: (params) => api.get('/notifications/my-notifications', { params }),
+  markAsRead: (notificationId) => api.put(`/notifications/${notificationId}/read`),
+  markAllAsRead: () => api.put('/notifications/mark-all-read'),
+};
+
 // ============================================
 // POS API - ĐÃ ĐỒNG BỘ 100% VỚI posController.js
 // ============================================
@@ -146,6 +156,9 @@ export const posAPI = {
 
   // (Tùy chọn) Lấy chi tiết 1 đơn POS
   getOrderById: (orderId) => api.get(`/pos/orders/${orderId}`),
+
+  // Thu ngân hoàn tất đơn hàng (nhập IMEI & in)
+  finalizeOrder: (orderId, data) => api.put(`/pos/orders/${orderId}/finalize`, data),
 };
 
 // ============================================
@@ -393,6 +406,7 @@ export default {
   authAPI,
   cartAPI,
   orderAPI,
+  notificationAPI,
   posAPI,
   reviewAPI,
   promotionAPI,

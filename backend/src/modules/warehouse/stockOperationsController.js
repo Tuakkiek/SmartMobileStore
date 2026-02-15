@@ -129,6 +129,38 @@ export const pickItem = async (req, res) => {
       });
     }
 
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    const isInStoreOrder =
+      order.orderSource === "IN_STORE" || order.fulfillmentType === "IN_STORE";
+    if (isInStoreOrder) {
+      const assignedPickerId = order?.pickerInfo?.pickerId?.toString();
+      const actorId = req.user?._id?.toString();
+
+      if (!["WAREHOUSE_MANAGER", "ADMIN"].includes(req.user?.role)) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: "Đơn IN_STORE chỉ cho Warehouse Manager thao tác xuất kho",
+        });
+      }
+
+      if (assignedPickerId && actorId && assignedPickerId !== actorId) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: "Đơn này đã được gán cho Warehouse Manager khác",
+        });
+      }
+    }
+
     // Tìm inventory
     const location = await WarehouseLocation.findOne({ locationCode }).session(session);
     if (!location) {

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 export const ORDER_STATUSES = [
   "PENDING",
+  "PENDING_ORDER_MANAGEMENT", // ✅ NEW: POS Created, waiting for assignment
   "PENDING_PAYMENT",
   "PAYMENT_CONFIRMED",
   "PAYMENT_VERIFIED",
@@ -24,6 +25,7 @@ export const ORDER_STATUSES = [
 
 export const ORDER_STATUS_STAGES = [
   "PENDING",
+  "PENDING_ORDER_MANAGEMENT",
   "PENDING_PAYMENT",
   "PAYMENT_FAILED",
   "CONFIRMED",
@@ -37,6 +39,7 @@ export const ORDER_STATUS_STAGES = [
 
 export const STATUS_TO_STAGE = Object.freeze({
   PENDING: "PENDING",
+  PENDING_ORDER_MANAGEMENT: "PENDING_ORDER_MANAGEMENT",
   PENDING_PAYMENT: "PENDING_PAYMENT",
   PAYMENT_CONFIRMED: "PENDING",
   PAYMENT_VERIFIED: "PENDING",
@@ -135,6 +138,11 @@ const orderItemSchema = new mongoose.Schema(
     total: {
       type: Number,
       min: 0,
+    },
+    // ✅ ADDED: IMEI for POS orders
+    imei: {
+      type: String,
+      trim: true,
     },
   },
   { _id: true }
@@ -436,6 +444,39 @@ const orderSchema = new mongoose.Schema(
       pickedAt: Date,
       note: String,
     },
+
+    createdByInfo: {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      userName: String,
+      userRole: String
+    },
+
+    exchangeHistory: [
+      {
+        requestedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        requestedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        requestedByName: String,
+        reason: String,
+        previousStatus: String,
+        nextStatus: String,
+        restoredItems: [
+          {
+            sku: String,
+            locationCode: String,
+            quantity: Number,
+          },
+        ],
+      },
+    ],
 
     carrierAssignment: {
       carrierCode: {

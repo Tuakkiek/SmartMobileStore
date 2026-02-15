@@ -69,6 +69,13 @@ const OrderManagementPage = () => {
     return order?.statusStage || getStatusStage(order?.status) || "PENDING";
   };
 
+  const getImageUrl = (path) => {
+    if (!path) return "https://via.placeholder.com/100?text=No+Image";
+    if (path.startsWith("http")) return path;
+    const baseUrl = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+    return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+  };
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -122,18 +129,18 @@ const OrderManagementPage = () => {
         label: "Chờ thanh toán",
         icon: Clock,
       },
-      PAID: { 
-        color: "bg-emerald-50 text-emerald-700 border-emerald-200", 
+      PAID: {
+        color: "bg-emerald-50 text-emerald-700 border-emerald-200",
         label: "Đã thanh toán",
         icon: CheckCircle,
       },
-      FAILED: { 
-        color: "bg-red-50 text-red-700 border-red-200", 
+      FAILED: {
+        color: "bg-red-50 text-red-700 border-red-200",
         label: "Thất bại",
         icon: XCircle,
       },
-      REFUNDED: { 
-        color: "bg-slate-50 text-slate-700 border-slate-200", 
+      REFUNDED: {
+        color: "bg-slate-50 text-slate-700 border-slate-200",
         label: "Đã hoàn",
         icon: CheckCircle,
       },
@@ -371,7 +378,7 @@ const OrderManagementPage = () => {
                   </SelectContent>
                 </Select>
 
-                <Button 
+                <Button
                   onClick={handleSearch}
                   className="h-11 sm:h-12 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300 rounded-xl font-medium px-6"
                 >
@@ -482,7 +489,7 @@ const OrderManagementPage = () => {
                                     >
                                       <img
                                         className="w-full h-full object-contain p-2"
-                                        src={item.image || "/placeholder.png"}
+                                        src={getImageUrl(item.images?.[0] || item.image)}
                                         alt={item.name}
                                         onError={(e) => {
                                           e.target.src = "https://placehold.co/120x90/e2e8f0/64748b?text=No+Image";
@@ -630,8 +637,8 @@ const OrderManagementPage = () => {
                 <div className="lg:hidden p-4 sm:p-5">
                   <div className="space-y-4">
                     {orders.map((order, index) => (
-                      <Card 
-                        key={order._id} 
+                      <Card
+                        key={order._id}
                         className="overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border-slate-200 hover:border-blue-300"
                         style={{
                           animation: `fadeInUp 0.4s ease-out ${index * 0.05}s both`,
@@ -656,7 +663,7 @@ const OrderManagementPage = () => {
                             </div>
                           </div>
                         </CardHeader>
-                        
+
                         <CardContent className="p-4 space-y-4">
                           {/* Product Thumbnails */}
                           <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-lg p-3">
@@ -681,7 +688,7 @@ const OrderManagementPage = () => {
                                 >
                                   <img
                                     className="w-full h-full object-cover"
-                                    src={item.image || "/placeholder.png"}
+                                    src={getImageUrl(item.images?.[0] || item.image)}
                                     alt={item.name}
                                     onError={(e) => {
                                       e.target.src = "https://placehold.co/80x60/e2e8f0/64748b?text=?";

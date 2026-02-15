@@ -62,6 +62,18 @@ const notificationSchema = new mongoose.Schema(
       default: "SENT",
       index: true,
     },
+    isRead: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    readAt: {
+      type: Date,
+    },
+    readBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
     sentAt: {
       type: Date,
       default: Date.now,
@@ -79,6 +91,7 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipientType: 1, recipientRole: 1, createdAt: -1 });
 notificationSchema.index({ recipientUserId: 1, createdAt: -1 });
+notificationSchema.index({ recipientUserId: 1, isRead: 1, createdAt: -1 });
 
 export default
   mongoose.models.Notification ||

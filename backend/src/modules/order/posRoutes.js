@@ -12,6 +12,7 @@ import {
   cancelPendingOrder,
   issueVATInvoice,
   getPOSOrderHistory,
+  finalizePOSOrder, // ✅ ADDED
 } from "./posController.js";
 
 // DÙNG LẠI getOrderById từ orderController (đã có kiểm tra quyền + populate đầy đủ)
@@ -54,7 +55,9 @@ router.post("/orders/:orderId/vat", restrictTo("CASHIER", "ADMIN"), issueVATInvo
 // 8. Thu ngân / Admin xem toàn bộ lịch sử đơn POS (tất cả nhân viên)
 router.get("/history", restrictTo("CASHIER", "ADMIN","POS_STAFF"), getPOSOrderHistory);
 
-// ============================================
+// 9. Thu ngân hoàn tất đơn hàng (nhập IMEI & in)
+router.put("/orders/:orderId/finalize", restrictTo("CASHIER", "ADMIN"), finalizePOSOrder);
+
 // ROUTE CHUNG: Tìm kiếm + lọc lịch sử (dùng chung cho cả POS_STAFF và CASHIER)
 // ============================================
 

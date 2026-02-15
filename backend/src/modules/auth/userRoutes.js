@@ -30,7 +30,7 @@ router.put("/addresses/:addressId", restrictTo("CUSTOMER"), updateAddress);
 router.delete("/addresses/:addressId", restrictTo("CUSTOMER"), deleteAddress);
 
 // Admin/Manager routes
-router.get("/employees", restrictTo("ADMIN", "PRODUCT_MANAGER"), getAllEmployees);
+router.get("/employees", restrictTo("ADMIN", "PRODUCT_MANAGER", "ORDER_MANAGER"), getAllEmployees);
 
 // ✅ NEW: Get all shippers (for Order Manager to assign)
 router.get("/shippers", restrictTo("ADMIN", "ORDER_MANAGER"), getAllShippers);

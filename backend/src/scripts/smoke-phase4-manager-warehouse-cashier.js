@@ -69,12 +69,18 @@ const run = async () => {
     const cashierUser =
       (await User.findOne({ role: "CASHIER" }).select("_id role fullName name")) ||
       (await User.findOne({ role: "ADMIN" }).select("_id role fullName name"));
+    const warehouseUser =
+      (await User.findOne({ role: "WAREHOUSE_MANAGER" }).select("_id role fullName name")) ||
+      (await User.findOne({ role: "ADMIN" }).select("_id role fullName name"));
 
     assert(managerUser, "No ORDER_MANAGER/ADMIN user found");
     assert(cashierUser, "No CASHIER/ADMIN user found");
+    // warehouseUser might be same as managerUser if ADMIN is used, that's fine.
+
     log("Users resolved", {
       managerRole: managerUser.role,
       cashierRole: cashierUser.role,
+      warehouseRole: warehouseUser?.role,
     });
 
     const nowSuffix = Date.now();
@@ -172,15 +178,31 @@ const run = async () => {
     const progressToCashier = async (orderId) => {
       const statuses = ["PICKING", "PICKUP_COMPLETED", "PENDING_PAYMENT"];
       for (const status of statuses) {
+        const body = { status, note: `Smoke move to ${status}` };
+        let userToUse = managerUser;
+
+        if (status === "PICKING") {
+          body.pickerId = warehouseUser._id;
+        }
+
+        // PICKUP_COMPLETED and PENDING_PAYMENT managed by Warehouse in this flow
+        if (status === "PICKUP_COMPLETED" || status === "PENDING_PAYMENT") {
+             userToUse = warehouseUser;
+        }
+
         const res = await invokeController(updateOrderStatus, {
           params: { id: String(orderId) },
-          body: { status, note: `Smoke move to ${status}` },
+          body,
           user: {
-            _id: managerUser._id,
-            role: managerUser.role,
-            fullName: managerUser.fullName || managerUser.name || "Manager",
+            _id: userToUse._id,
+            role: userToUse.role,
+            fullName: userToUse.fullName || userToUse.name || "User",
           },
         });
+        
+        if (res.statusCode !== 200) {
+            console.error(`FAILED updateOrderStatus(${status})`, JSON.stringify(res.payload, null, 2));
+        }
         assert(res.statusCode === 200, `updateOrderStatus(${status}) failed`);
       }
     };

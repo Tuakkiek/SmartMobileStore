@@ -46,6 +46,7 @@ import ShipperDashboard from "@/pages/shipper/ShipperDashboard";
 
 import POSDashboard from "@/pages/pos-staff/POSDashboard";
 import POSOrderHistory from "@/pages/pos-staff/POSOrderHistory";
+import POSOrderHandover from "@/pages/pos-staff/POSOrderHandover";
 
 import CASHIERDashboard from "@/pages/cashier/CASHIERDashboard";
 import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
@@ -286,6 +287,7 @@ function App() {
         >
           <Route path="/pos/dashboard" element={<POSDashboard />} />
           <Route path="/pos/orders" element={<POSOrderHistory />} />
+          <Route path="/pos-staff/handover/:orderId" element={<POSOrderHandover />} />
         </Route>
 
         {/* ========================================
@@ -299,7 +301,9 @@ function App() {
           }
         >
           <Route path="/cashier/dashboard" element={<CASHIERDashboard />} />
+          <Route path="/CASHIER/dashboard" element={<CASHIERDashboard />} />
           <Route path="/cashier/vat-invoices" element={<VATInvoicesPage />} />
+          <Route path="/CASHIER/vat-invoices" element={<VATInvoicesPage />} />
         </Route>
 
         {/* ========================================

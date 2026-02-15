@@ -93,43 +93,82 @@ const CASHIERDashboard = () => {
     setShowPaymentDialog(true);
   };
 
-  const handleProcessPayment = async () => {
+  const handleNavigateToEditInvoice = () => {
     const received = parseFloat(paymentReceived);
 
     if (!received || received < selectedOrder.totalAmount) {
       toast.error("Số tiền thanh toán không đủ");
       return;
     }
+
+    // Prepare temporary order object for checking/editing before processing
+    const orderWithPaymentInfo = {
+      ...selectedOrder,
+      posInfo: {
+        ...selectedOrder.posInfo,
+        paymentReceived: received,
+        changeGiven: received - selectedOrder.totalAmount,
+      },
+      items: selectedOrder.items.map((item) => ({
+        ...item,
+        imei: item.imei || "",
+      })),
+    };
+
+    setOrderToPrint(orderWithPaymentInfo);
+    setShowPaymentDialog(false);
+    setShowEditInvoice(true);
+  };
+
+  const handleConfirmPaymentAndFinalize = async (editableData) => {
     setIsLoading(true);
     try {
-      const response = await posAPI.processPayment(selectedOrder._id, {
-        paymentReceived: received,
+      // 1. Process Payment
+      const paymentResponse = await posAPI.processPayment(selectedOrder._id, {
+        paymentReceived: parseFloat(editableData.paymentReceived),
       });
 
-      toast.success("Thanh toán thành công!");
-      setShowPaymentDialog(false);
+      // 2. Finalize Order (update info)
+      await posAPI.finalizeOrder(selectedOrder._id, {
+        items: editableData.items,
+        customerInfo: {
+          name: editableData.customerName,
+          phone: editableData.customerPhone,
+          address: editableData.customerAddress, // Ensure backend supports this if needed, or just standard fields
+        },
+      });
+
+      toast.success("Thanh toán và lưu đơn hàng thành công!");
       fetchPendingOrders(pagination.currentPage);
-
-      const orderWithIMEI = {
-        ...response.data.data.order,
-        items: response.data.data.order.items.map((item) => ({
-          ...item,
-          imei: item.imei || "",
-        })),
+      
+      // Update orderToPrint with finalized data for receipt
+      // merging response data might be safer, but editableData has the latest from user
+      const finalizedOrder = {
+        ...orderToPrint,
+        ...editableData,
+        _id: selectedOrder._id, // ensure ID is preserved
+        createdAt: new Date(), // update time to now
       };
-
-      setOrderToPrint(orderWithIMEI);
-      setShowEditInvoice(true);
+       setOrderToPrint(finalizedOrder);
+       return true; // Signal success to dialog
     } catch (error) {
-      console.error("Lỗi thanh toán:", error);
-      toast.error(error.response?.data?.message || "Thanh toán thất bại");
+      console.error("Lỗi xử lý thanh toán:", error);
+      toast.error(error.response?.data?.message || "Xử lý thanh toán thất bại");
+      return false; // Signal failure
     } finally {
       setIsLoading(false);
     }
   };
 
   const handlePrintInvoice = async (editableData) => {
-    const invoiceHTML = `
+    try {
+      // setIsLoading(true); // No longer doing async work here
+      // Order is already finalized in handleConfirmPaymentAndFinalize
+      
+      // Tiếp tục in hóa đơn
+      
+      // Tiếp tục in hóa đơn
+      const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -305,19 +344,25 @@ const CASHIERDashboard = () => {
       </html>
     `;
 
-    const printWindow = window.open("", "", "width=800,height=1000");
-    if (!printWindow) {
-      toast.error("Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.");
-      return;
-    }
+      const printWindow = window.open("", "", "width=800,height=1000");
+      if (!printWindow) {
+        toast.error("Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.");
+        return;
+      }
 
-    printWindow.document.write(invoiceHTML);
-    printWindow.document.close();
-    printWindow.focus();
+      printWindow.document.write(invoiceHTML);
+      printWindow.document.close();
+      printWindow.focus();
 
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+      setTimeout(() => {
+        printWindow.print();
+        setShowEditInvoice(false); // Close dialog upon successful print initiation
+      }, 500);
+
+    } catch (error) {
+      console.error("Print Error:", error);
+      toast.error("Lỗi khi mở cửa sổ in");
+    } 
   };
 
   const handleCancelOrder = async (orderId) => {
@@ -646,8 +691,8 @@ const CASHIERDashboard = () => {
             >
               Hủy
             </Button>
-            <Button onClick={handleProcessPayment} disabled={isLoading}>
-              {isLoading ? "Đang xử lý..." : "Xác nhận thanh toán"}
+            <Button onClick={handleNavigateToEditInvoice} disabled={isLoading}>
+              Chỉnh sửa hóa đơn
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -716,6 +761,7 @@ const CASHIERDashboard = () => {
         onOpenChange={setShowEditInvoice}
         order={orderToPrint}
         onPrint={handlePrintInvoice}
+        onConfirmPayment={handleConfirmPaymentAndFinalize}
         isLoading={isLoading}
       />
     </div>

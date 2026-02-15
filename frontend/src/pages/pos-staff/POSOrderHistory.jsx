@@ -40,7 +40,10 @@ import {
   getStatusText,
 } from "@/lib/utils";
 
+import { useNavigate } from "react-router-dom"; // Added import
+
 const POSOrderHistory = () => {
+  const navigate = useNavigate(); // Added hook
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -61,11 +64,10 @@ const POSOrderHistory = () => {
 
   // Helper: Lấy URL ảnh
   const getImageUrl = (path) => {
-    if (!path) return "https://via.placeholder.com/64?text=No+Image";
+    if (!path) return "https://via.placeholder.com/100?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${
-      path.startsWith("/") ? "" : "/"
-    }${path}`;
+    const baseUrl = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+    return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
   };
 
   const resolveOrderStage = (order) => {
@@ -417,6 +419,18 @@ const POSOrderHistory = () => {
                         >
                           <Eye className="w-4 h-4 mr-2" /> Chi tiết
                         </Button>
+                        {/* ✅ Handover Action */}
+                        {(order.status === "PREPARING_SHIPMENT" || order.statusStage === "PICKUP_COMPLETED") &&
+                          order.orderSource === "IN_STORE" && (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => navigate(`/pos-staff/handover/${order._id}`)}
+                            >
+                              <Package className="w-4 h-4 mr-2" />
+                              Nhận bàn giao
+                            </Button>
+                          )}
                       </div>
                     </div>
 

@@ -334,6 +334,101 @@ export const updateAvatar = async (req, res) => {
   }
 };
 
+const buildCustomerDefaultPassword = (fullName, phoneNumber) => {
+  const compactName = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join("");
+  const last3Digits = phoneNumber.slice(-3);
+  return `${compactName}@${last3Digits}`;
+};
+
+export const checkCustomerByPhone = async (req, res) => {
+  try {
+    const { phoneNumber } = req.query;
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number required",
+      });
+    }
+
+    const user = await User.findOne({
+      phoneNumber: phoneNumber.trim(),
+      role: "CUSTOMER",
+    }).select("_id fullName email phoneNumber");
+
+    res.json({
+      success: true,
+      exists: !!user,
+      customer: user || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const quickRegisterCustomer = async (req, res) => {
+  try {
+    const { fullName, phoneNumber } = req.body;
+    const normalizedName = fullName?.trim();
+    const normalizedPhone = phoneNumber?.trim();
+
+    if (!normalizedName || !normalizedPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Full name and phone number required",
+      });
+    }
+
+    const existing = await User.findOne({ phoneNumber: normalizedPhone });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number already registered",
+      });
+    }
+
+    const generatedPassword = buildCustomerDefaultPassword(
+      normalizedName,
+      normalizedPhone
+    );
+
+    // console.log("Account created with password:", generatedPassword); // For debug if needed
+
+    const user = await User.create({
+      fullName: normalizedName,
+      phoneNumber: normalizedPhone,
+      email: `${normalizedPhone}@temp.com`,
+      password: generatedPassword,
+      role: "CUSTOMER",
+      isActive: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Customer account created",
+      customer: {
+        _id: user._id,
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber,
+      },
+      temporaryPassword: generatedPassword,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export default {
   register,
   login,
@@ -341,4 +436,6 @@ export default {
   getCurrentUser,
   changePassword,
   updateAvatar,
+  checkCustomerByPhone,
+  quickRegisterCustomer,
 };

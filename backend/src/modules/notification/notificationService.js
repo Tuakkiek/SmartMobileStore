@@ -364,7 +364,122 @@ export const sendReplenishmentSummaryNotification = async ({
   }
 };
 
+export const notifyPOSStaffOrderReady = async ({ order, pickerInfo }) => {
+  if (!order?.createdByInfo?.userId) {
+    return null;
+  }
+
+  try {
+    const notification = await Notification.create({
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      eventType: "ORDER_READY_FOR_POS",
+      stage: "PICKUP_COMPLETED",
+      recipientType: "SYSTEM",
+      recipientUserId: order.createdByInfo.userId,
+      recipientRole: "POS_STAFF",
+      channels: ["IN_APP"],
+      title: "Order Ready for Customer Handover",
+      message: `Order ${order.orderNumber} has been picked and is ready for customer handover`,
+      status: "SENT",
+      sentAt: new Date(),
+      metadata: {
+        pickerName: pickerInfo?.pickerName,
+        pickerId: pickerInfo?.pickerId,
+        orderItems: order.items?.map(item => ({
+          productName: item.productName,
+          variantSku: item.variantSku,
+          quantity: item.quantity,
+          image: item.images?.[0]
+        }))
+      }
+    });
+
+    return notification;
+  } catch (error) {
+    omniLog.error("notifyPOSStaffOrderReady failed", {
+      orderId: order._id,
+      error: error.message
+    });
+    return null;
+  }
+};
+
+export const notifyOrderManagerPendingInStoreOrder = async ({ order }) => {
+  if (!order?._id) {
+    return null;
+  }
+
+  try {
+    const notification = await Notification.create({
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      eventType: "IN_STORE_ORDER_PENDING_REVIEW",
+      stage: "PENDING",
+      recipientType: "SYSTEM",
+      recipientRole: "ORDER_MANAGER",
+      channels: ["IN_APP"],
+      title: "New In-Store Transfer Order",
+      message: `Order ${order.orderNumber} is waiting for Order Manager review and warehouse assignment`,
+      status: "SENT",
+      sentAt: new Date(),
+      metadata: {
+        orderSource: order.orderSource,
+        customerName: order.shippingAddress?.fullName,
+        customerPhone: order.shippingAddress?.phoneNumber,
+        createdBy: order.createdByInfo?.userName,
+      },
+    });
+
+    return notification;
+  } catch (error) {
+    omniLog.error("notifyOrderManagerPendingInStoreOrder failed", {
+      orderId: order._id,
+      error: error.message,
+    });
+    return null;
+  }
+};
+
+export const notifyOrderManagerExchangeRequested = async ({ order, reason }) => {
+  if (!order?._id) {
+    return null;
+  }
+
+  try {
+    const notification = await Notification.create({
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      eventType: "IN_STORE_ORDER_EXCHANGE_REQUESTED",
+      stage: "CONFIRMED",
+      recipientType: "SYSTEM",
+      recipientRole: "ORDER_MANAGER",
+      channels: ["IN_APP"],
+      title: "Device Change Requested",
+      message: `Order ${order.orderNumber} has a device change request and must be re-assigned to warehouse`,
+      status: "SENT",
+      sentAt: new Date(),
+      metadata: {
+        reason,
+        orderSource: order.orderSource,
+        createdBy: order.createdByInfo?.userName,
+      },
+    });
+
+    return notification;
+  } catch (error) {
+    omniLog.error("notifyOrderManagerExchangeRequested failed", {
+      orderId: order._id,
+      error: error.message,
+    });
+    return null;
+  }
+};
+
 export default {
   sendOrderStageNotifications,
   sendReplenishmentSummaryNotification,
+  notifyPOSStaffOrderReady,
+  notifyOrderManagerPendingInStoreOrder,
+  notifyOrderManagerExchangeRequested,
 };

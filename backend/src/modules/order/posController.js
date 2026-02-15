@@ -5,13 +5,17 @@
 
 import mongoose from "mongoose";
 import Order, { mapStatusToStage } from "./Order.js";
+import User from "../auth/User.js";
 import UniversalProduct, {
   UniversalVariant,
 } from "../product/UniversalProduct.js";
 import Inventory from "../warehouse/Inventory.js";
 import WarehouseLocation from "../warehouse/WarehouseLocation.js";
 import StockMovement from "../warehouse/StockMovement.js";
-import { sendOrderStageNotifications } from "../notification/notificationService.js";
+import {
+  notifyOrderManagerPendingInStoreOrder,
+  sendOrderStageNotifications,
+} from "../notification/notificationService.js";
 
 const getModelsByType = (productType) => {
   // Unified catalog: all product types now point to Universal models
@@ -32,6 +36,8 @@ export const createPOSOrder = async (req, res) => {
   try {
     const { items, customerInfo, storeLocation, totalAmount, promotionCode } =
       req.body;
+    const customerPhone = String(customerInfo?.phoneNumber || "").trim();
+    const customerName = String(customerInfo?.fullName || "").trim();
 
     if (!items?.length) {
       await session.abortTransaction();
@@ -39,13 +45,25 @@ export const createPOSOrder = async (req, res) => {
         .status(400)
         .json({ success: false, message: "Giỏ hàng trống" });
     }
-    if (!customerInfo?.fullName || !customerInfo?.phoneNumber) {
+    if (!customerName || !customerPhone) {
       await session.abortTransaction();
       return res
         .status(400)
         .json({ success: false, message: "Thiếu thông tin khách hàng" });
     }
+    const customer = await User.findOne({
+      phoneNumber: customerPhone,
+      role: "CUSTOMER",
+    }).session(session);
 
+    if (!customer) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message:
+          "Khach hang chua co tai khoan. Vui long tao tai khoan truoc khi tao don.",
+      });
+    }
     const orderItems = [];
     let subtotal = 0;
 
@@ -106,11 +124,15 @@ export const createPOSOrder = async (req, res) => {
       const itemTotal = price * quantity;
       subtotal += itemTotal;
 
+      const images = variant.images || product.featuredImages || [];
+      const image = images.length > 0 ? images[0] : "";
+
       orderItems.push({
         productId: product._id,
         variantId: variant._id,
         productType,
         productName: product.name,
+        name: product.name, // Ensure compatible naming
         variantSku: variant.sku,
         variantColor: variant.color || "",
         variantStorage: variant.storage || "",
@@ -122,7 +144,9 @@ export const createPOSOrder = async (req, res) => {
         price,
         originalPrice,
         total: itemTotal,
-        images: variant.images || [],
+        subtotal: itemTotal,
+        images: images,
+        image: image,
       });
     }
 
@@ -137,22 +161,23 @@ export const createPOSOrder = async (req, res) => {
       .padStart(3, "0");
     const orderNumber = `POS-${datePart}-${Date.now().toString().slice(-6)}${randomPart}`;
 
-    const status = req.body.instantFulfillment ? "DELIVERED" : "CONFIRMED";
-    const paymentStatus = req.body.instantFulfillment ? "PAID" : "UNPAID";
-    const paidAt = req.body.instantFulfillment ? new Date() : null;
-    const deliveredAt = req.body.instantFulfillment ? new Date() : null;
+    const status = "PENDING_ORDER_MANAGEMENT"; // ✅ NEW STATUS
+    const paymentStatus = "UNPAID";
+    const paidAt = null;
+    const deliveredAt = null;
 
-    const order = await Order.create(
+    const order = (
+      await Order.create(
       [
         {
           orderNumber,
           orderSource: "IN_STORE",
           fulfillmentType: "IN_STORE",
-          customerId: req.user._id,
+            customerId: customer._id,
           items: orderItems,
           shippingAddress: {
-            fullName: customerInfo.fullName,
-            phoneNumber: customerInfo.phoneNumber,
+              fullName: customerName,
+              phoneNumber: customerPhone,
             province: storeLocation || "Cần Thơ",
             ward: "Ninh Kiều",
             detailAddress: "Mua tại cửa hàng",
@@ -174,28 +199,42 @@ export const createPOSOrder = async (req, res) => {
             staffName: req.user.fullName,
             storeLocation: storeLocation || "Ninh Kiều iStore",
             receiptNumber,
-            // For instant fulfillment, implied cashier is same as staff or auto-verified
-            paymentReceived: req.body.instantFulfillment ? finalTotal : 0,
+            paymentReceived: 0,
             changeGiven: 0,
+          },
+          createdByInfo: {
+            userId: req.user._id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
           },
         },
       ],
       { session }
-    );
+      )
+    )[0];
+
+    order.createdByInfo = {
+      userId: req.user._id,
+      userName: req.user.fullName || req.user.name,
+      userRole: req.user.role
+    };
+    await order.save({ session });
 
     await session.commitTransaction();
 
     await sendOrderStageNotifications({
-      order: order[0],
+      order,
       previousStage: "PENDING",
       triggeredBy: req.user?._id,
       source: "create_pos_order",
     });
+    // Notification for Order Manager
+    await notifyOrderManagerPendingInStoreOrder({ order });
 
     res.status(201).json({
       success: true,
-      message: "Tạo đơn thành công. Đã chuyển cho kho lấy hàng.",
-      data: { order: order[0] },
+      message: "Da tao don chuyen kho thanh cong. Don dang cho Order Manager xu ly.",
+      data: { order },
     });
   } catch (error) {
     await session.abortTransaction();
@@ -216,7 +255,13 @@ export const getPendingOrders = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const query = {
       orderSource: "IN_STORE",
-      $or: [{ statusStage: "PENDING_PAYMENT" }, { status: "PENDING_PAYMENT" }],
+      $or: [
+        { statusStage: "PENDING_PAYMENT" },
+        { status: "PENDING_PAYMENT" },
+        { status: "PROCESSING" }, // ✅ ADDED: Include paid but not finalized orders
+        { status: "PENDING_ORDER_MANAGEMENT" }, // ✅ ADDED: Allow new orders
+        { statusStage: "PENDING_ORDER_MANAGEMENT" },
+      ],
     };
 
     const [orders, total] = await Promise.all([
@@ -275,7 +320,12 @@ export const processPayment = async (req, res) => {
     }
 
     const currentStage = resolveOrderStage(order);
-    if (currentStage !== "PENDING_PAYMENT") {
+    if (
+      currentStage !== "PENDING_PAYMENT" &&
+      currentStage !== "PENDING_ORDER_MANAGEMENT" && // ✅ ALLOW NEW STATUS
+      order.paymentStatus !== "PENDING" &&
+      order.paymentStatus !== "UNPAID" // ✅ ALLOW UNPAID
+    ) {
       return res
         .status(400)
         .json({
@@ -292,24 +342,8 @@ export const processPayment = async (req, res) => {
 
     const changeGiven = paymentReceived - order.totalAmount;
 
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const lastInvoice = await Order.findOne({
-      "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
-    }).sort({ "paymentInfo.invoiceNumber": -1 });
-
-    let seq = 1;
-    if (lastInvoice?.paymentInfo?.invoiceNumber) {
-      const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
-      if (!isNaN(lastSeq)) seq = lastSeq + 1;
-    }
-    const invoiceNumber = `INV${year}${month}${seq
-      .toString()
-      .padStart(6, "0")}`;
-
     order.paymentStatus = "PAID";
-    order.status = "DELIVERED";
+    order.status = "PROCESSING"; // ✅ CHANGED: Wait for IMEI update before DELIVERED
 
     if (!order.posInfo) {
       order.posInfo = {};
@@ -324,14 +358,13 @@ export const processPayment = async (req, res) => {
       processedAt: new Date(),
       paymentReceived,
       changeGiven,
-      invoiceNumber,
     };
 
     order.statusHistory.push({
-      status: "DELIVERED",
+      status: "PROCESSING",
       updatedBy: req.user._id,
       updatedAt: new Date(),
-      note: `Đã thanh toán - Hóa đơn ${invoiceNumber} - Thu ngân: ${req.user.fullName}`,
+      note: `Đã thanh toán - Thu ngân: ${req.user.fullName} - Chờ nhập IMEI`,
     });
 
     await order.save();
@@ -345,12 +378,132 @@ export const processPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Thanh toán thành công!",
+      message: "Thanh toán thành công! Vui lòng nhập IMEI để hoàn tất.",
       data: { order },
     });
   } catch (error) {
     console.error("PROCESS PAYMENT ERROR:", error);
     res.status(500).json({ success: false, message: "Lỗi xử lý thanh toán" });
+  }
+};
+
+// ============================================
+// 4. HOÀN TẤT ĐƠN HÀNG (NHẬP IMEI & IN HÓA ĐƠN)
+// ============================================
+export const finalizePOSOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { orderId } = req.params;
+    const { items, customerInfo } = req.body;
+
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+    }
+
+    if (order.status !== "PROCESSING" && order.status !== "PENDING_PAYMENT") {
+       // Allow finalizing if it's processing or pending payment (if paid via other means?)
+       // But strictly for this flow, it should be PROCESSING or PAID.
+       if (order.paymentStatus !== "PAID") {
+          await session.abortTransaction();
+          return res.status(400).json({ success: false, message: "Đơn hàng chưa được thanh toán" });
+       }
+    }
+
+    // Update Items with IMEI
+    if (items && items.length > 0) {
+      // Create a map for easier lookup
+      const itemMap = new Map(items.map(i => [String(i._id) || String(i.variantId), i]));
+
+      for (const orderItem of order.items) {
+        // Try to find matching item by specific ID or variantID
+        let updateItem = itemMap.get(String(orderItem._id));
+        if (!updateItem) updateItem = itemMap.get(String(orderItem.variantId));
+        
+        if (updateItem) {
+          if (updateItem.imei) orderItem.imei = updateItem.imei; // Assuming schema supports it, wait, simple Order items usually don't have IMEI in basic schema?
+          // The current schema in Order.js doesn't show IMEI in orderItemSchema!
+          // Wait, I need to check if orderItemSchema supports IMEI.
+          // Viewing Order.js line 83-144... NO IMEI FIELD!
+          // BUT the user script in EditInvoiceDialog uses `item.imei`.
+          // If the schema doesn't have it, it won't be saved.
+          
+          // CRITICAL: Check Order.js schema again. 
+          // I see `variantSku`, `variantColor`... but NO `imei`.
+          // However, lines 233 in CASHIERDashboard says `${item.imei || "N/A"}`.
+          // So maybe it's in `variantId` populate? No, that's stock.
+          // Maybe `Order` items should have `imei`.
+          
+          // Wait, if Order schema doesn't have IMEI, where is it stored?
+          // User said: "chưa nhập IMEI máy".
+          // In online orders, IMEI is usually selected during fulfillment.
+          // Here, we manually enter it. 
+          // I MUST ADD IMEI TO ORDER SCHEMA if it's missing.
+        }
+      }
+    }
+    
+    // Check Order.js for IMEI.
+    // It is MISSING.
+    // I will need to update Order.js too.
+
+    // Calculate Invoce Number if not exists
+    if (!order.paymentInfo || !order.paymentInfo.invoiceNumber) {
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const lastInvoice = await Order.findOne({
+        "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
+        }).sort({ "paymentInfo.invoiceNumber": -1 }).session(session);
+
+        let seq = 1;
+        if (lastInvoice?.paymentInfo?.invoiceNumber) {
+        const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
+        if (!isNaN(lastSeq)) seq = lastSeq + 1;
+        }
+        const invoiceNumber = `INV${year}${month}${seq
+        .toString()
+        .padStart(6, "0")}`;
+        
+        if (!order.paymentInfo) order.paymentInfo = {};
+        order.paymentInfo.invoiceNumber = invoiceNumber;
+    }
+
+    order.status = "DELIVERED";
+    order.deliveredAt = new Date();
+    
+    // Update Customer Info if changed
+    if (customerInfo) {
+        if (customerInfo.name) order.shippingAddress.fullName = customerInfo.name;
+        if (customerInfo.phone) order.shippingAddress.phoneNumber = customerInfo.phone;
+        // Address update if needed
+    }
+
+    order.statusHistory.push({
+      status: "DELIVERED",
+      updatedBy: req.user._id,
+      updatedAt: new Date(),
+      note: `Hoàn tất đơn hàng - Hóa đơn ${order.paymentInfo.invoiceNumber}`,
+    });
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    res.json({
+      success: true,
+      message: "Đơn hàng đã hoàn tất!",
+      data: { order },
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("FINALIZE ORDER ERROR:", error);
+    res.status(500).json({ success: false, message: "Lỗi hoàn tất đơn hàng" });
+  } finally {
+      session.endSession();
   }
 };
 
@@ -764,6 +917,5 @@ export default {
   issueVATInvoice,
   getPOSOrderHistory,
   getPOSStats, // ✅ NEW
+  finalizePOSOrder, // ✅ ADDED
 };
-
-

@@ -27,12 +27,12 @@ router.post("/:id/cancel", orderController.cancelOrder);
 
 router.patch(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "SHIPPER"),
+  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "SHIPPER", "POS_STAFF"),
   orderController.updateOrderStatus
 );
 router.put(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "SHIPPER"),
+  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "SHIPPER", "POS_STAFF"),
   orderController.updateOrderStatus
 );
 

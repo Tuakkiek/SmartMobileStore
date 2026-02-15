@@ -18,6 +18,7 @@ const EditInvoiceDialog = ({
   onOpenChange,
   order,
   onPrint,
+  onConfirmPayment,
   isLoading,
 }) => {
   const [editableData, setEditableData] = useState({
@@ -72,8 +73,18 @@ const EditInvoiceDialog = ({
     }));
   };
 
-  const handlePreview = () => {
-    setShowPreview(true);
+
+
+  const handleConfirm = async () => {
+    if (onConfirmPayment) {
+      const success = await onConfirmPayment(editableData);
+      if (success) {
+        setShowPreview(true);
+      }
+    } else {
+      // Fallback or old behavior if needed, but for now we expect onConfirmPayment
+      setShowPreview(true);
+    }
   };
 
   const handlePrint = () => {
@@ -98,8 +109,8 @@ const EditInvoiceDialog = ({
             <Button variant="outline" onClick={() => setShowPreview(false)}>
               Quay lại chỉnh sửa
             </Button>
-            <Button onClick={handlePrint} disabled={isLoading}>
-              {isLoading ? "Đang in..." : "In hóa đơn"}
+            <Button onClick={handlePrint}>
+              In hóa đơn
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -124,14 +135,16 @@ const EditInvoiceDialog = ({
               <Label>Tên khách hàng</Label>
               <Input
                 value={editableData.customerName}
-                onChange={(e) => handleChange("customerName", e.target.value)}
+                readOnly
+                className="bg-muted"
               />
             </div>
             <div>
               <Label>Số điện thoại</Label>
               <Input
                 value={editableData.customerPhone}
-                onChange={(e) => handleChange("customerPhone", e.target.value)}
+                readOnly
+                className="bg-muted"
               />
             </div>
           </div>
@@ -171,13 +184,8 @@ const EditInvoiceDialog = ({
                       <Input
                         type="number"
                         value={item.quantity}
-                        onChange={(e) =>
-                          handleItemChange(
-                            index,
-                            "quantity",
-                            parseInt(e.target.value)
-                          )
-                        }
+                        readOnly
+                        className="bg-muted"
                       />
                     </div>
                     <div>
@@ -185,13 +193,8 @@ const EditInvoiceDialog = ({
                       <Input
                         type="number"
                         value={item.price}
-                        onChange={(e) =>
-                          handleItemChange(
-                            index,
-                            "price",
-                            parseFloat(e.target.value)
-                          )
-                        }
+                        readOnly
+                        className="bg-muted"
                       />
                     </div>
                   </div>
@@ -207,9 +210,8 @@ const EditInvoiceDialog = ({
               <Input
                 type="number"
                 value={editableData.paymentReceived}
-                onChange={(e) =>
-                  handleChange("paymentReceived", parseFloat(e.target.value))
-                }
+                readOnly
+                className="bg-muted"
               />
             </div>
             <div>
@@ -233,7 +235,9 @@ const EditInvoiceDialog = ({
           >
             Hủy
           </Button>
-          <Button onClick={handlePreview}>Xem trước & In</Button>
+          <Button onClick={handleConfirm} disabled={isLoading}>
+            {isLoading ? "Đang xử lý..." : "Xác nhận thanh toán và xem hóa đơn"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

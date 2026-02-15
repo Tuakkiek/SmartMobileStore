@@ -47,13 +47,24 @@ const PickOrdersPage = () => {
       const uniqueById = Array.from(
         new Map(merged.map((order) => [order._id, order])).values()
       );
-      setOrders(uniqueById);
+      const visibleOrders =
+        user?.role === "WAREHOUSE_STAFF"
+          ? uniqueById.filter(
+              (order) =>
+                order.orderSource !== "IN_STORE" &&
+                order.fulfillmentType !== "IN_STORE"
+            )
+          : uniqueById;
+      setOrders(visibleOrders);
     } catch { toast.error("Không thể tải đơn hàng"); } finally { setLoading(false); }
   };
 
   const getFilteredOrders = () => {
       if (filterMode === "ALL") return orders;
-      return orders.filter(o => o.pickerInfo?.pickerId === user?._id);
+      return orders.filter(
+        (o) =>
+          o?.pickerInfo?.pickerId?.toString?.() === user?._id?.toString?.()
+      );
   };
 
   const loadPickList = async (id) => {
@@ -99,18 +110,18 @@ const PickOrdersPage = () => {
       selectedOrder.orderSource === "IN_STORE" ||
       selectedOrder.fulfillmentType === "IN_STORE";
 
-    return isInStoreOrder ? "PENDING_PAYMENT" : "PICKUP_COMPLETED";
+    return isInStoreOrder ? "PREPARING_SHIPMENT" : "PICKUP_COMPLETED";
   };
 
   const handleFinalizePick = async () => {
     if (!selectedOrder?._id) {
-      toast.error("Không xác định đơn hàng cần cập nhật");
+      toast.error("Không xác định được đơn hàng");
       return;
     }
 
     const nextStatus = getNextStatusAfterPick();
     if (!nextStatus) {
-      toast.error("Không xác định trạng thái sau khi lấy hàng");
+      toast.error("Không xác định được trạng thái tiếp theo");
       return;
     }
 
@@ -118,16 +129,14 @@ const PickOrdersPage = () => {
     try {
       await api.put(`/orders/${selectedOrder._id}/status`, {
         status: nextStatus,
-        note:
-          nextStatus === "PENDING_PAYMENT"
-            ? "Kho đã lấy hàng xong, chuyển thu ngân thanh toán"
-            : "Kho đã hoàn tất lấy hàng, sẵn sàng giao shipper",
+        note: "Warehouse completed picking, ready for POS staff handover",
+        notifyPOS: nextStatus === "PREPARING_SHIPMENT",
       });
 
       toast.success(
-        nextStatus === "PENDING_PAYMENT"
-          ? "Đã chuyển đơn cho thu ngân"
-          : "Đã cập nhật đơn: Hoàn tất lấy hàng"
+        nextStatus === "PREPARING_SHIPMENT"
+          ? "Đã báo POS staff nhận bàn giao"
+          : "Đã cập nhật: Hoàn tất lấy hàng"
       );
       navigate("/warehouse-staff");
     } catch (e) {
@@ -329,7 +338,7 @@ const PickOrdersPage = () => {
     const isFailed = pickList.length === 0;
     const nextStatus = getNextStatusAfterPick();
     const nextStatusLabel =
-      nextStatus === "PENDING_PAYMENT" ? "Chờ thu ngân thanh toán" : "Đã hoàn tất lấy hàng";
+      nextStatus === "PREPARING_SHIPMENT" ? "POS bàn giao cho khách" : "Đã hoàn tất lấy hàng";
 
     return (
       <div className="container mx-auto px-4 py-8">

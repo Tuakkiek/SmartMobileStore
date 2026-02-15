@@ -5,9 +5,16 @@ import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.
 import Store from "../store/Store.js";
 import User from "../auth/User.js";
 import Cart from "../cart/Cart.js";
+import Inventory from "../warehouse/Inventory.js";
+import WarehouseLocation from "../warehouse/WarehouseLocation.js";
+import StockMovement from "../warehouse/StockMovement.js";
 import routingService from "../../services/routingService.js";
 import { trackOmnichannelEvent } from "../monitoring/omnichannelMonitoringService.js";
-import { sendOrderStageNotifications } from "../notification/notificationService.js";
+import {
+  notifyOrderManagerExchangeRequested,
+  notifyPOSStaffOrderReady,
+  sendOrderStageNotifications,
+} from "../notification/notificationService.js";
 import { omniLog } from "../../utils/logger.js";
 import {
   canTransitionOrderStatus,
@@ -135,6 +142,33 @@ const normalizeOrderForResponse = (order) => {
   };
 };
 
+const enrichOrderImages = (order) => {
+  if (!order.items) return order;
+
+  order.items = order.items.map(item => ({
+    ...item,
+    images: (item.images || []).map(img => {
+      if (!img) return null;
+      if (img.startsWith("http")) return img;
+      if (img.startsWith("/uploads/")) return img;
+      if (img.startsWith("uploads/")) return `/${img}`;
+      if (img.startsWith("/")) return img;
+      return `/uploads/${img}`;
+    }).filter(Boolean),
+    image: (() => {
+      const base = item.image || item.images?.[0] || "";
+      if (!base) return "";
+      if (base.startsWith("http")) return base;
+      if (base.startsWith("/uploads/")) return base;
+      if (base.startsWith("uploads/")) return `/${base}`;
+      if (base.startsWith("/")) return base;
+      return `/uploads/${base}`;
+    })(),
+  }));
+
+  return order;
+};
+
 const appendHistory = (order, status, updatedBy, note = "") => {
   if (!Array.isArray(order.statusHistory)) {
     order.statusHistory = [];
@@ -151,6 +185,145 @@ const appendHistory = (order, status, updatedBy, note = "") => {
     updatedAt: new Date(),
     note,
   });
+};
+
+const getActorName = (user) => {
+  return (
+    user?.fullName?.trim() ||
+    user?.name?.trim() ||
+    user?.email?.trim() ||
+    "POS Staff"
+  );
+};
+
+const restorePickedInventoryForExchange = async ({
+  order,
+  user,
+  session,
+  reason = "",
+} = {}) => {
+  const movements = await StockMovement.find({
+    referenceType: "ORDER",
+    referenceId: String(order?._id),
+  }).session(session);
+
+  if (!movements.length) {
+    return [];
+  }
+
+  const grouped = new Map();
+  for (const movement of movements) {
+    const locationId =
+      movement.fromLocationId?.toString() || movement.toLocationId?.toString();
+    if (!locationId) {
+      continue;
+    }
+
+    const key = `${movement.sku}::${locationId}`;
+    const existing = grouped.get(key) || {
+      sku: movement.sku,
+      locationId:
+        movement.fromLocationId || movement.toLocationId || null,
+      locationCode:
+        movement.fromLocationCode || movement.toLocationCode || "",
+      productId: movement.productId,
+      productName: movement.productName,
+      outboundQty: 0,
+      inboundQty: 0,
+    };
+
+    if (movement.type === "OUTBOUND") {
+      existing.outboundQty += Number(movement.quantity) || 0;
+      if (!existing.locationCode && movement.fromLocationCode) {
+        existing.locationCode = movement.fromLocationCode;
+      }
+    } else if (movement.type === "INBOUND") {
+      existing.inboundQty += Number(movement.quantity) || 0;
+      if (!existing.locationCode && movement.toLocationCode) {
+        existing.locationCode = movement.toLocationCode;
+      }
+    }
+
+    grouped.set(key, existing);
+  }
+
+  const restoredItems = [];
+
+  for (const batch of grouped.values()) {
+    const toRestore = Math.max(0, batch.outboundQty - batch.inboundQty);
+    if (!toRestore) {
+      continue;
+    }
+
+    let location = null;
+    if (batch.locationId) {
+      location = await WarehouseLocation.findById(batch.locationId).session(session);
+    }
+    if (!location && batch.locationCode) {
+      location = await WarehouseLocation.findOne({
+        locationCode: batch.locationCode,
+      }).session(session);
+    }
+    if (!location) {
+      continue;
+    }
+
+    let inventory = await Inventory.findOne({
+      sku: batch.sku,
+      locationId: location._id,
+    }).session(session);
+
+    if (inventory) {
+      inventory.quantity = (Number(inventory.quantity) || 0) + toRestore;
+      await inventory.save({ session });
+    } else {
+      await Inventory.create(
+        [
+          {
+            sku: batch.sku,
+            productId: batch.productId,
+            productName: batch.productName || batch.sku,
+            locationId: location._id,
+            locationCode: location.locationCode,
+            quantity: toRestore,
+            status: "GOOD",
+          },
+        ],
+        { session }
+      );
+    }
+
+    location.currentLoad = (Number(location.currentLoad) || 0) + toRestore;
+    await location.save({ session });
+
+    await StockMovement.create(
+      [
+        {
+          type: "INBOUND",
+          sku: batch.sku,
+          productId: batch.productId,
+          productName: batch.productName || batch.sku,
+          toLocationId: location._id,
+          toLocationCode: location.locationCode,
+          quantity: toRestore,
+          referenceType: "ORDER",
+          referenceId: String(order._id),
+          performedBy: user?._id,
+          performedByName: getActorName(user),
+          notes: `Inventory returned for device change${reason ? `: ${reason}` : ""}`,
+        },
+      ],
+      { session }
+    );
+
+    restoredItems.push({
+      sku: batch.sku,
+      locationCode: location.locationCode,
+      quantity: toRestore,
+    });
+  }
+
+  return restoredItems;
 };
 
 const getOrderSourceFromRequest = (fulfillmentType) => {
@@ -517,7 +690,7 @@ export const getAllOrders = async (req, res) => {
       Order.countDocuments(filter),
     ]);
 
-    const normalizedOrders = orders.map(normalizeOrderForResponse);
+    const normalizedOrders = orders.map(order => enrichOrderImages(normalizeOrderForResponse(order)));
 
     const payload = {
       orders: normalizedOrders,
@@ -600,7 +773,7 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     res.json({
       success: true,
@@ -844,40 +1017,13 @@ export const createOrder = async (req, res) => {
       await assignedStore.save({ session });
     }
 
-    if (req.body.instantFulfillment && effectiveOrderSource === "IN_STORE") {
-       // Instant fulfillment logic:
-       // 1. Mark as COMPLETED / DELIVERED
-       // 2. Mark as PAID (if not already)
-       // 3. Deduct inventory immediately
-       
-       order.status = "COMPLETED";
-       order.statusStage = "DELIVERED";
-       order.paymentStatus = "PAID";
-       order.paidAt = new Date();
-       order.confirmedAt = new Date();
-       order.shippedAt = new Date();
-       order.deliveredAt = new Date();
-       
-       // Deduct inventory
-        if (assignedStore) {
-            await routingService.deductInventory(assignedStore._id, order.items, { session });
-            order.inventoryDeductedAt = new Date();
-            // Release capacity since it is done immediately
-             assignedStore.capacity.currentOrders = Math.max(0, toNumber(assignedStore.capacity?.currentOrders, 1) - 1);
-             await assignedStore.save({ session });
-        }
-        
-        appendHistory(order, "COMPLETED", req.user._id, "Instant fulfillment at POS");
-        await order.save({ session });
-    }
-
     if (!isVNPay) {
       await removeOrderedItemsFromCart(req.user._id, processedItems, session);
     }
 
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     omniLog.info("createOrder: success", {
       orderId: order._id,
@@ -964,6 +1110,8 @@ export const updateOrderStatus = async (req, res) => {
     const canAssignCarrier = ["ADMIN", "ORDER_MANAGER"].includes(
       req.user.role
     );
+    let exchangeRequested = false;
+    let exchangeReason = "";
 
     if (!ORDER_STATUSES.has(targetStatus)) {
       await session.abortTransaction();
@@ -1004,6 +1152,33 @@ export const updateOrderStatus = async (req, res) => {
 
     const currentStatus = normalizeLegacyStatus(order.status);
     const inStoreOrder = isInStoreOrder(order);
+
+    if (req.user.role === "POS_STAFF") {
+      const creatorId = order?.createdByInfo?.userId?.toString();
+      const canHandleOwnInStoreOrder =
+        inStoreOrder && creatorId && creatorId === req.user._id.toString();
+      const validHandoverAction =
+        currentStatus === "PREPARING_SHIPMENT" &&
+        ["PENDING_PAYMENT", "CONFIRMED"].includes(targetStatus);
+
+      if (!canHandleOwnInStoreOrder) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: "POS staff chi duoc xu ly don tai quay do chinh minh tao",
+        });
+      }
+
+      if (!validHandoverAction) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "POS staff chi duoc xac nhan ban giao hoac yeu cau doi may tai buoc ban giao",
+        });
+      }
+    }
+
     const transitionCheck = canTransitionOrderStatus({
       order,
       currentStatus,
@@ -1030,10 +1205,11 @@ export const updateOrderStatus = async (req, res) => {
     ) {
       // Allow assigning picker during status update
       const picker = await User.findById(req.body.pickerId).session(session);
-      if (
-        picker &&
-        ["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker.role)
-      ) {
+      const isAllowedPickerRole = inStoreOrder
+        ? picker?.role === "WAREHOUSE_MANAGER"
+        : ["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker?.role);
+
+      if (picker && isAllowedPickerRole) {
         order.pickerInfo = {
           pickerId: picker._id,
           pickerName: picker.fullName,
@@ -1041,6 +1217,14 @@ export const updateOrderStatus = async (req, res) => {
           assignedBy: req.user._id,
           note: req.body.note || "",
         };
+      } else if (req.body.pickerId) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: inStoreOrder
+            ? "Don IN_STORE phai duoc giao cho WAREHOUSE_MANAGER"
+            : "Nhan vien kho duoc chon khong hop le",
+        });
       }
     }
 
@@ -1058,12 +1242,44 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (targetStatus === "PREPARING_SHIPMENT" && !["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(req.user.role)) {
+    if (
+      inStoreOrder &&
+      req.user.role === "ORDER_MANAGER" &&
+      ["PROCESSING", "PREPARING"].includes(targetStatus) &&
+      !order?.pickerInfo?.pickerId
+    ) {
       await session.abortTransaction();
-      return res.status(403).json({
+      return res.status(400).json({
         success: false,
-        message: "Chi WAREHOUSE_MANAGER hoac WAREHOUSE_STAFF moi duoc xac nhan hoan tat lay hang",
+        message: "Vui long chi dinh WAREHOUSE_MANAGER truoc khi dua don vao lay hang",
       });
+    }
+
+    if (targetStatus === "PREPARING_SHIPMENT") {
+      if (inStoreOrder) {
+        if (req.user.role !== "WAREHOUSE_MANAGER") {
+          await session.abortTransaction();
+          return res.status(403).json({
+            success: false,
+            message: "Chi WAREHOUSE_MANAGER duoc xac nhan san sang ban giao don IN_STORE",
+          });
+        }
+
+        const assignedPickerId = order?.pickerInfo?.pickerId?.toString();
+        if (assignedPickerId && assignedPickerId !== req.user._id.toString()) {
+          await session.abortTransaction();
+          return res.status(403).json({
+            success: false,
+            message: "Don hang nay duoc phan cong cho Warehouse Manager khac",
+          });
+        }
+      } else if (!["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(req.user.role)) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: "Chi WAREHOUSE_MANAGER hoac WAREHOUSE_STAFF moi duoc xac nhan hoan tat lay hang",
+        });
+      }
     }
 
     if (targetStatus === "PENDING_PAYMENT" && !inStoreOrder && !isManagerRole) {
@@ -1120,6 +1336,40 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
+    if (
+      inStoreOrder &&
+      req.user.role === "POS_STAFF" &&
+      currentStatus === "PREPARING_SHIPMENT" &&
+      targetStatus === "CONFIRMED"
+    ) {
+      exchangeRequested = true;
+      exchangeReason = (note || req.body.reason || "Device change requested").trim();
+      const restoredItems = await restorePickedInventoryForExchange({
+        order,
+        user: req.user,
+        session,
+        reason: exchangeReason,
+      });
+
+      if (!Array.isArray(order.exchangeHistory)) {
+        order.exchangeHistory = [];
+      }
+      order.exchangeHistory.push({
+        requestedAt: new Date(),
+        requestedBy: req.user._id,
+        requestedByName: getActorName(req.user),
+        reason: exchangeReason,
+        previousStatus: currentStatus,
+        nextStatus: targetStatus,
+        restoredItems,
+      });
+
+      if (order.pickerInfo) {
+        order.pickerInfo.pickedAt = null;
+        order.pickerInfo.note = exchangeReason;
+      }
+    }
+
     order.status = targetStatus;
 
     if (targetStatus === "CONFIRMED") {
@@ -1128,6 +1378,17 @@ export const updateOrderStatus = async (req, res) => {
 
     if (targetStatus === "SHIPPING") {
       order.shippedAt = new Date();
+    }
+
+    if (targetStatus === "PREPARING_SHIPMENT") {
+      order.pickerInfo = {
+        ...order.pickerInfo,
+        pickerId: order.pickerInfo?.pickerId || req.user._id,
+        pickerName:
+          order.pickerInfo?.pickerName || req.user.fullName || req.user.name,
+        pickedAt: new Date(),
+        note: note || order.pickerInfo?.note || "",
+      };
     }
 
     if (["DELIVERED", "PICKED_UP", "COMPLETED"].includes(targetStatus)) {
@@ -1174,7 +1435,7 @@ export const updateOrderStatus = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     omniLog.info("updateOrderStatus: success", {
       orderId: order._id,
@@ -1191,6 +1452,24 @@ export const updateOrderStatus = async (req, res) => {
       triggeredBy: req.user?._id,
       source: "update_order_status",
     });
+
+    if (
+      req.body.notifyPOS &&
+      targetStatus === "PREPARING_SHIPMENT" &&
+      order.createdByInfo?.userId
+    ) {
+      await notifyPOSStaffOrderReady({
+        order,
+        pickerInfo: order.pickerInfo
+      });
+    }
+
+    if (exchangeRequested) {
+      await notifyOrderManagerExchangeRequested({
+        order,
+        reason: exchangeReason,
+      });
+    }
 
     res.json({
       success: true,
@@ -1363,7 +1642,7 @@ export const assignCarrier = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
     return res.json({
       success: true,
       message: changedCarrier ? "Da chuyen carrier" : "Da cap nhat carrier",
@@ -1600,7 +1879,7 @@ export const handleCarrierWebhook = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     if (statusChanged) {
       await sendOrderStageNotifications({
@@ -1686,7 +1965,7 @@ export const assignPicker = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
     res.json({
       success: true,
       message: `Da phan cong nhan vien lay hang: ${picker.fullName}`,
@@ -1745,7 +2024,7 @@ export const updatePaymentStatus = async (req, res) => {
 
     await order.save();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     res.json({
       success: true,
@@ -1903,7 +2182,7 @@ export const cancelOrder = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-    const normalizedOrder = normalizeOrderForResponse(order);
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
 
     omniLog.info("cancelOrder: success", {
       orderId: order._id,

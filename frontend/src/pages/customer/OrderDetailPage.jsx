@@ -209,11 +209,10 @@ const OrderDetailPage = () => {
 
   // =============== HELPER FUNCTIONS ===============
   const getImageUrl = (path) => {
-    if (!path) return PlaceholderImg;
+    if (!path) return "https://via.placeholder.com/100?text=No+Image";
     if (path.startsWith("http")) return path;
-    return `${import.meta.env.VITE_API_URL}${
-      path.startsWith("/") ? "" : "/"
-    }${path}`;
+    const baseUrl = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
+    return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
   };
 
   const getVariantLabel = (item) => {
