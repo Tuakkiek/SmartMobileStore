@@ -172,12 +172,12 @@ const PickOrdersPage = () => {
     const quantity = Number(loc?.pickQty || loc?.quantity || 0);
 
     if (!item || !loc) {
-      toast.error("Khong tim thay thong tin vi tri lay hang");
+      toast.error("Không tìm thấy thông tin vị trí lấy hàng");
       return;
     }
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error("So luong lay hang khong hop le");
+      toast.error("Số lượng lấy hàng không hợp lệ");
       return;
     }
 
@@ -189,7 +189,7 @@ const PickOrdersPage = () => {
         locationCode: loc.locationCode,
         quantity,
       });
-      toast.success(`Da lay ${quantity} ${item.productName}`);
+      toast.success(`Đã lấy ${quantity} ${item.productName}`);
 
       if (currentLocationIndex < item.locations.length - 1) {
         setCurrentLocationIndex(currentLocationIndex + 1);
@@ -200,7 +200,7 @@ const PickOrdersPage = () => {
         setStep(3);
       }
     } catch (e) {
-      toast.error(e.response?.data?.message || "Loi khi lay hang");
+      toast.error(e.response?.data?.message || "Lỗi khi lấy hàng");
     } finally {
       setLoading(false);
     }

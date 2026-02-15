@@ -555,7 +555,7 @@ const WarehouseStaffDashboard = () => {
               <AlertCircle className="w-5 h-5 text-red-500" />
               Cảnh Báo Tồn Kho Thấp
             </CardTitle>
-            <Badge variant="outline">{alerts.length} rows</Badge>
+            <Badge variant="outline">{alerts.length} dòng</Badge>
           </CardHeader>
           <CardContent>
             {alerts.length === 0 ? (
@@ -617,7 +617,7 @@ const WarehouseStaffDashboard = () => {
               <RefreshCw className="w-5 h-5 text-blue-500" />
               Biến Động Tồn Kho Gần Đây
             </CardTitle>
-            <Badge variant="outline">{movements.length} rows</Badge>
+            <Badge variant="outline">{movements.length} dòng</Badge>
           </CardHeader>
           <CardContent>
             {movements.length === 0 ? (
@@ -672,7 +672,7 @@ const WarehouseStaffDashboard = () => {
               <ArrowRightLeft className="w-5 h-5 text-amber-500" />
               Chuyển Kho Gần Đây
             </CardTitle>
-            <Badge variant="outline">{transfers.length} rows</Badge>
+            <Badge variant="outline">{transfers.length} dòng</Badge>
           </CardHeader>
           <CardContent>
             {transfers.length === 0 ? (
@@ -728,7 +728,7 @@ const WarehouseStaffDashboard = () => {
               <Store className="w-5 h-5 text-orange-500" />
               Cửa Hàng Cần Chú Ý
             </CardTitle>
-            <Badge variant="outline">{storeNeedsAttention.length} stores</Badge>
+            <Badge variant="outline">{storeNeedsAttention.length} cửa hàng</Badge>
           </CardHeader>
           <CardContent>
             {storeNeedsAttention.length === 0 ? (
@@ -781,7 +781,7 @@ const WarehouseStaffDashboard = () => {
               <TrendingDown className="w-5 h-5 text-rose-500" />
               Dự Báo Nhu Cầu (7 ngày)
             </CardTitle>
-            <Badge variant="outline">{demandPredictions.length} rows</Badge>
+            <Badge variant="outline">{demandPredictions.length} dòng</Badge>
           </CardHeader>
           <CardContent>
             {demandPredictions.length === 0 ? (

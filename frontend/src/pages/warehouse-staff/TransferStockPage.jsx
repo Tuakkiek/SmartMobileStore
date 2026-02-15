@@ -411,10 +411,10 @@ const TransferStockPage = () => {
               <div>
                 <Label className="flex items-center">
                   <MapPin className="w-4 h-4 mr-1 text-red-500" />
-                  From location *
+                  Vị trí xuất *
                 </Label>
                 <Input
-                  placeholder="Example: WH-HCM-A-01-01-01"
+                  placeholder="Ví dụ: WH-HCM-A-01-01-01"
                   value={fromLocationCode}
                   onChange={(event) =>
                     setFromLocationCode(event.target.value.toUpperCase())
