@@ -13,16 +13,18 @@ const createSlug = (str) =>
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
     .replace(/\s+/g, "-")
     .replace(/[^\w\-]+/g, "")
     .replace(/\-\-+/g, "-")
     .replace(/^-+/, "")
     .replace(/-+$/, "");
 
-// Tạo variant slug = baseSlug + variantName
-const createVariantSlug = (baseSlug, variantName) => {
+// Tạo variant slug = baseSlug + color + variantName
+const createVariantSlug = (baseSlug, color, variantName) => {
+  const colorSlug = createSlug(color);
   const nameSlug = createSlug(variantName);
-  return `${baseSlug}-${nameSlug}`;
+  return [baseSlug, colorSlug, nameSlug].filter(Boolean).join("-");
 };
 
 const canManageVariantStock = (role) => {
@@ -43,7 +45,16 @@ const hasVariantStockInput = (variantGroups = []) => {
   for (const group of variantGroups) {
     const options = Array.isArray(group?.options) ? group.options : [];
     for (const opt of options) {
-      if (Object.prototype.hasOwnProperty.call(opt || {}, "stock")) {
+      if (!Object.prototype.hasOwnProperty.call(opt || {}, "stock")) {
+        continue;
+      }
+
+      if (opt.stock === "" || opt.stock === null || opt.stock === undefined) {
+        continue;
+      }
+
+      const parsed = Number(opt.stock);
+      if (!Number.isFinite(parsed) || parsed !== 0) {
         return true;
       }
     }
@@ -56,6 +67,48 @@ const buildVariantStockKey = (color, variantName) => {
   const normalizedColor = String(color || "").trim().toLowerCase();
   const normalizedVariant = String(variantName || "").trim().toLowerCase();
   return `${normalizedColor}::${normalizedVariant}`;
+};
+
+const RESERVED_VARIANT_FIELDS = new Set([
+  "variantName",
+  "originalPrice",
+  "price",
+  "stock",
+  "sku",
+  "slug",
+]);
+
+const extractVariantAttributes = (option = {}) => {
+  if (!option || typeof option !== "object") return {};
+
+  const attrs = {};
+  for (const [key, value] of Object.entries(option)) {
+    if (RESERVED_VARIANT_FIELDS.has(key)) continue;
+    if (value === undefined || value === null || value === "") continue;
+    attrs[key] = value;
+  }
+  return attrs;
+};
+
+const deriveVariantName = (option = {}) => {
+  const explicitName = String(option?.variantName || "").trim();
+  if (explicitName) return explicitName;
+
+  const fallbackParts = [
+    option?.storage,
+    option?.connectivity,
+    option?.cpuGpu,
+    option?.ram,
+    option?.bandSize,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  if (fallbackParts.length > 0) {
+    return fallbackParts.join(" - ");
+  }
+
+  return "";
 };
 
 // ============================================
@@ -74,8 +127,8 @@ export const create = async (req, res) => {
       slug: frontendSlug,
       ...productData
     } = req.body;
-
-    const allowStockManagement = canManageVariantStock(req.user?.role);
+    const variantGroups = createVariants || variants || [];
+    const stockInputIgnored = hasVariantStockInput(variantGroups);
 
     // === 1. VALIDATE REQUIRED FIELDS ===
     if (!productData.name?.trim()) {
@@ -92,6 +145,9 @@ export const create = async (req, res) => {
     }
     if (!productData.createdBy) {
       throw new Error("createdBy là bắt buộc");
+    }
+    if (!Array.isArray(variantGroups) || variantGroups.length === 0) {
+      throw new Error("Cần ít nhất một biến thể sản phẩm");
     }
 
     // === 2. TẠO SLUG ===
@@ -139,9 +195,8 @@ export const create = async (req, res) => {
     });
 
     // === 4. XỬ LÝ VARIANTS ===
-    const variantGroups = createVariants || variants || [];
     const createdVariantIds = [];
-    const stockInputIgnored = !allowStockManagement && hasVariantStockInput(variantGroups);
+    const seenVariantKeys = new Set();
 
     if (variantGroups.length > 0) {
       console.log(`📦 Processing ${variantGroups.length} variant group(s)`);
@@ -159,30 +214,43 @@ export const create = async (req, res) => {
         }
 
         for (const opt of options) {
-          if (!opt.variantName?.trim()) {
+          const derivedVariantName = deriveVariantName(opt);
+          if (!derivedVariantName) {
             console.warn(`⚠️ Skipping option: missing variantName`, opt);
             continue;
           }
 
+          const variantKey = buildVariantStockKey(color, derivedVariantName);
+          if (seenVariantKeys.has(variantKey)) {
+            throw new Error(`Biến thể bị trùng: ${color} / ${derivedVariantName}`);
+          }
+          seenVariantKeys.add(variantKey);
+
           const sku = await getNextSku();
-          const variantSlug = createVariantSlug(finalSlug, opt.variantName.trim());
+          const variantSlug = createVariantSlug(finalSlug, color, derivedVariantName);
 
           const variantDoc = new UniversalVariant({
             productId: product._id,
             color: color.trim(),
-            variantName: opt.variantName.trim(),
+            variantName: derivedVariantName,
             originalPrice: Number(opt.originalPrice) || 0,
             price: Number(opt.price) || 0,
-            stock: allowStockManagement ? normalizeStockValue(opt.stock) : 0,
+            // Phase 1 rule: stock starts at 0 and is managed by warehouse flows.
+            stock: 0,
             images: images.filter((img) => img?.trim()),
             sku,
             slug: variantSlug,
+            attributes: extractVariantAttributes(opt),
           });
 
           await variantDoc.save({ session });
           createdVariantIds.push(variantDoc._id);
           console.log(`✅ Created variant: ${sku} → ${variantSlug}`);
         }
+      }
+
+      if (createdVariantIds.length === 0) {
+        throw new Error("Không tạo được biến thể hợp lệ nào");
       }
 
       // Cập nhật product với variant IDs
@@ -259,13 +327,16 @@ export const update = async (req, res) => {
     const stockInputIgnored = !allowStockManagement && hasVariantStockInput(variantGroups);
 
     const existingVariants = await UniversalVariant.find({ productId: id })
-      .select("color variantName stock")
+      .select("color variantName stock sku")
       .session(session);
-    const stockByVariantKey = new Map();
+    const variantStateByKey = new Map();
     for (const item of existingVariants) {
-      stockByVariantKey.set(
+      variantStateByKey.set(
         buildVariantStockKey(item.color, item.variantName),
-        normalizeStockValue(item.stock)
+        {
+          stock: normalizeStockValue(item.stock),
+          sku: String(item.sku || ""),
+        }
       );
     }
 
@@ -313,38 +384,55 @@ export const update = async (req, res) => {
 
       await UniversalVariant.deleteMany({ productId: id }, { session });
       const newIds = [];
+      const seenVariantKeys = new Set();
 
       for (const g of variantGroups) {
         const { color, images = [], options = [] } = g;
         if (!color?.trim() || !options.length) continue;
 
         for (const opt of options) {
-          if (!opt.variantName?.trim()) continue;
+          const derivedVariantName = deriveVariantName(opt);
+          if (!derivedVariantName) continue;
 
-          const sku = await getNextSku();
+          const variantKey = buildVariantStockKey(color, derivedVariantName);
+          if (seenVariantKeys.has(variantKey)) {
+            throw new Error(`Biến thể bị trùng: ${color} / ${derivedVariantName}`);
+          }
+          seenVariantKeys.add(variantKey);
+
+          const previousVariantState = variantStateByKey.get(variantKey);
+          const sku = previousVariantState?.sku || (await getNextSku());
           const variantSlug = createVariantSlug(
             product.baseSlug || product.slug,
-            opt.variantName.trim()
+            color,
+            derivedVariantName
           );
 
           const v = new UniversalVariant({
             productId: id,
             color: color.trim(),
-            variantName: opt.variantName.trim(),
+            variantName: derivedVariantName,
             originalPrice: Number(opt.originalPrice) || 0,
             price: Number(opt.price) || 0,
             stock: allowStockManagement
-              ? normalizeStockValue(opt.stock)
-              : stockByVariantKey.get(buildVariantStockKey(color, opt.variantName)) || 0,
+              ? Object.prototype.hasOwnProperty.call(opt || {}, "stock")
+                ? normalizeStockValue(opt.stock)
+                : previousVariantState?.stock || 0
+              : previousVariantState?.stock || 0,
             images: images.filter((i) => i?.trim()),
             sku,
             slug: variantSlug,
+            attributes: extractVariantAttributes(opt),
           });
 
           await v.save({ session });
           newIds.push(v._id);
           console.log(`✅ Updated variant: ${sku} → ${variantSlug}`);
         }
+      }
+
+      if (newIds.length === 0) {
+        throw new Error("Không tạo được biến thể hợp lệ nào");
       }
 
       product.variants = newIds;

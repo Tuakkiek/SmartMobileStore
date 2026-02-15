@@ -26,13 +26,13 @@
     ],
     "shippingAddress": {
       "fullName": "Kiệt",
-      "phoneNumber": "0370303293",
+      "phoneNumber": "0866332269",
       "province": "dong thap",
       "ward": "tan gnhia",
       "detailAddress": "a",
-      "district": "Binh Thanh"
+      "district": "District 3"
     },
-    "totalAmount": 43482,
+    "totalAmount": 45440,
     "subtotal": 22,
     "shippingFee": 50000,
     "pointsUsed": 0,
@@ -60,9 +60,9 @@
     "updatedAt": "2026-02-11T15:40:45.673Z",
     "__v": 1,
     "userId": "698c9dea3f731e263bc709a9",
-    "fulfillmentType": "HOME_DELIVERY",
-    "discount": 6540,
-    "total": 43482,
+    "fulfillmentType": "CLICK_AND_COLLECT",
+    "discount": 4582,
+    "total": 45440,
     "paymentInfo": {},
     "statusStage": "CANCELLED",
     "statusStageHistory": [
@@ -101,13 +101,13 @@
     ],
     "shippingAddress": {
       "fullName": "Kiệt",
-      "phoneNumber": "0995298854",
+      "phoneNumber": "0860519296",
       "province": "dong thap",
       "ward": "tan gnhia",
       "detailAddress": "a",
       "district": "Binh Thanh"
     },
-    "totalAmount": 45342,
+    "totalAmount": 41700,
     "subtotal": 22,
     "shippingFee": 50000,
     "pointsUsed": 0,
@@ -136,8 +136,8 @@
     "__v": 1,
     "userId": "698c9dea3f731e263bc709a9",
     "fulfillmentType": "CLICK_AND_COLLECT",
-    "discount": 4680,
-    "total": 45342,
+    "discount": 8322,
+    "total": 41700,
     "paymentInfo": {},
     "statusStage": "CANCELLED",
     "statusStageHistory": [
@@ -176,13 +176,13 @@
     ],
     "shippingAddress": {
       "fullName": "Kiệt",
-      "phoneNumber": "0314446608",
+      "phoneNumber": "0774148194",
       "province": "dong thap",
       "ward": "tan gnhia",
       "detailAddress": "a",
-      "district": "Binh Thanh"
+      "district": "Ninh Kieu"
     },
-    "totalAmount": 47455,
+    "totalAmount": 49524,
     "subtotal": 22,
     "shippingFee": 50000,
     "pointsUsed": 0,
@@ -204,9 +204,9 @@
     "updatedAt": "2026-02-11T15:43:31.972Z",
     "__v": 0,
     "userId": "698c9dea3f731e263bc709a9",
-    "fulfillmentType": "CLICK_AND_COLLECT",
-    "discount": 2567,
-    "total": 47455,
+    "fulfillmentType": "HOME_DELIVERY",
+    "discount": 498,
+    "total": 49524,
     "paymentInfo": {},
     "statusStage": "PENDING",
     "statusStageHistory": [
@@ -245,13 +245,13 @@
     ],
     "shippingAddress": {
       "fullName": "Kiệt",
-      "phoneNumber": "0535131285",
+      "phoneNumber": "0112463695",
       "province": "dong thap",
       "ward": "tan gnhia",
       "detailAddress": "a",
-      "district": "District 3"
+      "district": "Binh Thanh"
     },
-    "totalAmount": 49383,
+    "totalAmount": 47383,
     "subtotal": 27,
     "shippingFee": 50000,
     "pointsUsed": 0,
@@ -285,9 +285,9 @@
       "vnpayVerified": false
     },
     "userId": "698c9dea3f731e263bc709a9",
-    "fulfillmentType": "HOME_DELIVERY",
-    "discount": 644,
-    "total": 49383,
+    "fulfillmentType": "CLICK_AND_COLLECT",
+    "discount": 2644,
+    "total": 47383,
     "statusStage": "CANCELLED",
     "statusStageHistory": [
       {
@@ -325,13 +325,13 @@
     ],
     "shippingAddress": {
       "fullName": "Kiệt",
-      "phoneNumber": "0511206388",
+      "phoneNumber": "0516040386",
       "province": "dong thap",
       "ward": "tan gnhia",
       "detailAddress": "a",
-      "district": "District 7"
+      "district": "District 1"
     },
-    "totalAmount": 41362,
+    "totalAmount": 49789,
     "subtotal": 27,
     "shippingFee": 50000,
     "pointsUsed": 0,
@@ -353,9 +353,9 @@
     "updatedAt": "2026-02-11T15:44:57.131Z",
     "__v": 0,
     "userId": "698c9dea3f731e263bc709a9",
-    "fulfillmentType": "HOME_DELIVERY",
-    "discount": 8665,
-    "total": 41362,
+    "fulfillmentType": "CLICK_AND_COLLECT",
+    "discount": 238,
+    "total": 49789,
     "paymentInfo": {},
     "statusStage": "PENDING",
     "statusStageHistory": [

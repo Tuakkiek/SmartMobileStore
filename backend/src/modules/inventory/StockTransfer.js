@@ -122,7 +122,6 @@ const stockTransferSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-stockTransferSchema.index({ transferNumber: 1 });
 stockTransferSchema.index({ "fromStore.storeId": 1, status: 1 });
 stockTransferSchema.index({ "toStore.storeId": 1, status: 1 });
 stockTransferSchema.index({ status: 1 });

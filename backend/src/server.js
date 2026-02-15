@@ -33,6 +33,7 @@ import warehouseRoutes from "./modules/warehouse/warehouseRoutes.js";
 import warehouseConfigRoutes from "./modules/warehouse/warehouseConfigRoutes.js";
 import storeRoutes from "./modules/store/storeRoutes.js";
 import inventoryRoutes from "./modules/inventory/inventoryRoutes.js";
+import { startReplenishmentScheduler } from "./modules/inventory/replenishmentScheduler.js";
 import monitoringRoutes from "./modules/monitoring/monitoringRoutes.js";
 
 
@@ -287,6 +288,8 @@ const startServer = () => {
         timeZone: "Asia/Ho_Chi_Minh",
       })}`
     );
+
+    startReplenishmentScheduler();
   });
 };
 

@@ -3,13 +3,243 @@
 // Controllers cho chức năng nhận hàng vào kho
 // ============================================
 
+import mongoose from "mongoose";
 import GoodsReceipt from "./GoodsReceipt.js";
 import PurchaseOrder from "./PurchaseOrder.js";
 import Inventory from "./Inventory.js";
 import WarehouseLocation from "./WarehouseLocation.js";
 import StockMovement from "./StockMovement.js";
-import UniversalProduct from "../product/UniversalProduct.js";
-import mongoose from "mongoose";
+import { UniversalVariant } from "../product/UniversalProduct.js";
+import StoreInventory from "../inventory/StoreInventory.js";
+import Store from "../store/Store.js";
+
+const RECEIVABLE_PO_STATUSES = new Set(["CONFIRMED", "PARTIAL"]);
+const DEFAULT_STORE_MIN_STOCK = 5;
+
+const getActorName = (user) =>
+  user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
+
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+};
+
+const toNonNegativeInteger = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+};
+
+const normalizeQualityStatus = (value) => {
+  const allowed = new Set(["GOOD", "DAMAGED", "EXPIRED"]);
+  return allowed.has(value) ? value : "GOOD";
+};
+
+const calculateSellableQuantity = ({
+  receivedQuantity,
+  damagedQuantity,
+  qualityStatus,
+}) => {
+  if (qualityStatus !== "GOOD") {
+    return 0;
+  }
+  return Math.max(0, receivedQuantity - damagedQuantity);
+};
+
+const buildStoreAllocationPlan = async ({
+  productId,
+  variantSku,
+  receivedQuantity,
+  session,
+}) => {
+  if (!productId || !variantSku || receivedQuantity <= 0) {
+    return [];
+  }
+
+  const stores = await Store.find({
+    status: "ACTIVE",
+    type: { $ne: "WAREHOUSE" },
+  })
+    .select("_id capacity.maxOrdersPerDay")
+    .session(session);
+
+  if (stores.length === 0) {
+    return [];
+  }
+
+  const storeIds = stores.map((store) => store._id);
+  const currentInventories = await StoreInventory.find({
+    productId,
+    variantSku,
+    storeId: { $in: storeIds },
+  })
+    .select("storeId quantity minStock")
+    .session(session);
+
+  const inventoryByStore = new Map(
+    currentInventories.map((item) => [String(item.storeId), item])
+  );
+
+  let remaining = receivedQuantity;
+  const rawAllocations = [];
+
+  // Priority 1: bù thiếu tối thiểu cho các store đang dưới ngưỡng minStock
+  for (const store of stores) {
+    if (remaining <= 0) break;
+
+    const inventory = inventoryByStore.get(String(store._id));
+    const currentQuantity = Number(inventory?.quantity) || 0;
+    const minStock = Number(inventory?.minStock ?? DEFAULT_STORE_MIN_STOCK);
+    const minTarget = Number.isFinite(minStock) && minStock > 0 ? Math.floor(minStock) : DEFAULT_STORE_MIN_STOCK;
+    const deficit = Math.max(0, minTarget - currentQuantity);
+
+    if (deficit <= 0) continue;
+
+    const allocate = Math.min(deficit, remaining);
+    rawAllocations.push({ storeId: store._id, quantity: allocate });
+    remaining -= allocate;
+  }
+
+  // Priority 2: chia phần còn lại theo năng lực xử lý đơn hàng của từng store
+  if (remaining > 0) {
+    const weightedStores = stores.map((store) => ({
+      storeId: store._id,
+      weight: Math.max(1, Number(store.capacity?.maxOrdersPerDay) || 100),
+    }));
+
+    const totalWeight =
+      weightedStores.reduce((sum, item) => sum + item.weight, 0) || 1;
+    const remainingBeforeWeighted = remaining;
+    let allocatedInWeightedPass = 0;
+
+    for (let index = 0; index < weightedStores.length; index += 1) {
+      if (remaining <= 0) break;
+
+      const isLast = index === weightedStores.length - 1;
+      let allocate = isLast
+        ? remainingBeforeWeighted - allocatedInWeightedPass
+        : Math.floor(
+            (remainingBeforeWeighted * weightedStores[index].weight) / totalWeight
+          );
+
+      allocate = Math.min(allocate, remaining);
+      if (allocate <= 0) continue;
+
+      rawAllocations.push({
+        storeId: weightedStores[index].storeId,
+        quantity: allocate,
+      });
+
+      allocatedInWeightedPass += allocate;
+      remaining -= allocate;
+    }
+
+    if (remaining > 0 && weightedStores.length > 0) {
+      rawAllocations.push({
+        storeId: weightedStores[0].storeId,
+        quantity: remaining,
+      });
+      remaining = 0;
+    }
+  }
+
+  const mergedAllocations = new Map();
+  for (const allocation of rawAllocations) {
+    const key = String(allocation.storeId);
+    const current = mergedAllocations.get(key);
+    if (current) {
+      current.quantity += allocation.quantity;
+    } else {
+      mergedAllocations.set(key, {
+        storeId: allocation.storeId,
+        quantity: allocation.quantity,
+      });
+    }
+  }
+
+  return Array.from(mergedAllocations.values()).filter(
+    (allocation) => allocation.quantity > 0
+  );
+};
+
+const syncStoreInventory = async ({
+  productId,
+  variantSku,
+  receivedQuantity,
+  session,
+}) => {
+  if (!productId || !variantSku || receivedQuantity <= 0) {
+    return [];
+  }
+
+  const allocationPlan = await buildStoreAllocationPlan({
+    productId,
+    variantSku,
+    receivedQuantity,
+    session,
+  });
+
+  const distribution = [];
+
+  for (const allocation of allocationPlan) {
+    let storeInventory = await StoreInventory.findOne({
+      productId,
+      variantSku,
+      storeId: allocation.storeId,
+    }).session(session);
+
+    if (!storeInventory) {
+      storeInventory = new StoreInventory({
+        productId,
+        variantSku,
+        storeId: allocation.storeId,
+        quantity: 0,
+        reserved: 0,
+      });
+    }
+
+    storeInventory.quantity =
+      (Number(storeInventory.quantity) || 0) + allocation.quantity;
+    storeInventory.lastRestockDate = new Date();
+    storeInventory.lastRestockQuantity = allocation.quantity;
+
+    await storeInventory.save({ session });
+
+    distribution.push({
+      storeId: allocation.storeId,
+      quantity: allocation.quantity,
+      available: storeInventory.available,
+      status: storeInventory.status,
+    });
+  }
+
+  return distribution;
+};
+
+const generateGrnNumber = async (session) => {
+  const year = new Date().getFullYear();
+  const prefix = `GRN-${year}-`;
+  const countInYear = await GoodsReceipt.countDocuments({
+    grnNumber: { $regex: `^${prefix}` },
+  }).session(session);
+
+  let sequence = countInYear + 1;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = `${prefix}${String(sequence).padStart(3, "0")}`;
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await GoodsReceipt.findOne({ grnNumber: candidate })
+      .select("_id")
+      .session(session);
+    if (!existing) {
+      return candidate;
+    }
+    sequence += 1;
+  }
+
+  return `${prefix}${Date.now()}`;
+};
 
 /**
  * Bắt đầu nhận hàng từ PO
@@ -19,11 +249,11 @@ export const startGoodsReceipt = async (req, res) => {
   try {
     const { poId, poNumber } = req.body;
 
-    let po;
+    let po = null;
     if (poId) {
       po = await PurchaseOrder.findById(poId);
     } else if (poNumber) {
-      po = await PurchaseOrder.findOne({ poNumber });
+      po = await PurchaseOrder.findOne({ poNumber: String(poNumber).trim() });
     }
 
     if (!po) {
@@ -33,28 +263,35 @@ export const startGoodsReceipt = async (req, res) => {
       });
     }
 
-    if (po.status !== "CONFIRMED") {
+    if (!RECEIVABLE_PO_STATUSES.has(po.status)) {
       return res.status(400).json({
         success: false,
-        message: "Đơn hàng chưa được duyệt",
+        message: "Đơn hàng chưa sẵn sàng để nhận hàng",
       });
     }
 
-    // Trả về thông tin để nhân viên kho kiểm tra
     res.json({
       success: true,
       purchaseOrder: {
         _id: po._id,
         poNumber: po.poNumber,
         supplier: po.supplier,
-        items: po.items.map((item) => ({
-          sku: item.sku,
-          productId: item.productId,
-          productName: item.productName,
-          orderedQuantity: item.orderedQuantity,
-          receivedQuantity: item.receivedQuantity,
-          remainingQuantity: item.orderedQuantity - item.receivedQuantity,
-        })),
+        status: po.status,
+        items: po.items.map((item) => {
+          const remainingQuantity = Math.max(
+            0,
+            (Number(item.orderedQuantity) || 0) - (Number(item.receivedQuantity) || 0)
+          );
+          return {
+            sku: item.sku,
+            productId: item.productId,
+            productName: item.productName,
+            orderedQuantity: item.orderedQuantity,
+            receivedQuantity: item.receivedQuantity,
+            damagedQuantity: item.damagedQuantity || 0,
+            remainingQuantity,
+          };
+        }),
         expectedDeliveryDate: po.expectedDeliveryDate,
       },
     });
@@ -87,7 +324,30 @@ export const receiveItem = async (req, res) => {
       notes,
     } = req.body;
 
-    // Validate
+    const actorName = getActorName(req.user);
+    const receiveQty = toPositiveInteger(receivedQuantity);
+    const damagedQty = toNonNegativeInteger(damagedQuantity);
+    const normalizedSku = String(sku || "").trim();
+    const normalizedLocationCode = String(locationCode || "").trim();
+    const normalizedQualityStatus = normalizeQualityStatus(qualityStatus);
+
+    if (!poId || !normalizedSku || !normalizedLocationCode || !receiveQty) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message:
+          "Dữ liệu nhận hàng không hợp lệ (poId, sku, receivedQuantity, locationCode)",
+      });
+    }
+
+    if (damagedQty === null || damagedQty > receiveQty) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Số lượng hư hỏng không hợp lệ",
+      });
+    }
+
     const po = await PurchaseOrder.findById(poId).session(session);
     if (!po) {
       await session.abortTransaction();
@@ -97,7 +357,15 @@ export const receiveItem = async (req, res) => {
       });
     }
 
-    const poItem = po.items.find((item) => item.sku === sku);
+    if (!RECEIVABLE_PO_STATUSES.has(po.status)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng không ở trạng thái có thể nhận",
+      });
+    }
+
+    const poItem = po.items.find((item) => item.sku === normalizedSku);
     if (!poItem) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -106,7 +374,41 @@ export const receiveItem = async (req, res) => {
       });
     }
 
-    const location = await WarehouseLocation.findOne({ locationCode }).session(session);
+    const remainingQuantity = Math.max(
+      0,
+      (Number(poItem.orderedQuantity) || 0) - (Number(poItem.receivedQuantity) || 0)
+    );
+
+    if (remainingQuantity <= 0) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "SKU này đã nhận đủ theo đơn hàng",
+      });
+    }
+
+    if (receiveQty > remainingQuantity) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Số lượng nhận vượt quá còn lại (${remainingQuantity})`,
+      });
+    }
+
+    const sellableQuantity = calculateSellableQuantity({
+      receivedQuantity: receiveQty,
+      damagedQuantity: damagedQty,
+      qualityStatus: normalizedQualityStatus,
+    });
+
+    const inventoryQuantityDelta =
+      normalizedQualityStatus === "GOOD" ? sellableQuantity : receiveQty;
+
+    const location = await WarehouseLocation.findOne({
+      locationCode: normalizedLocationCode,
+      status: "ACTIVE",
+    }).session(session);
+
     if (!location) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -115,8 +417,9 @@ export const receiveItem = async (req, res) => {
       });
     }
 
-    // Kiểm tra sức chứa
-    if (!location.canAccommodate(receivedQuantity)) {
+    const currentLoad = Number(location.currentLoad) || 0;
+    const capacity = Number(location.capacity) || 0;
+    if (currentLoad + inventoryQuantityDelta > capacity) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -124,69 +427,91 @@ export const receiveItem = async (req, res) => {
       });
     }
 
-    // Cập nhật hoặc tạo mới inventory
     let inventory = await Inventory.findOne({
-      sku,
+      sku: normalizedSku,
       locationId: location._id,
     }).session(session);
 
     if (inventory) {
-      inventory.quantity += receivedQuantity;
+      inventory.quantity = (Number(inventory.quantity) || 0) + inventoryQuantityDelta;
       inventory.lastReceived = new Date();
-      inventory.status = qualityStatus;
-      if (notes) inventory.notes = notes;
+      inventory.status = normalizedQualityStatus;
+      if (notes !== undefined) {
+        inventory.notes = String(notes || "").trim();
+      }
       await inventory.save({ session });
     } else {
       inventory = new Inventory({
-        sku,
+        sku: normalizedSku,
         productId: poItem.productId,
         productName: poItem.productName,
         locationId: location._id,
         locationCode: location.locationCode,
-        quantity: receivedQuantity,
+        quantity: inventoryQuantityDelta,
         lastReceived: new Date(),
-        status: qualityStatus,
-        notes,
+        status: normalizedQualityStatus,
+        notes: String(notes || "").trim(),
       });
       await inventory.save({ session });
     }
 
-    // Cập nhật location
-    await location.addStock(receivedQuantity);
+    location.currentLoad = currentLoad + inventoryQuantityDelta;
+    await location.save({ session });
 
-    // Ghi log stock movement
     const movement = new StockMovement({
       type: "INBOUND",
-      sku,
+      sku: normalizedSku,
       productId: poItem.productId,
       productName: poItem.productName,
       toLocationId: location._id,
       toLocationCode: location.locationCode,
-      quantity: receivedQuantity,
+      quantity: receiveQty,
       referenceType: "PO",
       referenceId: po.poNumber,
       performedBy: req.user._id,
-      performedByName: req.user.name,
-      qualityStatus,
-      notes,
+      performedByName: actorName,
+      qualityStatus: normalizedQualityStatus,
+      notes: String(notes || "").trim(),
     });
     await movement.save({ session });
 
-    // Cập nhật PO item
-    poItem.receivedQuantity += receivedQuantity;
-    if (damagedQuantity > 0) {
-      poItem.damagedQuantity += damagedQuantity;
+    poItem.receivedQuantity = (Number(poItem.receivedQuantity) || 0) + receiveQty;
+    poItem.damagedQuantity = (Number(poItem.damagedQuantity) || 0) + damagedQty;
+
+    const hasAnyReceived = po.items.some(
+      (item) => (Number(item.receivedQuantity) || 0) > 0
+    );
+    if (po.status === "CONFIRMED" && hasAnyReceived) {
+      po.status = "PARTIAL";
     }
     await po.save({ session });
 
-    // Cập nhật tổng tồn kho trong UniversalProduct
-    const product = await UniversalProduct.findById(poItem.productId).session(session);
-    if (product) {
-      const variant = product.variants.find((v) => v.sku === sku);
-      if (variant) {
-        variant.totalStock = (variant.totalStock || 0) + receivedQuantity;
-        await product.save({ session });
+    let variantStockAfter = null;
+    let distributedToStores = [];
+
+    if (sellableQuantity > 0) {
+      const variant = await UniversalVariant.findOne({
+        sku: normalizedSku,
+      }).session(session);
+
+      if (!variant) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          success: false,
+          message: `Không tìm thấy biến thể SKU: ${normalizedSku}`,
+        });
       }
+
+      variant.stock = (Number(variant.stock) || 0) + sellableQuantity;
+      await variant.save({ session });
+      variantStockAfter = variant.stock;
+
+      distributedToStores = await syncStoreInventory({
+        productId: variant.productId,
+        variantSku: normalizedSku,
+        receivedQuantity: sellableQuantity,
+        session,
+      });
     }
 
     await session.commitTransaction();
@@ -200,6 +525,12 @@ export const receiveItem = async (req, res) => {
         currentLoad: location.currentLoad,
         capacity: location.capacity,
         fillRate: location.fillRate,
+      },
+      sync: {
+        inventoryQuantityDelta,
+        sellableQuantity,
+        variantStockAfter,
+        distributedToStores,
       },
     });
   } catch (error) {
@@ -226,6 +557,14 @@ export const completeGoodsReceipt = async (req, res) => {
   try {
     const { poId, deliverySignature, notes } = req.body;
 
+    if (!poId) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu poId",
+      });
+    }
+
     const po = await PurchaseOrder.findById(poId).session(session);
     if (!po) {
       await session.abortTransaction();
@@ -235,41 +574,76 @@ export const completeGoodsReceipt = async (req, res) => {
       });
     }
 
-    // Generate GRN Number
-    const count = await GoodsReceipt.countDocuments();
-    const year = new Date().getFullYear();
-    const grnNumber = `GRN-${year}-${String(count + 1).padStart(3, "0")}`;
+    if (po.status === "COMPLETED") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Đơn đặt hàng đã hoàn tất trước đó",
+      });
+    }
 
-    // Lấy thông tin các items đã nhận
+    if (!RECEIVABLE_PO_STATUSES.has(po.status)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng không ở trạng thái có thể hoàn tất nhận",
+      });
+    }
+
+    const receivedPoItems = po.items.filter(
+      (item) => (Number(item.receivedQuantity) || 0) > 0
+    );
+
+    if (receivedPoItems.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng chưa có SKU nào được nhận",
+      });
+    }
+
+    const grnNumber = await generateGrnNumber(session);
     const receivedItems = [];
     let totalQuantity = 0;
     let totalDamaged = 0;
 
-    for (const poItem of po.items) {
-      if (poItem.receivedQuantity > 0) {
-        // Tìm vị trí lưu kho
-        const inventory = await Inventory.findOne({ sku: poItem.sku }).session(session);
+    for (const poItem of receivedPoItems) {
+      // Lấy snapshot vị trí gần nhất để ghi trên GRN.
+      // Luồng hiện tại nhận mỗi SKU theo một location trong 1 lần xử lý.
+      // eslint-disable-next-line no-await-in-loop
+      const inventorySnapshot = await Inventory.findOne({
+        sku: poItem.sku,
+      })
+        .sort({ updatedAt: -1 })
+        .session(session);
 
-        receivedItems.push({
-          sku: poItem.sku,
-          productId: poItem.productId,
-          productName: poItem.productName,
-          orderedQuantity: poItem.orderedQuantity,
-          receivedQuantity: poItem.receivedQuantity,
-          damagedQuantity: poItem.damagedQuantity,
-          locationId: inventory?.locationId,
-          locationCode: inventory?.locationCode,
-          qualityStatus: inventory?.status || "GOOD",
-          unitPrice: poItem.unitPrice,
-          totalPrice: poItem.receivedQuantity * poItem.unitPrice,
-        });
-
-        totalQuantity += poItem.receivedQuantity;
-        totalDamaged += poItem.damagedQuantity;
+      if (!inventorySnapshot) {
+        throw new Error(
+          `Không tìm thấy tồn kho cho SKU ${poItem.sku}. Vui lòng nhận hàng trước khi hoàn tất.`
+        );
       }
+
+      const receivedQty = Number(poItem.receivedQuantity) || 0;
+      const damagedQty = Number(poItem.damagedQuantity) || 0;
+
+      receivedItems.push({
+        sku: poItem.sku,
+        productId: poItem.productId,
+        productName: poItem.productName,
+        orderedQuantity: poItem.orderedQuantity,
+        receivedQuantity: receivedQty,
+        damagedQuantity: damagedQty,
+        locationId: inventorySnapshot.locationId,
+        locationCode: inventorySnapshot.locationCode,
+        qualityStatus: inventorySnapshot.status || "GOOD",
+        unitPrice: poItem.unitPrice,
+        totalPrice: receivedQty * (Number(poItem.unitPrice) || 0),
+      });
+
+      totalQuantity += receivedQty;
+      totalDamaged += damagedQty;
     }
 
-    // Tạo GRN
     const grn = new GoodsReceipt({
       grnNumber,
       purchaseOrderId: po._id,
@@ -279,7 +653,7 @@ export const completeGoodsReceipt = async (req, res) => {
       totalQuantity,
       totalDamaged,
       receivedBy: req.user._id,
-      receivedByName: req.user.name,
+      receivedByName: getActorName(req.user),
       receivedDate: new Date(),
       deliverySignature,
       notes,
@@ -287,16 +661,11 @@ export const completeGoodsReceipt = async (req, res) => {
 
     await grn.save({ session });
 
-    // Cập nhật trạng thái PO
-    const allReceived = po.items.every((item) => item.receivedQuantity >= item.orderedQuantity);
-    const someReceived = po.items.some((item) => item.receivedQuantity > 0);
+    const allReceived = po.items.every(
+      (item) => (Number(item.receivedQuantity) || 0) >= (Number(item.orderedQuantity) || 0)
+    );
 
-    if (allReceived) {
-      po.status = "COMPLETED";
-    } else if (someReceived) {
-      po.status = "PARTIAL";
-    }
-
+    po.status = allReceived ? "COMPLETED" : "PARTIAL";
     po.actualDeliveryDate = new Date();
     await po.save({ session });
 
@@ -328,6 +697,8 @@ export const completeGoodsReceipt = async (req, res) => {
 export const getGoodsReceipts = async (req, res) => {
   try {
     const { search, page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 20);
 
     const filter = {};
     if (search) {
@@ -337,10 +708,13 @@ export const getGoodsReceipts = async (req, res) => {
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const skip = (pageNum - 1) * limitNum;
 
     const [goodsReceipts, total] = await Promise.all([
-      GoodsReceipt.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      GoodsReceipt.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
       GoodsReceipt.countDocuments(filter),
     ]);
 
@@ -348,10 +722,10 @@ export const getGoodsReceipts = async (req, res) => {
       success: true,
       goodsReceipts,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / limitNum),
       },
     });
   } catch (error) {

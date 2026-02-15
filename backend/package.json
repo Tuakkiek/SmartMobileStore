@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1 src/tests/**/*.test.js",
+    "test:inventory-dashboard": "node --test --test-concurrency=1 src/tests/inventory-dashboard.integration.test.js",
     "uat:omnichannel": "node scripts/run_omnichannel_uat.js",
     "migrate:order-status-stage": "node src/scripts/migrate-order-status-stage.js",
     "migrate:product-warehouse-sync": "node src/scripts/migrate-product-warehouse-sync.js",
+    "sync:legacy-backup": "node src/scripts/sync-legacy-backup-data.js",
     "smoke:phase5": "node src/scripts/smoke-phase5-carrier-notifications.js",
     "test:order-state-machine": "node src/scripts/test-order-state-machine.js",
     "test:vnpay-integration": "node src/scripts/test-vnpay-integration.js",
@@ -41,7 +44,9 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "mongodb-memory-server": "^11.0.1",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.2.2"
   },
   "type": "module"
 }

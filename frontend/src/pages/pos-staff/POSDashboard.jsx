@@ -3,8 +3,7 @@
 // ✅ V3: Fixed - Chọn sản phẩm → Tạo đơn → Chuyển Kho
 // ============================================
 
-import React, { useState, useEffect, useMemo } from "react";
-import { useAuthStore } from "@/store/authStore";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,14 +21,9 @@ import {
 import { formatPrice } from "@/lib/utils";
 import ProductVariantSelector from "@/components/product/ProductVariantSelector";
 import {
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
   promotionAPI,
   posAPI,
+  universalProductAPI,
 } from "@/lib/api";
 import {
   Dialog,
@@ -41,7 +35,6 @@ import {
 import PersonalStatsWidget from "@/components/employee/PersonalStatsWidget";
 
 const POSDashboard = () => {
-  const { user } = useAuthStore();
   // ============================================
   // STATE
   // ============================================
@@ -64,9 +57,47 @@ const POSDashboard = () => {
   const [promotionCode, setPromotionCode] = useState("");
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
-  
+
   // Fulfillment state
   const [instantFulfillment, setInstantFulfillment] = useState(false);
+
+  const detectCategory = (product) => {
+    const text = [
+      product?.category,
+      product?.productType?.name,
+      product?.productType?.slug,
+      product?.name,
+      product?.model,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    if (text.includes("iphone")) return "iPhone";
+    if (text.includes("ipad")) return "iPad";
+    if (text.includes("airpods") || text.includes("air pods")) return "AirPods";
+    if (
+      text.includes("macbook") ||
+      text.includes("imac") ||
+      text.includes("mac")
+    ) {
+      return "Mac";
+    }
+    if (
+      text.includes("apple watch") ||
+      text.includes("applewatch") ||
+      text.includes("watch")
+    ) {
+      return "AppleWatch";
+    }
+    if (text.includes("accessor") || text.includes("phu kien")) {
+      return "Accessory";
+    }
+
+    return null;
+  };
 
   // ============================================
   // HELPER FOR IMAGE URL
@@ -185,52 +216,41 @@ const POSDashboard = () => {
   // ============================================
   // FETCH PRODUCTS
   // ============================================
-  useEffect(() => {
-    fetchProducts();
-  }, [selectedCategory]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setIsLoading(true);
-      let response;
+      const response = await universalProductAPI.getAll({ limit: 500 });
+      const productData = response?.data?.data?.products || [];
 
-      switch (selectedCategory) {
-        case "iPhone":
-          response = await iPhoneAPI.getAll({ limit: 50 });
-          break;
-        case "iPad":
-          response = await iPadAPI.getAll({ limit: 50 });
-          break;
-        case "Mac":
-          response = await macAPI.getAll({ limit: 50 });
-          break;
-        case "AirPods":
-          response = await airPodsAPI.getAll({ limit: 50 });
-          break;
-        case "AppleWatch":
-          response = await appleWatchAPI.getAll({ limit: 50 });
-          break;
-        case "Accessory":
-          response = await accessoryAPI.getAll({ limit: 50 });
-          break;
-        default:
-          response = await iPhoneAPI.getAll({ limit: 50 });
+      if (!Array.isArray(productData)) {
+        setProducts([]);
+        return;
       }
 
-      const productData =
-        response?.data?.data?.products || response?.data || [];
-      setProducts(
-        Array.isArray(productData)
-          ? productData.map((p) => ({ ...p, category: selectedCategory }))
-          : []
-      );
+      const filtered = productData
+        .map((product) => ({
+          ...product,
+          category: detectCategory(product),
+        }))
+        .filter(
+          (product) =>
+            product.category === selectedCategory &&
+            Array.isArray(product.variants) &&
+            product.variants.length > 0
+        );
+
+      setProducts(filtered);
     } catch (error) {
       console.error("Lỗi tải sản phẩm:", error);
       toast.error("Không thể tải sản phẩm");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   // ============================================
   // PRODUCT SELECTION
@@ -357,7 +377,7 @@ const POSDashboard = () => {
       );
 
       // ✅ SỬA: Dùng posAPI.createOrder thay vì axios.post
-      const response = await posAPI.createOrder({
+      await posAPI.createOrder({
         orderSource: "IN_STORE",
         items: checkoutItemsWithFinalPrice.map((item) => ({
           productId: item.productId,

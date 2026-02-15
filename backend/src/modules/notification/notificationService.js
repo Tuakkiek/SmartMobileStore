@@ -30,6 +30,9 @@ const STAGE_NOTIFICATION_CONFIG = Object.freeze({
 
 const isNotificationEnabled = () =>
   String(process.env.ORDER_NOTIFICATIONS_ENABLED ?? "true").toLowerCase() !== "false";
+const isReplenishmentNotificationEnabled = () =>
+  String(process.env.REPLENISHMENT_NOTIFICATIONS_ENABLED ?? "true").toLowerCase() !==
+  "false";
 
 const normalizeStage = (value) => {
   if (!value || typeof value !== "string") {
@@ -83,6 +86,20 @@ const createCustomerMessage = (stage, orderLabel) => {
 
 const createWarehouseMessage = (orderLabel) => {
   return `Order ${orderLabel} is confirmed and ready for warehouse picking.`;
+};
+
+const REPLENISHMENT_DAILY_EVENT_TYPE = "REPLENISHMENT_CRITICAL_DAILY";
+
+const buildReplenishmentMessage = ({ snapshotDateKey, summary = {} }) => {
+  const criticalCount = Number(summary.criticalCount) || 0;
+  const interStoreCount = Number(summary.interStoreCount) || 0;
+  const warehouseCount = Number(summary.warehouseCount) || 0;
+
+  return [
+    `Daily replenishment analysis (${snapshotDateKey}) found ${criticalCount} critical items.`,
+    `Inter-store: ${interStoreCount}.`,
+    `Warehouse replenishment: ${warehouseCount}.`,
+  ].join(" ");
 };
 
 export const sendOrderStageNotifications = async ({
@@ -206,6 +223,148 @@ export const sendOrderStageNotifications = async ({
   }
 };
 
+export const sendReplenishmentSummaryNotification = async ({
+  snapshotDateKey,
+  summary = {},
+  recommendations = [],
+  source = "replenishment_scheduler",
+  triggeredBy = "SYSTEM",
+} = {}) => {
+  if (!isReplenishmentNotificationEnabled()) {
+    return {
+      success: true,
+      createdCount: 0,
+      skipped: true,
+      reason: "disabled",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    };
+  }
+
+  if (!snapshotDateKey) {
+    return {
+      success: false,
+      createdCount: 0,
+      skipped: true,
+      reason: "missing_snapshot_date",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    };
+  }
+
+  const criticalCount = Number(summary.criticalCount) || 0;
+  if (criticalCount <= 0) {
+    return {
+      success: true,
+      createdCount: 0,
+      skipped: true,
+      reason: "no_critical_recommendations",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    };
+  }
+
+  const existing = await Notification.findOne({
+    eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    recipientType: "WAREHOUSE",
+    recipientRole: "WAREHOUSE_MANAGER",
+    "metadata.snapshotDateKey": snapshotDateKey,
+  })
+    .select("_id")
+    .lean();
+
+  if (existing) {
+    return {
+      success: true,
+      createdCount: 0,
+      skipped: true,
+      reason: "already_sent",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    };
+  }
+
+  const preview = (recommendations || [])
+    .filter((item) => String(item.priority || "").toUpperCase() === "CRITICAL")
+    .slice(0, 10)
+    .map((item) => ({
+      type: item.type,
+      priority: item.priority,
+      variantSku: item.variantSku,
+      suggestedQuantity: item.suggestedQuantity,
+      fromStoreCode: item.fromStore?.storeCode || null,
+      toStoreCode: item.toStore?.storeCode || null,
+    }));
+
+  const doc = {
+    eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    recipientType: "WAREHOUSE",
+    recipientRole: "WAREHOUSE_MANAGER",
+    channels: ["IN_APP"],
+    title: "Critical replenishment recommendations",
+    message: buildReplenishmentMessage({ snapshotDateKey, summary }),
+    status: "SENT",
+    sentAt: new Date(),
+    metadata: {
+      source,
+      triggeredBy,
+      snapshotDateKey,
+      summary,
+      criticalPreview: preview,
+    },
+  };
+
+  try {
+    const created = await Notification.create(doc);
+
+    await trackOmnichannelEvent({
+      eventType: "REPLENISHMENT_NOTIFICATIONS_SENT",
+      operation: "inventory_replenishment_notifications",
+      level: "INFO",
+      success: true,
+      metadata: {
+        source,
+        snapshotDateKey,
+        criticalCount,
+        notificationId: created?._id,
+      },
+    });
+
+    return {
+      success: true,
+      createdCount: 1,
+      skipped: false,
+      reason: "",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+      notificationId: created?._id,
+    };
+  } catch (error) {
+    omniLog.warn("sendReplenishmentSummaryNotification failed", {
+      snapshotDateKey,
+      source,
+      error: error.message,
+    });
+
+    await trackOmnichannelEvent({
+      eventType: "REPLENISHMENT_NOTIFICATIONS_FAILED",
+      operation: "inventory_replenishment_notifications",
+      level: "ERROR",
+      success: false,
+      errorMessage: error.message,
+      metadata: {
+        source,
+        snapshotDateKey,
+        criticalCount,
+      },
+    });
+
+    return {
+      success: false,
+      createdCount: 0,
+      skipped: false,
+      reason: "insert_failed",
+      eventType: REPLENISHMENT_DAILY_EVENT_TYPE,
+    };
+  }
+};
+
 export default {
   sendOrderStageNotifications,
+  sendReplenishmentSummaryNotification,
 };

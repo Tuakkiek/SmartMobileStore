@@ -103,7 +103,6 @@ const storeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-storeSchema.index({ code: 1 });
 storeSchema.index({ "address.province": 1, "address.district": 1 });
 storeSchema.index({ "address.coordinates": "2dsphere" });
 storeSchema.index({ status: 1 });

@@ -9,9 +9,12 @@ import StockMovement from "./StockMovement.js";
 import PurchaseOrder from "./PurchaseOrder.js";
 import GoodsReceipt from "./GoodsReceipt.js";
 import CycleCount from "./CycleCount.js";
-import UniversalProduct from "../product/UniversalProduct.js";
+import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 import QRCode from "qrcode";
 import { normalizeWarehouseCategory } from "../../lib/productClassification.js";
+
+const getActorName = (user) =>
+  user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
 
 // ============================================
 // PHẦN 1: QUẢN LÝ CẤU TRÚC KHO
@@ -302,6 +305,23 @@ export const createPurchaseOrder = async (req, res) => {
     const processedItems = [];
 
     for (const item of items) {
+      const orderedQuantity = Number(item.orderedQuantity);
+      const unitPrice = Number(item.unitPrice);
+
+      if (!Number.isFinite(orderedQuantity) || orderedQuantity <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Số lượng đặt không hợp lệ cho SKU: ${item.sku || "N/A"}`,
+        });
+      }
+
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Đơn giá không hợp lệ cho SKU: ${item.sku || "N/A"}`,
+        });
+      }
+
       const product = await UniversalProduct.findById(item.productId);
       if (!product) {
         return res.status(404).json({
@@ -310,23 +330,26 @@ export const createPurchaseOrder = async (req, res) => {
         });
       }
 
-      const variant = product.variants.find((v) => v.sku === item.sku);
+      const variant = await UniversalVariant.findOne({
+        sku: item.sku,
+        productId: product._id,
+      }).select("_id sku productId");
       if (!variant) {
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy SKU: ${item.sku}`,
+          message: `Không tìm thấy SKU ${item.sku} cho sản phẩm ${product.name}`,
         });
       }
 
-      const totalPrice = item.orderedQuantity * item.unitPrice;
+      const totalPrice = orderedQuantity * unitPrice;
       subtotal += totalPrice;
 
       processedItems.push({
         sku: item.sku,
-        productId: item.productId,
+        productId: product._id,
         productName: product.name,
-        orderedQuantity: item.orderedQuantity,
-        unitPrice: item.unitPrice,
+        orderedQuantity,
+        unitPrice,
         totalPrice,
       });
     }
@@ -353,7 +376,7 @@ export const createPurchaseOrder = async (req, res) => {
       expectedDeliveryDate,
       paymentDueDate,
       createdBy: req.user._id,
-      createdByName: req.user.name,
+      createdByName: getActorName(req.user),
       notes,
       status: "PENDING", // Chờ duyệt
     });
@@ -472,7 +495,7 @@ export const approvePurchaseOrder = async (req, res) => {
 
     po.status = "CONFIRMED";
     po.approvedBy = req.user._id;
-    po.approvedByName = req.user.name;
+    po.approvedByName = getActorName(req.user);
     po.approvedAt = new Date();
 
     await po.save();

@@ -24,6 +24,7 @@ import {
   ClipboardList,
   RefreshCw,
   Warehouse,
+  Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -61,6 +62,11 @@ const DashboardLayout = () => {
     if (user?.role === "ADMIN") {
       items.push(
         { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
+        {
+          path: "/admin/inventory-dashboard",
+          icon: Boxes,
+          label: "Inventory Dashboard",
+        },
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/brands", icon: Tags, label: "Quản lý Hãng" },
         { path: "/admin/product-types", icon: Layers, label: "Loại sản phẩm" },

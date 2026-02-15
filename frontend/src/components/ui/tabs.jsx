@@ -6,9 +6,26 @@ import { cn } from "@/lib/utils";
 
 const TabsContext = React.createContext();
 
-const Tabs = ({ value, onValueChange, children, className, ...props }) => {
+const Tabs = ({ value, defaultValue, onValueChange, children, className, ...props }) => {
+  const [stateValue, setStateValue] = React.useState(defaultValue || value);
+
+  React.useEffect(() => {
+    if (value !== undefined) {
+      setStateValue(value);
+    }
+  }, [value]);
+
+  const handleValueChange = (newValue) => {
+    if (value === undefined) {
+      setStateValue(newValue);
+    }
+    onValueChange?.(newValue);
+  };
+
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
+    <TabsContext.Provider
+      value={{ value: value !== undefined ? value : stateValue, onValueChange: handleValueChange }}
+    >
       <div className={cn("w-full", className)} {...props}>
         {children}
       </div>
