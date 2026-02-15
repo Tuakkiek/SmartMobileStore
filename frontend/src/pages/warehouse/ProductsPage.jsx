@@ -18,7 +18,7 @@ import {
   Layers,
   ArrowUpDown
 } from "lucide-react";
-import { universalProductAPI, productTypeAPI } from "@/lib/api";
+import { universalProductAPI, productTypeAPI, brandAPI } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/shared/Loading";
@@ -30,6 +30,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
 const ProductsPage = () => {
@@ -39,9 +46,30 @@ const ProductsPage = () => {
   // Refs for potential future use
   const containerRef = useRef(null);
   
+  // Helper to get representative image (matching ProductCard logic)
+  const getRepresentativeImage = (product) => {
+    const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
+    let variant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
+    if (!variant) variant = safeVariants.find((v) => v.sku && v.slug);
+    if (!variant) variant = safeVariants.find((v) => v.sku);
+    if (!variant) variant = safeVariants[0];
+
+    return (
+      variant?.images?.[0] ||
+      (Array.isArray(product?.images) ? product.images[0] : null) ||
+      product?.image ||
+      product?.featuredImages?.[0] || 
+      "/placeholder.png"
+    );
+  };
+
   // Product Types State
   const [productTypes, setProductTypes] = useState([]);
   const [activeTab, setActiveTab] = useState("");
+  
+  // Brand Filter State
+  const [brands, setBrands] = useState([]);
+  const [selectedBrand, setSelectedBrand] = useState("all");
   
   // Products State
   const [products, setProducts] = useState([]);
@@ -74,17 +102,18 @@ const ProductsPage = () => {
   // ============================================
   useEffect(() => {
     fetchProductTypes();
+    fetchBrands();
   }, []);
 
   useEffect(() => {
     if (activeTab) {
       fetchProducts();
     }
-  }, [activeTab, page, searchQuery, sortBy]);
+  }, [activeTab, page, searchQuery, sortBy, selectedBrand]);
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, searchQuery]);
+  }, [activeTab, searchQuery, selectedBrand]);
 
   const fetchProductTypes = async () => {
     try {
@@ -113,6 +142,17 @@ const ProductsPage = () => {
     }
   };
 
+  const fetchBrands = async () => {
+    try {
+      const response = await brandAPI.getAll({ limit: 100 });
+      const brandList = response.data?.data?.brands || [];
+      setBrands(brandList);
+    } catch (error) {
+      console.error("Error fetching brands:", error);
+      // Don't show toast for this background task to avoid annoyance
+    }
+  };
+
   const fetchProducts = async () => {
     if (!activeTab) return;
     
@@ -124,6 +164,7 @@ const ProductsPage = () => {
         search: searchQuery || undefined,
         productType: activeTab,
         sortBy: sortBy,
+        brand: selectedBrand !== "all" ? selectedBrand : undefined,
       });
 
       const data = response?.data?.data;
@@ -390,6 +431,24 @@ const ProductsPage = () => {
                   )}
                 </div>
 
+                {/* Brand Filter */}
+                <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                  <SelectTrigger className="w-[160px] h-11 border-slate-200 focus:ring-blue-400/20 rounded-xl bg-white">
+                    <div className="flex items-center truncate">
+                      <Filter className="w-4 h-4 mr-2 text-slate-500" />
+                      <SelectValue placeholder="Hãng sản xuất" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả hãng</SelectItem>
+                    {brands.map((brand) => (
+                      <SelectItem key={brand._id} value={brand._id}>
+                        {brand.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 {/* Sort */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -530,17 +589,17 @@ const ProductsPage = () => {
                               <div className="flex items-center gap-4">
                                 {/* Product Image */}
                                 <div className="flex-shrink-0">
-                                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50/30 border-2 border-slate-200 flex items-center justify-center">
-                                    <img
-                                      src={product.images?.[0] || "/placeholder.png"}
-                                      alt={product.name}
-                                      className="max-w-full max-h-full object-contain"
-                                      style={{ width: '85%', height: '85%' }}
-                                      onError={(e) => {
-                                        e.target.src = "https://placehold.co/96x96/e2e8f0/64748b?text=No+Image";
-                                      }}
-                                    />
-                                  </div>
+                                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-2">
+                                      <img
+                                        src={getRepresentativeImage(product)}
+                                        alt={product.name}
+                                        className="max-w-full max-h-full object-contain"
+                                        onError={(e) => {
+                                          e.target.src = "/placeholder.png"; 
+                                          e.target.onerror = null;
+                                        }}
+                                      />
+                                    </div>
                                 </div>
 
                                 {/* Product Info */}
