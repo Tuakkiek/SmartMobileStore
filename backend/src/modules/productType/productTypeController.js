@@ -3,6 +3,7 @@
 // ============================================
 
 import ProductType from "./ProductType.js";
+import UniversalProduct from "../product/UniversalProduct.js";
 
 // CREATE
 export const create = async (req, res) => {
@@ -74,11 +75,43 @@ export const findAll = async (req, res) => {
       .limit(+limit);
 
     const total = await ProductType.countDocuments(query);
+    const productTypeIds = productTypes.map((item) => item._id);
+
+    let usageMap = new Map();
+    if (productTypeIds.length) {
+      const usageStats = await UniversalProduct.aggregate([
+        { $match: { productType: { $in: productTypeIds } } },
+        {
+          $group: {
+            _id: "$productType",
+            associatedProductsCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      usageMap = new Map(
+        usageStats.map((item) => [
+          String(item._id),
+          item.associatedProductsCount || 0,
+        ])
+      );
+    }
+
+    const productTypesWithUsage = productTypes.map((productType) => {
+      const associatedProductsCount =
+        usageMap.get(String(productType._id)) || 0;
+
+      return {
+        ...productType.toObject(),
+        associatedProductsCount,
+        canDelete: associatedProductsCount === 0,
+      };
+    });
 
     res.json({
       success: true,
       data: {
-        productTypes,
+        productTypes: productTypesWithUsage,
         total,
         totalPages: Math.ceil(total / limit),
         currentPage: +page,
@@ -183,6 +216,19 @@ export const deleteProductType = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy loại sản phẩm",
+      });
+    }
+
+    const associatedProductsCount = await UniversalProduct.countDocuments({
+      productType: productType._id,
+    });
+
+    if (associatedProductsCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This product type cannot be deleted because it is currently in use by one or more products.",
+        data: { associatedProductsCount },
       });
     }
 

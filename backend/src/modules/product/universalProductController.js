@@ -1,26 +1,26 @@
 // ============================================
 // FILE: backend/src/modules/product/universalProductController.js
-// ✅ Controller cho Universal Product (Tất cả sản phẩm)
+// âœ… Controller cho Universal Product (Táº¥t cáº£ sáº£n pháº©m)
 // ============================================
 
 import mongoose from "mongoose";
 import UniversalProduct, { UniversalVariant } from "./UniversalProduct.js";
 import { getNextSku } from "../../lib/generateSKU.js";
 
-// Helper: Tạo slug chuẩn SEO
+// Helper: Táº¡o slug chuáº©n SEO
 const createSlug = (str) =>
   str
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
+    .replace(/Ä‘/g, "d")
     .replace(/\s+/g, "-")
     .replace(/[^\w\-]+/g, "")
     .replace(/\-\-+/g, "-")
     .replace(/^-+/, "")
     .replace(/-+$/, "");
 
-// Tạo variant slug = baseSlug + color + variantName
+// Táº¡o variant slug = baseSlug + color + variantName
 const createVariantSlug = (baseSlug, color, variantName) => {
   const colorSlug = createSlug(color);
   const nameSlug = createSlug(variantName);
@@ -119,7 +119,7 @@ export const create = async (req, res) => {
   session.startTransaction();
 
   try {
-    console.log("📥 CREATE UNIVERSAL PRODUCT REQUEST:", JSON.stringify(req.body, null, 2));
+    console.log("ðŸ“¥ CREATE UNIVERSAL PRODUCT REQUEST:", JSON.stringify(req.body, null, 2));
 
     const {
       createVariants,
@@ -132,40 +132,40 @@ export const create = async (req, res) => {
 
     // === 1. VALIDATE REQUIRED FIELDS ===
     if (!productData.name?.trim()) {
-      throw new Error("Tên sản phẩm là bắt buộc");
+      throw new Error("TÃªn sáº£n pháº©m lÃ  báº¯t buá»™c");
     }
     if (!productData.model?.trim()) {
-      throw new Error("Model là bắt buộc");
+      throw new Error("Model lÃ  báº¯t buá»™c");
     }
     if (!productData.brand) {
-      throw new Error("Hãng sản xuất là bắt buộc");
+      throw new Error("HÃ£ng sáº£n xuáº¥t lÃ  báº¯t buá»™c");
     }
     if (!productData.productType) {
-      throw new Error("Loại sản phẩm là bắt buộc");
+      throw new Error("Loáº¡i sáº£n pháº©m lÃ  báº¯t buá»™c");
     }
     if (!productData.createdBy) {
-      throw new Error("createdBy là bắt buộc");
+      throw new Error("createdBy lÃ  báº¯t buá»™c");
     }
     if (!Array.isArray(variantGroups) || variantGroups.length === 0) {
-      throw new Error("Cần ít nhất một biến thể sản phẩm");
+      throw new Error("Cáº§n Ã­t nháº¥t má»™t biáº¿n thá»ƒ sáº£n pháº©m");
     }
 
-    // === 2. TẠO SLUG ===
+    // === 2. Táº O SLUG ===
     const finalSlug = frontendSlug?.trim() || createSlug(productData.model.trim());
-    if (!finalSlug) throw new Error("Không thể tạo slug từ model");
+    if (!finalSlug) throw new Error("KhÃ´ng thá»ƒ táº¡o slug tá»« model");
 
-    // Kiểm tra slug trùng
+    // Kiá»ƒm tra slug trÃ¹ng
     const existingBySlug = await UniversalProduct.findOne({
       $or: [{ slug: finalSlug }, { baseSlug: finalSlug }],
     }).session(session);
 
     if (existingBySlug) {
-      throw new Error(`Slug đã tồn tại: ${finalSlug}`);
+      throw new Error(`Slug Ä‘Ã£ tá»“n táº¡i: ${finalSlug}`);
     }
 
-    console.log("✅ Generated slug:", finalSlug);
+    console.log("âœ… Generated slug:", finalSlug);
 
-    // === 3. TẠO PRODUCT CHÍNH ===
+    // === 3. Táº O PRODUCT CHÃNH ===
     const product = new UniversalProduct({
       name: productData.name.trim(),
       model: productData.model.trim(),
@@ -188,41 +188,41 @@ export const create = async (req, res) => {
     });
 
     await product.save({ session });
-    console.log("✅ Product created:", {
+    console.log("âœ… Product created:", {
       id: product._id,
       slug: finalSlug,
       name: product.name,
     });
 
-    // === 4. XỬ LÝ VARIANTS ===
+    // === 4. Xá»¬ LÃ VARIANTS ===
     const createdVariantIds = [];
     const seenVariantKeys = new Set();
 
     if (variantGroups.length > 0) {
-      console.log(`📦 Processing ${variantGroups.length} variant group(s)`);
+      console.log(`ðŸ“¦ Processing ${variantGroups.length} variant group(s)`);
 
       for (const group of variantGroups) {
         const { color, images = [], options = [] } = group;
 
         if (!color?.trim()) {
-          console.warn("⚠️ Skipping: missing color");
+          console.warn("âš ï¸ Skipping: missing color");
           continue;
         }
         if (!Array.isArray(options) || options.length === 0) {
-          console.warn(`⚠️ Skipping ${color}: no options`);
+          console.warn(`âš ï¸ Skipping ${color}: no options`);
           continue;
         }
 
         for (const opt of options) {
           const derivedVariantName = deriveVariantName(opt);
           if (!derivedVariantName) {
-            console.warn(`⚠️ Skipping option: missing variantName`, opt);
+            console.warn(`âš ï¸ Skipping option: missing variantName`, opt);
             continue;
           }
 
           const variantKey = buildVariantStockKey(color, derivedVariantName);
           if (seenVariantKeys.has(variantKey)) {
-            throw new Error(`Biến thể bị trùng: ${color} / ${derivedVariantName}`);
+            throw new Error(`Biáº¿n thá»ƒ bá»‹ trÃ¹ng: ${color} / ${derivedVariantName}`);
           }
           seenVariantKeys.add(variantKey);
 
@@ -245,15 +245,15 @@ export const create = async (req, res) => {
 
           await variantDoc.save({ session });
           createdVariantIds.push(variantDoc._id);
-          console.log(`✅ Created variant: ${sku} → ${variantSlug}`);
+          console.log(`âœ… Created variant: ${sku} â†’ ${variantSlug}`);
         }
       }
 
       if (createdVariantIds.length === 0) {
-        throw new Error("Không tạo được biến thể hợp lệ nào");
+        throw new Error("KhÃ´ng táº¡o Ä‘Æ°á»£c biáº¿n thá»ƒ há»£p lá»‡ nÃ o");
       }
 
-      // Cập nhật product với variant IDs
+      // Cáº­p nháº­t product vá»›i variant IDs
       product.variants = createdVariantIds;
       await product.save({ session });
     }
@@ -275,7 +275,7 @@ export const create = async (req, res) => {
 
     const responsePayload = {
       success: true,
-      message: "Tạo sản phẩm thành công",
+      message: "Táº¡o sáº£n pháº©m thÃ nh cÃ´ng",
       data: { product: populated },
     };
 
@@ -286,7 +286,7 @@ export const create = async (req, res) => {
     res.status(201).json(responsePayload);
   } catch (error) {
     await session.abortTransaction();
-    console.error("❌ CREATE PRODUCT ERROR:", error.message);
+    console.error("âŒ CREATE PRODUCT ERROR:", error.message);
     console.error("Stack:", error.stack);
 
     if (error.code === 11000) {
@@ -294,13 +294,13 @@ export const create = async (req, res) => {
       const value = error.keyValue[field];
       return res.status(400).json({
         success: false,
-        message: `Trường ${field} đã tồn tại: ${value}`,
+        message: `TrÆ°á»ng ${field} Ä‘Ã£ tá»“n táº¡i: ${value}`,
       });
     }
 
     res.status(400).json({
       success: false,
-      message: error.message || "Lỗi khi tạo sản phẩm",
+      message: error.message || "Lá»—i khi táº¡o sáº£n pháº©m",
     });
   } finally {
     session.endSession();
@@ -318,7 +318,7 @@ export const update = async (req, res) => {
     const { id } = req.params;
     const { createVariants, variants, slug: frontendSlug, ...data } = req.body;
 
-    console.log("📝 UPDATE UNIVERSAL PRODUCT REQUEST:", id);
+    console.log("ðŸ“ UPDATE UNIVERSAL PRODUCT REQUEST:", id);
 
     const product = await UniversalProduct.findById(id).session(session);
     if (!product) throw new Error("Khong tim thay san pham");
@@ -340,7 +340,7 @@ export const update = async (req, res) => {
       );
     }
 
-    // Cập nhật cơ bản
+    // Cáº­p nháº­t cÆ¡ báº£n
     if (data.name) product.name = data.name.trim();
     if (data.description !== undefined) product.description = data.description?.trim() || "";
     if (data.brand) product.brand = data.brand;
@@ -352,7 +352,7 @@ export const update = async (req, res) => {
     if (data.videoUrl !== undefined) product.videoUrl = data.videoUrl?.trim() || "";
     if (data.specifications !== undefined) product.specifications = data.specifications;
 
-    // Cập nhật slug nếu model thay đổi
+    // Cáº­p nháº­t slug náº¿u model thay Ä‘á»•i
     let newSlug = product.slug || product.baseSlug;
 
     if (data.model && data.model.trim() !== product.model) {
@@ -367,20 +367,20 @@ export const update = async (req, res) => {
         _id: { $ne: id },
       }).session(session);
 
-      if (slugExists) throw new Error(`Slug đã tồn tại: ${newSlug}`);
+      if (slugExists) throw new Error(`Slug Ä‘Ã£ tá»“n táº¡i: ${newSlug}`);
 
       product.slug = newSlug;
       product.baseSlug = newSlug;
       product.model = data.model?.trim() || product.model;
 
-      console.log("✅ Updated slug & baseSlug to:", newSlug);
+      console.log("âœ… Updated slug & baseSlug to:", newSlug);
     }
 
     await product.save({ session });
 
-    // === XỬ LÝ VARIANTS ===
+    // === Xá»¬ LÃ VARIANTS ===
     if (variantGroups.length > 0) {
-      console.log(`📦 Updating ${variantGroups.length} variant group(s)`);
+      console.log(`ðŸ“¦ Updating ${variantGroups.length} variant group(s)`);
 
       await UniversalVariant.deleteMany({ productId: id }, { session });
       const newIds = [];
@@ -396,7 +396,7 @@ export const update = async (req, res) => {
 
           const variantKey = buildVariantStockKey(color, derivedVariantName);
           if (seenVariantKeys.has(variantKey)) {
-            throw new Error(`Biến thể bị trùng: ${color} / ${derivedVariantName}`);
+            throw new Error(`Biáº¿n thá»ƒ bá»‹ trÃ¹ng: ${color} / ${derivedVariantName}`);
           }
           seenVariantKeys.add(variantKey);
 
@@ -427,12 +427,12 @@ export const update = async (req, res) => {
 
           await v.save({ session });
           newIds.push(v._id);
-          console.log(`✅ Updated variant: ${sku} → ${variantSlug}`);
+          console.log(`âœ… Updated variant: ${sku} â†’ ${variantSlug}`);
         }
       }
 
       if (newIds.length === 0) {
-        throw new Error("Không tạo được biến thể hợp lệ nào");
+        throw new Error("KhÃ´ng táº¡o Ä‘Æ°á»£c biáº¿n thá»ƒ há»£p lá»‡ nÃ o");
       }
 
       product.variants = newIds;
@@ -455,7 +455,7 @@ export const update = async (req, res) => {
 
     const responsePayload = {
       success: true,
-      message: "Cập nhật thành công",
+      message: "Cáº­p nháº­t thÃ nh cÃ´ng",
       data: { product: populated },
     };
 
@@ -466,10 +466,10 @@ export const update = async (req, res) => {
     res.json(responsePayload);
   } catch (error) {
     await session.abortTransaction();
-    console.error("❌ UPDATE PRODUCT ERROR:", error);
+    console.error("âŒ UPDATE PRODUCT ERROR:", error);
     res.status(400).json({
       success: false,
-      message: error.message || "Lỗi cập nhật",
+      message: error.message || "Lá»—i cáº­p nháº­t",
     });
   } finally {
     session.endSession();
@@ -486,10 +486,13 @@ export const update = async (req, res) => {
 // ============================================
 export const findAll = async (req, res) => {
   try {
-    const { page = 1, limit = 12, search, status, brand, productType } = req.query;
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 12;
-    
+    const { page = 1, limit = 10, search, status, brand, productType } =
+      req.query;
+    const pageNum = Math.max(Number(page) || 1, 1);
+    const limitNum = Math.max(Number(limit) || 10, 1);
+    const skipNum = (pageNum - 1) * limitNum;
+    const sortQuery = { createdAt: -1 };
+
     // 2. Build Query for Universal Products
     const uniQuery = {};
     if (search) {
@@ -502,32 +505,55 @@ export const findAll = async (req, res) => {
     if (brand) uniQuery.brand = brand;
     if (productType) uniQuery.productType = productType; // Filter by ID
 
-    // Debug Queries
-    console.log("🔎 Universal Query:", JSON.stringify(uniQuery));
+    // Debug queries and pagination/sorting.
+    console.log(
+      "[UNIVERSAL_PRODUCTS][LIST] Query:",
+      JSON.stringify({
+        page: pageNum,
+        limit: limitNum,
+        skip: skipNum,
+        sort: sortQuery,
+        filters: uniQuery,
+      })
+    );
 
     // 3. Execute Query (Universal Only)
     const [products, totalCount] = await Promise.all([
-        UniversalProduct.find(uniQuery)
-            .populate("variants")
-            .populate("brand", "name logo")
-            .populate("productType", "name slug")
-            .populate("createdBy", "fullName")
-            .sort({ createdAt: -1 })
-            .skip((pageNum - 1) * limitNum)
-            .limit(limitNum)
-            .lean(),
-        UniversalProduct.countDocuments(uniQuery)
+      UniversalProduct.find(uniQuery)
+        .populate("variants")
+        .populate("brand", "name logo")
+        .populate("productType", "name slug")
+        .populate("createdBy", "fullName")
+        .sort(sortQuery)
+        .skip(skipNum)
+        .limit(limitNum)
+        .lean(),
+      UniversalProduct.countDocuments(uniQuery),
     ]);
-    
-    console.log(`📦 Universal Results: ${products.length}`);
-    console.log(`∑ Total Products: ${totalCount}`);
+
+    const topNewestPreview = products.slice(0, 10).map((item) => ({
+      id: item._id,
+      model: item.model,
+      createdAt: item.createdAt,
+    }));
+    console.log(
+      "[UNIVERSAL_PRODUCTS][LIST] Result:",
+      JSON.stringify({
+        returned: products.length,
+        total: totalCount,
+        newestPreview: topNewestPreview,
+      })
+    );
 
     // 4. Normalize for frontend (mostly adding isUniversal flag and checking images)
-    const allProducts = products.map(p => ({
-        ...p,
-        isUniversal: true,
-        // Ensure featuredImages or valid image source
-        featuredImages: p.featuredImages?.length ? p.featuredImages : (p.variants?.[0]?.images || [])
+    const allProducts = products.map((p) => ({
+      ...p,
+      createAt: p.createdAt || p.createAt,
+      isUniversal: true,
+      // Ensure featuredImages or valid image source
+      featuredImages: p.featuredImages?.length
+        ? p.featuredImages
+        : p.variants?.[0]?.images || [],
     }));
 
     return res.json({
@@ -539,9 +565,8 @@ export const findAll = async (req, res) => {
         total: totalCount,
       },
     });
-
   } catch (error) {
-    console.error("❌ GET PRODUCTS ERROR:", error);
+    console.error("[UNIVERSAL_PRODUCTS][LIST] Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -560,13 +585,13 @@ export const findOne = async (req, res) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy",
+        message: "KhÃ´ng tÃ¬m tháº¥y",
       });
     }
 
     res.json({ success: true, data: { product } });
   } catch (error) {
-    console.error("❌ GET PRODUCT ERROR:", error);
+    console.error("âŒ GET PRODUCT ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -580,7 +605,7 @@ export const getProductDetail = async (req, res) => {
     const slug = id;
     const skuQuery = req.query.sku?.trim();
 
-    console.log("🔍 getProductDetail Universal:", { slug, sku: skuQuery });
+    console.log("ðŸ” getProductDetail Universal:", { slug, sku: skuQuery });
 
     let variant = await UniversalVariant.findOne({ slug });
     let product = null;
@@ -595,7 +620,7 @@ export const getProductDetail = async (req, res) => {
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: "Không tìm thấy sản phẩm",
+          message: "KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m",
         });
       }
 
@@ -603,7 +628,7 @@ export const getProductDetail = async (req, res) => {
         const variantBySku = product.variants.find((v) => v.sku === skuQuery);
         if (variantBySku) {
           variant = variantBySku;
-          console.log("✅ Switched to variant by SKU:", skuQuery);
+          console.log("âœ… Switched to variant by SKU:", skuQuery);
         }
       }
     } else {
@@ -618,7 +643,7 @@ export const getProductDetail = async (req, res) => {
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: "Không tìm thấy sản phẩm",
+          message: "KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m",
         });
       }
 
@@ -626,9 +651,14 @@ export const getProductDetail = async (req, res) => {
       variant = variants.find((v) => v.stock > 0) || variants[0];
 
       if (!variant) {
-        return res.status(404).json({
-          success: false,
-          message: "Sản phẩm không có biến thể",
+        // âœ… FIX: Return product even if no variants (for simple products/tests)
+        console.warn("âš ï¸ Product has no variants, returning base product:", product.slug);
+        return res.json({
+          success: true,
+          data: {
+            product,
+            selectedVariantSku: null,
+          },
         });
       }
 
@@ -652,10 +682,10 @@ export const getProductDetail = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ getProductDetail error:", error);
+    console.error("âŒ getProductDetail error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || "Lỗi server",
+      message: error.message || "Lá»—i server",
     });
   }
 };
@@ -669,17 +699,17 @@ export const deleteProduct = async (req, res) => {
 
   try {
     const product = await UniversalProduct.findById(req.params.id).session(session);
-    if (!product) throw new Error("Không tìm thấy sản phẩm");
+    if (!product) throw new Error("KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m");
 
     await UniversalVariant.deleteMany({ productId: product._id }, { session });
     await product.deleteOne({ session });
 
     await session.commitTransaction();
-    console.log("✅ PRODUCT DELETED:", req.params.id);
-    res.json({ success: true, message: "Xóa thành công" });
+    console.log("âœ… PRODUCT DELETED:", req.params.id);
+    res.json({ success: true, message: "XÃ³a thÃ nh cÃ´ng" });
   } catch (error) {
     await session.abortTransaction();
-    console.error("❌ DELETE PRODUCT ERROR:", error);
+    console.error("âŒ DELETE PRODUCT ERROR:", error);
     res.status(400).json({ success: false, message: error.message });
   } finally {
     session.endSession();
@@ -697,7 +727,7 @@ export const getVariants = async (req, res) => {
 
     res.json({ success: true, data: { variants } });
   } catch (error) {
-    console.error("❌ GET VARIANTS ERROR:", error);
+    console.error("âŒ GET VARIANTS ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -711,3 +741,4 @@ export default {
   deleteProduct,
   getVariants,
 };
+

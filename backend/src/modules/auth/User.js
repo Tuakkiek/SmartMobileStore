@@ -1,4 +1,3 @@
-// backend/src/models/User.js
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -34,6 +33,49 @@ const addressSchema = new mongoose.Schema({
   },
 });
 
+const branchAssignmentSchema = new mongoose.Schema(
+  {
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+    roles: [
+      {
+        type: String,
+        enum: [
+          "BRANCH_ADMIN",
+          "WAREHOUSE_MANAGER",
+          "WAREHOUSE_STAFF",
+          "PRODUCT_MANAGER",
+          "ORDER_MANAGER",
+          "POS_STAFF",
+          "CASHIER",
+        ],
+        required: true,
+      },
+    ],
+    status: {
+      type: String,
+      enum: ["ACTIVE", "SUSPENDED"],
+      default: "ACTIVE",
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false,
+    },
+    assignedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     role: {
@@ -42,100 +84,131 @@ const userSchema = new mongoose.Schema(
         "USER",
         "CUSTOMER",
         "WAREHOUSE_MANAGER",
-        "WAREHOUSE_STAFF", // Added missing role
+        "WAREHOUSE_STAFF",
         "PRODUCT_MANAGER",
         "ORDER_MANAGER",
         "SHIPPER",
         "POS_STAFF",
         "CASHIER",
         "ADMIN",
+        "GLOBAL_ADMIN",
+        "BRANCH_ADMIN",
       ],
       default: "USER",
     },
+
+    authzVersion: {
+      type: Number,
+      default: 2,
+    },
+
+    systemRoles: [
+      {
+        type: String,
+        enum: ["GLOBAL_ADMIN"],
+      },
+    ],
+
+    branchAssignments: [branchAssignmentSchema],
+
+    taskRoles: [
+      {
+        type: String,
+        enum: ["SHIPPER"],
+      },
+    ],
+
+    authzState: {
+      type: String,
+      enum: ["ACTIVE", "REVIEW_REQUIRED"],
+      default: "ACTIVE",
+    },
+
+    permissionsVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+
+    preferences: {
+      defaultBranchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Store",
+      },
+    },
+
     fullName: {
       type: String,
-      required: [true, "Vui lòng nhập họ tên"],
+      required: [true, "Vui long nhap ho ten"],
       trim: true,
-      minlength: [2, "Họ tên phải có ít nhất 2 ký tự"],
-      maxlength: [100, "Họ tên không được vượt quá 100 ký tự"],
+      minlength: [2, "Ho ten phai co it nhat 2 ky tu"],
+      maxlength: [100, "Ho ten khong duoc vuot qua 100 ky tu"],
     },
+
     phoneNumber: {
       type: String,
-      required: [true, "Vui lòng nhập số điện thoại"],
+      required: [true, "Vui long nhap so dien thoai"],
       unique: true,
       trim: true,
       validate: {
-        validator: function (v) {
-          // CHỈ VALIDATE KHI TẠO MỚI (this.isNew = true)
-          // Tài khoản cũ bỏ qua validation này
+        validator(v) {
           if (!this.isNew) return true;
-
-          // Kiểm tra: 10 chữ số, bắt đầu bằng 0
           return /^0\d{9}$/.test(v);
         },
-        message: "Số điện thoại phải có 10 chữ số và bắt đầu bằng số 0",
+        message: "So dien thoai phai co 10 chu so va bat dau bang so 0",
       },
     },
+
     email: {
       type: String,
       trim: true,
-      sparse: true, // Cho phép null nhưng nếu có thì phải unique
+      sparse: true,
       lowercase: true,
       validate: {
-        validator: function (v) {
-          // Nếu có email thì phải hợp lệ
-          if (!v) return true; // Email là optional
+        validator(v) {
+          if (!v) return true;
           return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
         },
-        message: "Email không hợp lệ. Email phải có dạng: example@domain.com",
+        message: "Email khong hop le. Email phai co dang: example@domain.com",
       },
     },
+
     province: {
       type: String,
       trim: true,
     },
+
     password: {
       type: String,
-      required: [true, "Vui lòng nhập mật khẩu"],
-      minlength: [8, "Mật khẩu phải có ít nhất 8 ký tự"],
+      required: [true, "Vui long nhap mat khau"],
+      minlength: [8, "Mat khau phai co it nhat 8 ky tu"],
       validate: {
-        validator: function (v) {
-          // Kiểm tra mật khẩu mạnh:
-          // - Ít nhất 8 ký tự
-          // - Có chữ thường (a-z)
-          // - Có chữ hoa (A-Z)
-          // - Có số (0-9)
-          // - Có ký tự đặc biệt
+        validator(v) {
           const hasLowerCase = /[a-z]/.test(v);
           const hasUpperCase = /[A-Z]/.test(v);
           const hasNumber = /[0-9]/.test(v);
-          const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(
-            v
-          );
-
-          return (
-            hasLowerCase &&
-            hasUpperCase &&
-            hasNumber &&
-            hasSpecialChar &&
-            v.length >= 8
-          );
+          const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
+          return hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar && v.length >= 8;
         },
         message:
-          "Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ thường, chữ hoa, số và ký tự đặc biệt (!@#$%^&*...)",
+          "Mat khau phai co it nhat 8 ky tu, bao gom chu thuong, chu hoa, so va ky tu dac biet",
       },
     },
+
     status: {
       type: String,
       enum: ["ACTIVE", "LOCKED"],
       default: "ACTIVE",
     },
+
     addresses: [addressSchema],
+
     avatar: {
       type: String,
       default: null,
       trim: true,
     },
+
     storeLocation: {
       type: String,
       trim: true,
@@ -146,23 +219,24 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-userSchema.pre("save", async function (next) {
+userSchema.index({ "branchAssignments.storeId": 1 });
+userSchema.index({ systemRoles: 1 });
+
+userSchema.pre("save", async function hashPassword(next) {
   if (!this.isModified("password")) return next();
+  if (!this.password) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = async function comparePassword(candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Remove password from JSON response
-userSchema.methods.toJSON = function () {
+userSchema.methods.toJSON = function toJSON() {
   const obj = this.toObject();
   delete obj.password;
   return obj;
 };
 
-export default mongoose.model("User", userSchema);
+export default mongoose.models.User || mongoose.model("User", userSchema);

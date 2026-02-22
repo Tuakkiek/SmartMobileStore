@@ -1,9 +1,9 @@
 // ============================================
 // FILE: frontend/src/components/homepage/DynamicSection.jsx
-// ✅ FIXED: Properly pass videos to modal
+// FIXED: Properly pass videos to modal
 // ============================================
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { HeroBannerCarousel } from "@/components/shared/HeroBanner";
 import SecondaryBanners from "@/components/shared/SecondaryBanners";
 import PromoStrip from "@/components/shared/PromoStrip";
@@ -22,22 +22,47 @@ const DynamicSection = ({
   onEdit,
   onDelete,
 }) => {
-  // ✅ FIX: State for video modal
+  // State for video modal
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoInitialIndex, setVideoInitialIndex] = useState(0);
   const [currentVideos, setCurrentVideos] = useState([]);
+  const newestLogSignatureRef = useRef("");
 
-  if (!section || !section.enabled) return null;
+  const { type, config = {}, title } = section || {};
 
-  const { type, config, title } = section;
-
-  // ✅ FIX: Handler nhận cả videos array
+  // Handler receives full videos array
   const handleVideoClick = (index, videos) => {
-    console.log("🎬 Video clicked:", { index, videosCount: videos.length });
+    console.log("[HOMEPAGE][VIDEO] clicked:", { index, videosCount: videos.length });
     setVideoInitialIndex(index);
     setCurrentVideos(videos);
     setVideoModalOpen(true);
   };
+
+  const getCreateAtTimestamp = (product) => {
+    const rawValue = product?.createdAt || product?.createAt;
+    const timestamp = rawValue ? new Date(rawValue).getTime() : 0;
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  };
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || type !== "products-new") return;
+
+    const newestPreview = [...allProducts]
+      .sort((a, b) => getCreateAtTimestamp(b) - getCreateAtTimestamp(a))
+      .slice(0, 10)
+      .map((product) => ({
+        id: product?._id,
+        model: product?.model,
+        createdAt: product?.createdAt || product?.createAt,
+      }));
+
+    const signature = JSON.stringify(newestPreview);
+    if (signature === newestLogSignatureRef.current) return;
+    newestLogSignatureRef.current = signature;
+    console.log("[HOMEPAGE][products-new] Selected newest products:", newestPreview);
+  }, [allProducts, type]);
+
+  if (!section || !section.enabled) return null;
 
   switch (type) {
     // ============================================
@@ -81,13 +106,13 @@ const DynamicSection = ({
       return <CategoryNav allProducts={allProducts} />;
 
     // ============================================
-    // SHORT VIDEOS (✅ FIXED)
+    // SHORT VIDEOS (FIXED)
     // ============================================
     case "short-videos":
       return (
         <>
           <ShortVideoSection
-            title={title || "Video ngắn"}
+            title={title || "Video ng\u1eafn"}
             videoLimit={config.videoLimit || 6}
             videoType={config.videoType || "latest"}
             onVideoClick={handleVideoClick}
@@ -123,28 +148,29 @@ const DynamicSection = ({
     // ============================================
     // NEW PRODUCTS
     // ============================================
-    case "products-new":
-      const newProducts = [...allProducts]
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, config.limit || 10);
+    case "products-new": {
+      const newestProducts = [...allProducts]
+        .sort((a, b) => getCreateAtTimestamp(b) - getCreateAtTimestamp(a))
+        .slice(0, 10);
 
       return (
         <ProductsSection
           title={title || "Sản phẩm mới"}
-          products={newProducts}
+          products={newestProducts}
           showBadges={true}
           badgeType="new"
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}
-          viewAllLink="/products?sort=createdAt"
+          viewAllLink="/products?sort=newest"
         />
       );
+    }
 
     // ============================================
     // TOP SELLERS
     // ============================================
-    case "products-topSeller":
+    case "products-topSeller": {
       const topSellers = [...allProducts]
         .filter((p) => p.salesCount > 0)
         .sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
@@ -152,7 +178,7 @@ const DynamicSection = ({
 
       return (
         <ProductsSection
-          title={title || "Sản phẩm bán chạy"}
+          title={title || "S\u1ea3n ph\u1ea9m b\u00e1n ch\u1ea1y"}
           products={topSellers}
           showBadges={true}
           badgeType="seller"
@@ -162,11 +188,12 @@ const DynamicSection = ({
           viewAllLink="/products?sort=salesCount"
         />
       );
+    }
 
     // ============================================
     // CATEGORY SECTION
     // ============================================
-    case "category-section":
+    case "category-section": {
       const categoryProducts = allProducts
         .filter((p) => p.category === config.categoryFilter)
         .slice(0, config.limit || 10);
@@ -184,6 +211,7 @@ const DynamicSection = ({
           viewAllLink={`/products?category=${config.categoryFilter}`}
         />
       );
+    }
 
     // ============================================
     // IPHONE SHOWCASE

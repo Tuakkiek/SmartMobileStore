@@ -25,6 +25,10 @@ import {
   RefreshCw,
   Warehouse,
   Boxes,
+  Store,
+  Percent,
+  Smartphone,
+  PackageCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -59,9 +63,10 @@ const DashboardLayout = () => {
   const getNavigationItems = () => {
     const items = [];
 
-    if (user?.role === "ADMIN") {
+    if (user?.role === "ADMIN" || user?.role === "GLOBAL_ADMIN") {
       items.push(
         { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
+        { path: "/admin/stores", icon: Store, label: "Quản lý Cửa Hàng" },
         {
           path: "/admin/inventory-dashboard",
           icon: Boxes,
@@ -70,13 +75,13 @@ const DashboardLayout = () => {
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/brands", icon: Tags, label: "Quản lý Hãng" },
         { path: "/admin/product-types", icon: Layers, label: "Loại sản phẩm" },
-        { path: "/admin/promotions", icon: Tag, label: "Khuyến mãi" },
+        { path: "/admin/promotions", icon: Percent, label: "Khuyến mãi" },
         { path: "/admin/homepage-editor", icon: Layout, label: "Giao diện trang chủ" },
         { path: "/admin/short-videos", icon: Video, label: "Video ngắn" },
         { path: "/admin/warehouse-config", icon: Warehouse, label: "Cấu Hình Kho" },
-        { path: "/warehouse/products", icon: Package, label: "Sản phẩm" },
+        { path: "/warehouse/products", icon: Smartphone, label: "Sản phẩm" },
         { path: "/warehouse-staff", icon: Package, label: "Dashboard Kho" },
-        { path: "/warehouse-staff/receive-goods", icon: Truck, label: "Nhận hàng" },
+        { path: "/warehouse-staff/receive-goods", icon: PackageCheck, label: "Nhận hàng" },
         { path: "/warehouse-staff/pick-orders", icon: ClipboardList, label: "Xuất kho" },
         { path: "/warehouse-staff/transfer", icon: RefreshCw, label: "Chuyển kho" },
         { path: "/order-manager/orders", icon: ShoppingBag, label: "Đơn hàng" },
@@ -204,6 +209,7 @@ const DashboardLayout = () => {
   // ============================================
   const getRoleLabel = (role) => {
     const roleMap = {
+      GLOBAL_ADMIN: "Quản trị viên toàn hệ thống",
       ADMIN: "Quản trị viên",
       WAREHOUSE_MANAGER: "Quản lý kho",
       WAREHOUSE_STAFF: "Nhân viên kho",

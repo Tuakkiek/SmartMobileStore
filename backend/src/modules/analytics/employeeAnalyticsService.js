@@ -1,164 +1,235 @@
-// ============================================
-// FILE: backend/src/services/employeeAnalyticsService.js
-// ✅ FIXED: successRate trả về NUMBER thay vì STRING
-// ============================================
-
+import mongoose from "mongoose";
 import Order from "../order/Order.js";
 
-/**
- * Lấy thống kê KPI của POS Staff
- */
-export const getPOSStaffStats = async (startDate, endDate) => {
+const toObjectIdIfValid = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  const asString = String(value).trim();
+  if (!asString) return null;
+  return mongoose.Types.ObjectId.isValid(asString)
+    ? new mongoose.Types.ObjectId(asString)
+    : null;
+};
+
+const buildDateMatch = (startDate, endDate) => {
+  if (!startDate && !endDate) {
+    return {};
+  }
+
+  const createdAt = {};
+  if (startDate) createdAt.$gte = new Date(startDate);
+  if (endDate) createdAt.$lte = new Date(endDate);
+  return { createdAt };
+};
+
+const normalizeEmployeeStatsOptions = (startDateOrOptions, endDate, legacyBranchId) => {
+  if (startDateOrOptions && typeof startDateOrOptions === "object") {
+    const branchId = startDateOrOptions.branchId || startDateOrOptions.storeId || "";
+    return {
+      startDate: startDateOrOptions.startDate || null,
+      endDate: startDateOrOptions.endDate || null,
+      branchId: branchId ? String(branchId) : "",
+      orderRepo: startDateOrOptions.orderRepo || null,
+      scopeMode: startDateOrOptions.scopeMode || "branch",
+    };
+  }
+
+  return {
+    startDate: startDateOrOptions || null,
+    endDate: endDate || null,
+    branchId: legacyBranchId ? String(legacyBranchId) : "",
+    orderRepo: null,
+    scopeMode: "branch",
+  };
+};
+
+const aggregateOrders = async ({ orderRepo, pipeline, scopeMode }) => {
+  if (orderRepo?.aggregate) {
+    return orderRepo.aggregate(pipeline, { mode: scopeMode });
+  }
+  return Order.aggregate(pipeline);
+};
+
+const applyLegacyBranchMatch = (match, branchId) => {
+  if (!branchId) return;
+  const asObjectId = toObjectIdIfValid(branchId);
+  match["assignedStore.storeId"] = asObjectId || branchId;
+};
+
+export const getPOSStaffStats = async (startDateOrOptions, endDate, legacyBranchId) => {
+  const options = normalizeEmployeeStatsOptions(
+    startDateOrOptions,
+    endDate,
+    legacyBranchId
+  );
+
   const match = {
     orderSource: "IN_STORE",
     status: { $in: ["DELIVERED", "CANCELLED"] },
+    ...buildDateMatch(options.startDate, options.endDate),
   };
 
-  if (startDate || endDate) {
-    match.createdAt = {};
-    if (startDate) match.createdAt.$gte = new Date(startDate);
-    if (endDate) match.createdAt.$lte = new Date(endDate);
+  if (options.branchId && !options.orderRepo) {
+    applyLegacyBranchMatch(match, options.branchId);
   }
 
-  const stats = await Order.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: {
-          staffId: "$posInfo.staffId",
-          staffName: "$posInfo.staffName",
-        },
-        orderCount: { $sum: 1 },
-        revenue: {
-          $sum: {
-            $cond: [{ $eq: ["$status", "DELIVERED"] }, "$totalAmount", 0],
+  const stats = await aggregateOrders({
+    orderRepo: options.orderRepo,
+    scopeMode: options.scopeMode,
+    pipeline: [
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            staffId: "$posInfo.staffId",
+            staffName: "$posInfo.staffName",
+          },
+          orderCount: { $sum: 1 },
+          revenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "DELIVERED"] }, "$totalAmount", 0],
+            },
+          },
+          cancelledCount: {
+            $sum: { $cond: [{ $eq: ["$status", "CANCELLED"] }, 1, 0] },
           },
         },
-        cancelledCount: {
-          $sum: { $cond: [{ $eq: ["$status", "CANCELLED"] }, 1, 0] },
-        },
       },
-    },
-    { $sort: { revenue: -1 } },
-  ]);
+      { $sort: { revenue: -1 } },
+    ],
+  });
 
-  return stats.map((s) => ({
-    staffId: s._id.staffId,
-    name: s._id.staffName || "Unknown",
-    orderCount: s.orderCount,
-    revenue: s.revenue,
-    cancelledCount: s.cancelledCount,
+  return stats.map((entry) => ({
+    staffId: entry._id.staffId,
+    name: entry._id.staffName || "Unknown",
+    orderCount: entry.orderCount,
+    revenue: entry.revenue,
+    cancelledCount: entry.cancelledCount,
   }));
 };
 
-/**
- * ✅ FIXED: Lấy thống kê KPI của Shipper - successRate là NUMBER
- */
-export const getShipperStats = async (startDate, endDate) => {
+export const getShipperStats = async (startDateOrOptions, endDate, legacyBranchId) => {
+  const options = normalizeEmployeeStatsOptions(
+    startDateOrOptions,
+    endDate,
+    legacyBranchId
+  );
+
   const match = {
     "shipperInfo.shipperId": { $exists: true },
     status: { $in: ["SHIPPING", "DELIVERED", "RETURNED"] },
+    ...buildDateMatch(options.startDate, options.endDate),
   };
 
-  if (startDate || endDate) {
-    match.createdAt = {};
-    if (startDate) match.createdAt.$gte = new Date(startDate);
-    if (endDate) match.createdAt.$lte = new Date(endDate);
+  if (options.branchId && !options.orderRepo) {
+    applyLegacyBranchMatch(match, options.branchId);
   }
 
-  const stats = await Order.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: {
-          shipperId: "$shipperInfo.shipperId",
-          shipperName: "$shipperInfo.shipperName",
-        },
-        totalOrders: { $sum: 1 },
-        shipping: {
-          $sum: { $cond: [{ $eq: ["$status", "SHIPPING"] }, 1, 0] },
-        },
-        delivered: {
-          $sum: { $cond: [{ $eq: ["$status", "DELIVERED"] }, 1, 0] },
-        },
-        returned: {
-          $sum: { $cond: [{ $eq: ["$status", "RETURNED"] }, 1, 0] },
+  const stats = await aggregateOrders({
+    orderRepo: options.orderRepo,
+    scopeMode: options.scopeMode,
+    pipeline: [
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            shipperId: "$shipperInfo.shipperId",
+            shipperName: "$shipperInfo.shipperName",
+          },
+          totalOrders: { $sum: 1 },
+          shipping: {
+            $sum: { $cond: [{ $eq: ["$status", "SHIPPING"] }, 1, 0] },
+          },
+          delivered: {
+            $sum: { $cond: [{ $eq: ["$status", "DELIVERED"] }, 1, 0] },
+          },
+          returned: {
+            $sum: { $cond: [{ $eq: ["$status", "RETURNED"] }, 1, 0] },
+          },
         },
       },
-    },
-    { $sort: { delivered: -1 } },
-  ]);
+      { $sort: { delivered: -1 } },
+    ],
+  });
 
-  return stats.map((s) => {
-    const completed = s.delivered + s.returned;
-    // ✅ TRẢ VỀ NUMBER thay vì STRING
+  return stats.map((entry) => {
+    const completed = entry.delivered + entry.returned;
     const successRate =
       completed > 0
-        ? parseFloat(((s.delivered / completed) * 100).toFixed(2))
+        ? parseFloat(((entry.delivered / completed) * 100).toFixed(2))
         : 0;
 
     return {
-      shipperId: s._id.shipperId,
-      name: s._id.shipperName || "Unknown",
-      totalOrders: s.totalOrders,
-      shipping: s.shipping,
-      delivered: s.delivered,
-      returned: s.returned,
-      successRate, // ✅ Đây là NUMBER (95.50 thay vì "95.50")
+      shipperId: entry._id.shipperId,
+      name: entry._id.shipperName || "Unknown",
+      totalOrders: entry.totalOrders,
+      shipping: entry.shipping,
+      delivered: entry.delivered,
+      returned: entry.returned,
+      successRate,
     };
   });
 };
 
-/**
- * Lấy thống kê KPI của Cashier
- */
-export const getCashierStats = async (startDate, endDate) => {
+export const getCashierStats = async (startDateOrOptions, endDate, legacyBranchId) => {
+  const options = normalizeEmployeeStatsOptions(
+    startDateOrOptions,
+    endDate,
+    legacyBranchId
+  );
+
   const match = {
     "posInfo.cashierId": { $exists: true },
     paymentStatus: "PAID",
+    ...buildDateMatch(options.startDate, options.endDate),
   };
 
-  if (startDate || endDate) {
-    match.createdAt = {};
-    if (startDate) match.createdAt.$gte = new Date(startDate);
-    if (endDate) match.createdAt.$lte = new Date(endDate);
+  if (options.branchId && !options.orderRepo) {
+    applyLegacyBranchMatch(match, options.branchId);
   }
 
-  const stats = await Order.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: {
-          cashierId: "$posInfo.cashierId",
-          cashierName: "$posInfo.cashierName",
-        },
-        transactionCount: { $sum: 1 },
-        totalAmount: { $sum: "$totalAmount" },
-        vatInvoiceCount: {
-          $sum: { $cond: [{ $ne: ["$vatInvoice", null] }, 1, 0] },
+  const stats = await aggregateOrders({
+    orderRepo: options.orderRepo,
+    scopeMode: options.scopeMode,
+    pipeline: [
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            cashierId: "$posInfo.cashierId",
+            cashierName: "$posInfo.cashierName",
+          },
+          transactionCount: { $sum: 1 },
+          totalAmount: { $sum: "$totalAmount" },
+          vatInvoiceCount: {
+            $sum: { $cond: [{ $ne: ["$vatInvoice", null] }, 1, 0] },
+          },
         },
       },
-    },
-    { $sort: { totalAmount: -1 } },
-  ]);
+      { $sort: { totalAmount: -1 } },
+    ],
+  });
 
-  return stats.map((s) => ({
-    cashierId: s._id.cashierId,
-    name: s._id.cashierName || "Unknown",
-    transactionCount: s.transactionCount,
-    totalAmount: s.totalAmount,
-    vatInvoiceCount: s.vatInvoiceCount,
+  return stats.map((entry) => ({
+    cashierId: entry._id.cashierId,
+    name: entry._id.cashierName || "Unknown",
+    transactionCount: entry.transactionCount,
+    totalAmount: entry.totalAmount,
+    vatInvoiceCount: entry.vatInvoiceCount,
   }));
 };
 
-/**
- * Lấy top performer của từng vai trò
- */
-export const getTopPerformers = async (startDate, endDate) => {
+export const getTopPerformers = async (startDateOrOptions, endDate, legacyBranchId) => {
+  const options = normalizeEmployeeStatsOptions(
+    startDateOrOptions,
+    endDate,
+    legacyBranchId
+  );
+
   const [posStats, shipperStats, cashierStats] = await Promise.all([
-    getPOSStaffStats(startDate, endDate),
-    getShipperStats(startDate, endDate),
-    getCashierStats(startDate, endDate),
+    getPOSStaffStats(options),
+    getShipperStats(options),
+    getCashierStats(options),
   ]);
 
   return {
@@ -168,10 +239,7 @@ export const getTopPerformers = async (startDate, endDate) => {
   };
 };
 
-/**
- * ✅ FIXED: Lấy thống kê cá nhân - successRate là NUMBER
- */
-export const getPersonalStats = async (userId, period = "today") => {
+export const getPersonalStats = async (userId, period = "today", options = {}) => {
   const now = new Date();
   let startDate;
 
@@ -192,8 +260,16 @@ export const getPersonalStats = async (userId, period = "today") => {
       startDate = new Date(now.setHours(0, 0, 0, 0));
   }
 
-  // Thống kê POS Staff
+  const baseScope = {};
+  if (options?.branchId) {
+    const scopedBranchId = toObjectIdIfValid(options.branchId);
+    if (scopedBranchId) {
+      baseScope["assignedStore.storeId"] = scopedBranchId;
+    }
+  }
+
   const posOrders = await Order.countDocuments({
+    ...baseScope,
     "posInfo.staffId": userId,
     orderSource: "IN_STORE",
     createdAt: { $gte: startDate },
@@ -202,6 +278,7 @@ export const getPersonalStats = async (userId, period = "today") => {
   const posRevenue = await Order.aggregate([
     {
       $match: {
+        ...baseScope,
         "posInfo.staffId": userId,
         status: "DELIVERED",
         createdAt: { $gte: startDate },
@@ -210,40 +287,42 @@ export const getPersonalStats = async (userId, period = "today") => {
     { $group: { _id: null, total: { $sum: "$totalAmount" } } },
   ]);
 
-  // Thống kê Shipper
   const shipperOrders = await Order.countDocuments({
+    ...baseScope,
     "shipperInfo.shipperId": userId,
     status: { $in: ["SHIPPING", "DELIVERED", "RETURNED"] },
     createdAt: { $gte: startDate },
   });
 
   const shipperShipping = await Order.countDocuments({
+    ...baseScope,
     "shipperInfo.shipperId": userId,
     status: "SHIPPING",
     createdAt: { $gte: startDate },
   });
 
   const shipperDelivered = await Order.countDocuments({
+    ...baseScope,
     "shipperInfo.shipperId": userId,
     status: "DELIVERED",
     createdAt: { $gte: startDate },
   });
 
   const shipperReturned = await Order.countDocuments({
+    ...baseScope,
     "shipperInfo.shipperId": userId,
     status: "RETURNED",
     createdAt: { $gte: startDate },
   });
 
-  // ✅ TRẢ VỀ NUMBER thay vì STRING
   const completed = shipperDelivered + shipperReturned;
   const successRate =
     completed > 0
       ? parseFloat(((shipperDelivered / completed) * 100).toFixed(2))
       : 0;
 
-  // Thống kê Cashier
   const cashierTransactions = await Order.countDocuments({
+    ...baseScope,
     "posInfo.cashierId": userId,
     paymentStatus: "PAID",
     createdAt: { $gte: startDate },
@@ -252,6 +331,7 @@ export const getPersonalStats = async (userId, period = "today") => {
   const cashierRevenue = await Order.aggregate([
     {
       $match: {
+        ...baseScope,
         "posInfo.cashierId": userId,
         paymentStatus: "PAID",
         createdAt: { $gte: startDate },
@@ -272,7 +352,7 @@ export const getPersonalStats = async (userId, period = "today") => {
       shipping: shipperShipping,
       delivered: shipperDelivered,
       returned: shipperReturned,
-      successRate, // ✅ Đây là NUMBER
+      successRate,
     },
     cashier: {
       transactions: cashierTransactions,

@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Warehouse,
   Plus,
@@ -41,13 +42,12 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 const WarehouseConfigPage = () => {
+  const navigate = useNavigate();
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [currentWarehouse, setCurrentWarehouse] = useState(null);
-  const [selectedWarehouse, setSelectedWarehouse] = useState(null);
-  const [stats, setStats] = useState(null);
   const [activeTab, setActiveTab] = useState("basic");
 
   // Form state
@@ -222,14 +222,7 @@ const WarehouseConfigPage = () => {
     }
   };
 
-  const fetchWarehouseStats = async (id) => {
-    try {
-      const res = await api.get(`/warehouse/config/${id}/stats`);
-      setStats(res.data.stats);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
-  };
+
 
   const calculateEstimatedLocations = (zones) => {
     return zones.reduce(
@@ -387,14 +380,11 @@ const WarehouseConfigPage = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setSelectedWarehouse(warehouse);
-                          fetchWarehouseStats(warehouse._id);
-                        }}
+                        onClick={() => navigate(`/admin/warehouse-config/${warehouse._id}/visual`)}
                         className="flex-1"
                       >
                         <BarChart3 className="w-4 h-4 mr-1" />
-                        Xem Thống Kê
+                        Xem Sơ Đồ
                       </Button>
                     )}
                     <Button
@@ -708,6 +698,8 @@ const WarehouseConfigPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const storeInventorySchema = new mongoose.Schema(
   {
@@ -91,6 +92,9 @@ storeInventorySchema.pre("save", function updateSnapshot(next) {
 
   next();
 });
+
+// ── KILL-SWITCH: Auto-inject branch scoping into every query ──
+storeInventorySchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
 
 export default
   mongoose.models.StoreInventory ||

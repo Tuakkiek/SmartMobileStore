@@ -1,4 +1,5 @@
 import User from "./User.js";
+import { deriveAuthzWriteFromLegacyInput } from "../../authz/userAccessResolver.js";
 
 // Cập nhật thông tin người dùng
 export const updateProfile = async (req, res) => {
@@ -100,6 +101,7 @@ export const getAllEmployees = async (req, res) => {
       limit = 20,
       search = "",
       role = "",
+      storeLocation = "", // ✅ Filter by store
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
@@ -140,6 +142,23 @@ export const getAllEmployees = async (req, res) => {
       }
     }
 
+    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    if (!req.authz?.isGlobalAdmin) {
+      if (req.authz?.activeBranchId) {
+        filter.storeLocation = req.authz.activeBranchId;
+      } else {
+         return res.json({
+          success: true,
+          data: { employees: [], pagination: { currentPage: 1, totalPages: 0, total: 0, limit: limitNum } },
+        });
+      }
+    } else {
+      // Global Admin can filter by store
+      if (storeLocation && storeLocation !== "ALL") {
+        filter.storeLocation = storeLocation;
+      }
+    }
+
     // Sắp xếp
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
@@ -175,8 +194,14 @@ export const getAllEmployees = async (req, res) => {
 // Tạo nhân viên mới
 export const createEmployee = async (req, res) => {
   try {
-    const { fullName, phoneNumber, email, province, password, role, avatar } =
+    const { fullName, phoneNumber, email, province, password, role, avatar, storeLocation } =
       req.body;
+    const legacyRole = String(role || "").trim().toUpperCase();
+    const authzWrite = deriveAuthzWriteFromLegacyInput({
+      role: legacyRole,
+      storeLocation,
+      assignedBy: req.user?._id,
+    });
 
     const user = await User.create({
       fullName,
@@ -184,8 +209,15 @@ export const createEmployee = async (req, res) => {
       email,
       province,
       password,
-      role,
+      role: legacyRole,
       avatar: avatar || "",
+      systemRoles: authzWrite.systemRoles,
+      taskRoles: authzWrite.taskRoles,
+      branchAssignments: authzWrite.branchAssignments,
+      authzState: authzWrite.authzState,
+      authzVersion: 2,
+      permissionsVersion: 1,
+      storeLocation: storeLocation || "",
     });
     res.status(201).json({
       success: true,
@@ -266,7 +298,7 @@ export const updateEmployeeAvatar = async (req, res) => {
 
 export const updateEmployee = async (req, res) => {
   try {
-    const { fullName, phoneNumber, email, province, password, role, avatar } =
+    const { fullName, phoneNumber, email, province, password, role, avatar, storeLocation } =
       req.body;
 
     const user = await User.findById(req.params.id);
@@ -276,13 +308,36 @@ export const updateEmployee = async (req, res) => {
         .json({ success: false, message: "Không tìm thấy nhân viên" });
     }
 
-    // Cập nhật thông tin
+    const nextRole = role ? String(role).trim().toUpperCase() : user.role;
+    const nextStoreLocation =
+      storeLocation !== undefined ? storeLocation : user.storeLocation;
+    const authzWrite = deriveAuthzWriteFromLegacyInput({
+      role: nextRole,
+      storeLocation: nextStoreLocation,
+      assignedBy: req.user?._id,
+    });
+
+    const roleOrScopeChanged =
+      String(user.role || "") !== String(nextRole || "") ||
+      String(user.storeLocation || "") !== String(nextStoreLocation || "");
+
+    // Cap nhat thong tin
     user.fullName = fullName || user.fullName;
     user.phoneNumber = phoneNumber || user.phoneNumber;
     user.email = email || user.email;
     user.province = province || user.province;
-    user.role = role || user.role;
+    user.role = nextRole;
     user.avatar = avatar !== undefined ? avatar : user.avatar;
+    user.storeLocation = nextStoreLocation;
+    user.systemRoles = authzWrite.systemRoles;
+    user.taskRoles = authzWrite.taskRoles;
+    user.branchAssignments = authzWrite.branchAssignments;
+    user.authzState = authzWrite.authzState;
+    user.authzVersion = 2;
+
+    if (roleOrScopeChanged) {
+      user.permissionsVersion = Number(user.permissionsVersion || 1) + 1;
+    }
 
     // Chỉ cập nhật password nếu được cung cấp
     if (password && password.trim()) {
@@ -305,7 +360,7 @@ export const getAllShippers = async (req, res) => {
   try {
     const shippers = await User.find({ 
       role: "SHIPPER",
-      status: "ACTIVE" 
+      status: "ACTIVE",
     })
       .select("_id fullName phoneNumber email")
       .sort({ fullName: 1 });
@@ -322,3 +377,6 @@ export const getAllShippers = async (req, res) => {
     });
   }
 };
+
+
+

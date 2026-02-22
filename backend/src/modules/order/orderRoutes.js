@@ -1,17 +1,22 @@
 import express from "express";
-import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import { protect } from "../../middleware/authMiddleware.js";
+import { resolveAccessContext } from "../../middleware/authz/resolveAccessContext.js";
+import { authorize } from "../../middleware/authz/authorize.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 import * as orderController from "./orderController.js";
 
 const router = express.Router();
 
+// Carrier webhooks are unauthenticated
 router.post("/carrier/webhook", orderController.handleCarrierWebhook);
 router.put("/carrier/webhook", orderController.handleCarrierWebhook);
 
-router.use(protect);
+// All other routes require auth + branch context
+router.use(protect, resolveAccessContext);
 
 router.get(
   "/stats/summary",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ORDERS_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.getOrderStats
 );
 
@@ -27,34 +32,34 @@ router.post("/:id/cancel", orderController.cancelOrder);
 
 router.patch(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "SHIPPER", "POS_STAFF"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.updateOrderStatus
 );
 router.put(
   "/:id/status",
-  restrictTo("ADMIN", "ORDER_MANAGER", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "SHIPPER", "POS_STAFF"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.updateOrderStatus
 );
 
 router.patch(
   "/:id/assign-carrier",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.assignCarrier
 );
 router.put(
   "/:id/assign-carrier",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.assignCarrier
 );
 
 router.patch(
   "/:id/payment",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.updatePaymentStatus
 );
 router.put(
   "/:id/payment",
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.updatePaymentStatus
 );
 

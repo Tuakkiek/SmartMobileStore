@@ -12,28 +12,40 @@ export const useAuthStore = create(
       isLoading: false,
       error: null,
 
+      // ── KILL-SWITCH: Branch context fields ──
+      activeBranchId: null,
+      authz: null,
+
       // Login
       login: async (credentials) => {
         set({ isLoading: true, error: null });
         try {
           const response = await authAPI.login(credentials);
-          const { user, token } = response.data.data;
-          
-          // Lưu vào store (tự động persist vào localStorage)
-          set({ 
-            user, 
+          const { user, token, authz } = response.data.data;
+
+          // ── KILL-SWITCH: Extract active branch from authz or first allowed branch ──
+          const activeBranchId =
+            authz?.activeBranchId ||
+            user?.storeLocation ||
+            (authz?.allowedBranchIds?.[0]) ||
+            null;
+
+          set({
+            user,
             token,
             isAuthenticated: true,
-            isLoading: false 
+            isLoading: false,
+            activeBranchId,
+            authz: authz || null,
           });
-          
+
           return { success: true };
         } catch (error) {
           const message = error.response?.data?.message || 'Đăng nhập thất bại';
-          set({ 
-            error: message, 
+          set({
+            error: message,
             isLoading: false,
-            isAuthenticated: false 
+            isAuthenticated: false
           });
           return { success: false, message };
         }
@@ -60,11 +72,13 @@ export const useAuthStore = create(
         } catch (error) {
           console.error('Logout error:', error);
         } finally {
-          set({ 
-            user: null, 
+          set({
+            user: null,
             token: null,
             isAuthenticated: false,
-            error: null 
+            error: null,
+            activeBranchId: null,
+            authz: null,
           });
         }
       },
@@ -72,27 +86,46 @@ export const useAuthStore = create(
       // Get current user (để refresh thông tin user)
       getCurrentUser: async () => {
         const token = get().token;
-        
+
         if (!token) {
           return { success: false };
         }
 
         try {
           const response = await authAPI.getCurrentUser();
-          set({ 
-            user: response.data.data.user,
-            isAuthenticated: true
+          const { user, authz } = response.data.data;
+
+          // ── KILL-SWITCH: Refresh authz context ──
+          const currentActiveBranch = get().activeBranchId;
+          const activeBranchId =
+            currentActiveBranch ||
+            authz?.activeBranchId ||
+            user?.storeLocation ||
+            (authz?.allowedBranchIds?.[0]) ||
+            null;
+
+          set({
+            user,
+            isAuthenticated: true,
+            activeBranchId,
+            authz: authz || get().authz,
           });
           return { success: true };
         } catch (error) {
-          // Token không hợp lệ, clear store
-          set({ 
-            user: null, 
+          set({
+            user: null,
             token: null,
-            isAuthenticated: false 
+            isAuthenticated: false,
+            activeBranchId: null,
+            authz: null,
           });
           return { success: false };
         }
+      },
+
+      // ── KILL-SWITCH: Switch active branch ──
+      setActiveBranch: (branchId) => {
+        set({ activeBranchId: branchId || null });
       },
 
       // Change password
@@ -118,7 +151,9 @@ export const useAuthStore = create(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        activeBranchId: state.activeBranchId,
+        authz: state.authz,
       })
     }
   )

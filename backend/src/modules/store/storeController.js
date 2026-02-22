@@ -1,5 +1,7 @@
 import Store from "./Store.js";
 import StoreInventory from "../inventory/StoreInventory.js";
+import User from "../auth/User.js";
+import Order from "../order/Order.js";
 import { omniLog } from "../../utils/logger.js";
 
 const parseBool = (value) => {
@@ -223,9 +225,213 @@ export const checkStoreStock = async (req, res) => {
   }
 };
 
+// ==========================================
+// 🔹 ADMIN: QUẢN LÝ CỬA HÀNG (CRUD)
+// ==========================================
+
+// @desc    Tạo cửa hàng mới
+// @route   POST /api/stores
+// @access  Private/Admin
+export const createStore = async (req, res) => {
+  try {
+    const {
+      code,
+      name,
+      type,
+      address,
+      phone,
+      email,
+      manager,
+      operatingHours,
+      services,
+      shippingZones,
+      capacity,
+      status,
+      isHeadquarters,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !code ||
+      !name ||
+      !address?.province ||
+      !address?.district ||
+      !address?.street
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng điền đầy đủ thông tin bắt buộc (Mã, Tên, Địa chỉ)",
+      });
+    }
+
+    const storeExists = await Store.findOne({ code });
+    if (storeExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã cửa hàng đã tồn tại",
+      });
+    }
+
+    const store = await Store.create({
+      code,
+      name,
+      type,
+      address,
+      phone,
+      email,
+      manager,
+      operatingHours,
+      services,
+      shippingZones,
+      capacity,
+      status,
+      isHeadquarters,
+    });
+
+    res.status(201).json({
+      success: true,
+      store,
+    });
+  } catch (error) {
+    omniLog.error("createStore failed", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi tạo cửa hàng",
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Cập nhật cửa hàng
+// @route   PUT /api/stores/:id
+// @access  Private/Admin
+export const updateStore = async (req, res) => {
+  try {
+    const store = await Store.findById(req.params.id);
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cửa hàng",
+      });
+    }
+
+    const {
+      code,
+      name,
+      type,
+      address,
+      phone,
+      email,
+      manager,
+      operatingHours,
+      services,
+      shippingZones,
+      capacity,
+      status,
+      isHeadquarters,
+    } = req.body;
+
+    // Validate code uniqueness if changing code
+    if (code && code !== store.code) {
+      const storeExists = await Store.findOne({ code });
+      if (storeExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã cửa hàng đã tồn tại",
+        });
+      }
+      store.code = code;
+    }
+
+    if (name) store.name = name;
+    if (type) store.type = type;
+    if (address) store.address = address;
+    if (phone) store.phone = phone;
+    if (email) store.email = email;
+    if (manager) store.manager = manager;
+    if (operatingHours) store.operatingHours = operatingHours;
+    if (services) store.services = services;
+    if (shippingZones) store.shippingZones = shippingZones;
+    if (capacity) store.capacity = capacity;
+    if (status) store.status = status;
+    if (isHeadquarters !== undefined) store.isHeadquarters = isHeadquarters;
+
+    const updatedStore = await store.save();
+
+    res.json({
+      success: true,
+      store: updatedStore,
+    });
+  } catch (error) {
+    omniLog.error("updateStore failed", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật cửa hàng",
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Xóa cửa hàng (Hard delete for now, or just deactivate?)
+// @route   DELETE /api/stores/:id
+// @access  Private/Admin
+export const deleteStore = async (req, res) => {
+  try {
+    const store = await Store.findById(req.params.id);
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cửa hàng",
+      });
+    }
+
+    // Prevent orphaned references and soft-delete the store when safe.
+    const [legacyUserRef, branchUserRef, orderRef, inventoryRef] = await Promise.all([
+      User.exists({ storeLocation: String(store._id) }),
+      User.exists({ "branchAssignments.storeId": store._id }),
+      Order.exists({ "assignedStore.storeId": store._id }),
+      StoreInventory.exists({ storeId: store._id }),
+    ]);
+
+    if (legacyUserRef || branchUserRef || orderRef || inventoryRef) {
+      return res.status(409).json({
+        success: false,
+        code: "STORE_DELETE_BLOCKED",
+        message: "Khong the xoa cua hang vi du lieu tham chieu van ton tai",
+        blockers: {
+          usersLegacyStoreLocation: Boolean(legacyUserRef),
+          usersBranchAssignments: Boolean(branchUserRef),
+          orders: Boolean(orderRef),
+          inventory: Boolean(inventoryRef),
+        },
+      });
+    }
+
+    store.status = "INACTIVE";
+    await store.save();
+
+    res.json({
+      success: true,
+      message: "Da vo hieu hoa cua hang thanh cong",
+    });
+  } catch (error) {
+    omniLog.error("deleteStore failed", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Loi khi vo hieu hoa cua hang",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   getAllStores,
   getNearbyStores,
   getStoreById,
   checkStoreStock,
+  createStore,
+  updateStore,
+  deleteStore,
 };

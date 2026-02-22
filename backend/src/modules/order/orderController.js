@@ -655,6 +655,15 @@ const buildFilter = (req) => {
     andClauses.push({ orderSource: "IN_STORE" });
   }
 
+  // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+  if (!req.authz?.isGlobalAdmin) {
+    if (req.authz?.activeBranchId) {
+      andClauses.push({ "assignedStore.storeId": req.authz.activeBranchId });
+    } else if (req.user.role !== "CUSTOMER") {
+      andClauses.push({ "assignedStore.storeId": null });
+    }
+  }
+
   if (andClauses.length === 0) {
     return {};
   }

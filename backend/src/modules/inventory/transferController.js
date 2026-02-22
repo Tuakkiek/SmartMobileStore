@@ -3,6 +3,8 @@ import StockTransfer from "./StockTransfer.js";
 import Store from "../store/Store.js";
 import StoreInventory from "./StoreInventory.js";
 import StockMovement from "../warehouse/StockMovement.js";
+import Inventory from "../warehouse/Inventory.js"; // Added for physical inventory sync
+import WarehouseLocation from "../warehouse/WarehouseLocation.js"; // Added for physical inventory sync
 
 const TRANSFER_EDITABLE_STATUSES = new Set(["PENDING", "APPROVED"]);
 
@@ -127,6 +129,13 @@ export const requestTransfer = async (req, res) => {
     }
     if (!reason) {
       throw new Error("Ly do transfer la bat buoc");
+    }
+
+    // ── KILL-SWITCH: Branch ownership validation ──
+    const allowedBranches = req.authz?.allowedBranchIds || [];
+    const isGlobalAdmin = req.authz?.isGlobalAdmin || false;
+    if (!isGlobalAdmin && !allowedBranches.includes(String(fromStoreId))) {
+      throw new Error("AUTHZ_BRANCH_FORBIDDEN: You do not manage the source store");
     }
 
     // Do not run transaction-scoped queries in parallel on the same session.
@@ -272,6 +281,13 @@ export const approveTransfer = async (req, res) => {
       throw new Error("Chi transfer PENDING moi duoc phe duyet");
     }
 
+    // ── KILL-SWITCH: Branch ownership validation ──
+    const allowedBranches = req.authz?.allowedBranchIds || [];
+    const isGlobalAdmin = req.authz?.isGlobalAdmin || false;
+    if (!isGlobalAdmin && !allowedBranches.includes(String(transfer.fromStore.storeId))) {
+      throw new Error("AUTHZ_BRANCH_FORBIDDEN: You do not manage the source store");
+    }
+
     const approvedItems = Array.isArray(req.body.approvedItems)
       ? req.body.approvedItems
       : [];
@@ -398,6 +414,13 @@ export const shipTransfer = async (req, res) => {
       throw new Error("Chi transfer APPROVED moi duoc xuat hang");
     }
 
+    // ── KILL-SWITCH: Branch ownership validation ──
+    const allowedBranches = req.authz?.allowedBranchIds || [];
+    const isGlobalAdmin = req.authz?.isGlobalAdmin || false;
+    if (!isGlobalAdmin && !allowedBranches.includes(String(transfer.fromStore.storeId))) {
+      throw new Error("AUTHZ_BRANCH_FORBIDDEN: You do not manage the source store");
+    }
+
     const actorName = getActorName(req.user);
     let shippedQuantity = 0;
 
@@ -426,6 +449,50 @@ export const shipTransfer = async (req, res) => {
       sourceInventory.quantity = quantity - approvedQty;
       sourceInventory.reserved = reserved - approvedQty;
       await sourceInventory.save({ session });
+
+      // =================================================================
+      // PHYSICAL INVENTORY SYNC (AUTO-PICK)
+      // =================================================================
+      // Only if source store is a WAREHOUSE
+      if (transfer.fromStore.storeCode.startsWith("WH") || transfer.fromStore.storeId.toString() === "67ab23743c72b2ff5432c256") {
+          let remainingQtyToPick = approvedQty;
+
+          const query = {
+              sku: item.variantSku,
+              locationCode: { $regex: new RegExp("^" + transfer.fromStore.storeCode + "-") },
+              quantity: { $gt: 0 }
+          };
+
+          const physicalInventories = await Inventory.find(query).sort({ quantity: -1 }).session(session);
+
+          for (const inv of physicalInventories) {
+              if (remainingQtyToPick <= 0) break;
+
+              const pickQty = Math.min(inv.quantity, remainingQtyToPick);
+              inv.quantity -= pickQty;
+              remainingQtyToPick -= pickQty;
+
+              if (inv.quantity === 0) {
+                  await Inventory.deleteOne({ _id: inv._id }).session(session);
+              } else {
+                  await inv.save({ session });
+              }
+
+              // Update Location Current Load
+              const location = await WarehouseLocation.findById(inv.locationId).session(session);
+              if (location) {
+                  location.currentLoad = Math.max(0, (location.currentLoad || 0) - pickQty);
+                  await location.save({ session });
+              }
+          }
+
+          if (remainingQtyToPick > 0) {
+              // WARNING: Logical Inventory had stock, but Physical Inventory did not!
+              // We log this but do NOT fail the transfer to avoid blocking operations.
+              console.warn(`[StockTransfer] Metadata mismatch! Transfer ${transfer.transferNumber} Item ${item.variantSku}: Missing ${remainingQtyToPick} in Physical Inventory.`); // eslint-disable-line no-console
+          }
+      }
+      // =================================================================
 
       await StockMovement.create(
         [
@@ -493,6 +560,13 @@ export const receiveTransfer = async (req, res) => {
       throw new Error("Chi transfer IN_TRANSIT moi duoc nhan");
     }
 
+    // ── KILL-SWITCH: Branch ownership validation (destination) ──
+    const allowedBranches = req.authz?.allowedBranchIds || [];
+    const isGlobalAdmin = req.authz?.isGlobalAdmin || false;
+    if (!isGlobalAdmin && !allowedBranches.includes(String(transfer.toStore.storeId))) {
+      throw new Error("AUTHZ_BRANCH_FORBIDDEN: You do not manage the destination store");
+    }
+
     const actorName = getActorName(req.user);
     const receivedItems = Array.isArray(req.body.receivedItems)
       ? req.body.receivedItems
@@ -556,6 +630,59 @@ export const receiveTransfer = async (req, res) => {
       destinationInventory.lastRestockDate = new Date();
       destinationInventory.lastRestockQuantity = receivedQty;
       await destinationInventory.save({ session });
+
+      // =================================================================
+      // PHYSICAL INVENTORY SYNC (RECEIVE)
+      // =================================================================
+      // Only if destination store is a WAREHOUSE
+      if (transfer.toStore.storeCode.startsWith("WH") || transfer.toStore.storeId.toString() === "67ab23743c72b2ff5432c256") {
+          // Verify we have a valid location to put this item.
+          // Strategy: Find a location named "RECEIVING" or similar, OR pick the first active location that allows this product.
+          // For simplicity/fallback, we find the FIRST available location for this store zone.
+          
+          let targetLocation = await WarehouseLocation.findOne({
+               locationCode: { $regex: `^${transfer.toStore.storeCode}-` },
+               status: "ACTIVE"
+          }).session(session);
+
+          // Try to find a specific "RECEIVING" or "INBOUND" location if possible (Optional improvement)
+          // const specificLoc = await WarehouseLocation.findOne({ locationCode: `${transfer.toStore.storeCode}-RECEIVING` }).session(session);
+          // if (specificLoc) targetLocation = specificLoc;
+
+          if (targetLocation) {
+              // Check if inventory record exists for this SKU at this location
+              let physInv = await Inventory.findOne({
+                  sku: item.variantSku,
+                  locationId: targetLocation._id,
+              }).session(session);
+
+              if (physInv) {
+                  physInv.quantity += receivedQty;
+                  physInv.lastReceived = new Date();
+                  await physInv.save({ session });
+              } else {
+                  physInv = new Inventory({
+                      sku: item.variantSku,
+                      productId: item.productId,
+                      productName: item.name || item.variantSku,
+                      locationId: targetLocation._id,
+                      locationCode: targetLocation.locationCode,
+                      quantity: receivedQty,
+                      status: "GOOD",
+                      lastReceived: new Date()
+                  });
+                  await physInv.save({ session });
+              }
+              
+              // Update Location Load
+              targetLocation.currentLoad = (targetLocation.currentLoad || 0) + receivedQty;
+              await targetLocation.save({ session });
+              
+          } else {
+               console.warn(`[StockTransfer] Could not find any valid location in ${transfer.toStore.storeCode} to receive item ${item.variantSku}`); // eslint-disable-line no-console
+          }
+      }
+      // =================================================================
 
       await StockMovement.create(
         [

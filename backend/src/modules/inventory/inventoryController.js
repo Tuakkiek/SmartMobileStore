@@ -35,6 +35,14 @@ export const checkAvailability = async (req, res) => {
     const { province } = req.query;
 
     const storeFilter = { status: "ACTIVE" };
+    
+    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    if (!req.authz?.isGlobalAdmin && req.authz?.activeBranchId) {
+      storeFilter._id = req.authz.activeBranchId;
+    } else if (!req.authz?.isGlobalAdmin) {
+      return res.json({ success: true, available: false, stores: [] });
+    }
+
     if (province) {
       storeFilter["address.province"] = province;
     }
@@ -104,8 +112,20 @@ export const checkAvailability = async (req, res) => {
 
 export const getByStore = async (req, res) => {
   try {
-    const { storeId } = req.params;
+    let { storeId } = req.params;
     const { status, limit = 200, page = 1 } = req.query;
+
+    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    if (!req.authz?.isGlobalAdmin) {
+      if (req.authz?.activeBranchId) {
+        storeId = req.authz.activeBranchId;
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: "Tai khoan khong thuoc ve chi nhanh nao",
+        });
+      }
+    }
 
     const filter = { storeId };
     if (status) {
@@ -161,6 +181,15 @@ export const getConsolidatedInventory = async (req, res) => {
       match.productId = mongoose.Types.ObjectId.isValid(productId)
         ? new mongoose.Types.ObjectId(productId)
         : productId;
+    }
+
+    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    if (!req.authz?.isGlobalAdmin) {
+      if (req.authz?.activeBranchId) {
+         match.storeId = new mongoose.Types.ObjectId(req.authz.activeBranchId);
+      } else {
+         return res.json({ success: true, inventory: [], summary: { totalSKUs: 0, totalValue: 0, lowStockCount: 0 } });
+      }
     }
 
     const pipeline = [
@@ -295,6 +324,14 @@ export const getStoreInventoryComparison = async (req, res) => {
     const stores = await Store.find({ status: "ACTIVE" })
       .select("_id code name type capacity")
       .lean();
+
+    // ✅ Branch Enforcement
+    if (req.user.role !== "GLOBAL_ADMIN") {
+        return res.status(403).json({
+            success: false,
+            message: "Ban khong co quyen xem so sanh ton kho toan he thong",
+        });
+    }
 
     const groupedStats = await StoreInventory.aggregate([
       {
@@ -480,11 +517,20 @@ export const getReplenishmentRecommendations = async (req, res) => {
       Number(req.query.surplusThreshold) || 20
     );
     const criticalOnly = parseBool(req.query.criticalOnly);
-    const storeId = req.query.storeId ? String(req.query.storeId).trim() : undefined;
+    let storeId = req.query.storeId ? String(req.query.storeId).trim() : undefined;
     const source = String(req.query.source || "snapshot")
       .trim()
       .toLowerCase();
     const useLive = source === "live" || source === "realtime";
+
+    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    if (!req.authz?.isGlobalAdmin) {
+      if (req.authz?.activeBranchId) {
+         storeId = req.authz.activeBranchId;
+      } else {
+         return res.status(403).json({ success: false, message: "No store assigned" });
+      }
+    }
 
     if (!useLive) {
       const latestSnapshotData = await getLatestReplenishmentSnapshot({
@@ -541,6 +587,7 @@ export const runReplenishmentSnapshotNow = async (req, res) => {
     const result = await runReplenishmentSnapshotJob({
       source: "MANUAL",
       initiatedBy: req.user?._id ? String(req.user._id) : "SYSTEM",
+      storeId: !req.authz?.isGlobalAdmin ? req.authz?.activeBranchId : undefined, // ── KILL-SWITCH: Use authz context ──
     });
 
     if (!result.success) {

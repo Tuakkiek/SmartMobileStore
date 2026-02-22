@@ -1,6 +1,8 @@
 // backend/src/controllers/authController.js
 import User from "./User.js";
 import { signToken } from "../../middleware/authMiddleware.js";
+import { normalizeUserAccess } from "../../authz/userAccessResolver.js";
+import { buildPermissionSet } from "../../authz/policyEngine.js";
 
 // ============================================
 // VALIDATION HELPERS
@@ -38,6 +40,32 @@ const validatePassword = (password) => {
       "Mật khẩu phải bao gồm chữ thường (a-z), chữ hoa (A-Z), số (0-9) và ký tự đặc biệt (!@#$%...)"
     );
   }
+};
+
+const branchFromBody = (body = {}) => {
+  if (body.activeBranchId) return String(body.activeBranchId).trim();
+  if (body.branchId) return String(body.branchId).trim();
+  if (body.storeId) return String(body.storeId).trim();
+  return "";
+};
+
+const buildEffectivePermissionsPayload = (user, resolvedContext = null) => {
+  const normalized = resolvedContext || normalizeUserAccess(user);
+  const permissions = buildPermissionSet(normalized);
+  return {
+    authzVersion: normalized.authzVersion,
+    authzState: normalized.authzState,
+    role: normalized.role,
+    systemRoles: normalized.systemRoles,
+    taskRoles: normalized.taskRoles,
+    branchAssignments: normalized.branchAssignments,
+    allowedBranchIds: normalized.allowedBranchIds,
+    activeBranchId: normalized.activeBranchId || "",
+    simulatedBranchId: normalized.simulatedBranchId || "",
+    contextMode: normalized.contextMode || "STANDARD",
+    noBranchAssigned: Boolean(normalized.noBranchAssigned),
+    permissions: Array.from(permissions).sort(),
+  };
 };
 
 // ============================================
@@ -163,7 +191,7 @@ export const login = async (req, res) => {
     }
 
     // Generate token
-    const token = signToken(user._id);
+    const token = signToken(user._id, user.permissionsVersion || 1);
 
     // Set cookie
     res.cookie("token", token, {
@@ -186,6 +214,7 @@ export const login = async (req, res) => {
           province: user.province,
           avatar: user.avatar,
         },
+        authz: buildEffectivePermissionsPayload(user),
         token,
       },
     });
@@ -233,7 +262,10 @@ export const getCurrentUser = async (req, res) => {
 
     res.json({
       success: true,
-      data: { user },
+      data: {
+        user,
+        authz: buildEffectivePermissionsPayload(user, req.authz || null),
+      },
     });
   } catch (error) {
     console.error("Get current user error:", error);
@@ -429,6 +461,182 @@ export const quickRegisterCustomer = async (req, res) => {
   }
 };
 
+const contextCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+export const getEffectivePermissions = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        code: "AUTHN_USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    const resolved = req.authz
+      ? { ...req.authz }
+      : {
+          ...normalizeUserAccess(user),
+          activeBranchId: "",
+          contextMode: "STANDARD",
+          simulatedBranchId: "",
+          noBranchAssigned: false,
+        };
+
+    return res.json({
+      success: true,
+      data: {
+        authz: buildEffectivePermissionsPayload(user, resolved),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const setActiveBranchContext = async (req, res) => {
+  try {
+    if (!req.authz) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTHZ_CONTEXT_MISSING",
+        message: "Authorization context is missing",
+      });
+    }
+
+    const targetBranchId = branchFromBody(req.body);
+    if (!targetBranchId) {
+      return res.status(400).json({
+        success: false,
+        code: "AUTHZ_ACTIVE_BRANCH_REQUIRED",
+        message: "branchId is required",
+      });
+    }
+
+    if (!req.authz.isGlobalAdmin && !req.authz.allowedBranchIds.includes(targetBranchId)) {
+      return res.status(403).json({
+        success: false,
+        code: "AUTHZ_BRANCH_FORBIDDEN",
+        message: "Branch is not assigned to current actor",
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          "preferences.defaultBranchId": targetBranchId,
+        },
+      },
+      { new: true }
+    );
+
+    res.cookie("activeBranchId", targetBranchId, contextCookieOptions);
+
+    const resolved = {
+      ...(req.authz || normalizeUserAccess(updatedUser)),
+      activeBranchId: targetBranchId,
+      simulatedBranchId: req.authz?.simulatedBranchId || "",
+      contextMode: req.authz?.contextMode || "STANDARD",
+    };
+
+    return res.json({
+      success: true,
+      message: "Active branch updated",
+      data: {
+        authz: buildEffectivePermissionsPayload(updatedUser, resolved),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const setSimulatedBranchContext = async (req, res) => {
+  try {
+    if (!req.authz?.isGlobalAdmin) {
+      return res.status(403).json({
+        success: false,
+        code: "AUTHZ_SIMULATION_FORBIDDEN",
+        message: "Only global admin can simulate branch context",
+      });
+    }
+
+    const targetBranchId = branchFromBody(req.body);
+    if (!targetBranchId) {
+      return res.status(400).json({
+        success: false,
+        code: "AUTHZ_SIMULATION_BRANCH_REQUIRED",
+        message: "branchId is required",
+      });
+    }
+
+    res.cookie("simulatedBranchId", targetBranchId, contextCookieOptions);
+
+    const user = await User.findById(req.user._id);
+    const resolved = {
+      ...req.authz,
+      activeBranchId: targetBranchId,
+      simulatedBranchId: targetBranchId,
+      contextMode: "SIMULATED",
+    };
+
+    return res.json({
+      success: true,
+      message: "Simulation branch updated",
+      data: {
+        authz: buildEffectivePermissionsPayload(user, resolved),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const clearSimulatedBranchContext = async (req, res) => {
+  try {
+    res.clearCookie("simulatedBranchId", contextCookieOptions);
+    const user = await User.findById(req.user._id);
+
+    const fallbackActiveBranch =
+      req.authz?.activeBranchId || ""; // ── KILL-SWITCH: No cookie fallback ──
+    const resolved = {
+      ...normalizeUserAccess(user),
+      activeBranchId: fallbackActiveBranch,
+      simulatedBranchId: "",
+      contextMode: "STANDARD",
+    };
+
+    return res.json({
+      success: true,
+      message: "Simulation branch cleared",
+      data: {
+        authz: buildEffectivePermissionsPayload(user, resolved),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export default {
   register,
   login,
@@ -438,4 +646,8 @@ export default {
   updateAvatar,
   checkCustomerByPhone,
   quickRegisterCustomer,
+  getEffectivePermissions,
+  setActiveBranchContext,
+  setSimulatedBranchContext,
+  clearSimulatedBranchContext,
 };

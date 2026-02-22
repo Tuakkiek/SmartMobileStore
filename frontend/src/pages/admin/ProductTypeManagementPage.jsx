@@ -27,6 +27,9 @@ import { productTypeAPI } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
 
+const PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE =
+  "This product type cannot be deleted because it is currently in use by one or more products.";
+
 const ProductTypeManagementPage = () => {
   const { user } = useAuthStore();
   const [productTypes, setProductTypes] = useState([]);
@@ -96,11 +99,19 @@ const ProductTypeManagementPage = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (productTypeId) => {
+  const handleDelete = async (productType) => {
+    const associatedProductsCount = Number(
+      productType?.associatedProductsCount || 0
+    );
+
+    if (associatedProductsCount > 0) {
+      toast.error(PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE);
+      return;
+    }
     if (!confirm("Bạn có chắc muốn xóa loại sản phẩm này?")) return;
 
     try {
-      await productTypeAPI.delete(productTypeId);
+      await productTypeAPI.delete(productType._id);
       toast.success("Xóa loại sản phẩm thành công");
       fetchProductTypes();
     } catch (error) {
@@ -218,7 +229,13 @@ const ProductTypeManagementPage = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {productTypes.map((type) => (
+          {productTypes.map((type) => {
+            const associatedProductsCount = Number(
+              type.associatedProductsCount || 0
+            );
+            const isDeleteBlocked = associatedProductsCount > 0;
+
+            return (
             <div
               key={type._id}
               className="border rounded-lg p-4 hover:shadow-md transition-shadow"
@@ -278,6 +295,16 @@ const ProductTypeManagementPage = () => {
                 </div>
               </div>
 
+              <p
+                className={`text-xs mb-3 ${
+                  isDeleteBlocked ? "text-amber-700" : "text-muted-foreground"
+                }`}
+              >
+                {isDeleteBlocked
+                  ? `In use by ${associatedProductsCount} product(s)`
+                  : "No associated products"}
+              </p>
+
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -290,13 +317,20 @@ const ProductTypeManagementPage = () => {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => handleDelete(type._id)}
+                  onClick={() => handleDelete(type)}
+                  disabled={isDeleteBlocked}
+                  title={
+                    isDeleteBlocked
+                      ? PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE
+                      : "Delete product type"
+                  }
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -144,7 +144,7 @@ export const pickItem = async (req, res) => {
       const assignedPickerId = order?.pickerInfo?.pickerId?.toString();
       const actorId = req.user?._id?.toString();
 
-      if (!["WAREHOUSE_MANAGER", "ADMIN"].includes(req.user?.role)) {
+      if (!["WAREHOUSE_MANAGER", "ADMIN", "GLOBAL_ADMIN"].includes(req.user?.role)) {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,

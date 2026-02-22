@@ -1,19 +1,16 @@
-// middleware/authMiddleware.js
-import jwt from 'jsonwebtoken';
-import User from '../modules/auth/User.js';
-import config from '../config/config.js'; // Kiểm tra đúng tên trong config
-import dotenv from 'dotenv';
-dotenv.config(); 
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
+import User from "../modules/auth/User.js";
+import config from "../config/config.js";
 
+dotenv.config();
 
-// Protect routes - verify token
 export const protect = async (req, res, next) => {
   try {
     let token;
 
-    // Get token from header or cookie
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      token = req.headers.authorization.split(" ")[1];
     } else if (req.cookies.token) {
       token = req.cookies.token;
     }
@@ -21,56 +18,75 @@ export const protect = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Vui lòng đăng nhập để truy cập'
+        code: "AUTHN_MISSING_TOKEN",
+        message: "Vui long dang nhap de truy cap",
       });
     }
 
-    // Verify token
     const decoded = jwt.verify(token, config.JWT_SECRET);
-
-    // Get user from token
     const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Người dùng không tồn tại'
+        code: "AUTHN_USER_NOT_FOUND",
+        message: "Nguoi dung khong ton tai",
       });
     }
 
-    if (user.status === 'LOCKED') {
+    if (user.status === "LOCKED") {
       return res.status(403).json({
         success: false,
-        message: 'Tài khoản đã bị khóa'
+        code: "AUTHN_LOCKED",
+        message: "Tai khoan da bi khoa",
       });
     }
 
-    req.user = user; // Lưu thông tin user vào request object
-    next(); // Tiến hành vào controller tiếp theo
+    const tokenPermissionsVersion = Number(decoded?.pv || 1);
+    const userPermissionsVersion = Number(user.permissionsVersion || 1);
+    if (tokenPermissionsVersion !== userPermissionsVersion) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTHN_TOKEN_OUTDATED",
+        message: "Token da het han do thay doi quyen truy cap",
+      });
+    }
+
+    req.user = user;
+    req.auth = {
+      userId: String(user._id),
+      tokenPermissionsVersion,
+    };
+
+    next();
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: 'Token không hợp lệ hoặc đã hết hạn'
+      code: "AUTHN_INVALID_TOKEN",
+      message: "Token khong hop le hoac da het han",
     });
   }
 };
 
-// Restrict to specific roles
 export const restrictTo = (...roles) => {
   return (req, res, next) => {
+    if (req.user.role === "GLOBAL_ADMIN") {
+      return next();
+    }
+
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Bạn không có quyền thực hiện hành động này'
+        message: "Ban khong co quyen thuc hien hanh dong nay",
       });
     }
-    next(); // Nếu user có quyền, tiếp tục vào controller tiếp theo
+
+    next();
   };
 };
 
-// Generate JWT token
-export const signToken = (id) => {
-  return jwt.sign({ id }, config.JWT_SECRET, {
-    expiresIn: config.JWT_EXPIRES_IN
+export const signToken = (id, permissionsVersion = 1) => {
+  return jwt.sign({ id, pv: Number(permissionsVersion || 1) }, config.JWT_SECRET, {
+    expiresIn: config.JWT_EXPIRES_IN,
   });
 };

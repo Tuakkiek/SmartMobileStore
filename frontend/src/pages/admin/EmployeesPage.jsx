@@ -16,11 +16,15 @@ import {
   Unlock,
   Trash2,
 } from "lucide-react";
-import { userAPI } from "@/lib/api";
+import { userAPI, storeAPI } from "@/lib/api";
 import { getStatusText, getNameInitials } from "@/lib/utils";
 import { provinces } from "@/province";
+import { MapPin } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuthStore } from "@/store/authStore"; // ✅ Import auth store
+// ... imports
+
 import {
   Dialog,
   DialogContent,
@@ -51,12 +55,15 @@ const EMPLOYEE_TABS = [
 const EmployeesPage = () => {
   const [activeTab, setActiveTab] = useState("ALL");
   const [allEmployees, setAllEmployees] = useState([]);
+  const [stores, setStores] = useState([]); // ✅ Added stores state
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuthStore(); // ✅ Get current user
 
   // Bộ lọc
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [provinceFilter, setProvinceFilter] = useState("ALL");
+  const [storeFilter, setStoreFilter] = useState("ALL"); // ✅ Store filter state
 
   // Dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -72,6 +79,7 @@ const EmployeesPage = () => {
     password: "",
     role: "SHIPPER",
     avatar: "",
+    storeLocation: "", // ✅ Added storeLocation
   });
 
   const [pagination, setPagination] = useState({
@@ -82,7 +90,17 @@ const EmployeesPage = () => {
 
   useEffect(() => {
     fetchEmployees(1);
-  }, [activeTab, searchQuery]);
+    fetchStores(); // ✅ Fetch stores on mount
+  }, [activeTab, searchQuery, storeFilter]); // ✅ Trigger on storeFilter change
+
+  const fetchStores = async () => {
+      try {
+          const res = await storeAPI.getAll({ limit: 100 });
+          setStores(res.data.stores || []);
+      } catch (err) {
+          console.error("Failed to fetch stores", err);
+      }
+  };
 
   const fetchEmployees = async (page = 1) => {
     try {
@@ -92,6 +110,7 @@ const EmployeesPage = () => {
         limit: 12,
         search: searchQuery.trim() || undefined,
         role: activeTab !== "ALL" ? activeTab : undefined,
+        storeLocation: storeFilter !== "ALL" ? storeFilter : undefined, // ✅ Pass store filter
         sortBy: "createdAt",
         sortOrder: "desc",
       };
@@ -120,6 +139,7 @@ const EmployeesPage = () => {
     setSearchQuery("");
     setStatusFilter("ALL");
     setProvinceFilter("ALL");
+    setStoreFilter("ALL"); // ✅ Reset store filter
   };
 
   const handleChange = (e) => {
@@ -244,10 +264,11 @@ const EmployeesPage = () => {
     setSearchQuery("");
     setStatusFilter("ALL");
     setProvinceFilter("ALL");
+    setStoreFilter("ALL"); // ✅ Reset store filter
   };
 
   const hasFilter =
-    searchQuery || statusFilter !== "ALL" || provinceFilter !== "ALL";
+    searchQuery || statusFilter !== "ALL" || provinceFilter !== "ALL" || storeFilter !== "ALL";
 
   return (
     <div className="space-y-6 p-6">
@@ -318,6 +339,23 @@ const EmployeesPage = () => {
           </SelectContent>
         </Select>
 
+        {/* ✅ Store Filter for Global Admin */}
+        {user?.role === "GLOBAL_ADMIN" && (
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Chi nhánh" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tất cả chi nhánh</SelectItem>
+              {stores.map((s) => (
+                <SelectItem key={s._id} value={s._id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {hasFilter && (
           <Button variant="outline" size="sm" onClick={resetFilters}>
             <X className="w-4 h-4 mr-2" />
@@ -380,6 +418,14 @@ const EmployeesPage = () => {
                   <Badge variant="outline" className="mt-2 text-xs">
                     {emp.province}
                   </Badge>
+                )}
+                
+                {/* Store Location Badge */}
+                {emp.storeLocation && (
+                    <Badge variant="secondary" className="mt-2 ml-2 text-xs">
+                        <MapPin className="w-3 h-3 mr-1" />
+                        {stores.find(s => s._id === emp.storeLocation)?.name || "Chi nhánh khác"}
+                    </Badge>
                 )}
 
                 <div className="flex gap-2 mt-4">
@@ -448,6 +494,10 @@ const EmployeesPage = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Thêm nhân viên mới</DialogTitle>
+            {/* Visually hidden description for accessibility */}
+            <div className="sr-only" aria-describedby="dialog-description">
+              Điền thông tin để tạo nhân viên mới
+            </div>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             {error && <ErrorMessage message={error} />}
@@ -522,6 +572,27 @@ const EmployeesPage = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+               {/* BRANCH SELECTION */}
+               <div>
+                  <Label>Chi nhánh / Cửa hàng</Label>
+                   <Select
+                    value={formData.storeLocation}
+                    onValueChange={(val) => setFormData(prev => ({...prev, storeLocation: val}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn chi nhánh" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((store) => (
+                        <SelectItem key={store._id} value={store._id}>
+                          {store.name} ({store.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
               <div className="col-span-2">
                 <Label>URL ảnh đại diện</Label>
                 <Input
@@ -552,6 +623,10 @@ const EmployeesPage = () => {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Chỉnh sửa nhân viên</DialogTitle>
+               {/* Visually hidden description for accessibility */}
+              <div className="sr-only" aria-describedby="dialog-description">
+                Cập nhật thông tin nhân viên
+              </div>
             </DialogHeader>
             <form onSubmit={handleUpdate} className="space-y-4">
               {error && <ErrorMessage message={error} />}
@@ -628,6 +703,27 @@ const EmployeesPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* BRANCH SELECTION */}
+                <div>
+                  <Label>Chi nhánh / Cửa hàng</Label>
+                   <Select
+                    value={formData.storeLocation}
+                    onValueChange={(val) => setFormData(prev => ({...prev, storeLocation: val}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn chi nhánh" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((store) => (
+                        <SelectItem key={store._id} value={store._id}>
+                          {store.name} ({store.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="col-span-2">
                   <Label>URL ảnh đại diện</Label>
                   <Input

@@ -1,5 +1,8 @@
 import express from "express";
-import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import { protect } from "../../middleware/authMiddleware.js";
+import { resolveAccessContext } from "../../middleware/authz/resolveAccessContext.js";
+import { authorize } from "../../middleware/authz/authorize.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 import {
   checkAvailability,
   getByStore,
@@ -26,95 +29,107 @@ import {
 
 const router = express.Router();
 
-router.use(protect);
+// All inventory routes require auth + branch context
+router.use(protect, resolveAccessContext);
 
-router.get("/check/:productId/:variantSku", checkAvailability);
-router.get("/store/:storeId", getByStore);
+// ── Inventory Read ──
+router.get(
+  "/check/:productId/:variantSku",
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", resourceType: "INVENTORY" }),
+  checkAvailability
+);
+router.get(
+  "/store/:storeId",
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
+  getByStore
+);
 
+// ── Inventory Dashboard ──
 router.get(
   "/dashboard/consolidated",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getConsolidatedInventory
 );
 router.get(
   "/dashboard/store-comparison",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.ANALYTICS_READ_GLOBAL, { scopeMode: "global", resourceType: "INVENTORY" }),
   getStoreInventoryComparison
 );
 router.get(
   "/dashboard/alerts",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getLowStockAlerts
 );
 router.get(
   "/dashboard/replenishment",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getReplenishmentRecommendations
 );
 router.post(
   "/dashboard/replenishment/run-snapshot",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   runReplenishmentSnapshotNow
 );
 router.get(
   "/dashboard/predictions",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getDemandPredictions
 );
 router.get(
   "/dashboard/predictions/:variantSku",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getSkuDemandPrediction
 );
 router.get(
   "/dashboard/movements",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.INVENTORY_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "INVENTORY" }),
   getRecentStockMovements
 );
 
+// ── Transfers ──
 router.get(
   "/transfers",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   getTransfers
 );
 router.get(
   "/transfers/:id",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_READ, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   getTransferById
 );
 router.post(
   "/transfers/request",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_CREATE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   requestTransfer
 );
 router.put(
   "/transfers/:id/approve",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_APPROVE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   approveTransfer
 );
 router.put(
   "/transfers/:id/reject",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_APPROVE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   rejectTransfer
 );
 router.put(
   "/transfers/:id/ship",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_SHIP, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   shipTransfer
 );
 router.put(
   "/transfers/:id/receive",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_RECEIVE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   receiveTransfer
 );
 router.put(
   "/transfers/:id/complete",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_APPROVE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   completeTransfer
 );
 router.put(
   "/transfers/:id/cancel",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  authorize(AUTHZ_ACTIONS.TRANSFER_APPROVE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "TRANSFER" }),
   cancelTransfer
 );
 

@@ -5,6 +5,7 @@
 
 import WarehouseConfiguration from "./WarehouseConfiguration.js";
 import WarehouseLocation from "./WarehouseLocation.js";
+import Inventory from "./Inventory.js"; // Import Inventory model
 import QRCode from "qrcode";
 import mongoose from "mongoose";
 
@@ -426,6 +427,90 @@ export const getWarehouseStats = async (req, res) => {
   }
 };
 
+// ============================================
+// WAREHOUSE VISUALIZATION & SEARCH
+// ============================================
+
+export const getWarehouseLayout = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const warehouse = await WarehouseConfiguration.findById(id).select("warehouseCode name zones");
+    if (!warehouse) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy kho" });
+    }
+
+    const locations = await WarehouseLocation.find({ warehouse: warehouse.warehouseCode })
+      .select("locationCode zone zoneName aisle shelf bin capacity currentLoad status productCategories")
+      .lean();
+
+    res.json({
+      success: true,
+      warehouse,
+      locations
+    });
+  } catch (error) {
+    console.error("Error getting warehouse layout:", error);
+    res.status(500).json({ success: false, message: "Lỗi khi lấy layout kho", error: error.message });
+  }
+};
+
+export const searchLocationByProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { query } = req.query;
+
+    if (!query) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập từ khóa tìm kiếm" });
+    }
+
+    const warehouse = await WarehouseConfiguration.findById(id).select("warehouseCode");
+    if (!warehouse) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy kho" });
+    }
+
+    // Find inventory items matching SKU or Product Name
+    // Note: Inventory stores 'locationCode' directly.
+    // We need to filter by warehouse as well. 
+    // Since Inventory has locationCode, and locationCode starts with warehouseCode, we can use regex or lookup.
+    // However, a safer way is to find locations in this warehouse first, then find inventory in those locations.
+    // OR simpler: Inventory -> Location (via locationId) -> check warehouse.
+    
+    const inventoryItems = await Inventory.find({
+      $or: [
+        { sku: { $regex: query, $options: "i" } },
+        { productName: { $regex: query, $options: "i" } }
+      ],
+      quantity: { $gt: 0 } // Only find items in stock
+    }).populate({
+      path: "locationId",
+      match: { warehouse: warehouse.warehouseCode },
+      select: "locationCode zone aisle shelf bin"
+    });
+
+    // Filter out items where location mismatch (populate returns null if match fails)
+    const validItems = inventoryItems.filter(item => item.locationId);
+
+    // Group by location
+    const results = validItems.map(item => ({
+      sku: item.sku,
+      productName: item.productName,
+      quantity: item.quantity,
+      location: item.locationId
+    }));
+
+    res.json({
+      success: true,
+      results
+    });
+
+  } catch (error) {
+    console.error("Error searching product location:", error);
+    res.status(500).json({ success: false, message: "Lỗi khi tìm kiếm sản phẩm", error: error.message });
+  }
+};
+
+
 export default {
   getAllWarehouses,
   getWarehouseById,
@@ -434,4 +519,6 @@ export default {
   deleteWarehouse,
   generateLocationsFromConfig,
   getWarehouseStats,
+  getWarehouseLayout,
+  searchLocationByProduct
 };

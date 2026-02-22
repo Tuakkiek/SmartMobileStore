@@ -69,4 +69,18 @@ router.get(
   configController.getWarehouseStats
 );
 
+// Get warehouse layout for visualization
+router.get(
+  "/:id/layout",
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  configController.getWarehouseLayout
+);
+
+// Search product location
+router.get(
+  "/:id/search-location",
+  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  configController.searchLocationByProduct
+);
+
 export default router;

@@ -22,6 +22,11 @@ const CATEGORY_ICONS = {
   Accessories: Box,
 };
 
+const getCreateAtTimestamp = (product) => {
+  const rawValue = product?.createAt || product?.createdAt;
+  const timestamp = rawValue ? new Date(rawValue).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
 const ProductsSection = ({
   title,
   products,
@@ -35,8 +40,15 @@ const ProductsSection = ({
 }) => {
   const navigate = useNavigate();
 
+  const displayProducts =
+    showBadges && badgeType === "new"
+      ? [...(products || [])]
+          .sort((a, b) => getCreateAtTimestamp(b) - getCreateAtTimestamp(a))
+          .slice(0, 10)
+      : products || [];
+
   // Nếu không có sản phẩm → không render section
-  if (!products || products.length === 0) return null;
+  if (!displayProducts || displayProducts.length === 0) return null;
 
   const Icon = category ? CATEGORY_ICONS[category] : null;
 
@@ -70,7 +82,7 @@ const ProductsSection = ({
 
         {/* Product Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
-          {products.map((product) => (
+          {displayProducts.map((product) => (
             <div key={product._id} className="relative group">
               <ProductCard
                 product={product}

@@ -33,6 +33,12 @@ api.interceptors.request.use(
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+
+        // ── KILL-SWITCH: Inject X-Active-Branch-Id header ──
+        const activeBranchId = state?.activeBranchId;
+        if (activeBranchId) {
+          config.headers["X-Active-Branch-Id"] = activeBranchId;
+        }
       } catch (error) {
         console.error("Error parsing auth-storage:", error);
       }
@@ -297,9 +303,20 @@ export const getTopNewProducts = async () => {
   try {
     const allProducts = (
       await Promise.all(categories.map(getAllProductsForCategory))
-    ).flat();
+    )
+      .flat()
+      .map((product) => ({
+        ...product,
+        createAt: product?.createAt || product?.createdAt,
+      }));
 
-    allProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const getCreateAtTimestamp = (product) => {
+      const rawValue = product?.createAt;
+      const timestamp = rawValue ? new Date(rawValue).getTime() : 0;
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
+    allProducts.sort((a, b) => getCreateAtTimestamp(b) - getCreateAtTimestamp(a));
     return allProducts.slice(0, 10).map((p) => p._id?.toString());
   } catch (error) {
     console.error("Error fetching top new products:", error);
@@ -462,6 +479,9 @@ export const storeAPI = {
   getNearby: (params = {}) => api.get("/stores/nearby", { params }),
   checkStock: (storeId, items = []) =>
     api.post(`/stores/${storeId}/check-stock`, { items }),
+  create: (data) => api.post("/stores", data),
+  update: (id, data) => api.put(`/stores/${id}`, data),
+  delete: (id) => api.delete(`/stores/${id}`),
 };
 
 // ============================================
@@ -513,7 +533,5 @@ export const monitoringAPI = {
   getOmnichannelEvents: (params = {}) =>
     api.get("/monitoring/omnichannel/events", { params }),
 };
-
-
 
 

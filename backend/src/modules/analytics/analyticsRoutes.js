@@ -1,29 +1,43 @@
-// backend/src/routes/analyticsRoutes.js
 import express from "express";
 import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import { resolveAccessContext } from "../../middleware/authz/resolveAccessContext.js";
+import { authorize } from "../../middleware/authz/authorize.js";
+import { withScopedRepository } from "../../middleware/authz/withScopedRepository.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 import salesAnalyticsService from "./salesAnalyticsService.js";
-import {
-  getEmployeeKPI,
-  getPersonalStats,
-} from "./analyticsController.js";
+import { getEmployeeKPI, getPersonalStats } from "./analyticsController.js";
 
 const router = express.Router();
 
-// Protect all routes
-router.use(protect);
+const resolveKpiScopeMode = (req) => {
+  const view = String(req.query?.view || "branch").trim().toLowerCase();
+  if (view === "global") return "global";
+  if (view === "assigned") return "assigned";
+  return "branch";
+};
 
-/**
- * GET /api/analytics/top-sellers/:category
- * Get top 10 best sellers by category
- */
-router.get("/top-sellers/:category", async (req, res) => {
+const resolveKpiAction = (req) => {
+  const mode = resolveKpiScopeMode(req);
+  if (mode === "global") return AUTHZ_ACTIONS.ANALYTICS_READ_GLOBAL;
+  if (mode === "assigned") return AUTHZ_ACTIONS.ANALYTICS_READ_ASSIGNED;
+  return AUTHZ_ACTIONS.ANALYTICS_READ_BRANCH;
+};
+
+const requireGlobalAnalytics = authorize(AUTHZ_ACTIONS.ANALYTICS_READ_GLOBAL, {
+  scopeMode: "global",
+  resourceType: "ANALYTICS",
+});
+
+router.use(protect, resolveAccessContext);
+
+router.get("/top-sellers/:category", requireGlobalAnalytics, async (req, res) => {
   try {
     const { category } = req.params;
     const { limit = 10 } = req.query;
 
     const topSellers = await salesAnalyticsService.getTopSellersByCategory(
       category,
-      parseInt(limit)
+      parseInt(limit, 10)
     );
 
     res.json({
@@ -38,17 +52,11 @@ router.get("/top-sellers/:category", async (req, res) => {
   }
 });
 
-/**
- * GET /api/analytics/top-sellers
- * Get top 10 best sellers across all categories
- */
-router.get("/top-sellers", async (req, res) => {
+router.get("/top-sellers", requireGlobalAnalytics, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
 
-    const topSellers = await salesAnalyticsService.getTopSellers(
-      parseInt(limit)
-    );
+    const topSellers = await salesAnalyticsService.getTopSellers(parseInt(limit, 10));
 
     res.json({
       success: true,
@@ -62,24 +70,17 @@ router.get("/top-sellers", async (req, res) => {
   }
 });
 
-/**
- * GET /api/analytics/product/:productId
- * Get sales data for a specific product
- */
-router.get("/product/:productId", async (req, res) => {
+router.get("/product/:productId", requireGlobalAnalytics, async (req, res) => {
   try {
     const { productId } = req.params;
     const { variantId } = req.query;
 
-    const salesData = await salesAnalyticsService.getProductSales(
-      productId,
-      variantId || null
-    );
+    const salesData = await salesAnalyticsService.getProductSales(productId, variantId || null);
 
     if (!salesData) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy dữ liệu bán hàng",
+        message: "Khong tim thay du lieu ban hang",
       });
     }
 
@@ -95,18 +96,14 @@ router.get("/product/:productId", async (req, res) => {
   }
 });
 
-/**
- * GET /api/analytics/sales-by-time
- * Get sales by time period
- */
-router.get("/sales-by-time", async (req, res) => {
+router.get("/sales-by-time", requireGlobalAnalytics, async (req, res) => {
   try {
     const { category, startDate, endDate, period = "daily" } = req.query;
 
     if (!category || !startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu tham số: category, startDate, endDate",
+        message: "Thieu tham so: category, startDate, endDate",
       });
     }
 
@@ -129,11 +126,7 @@ router.get("/sales-by-time", async (req, res) => {
   }
 });
 
-/**
- * DELETE /api/analytics/reset/:productId
- * Reset sales data (Admin only)
- */
-router.delete("/reset/:productId", restrictTo("ADMIN"), async (req, res) => {
+router.delete("/reset/:productId", restrictTo("ADMIN"), requireGlobalAnalytics, async (req, res) => {
   try {
     const { productId } = req.params;
     const { variantId } = req.query;
@@ -142,7 +135,7 @@ router.delete("/reset/:productId", restrictTo("ADMIN"), async (req, res) => {
 
     res.json({
       success: true,
-      message: "Đã reset dữ liệu bán hàng",
+      message: "Da reset du lieu ban hang",
     });
   } catch (error) {
     res.status(500).json({
@@ -152,73 +145,66 @@ router.delete("/reset/:productId", restrictTo("ADMIN"), async (req, res) => {
   }
 });
 
-/**
- * GET /api/analytics/dashboard
- * Get dashboard statistics
- */
 router.get(
   "/dashboard",
   restrictTo("ADMIN", "WAREHOUSE_MANAGER"),
+  requireGlobalAnalytics,
   async (req, res) => {
-    try {
-      const { category } = req.query;
+  try {
+    const { category } = req.query;
 
-      let topSellers;
-      if (category) {
-        topSellers = await salesAnalyticsService.getTopSellersByCategory(
-          category,
-          10
-        );
-      } else {
-        topSellers = await salesAnalyticsService.getTopSellers(10);
-      }
+    const topSellers = category
+      ? await salesAnalyticsService.getTopSellersByCategory(category, 10)
+      : await salesAnalyticsService.getTopSellers(10);
 
-      // Calculate total revenue
-      const totalRevenue = topSellers.reduce(
-        (sum, item) => sum + (item.revenue?.total || 0),
-        0
-      );
-      const totalSales = topSellers.reduce(
-        (sum, item) => sum + (item.sales?.total || 0),
-        0
-      );
+    const totalRevenue = topSellers.reduce(
+      (sum, item) => sum + (item.revenue?.total || 0),
+      0
+    );
+    const totalSales = topSellers.reduce((sum, item) => sum + (item.sales?.total || 0), 0);
 
-      res.json({
-        success: true,
-        data: {
-          topSellers,
-          summary: {
-            totalRevenue,
-            totalSales,
-            averageOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
-          },
+    res.json({
+      success: true,
+      data: {
+        topSellers,
+        summary: {
+          totalRevenue,
+          totalSales,
+          averageOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
         },
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: error.message,
-      });
-    }
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
   }
 );
 
-// ============================================
-// ADMIN ROUTES - Employee KPI
-// ============================================
 router.get(
   "/employee/kpi",
-  protect,
-  restrictTo("ADMIN", "ORDER_MANAGER"),
+  authorize(resolveKpiAction, {
+    scopeMode: resolveKpiScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ANALYTICS",
+  }),
+  withScopedRepository(["Order"], {
+    mode: (req) => req.authz.scopeMode,
+  }),
   getEmployeeKPI
 );
-// ============================================
-// EMPLOYEE ROUTES - Personal Stats
-// ============================================
+
 router.get(
   "/employee/personal",
-  protect,
-  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"), // <- THÊM 3 ROLE NÀY
+  restrictTo("POS_STAFF", "SHIPPER", "CASHIER", "ADMIN"),
+  authorize(AUTHZ_ACTIONS.ANALYTICS_READ_PERSONAL, {
+    scopeMode: (req) => (req.user?.role === "SHIPPER" ? "task" : "branch"),
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ANALYTICS",
+    audit: false,
+  }),
   getPersonalStats
 );
 

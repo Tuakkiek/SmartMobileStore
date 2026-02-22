@@ -111,7 +111,7 @@ const ProductCard = ({
   useEffect(() => {
     if (!safeVariants.length) {
       setSelectedVariant(null);
-      setIsVariantReady(false);
+      setIsVariantReady(true);
       return;
     }
 

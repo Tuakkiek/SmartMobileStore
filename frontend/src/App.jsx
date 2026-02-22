@@ -34,6 +34,8 @@ import BrandManagementPage from "@/pages/admin/BrandManagementPage";
 import ProductTypeManagementPage from "@/pages/admin/ProductTypeManagementPage";
 import WarehouseConfigPage from "@/pages/admin/WarehouseConfigPage";
 import InventoryDashboard from "@/pages/admin/InventoryDashboard";
+import StoreManagementPage from "@/pages/admin/StoreManagementPage";
+import WarehouseVisualizerPage from "@/pages/admin/WarehouseVisualizerPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import WarehouseStaffDashboard from "@/pages/warehouse-staff/WarehouseStaffDashboard";
@@ -77,6 +79,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (rehydrating) return <Loading />;
 
   if (!isAuthenticated || !user) return <Navigate to="/" replace />;
+
+  // ✅ GLOBAL_ADMIN bypass
+  if (user?.role === "GLOBAL_ADMIN") {
+    return children;
+  }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
@@ -215,6 +222,7 @@ function App() {
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
           <Route path="/admin/brands" element={<BrandManagementPage />} />
           <Route path="/admin/product-types" element={<ProductTypeManagementPage />} />
+          <Route path="/admin/stores" element={<StoreManagementPage />} />
           <Route path="/admin/inventory-dashboard" element={<InventoryDashboard />} />
         </Route>
 
@@ -226,6 +234,7 @@ function App() {
           }
         >
           <Route path="/admin/warehouse-config" element={<WarehouseConfigPage />} />
+          <Route path="/admin/warehouse-config/:id/visual" element={<WarehouseVisualizerPage />} />
         </Route>
 
         {/* ========================================
