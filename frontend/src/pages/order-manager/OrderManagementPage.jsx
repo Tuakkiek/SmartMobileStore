@@ -22,8 +22,11 @@ import {
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
+  GitBranch,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { orderAPI } from "@/lib/api";
+import { orderAPI, storeAPI } from "@/lib/api";
 import { getStatusColor, getStatusStage, getStatusText } from "@/lib/utils";
 import OrderDetailDialog from "@/components/employee/OrderDetailDialog";
 import OrderStatusUpdateDialog from "@/components/order/OrderStatusUpdateDialog";
@@ -59,11 +62,19 @@ const OrderManagementPage = () => {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [statusDialogOrder, setStatusDialogOrder] = useState(null);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+  const [stores, setStores] = useState([]);
+  const [isAssigning, setIsAssigning] = useState(false);
+  
+  const { user, authz } = useAuthStore();
+  const isGlobalAdmin = user?.role === "GLOBAL_ADMIN" || authz?.isGlobalAdmin;
   const limit = 20;
 
   useEffect(() => {
     fetchOrders();
-  }, [page, stageFilter]);
+    if (isGlobalAdmin) {
+      fetchStores();
+    }
+  }, [page, stageFilter, isGlobalAdmin]);
 
   const resolveOrderStage = (order) => {
     return order?.statusStage || getStatusStage(order?.status) || "PENDING";
@@ -95,6 +106,34 @@ const OrderManagementPage = () => {
       toast.error("Không thể tải danh sách đơn hàng");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const response = await storeAPI.getAll({ status: "ACTIVE", limit: 100 });
+      const fetchedStores = response.data.stores || response.data.data?.stores || [];
+      console.log("Fetched stores for reassignment:", fetchedStores);
+      setStores(fetchedStores);
+    } catch (error) {
+      console.error("Error fetching stores:", error);
+    }
+  };
+
+  const handleReassignStore = async (orderId, storeId) => {
+    if (!storeId) return;
+    try {
+      setIsAssigning(true);
+      const response = await orderAPI.assignStore(orderId, { storeId });
+      if (response.data.success) {
+        toast.success(response.data.message || "Đã chuyển đơn hàng thành công");
+        fetchOrders();
+      }
+    } catch (error) {
+      console.error("Reassign error:", error);
+      toast.error(error.response?.data?.message || "Không thể chuyển đơn hàng");
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -608,6 +647,32 @@ const OrderManagementPage = () => {
                             {/* Actions */}
                             <div className="col-span-2">
                               <div className="flex flex-col gap-2 h-full justify-center">
+                                {isGlobalAdmin && (
+                                  <div className="flex flex-col gap-1.5 mb-2">
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">
+                                      Chuyển chi nhánh
+                                    </p>
+                                    <Select
+                                      disabled={isAssigning || !canUpdateOrderStatus(order) || stores.length === 0}
+                                      onValueChange={(value) => handleReassignStore(order._id, value)}
+                                      value={order.assignedStore?.storeId || ""}
+                                    >
+                                      <SelectTrigger className="h-9 border-slate-200 bg-white hover:border-blue-400 transition-colors">
+                                        <div className="flex items-center gap-2 truncate">
+                                          <GitBranch className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                                          <SelectValue placeholder={stores.length === 0 ? "Đang tải..." : "Chọn chi nhánh"} />
+                                        </div>
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {stores.map((s) => (
+                                          <SelectItem key={s._id} value={s._id}>
+                                            {s.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
                                 <Button
                                   onClick={() => openStatusDialog(order)}
                                   disabled={!canUpdateOrderStatus(order)}
@@ -769,23 +834,51 @@ const OrderManagementPage = () => {
                           </div>
 
                           {/* Actions */}
-                          <div className="flex gap-2 pt-2">
-                            <Button
-                              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300 h-10 sm:h-11"
-                              onClick={() => openStatusDialog(order)}
-                              disabled={!canUpdateOrderStatus(order)}
-                            >
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Cập nhật
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="flex-1 border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all duration-300 h-10 sm:h-11"
-                              onClick={() => openOrderDetail(order)}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              Chi tiết
-                            </Button>
+                          <div className="flex flex-col gap-3 pt-2">
+                            {isGlobalAdmin && (
+                              <div className="flex flex-col gap-1.5">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">
+                                  Chuyển chi nhánh
+                                </p>
+                                <Select
+                                  disabled={isAssigning || !canUpdateOrderStatus(order) || stores.length === 0}
+                                  onValueChange={(value) => handleReassignStore(order._id, value)}
+                                  value={order.assignedStore?.storeId || ""}
+                                >
+                                  <SelectTrigger className="h-10 border-slate-200 bg-white shadow-sm">
+                                    <div className="flex items-center gap-2 truncate">
+                                      <GitBranch className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                                      <SelectValue placeholder={stores.length === 0 ? "Đang tải..." : "Chọn chi nhánh"} />
+                                    </div>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {stores.map((s) => (
+                                      <SelectItem key={s._id} value={s._id}>
+                                        {s.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <Button
+                                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-300 h-10 sm:h-11"
+                                onClick={() => openStatusDialog(order)}
+                                disabled={!canUpdateOrderStatus(order)}
+                              >
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Cập nhật
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="flex-1 border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all duration-300 h-10 sm:h-11"
+                                onClick={() => openOrderDetail(order)}
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                Chi tiết
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

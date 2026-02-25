@@ -11,7 +11,7 @@ const router = express.Router();
 router.post("/carrier/webhook", orderController.handleCarrierWebhook);
 router.put("/carrier/webhook", orderController.handleCarrierWebhook);
 
-// All other routes require auth + branch context
+// // All other routes require auth + branch context
 router.use(protect, resolveAccessContext);
 
 router.get(
@@ -61,6 +61,12 @@ router.put(
   "/:id/payment",
   authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
   orderController.updatePaymentStatus
+);
+
+router.patch(
+  "/:id/assign-store",
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "global", resourceType: "ORDER" }),
+  orderController.assignStore
 );
 
 export default router;

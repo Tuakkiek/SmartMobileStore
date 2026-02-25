@@ -866,7 +866,8 @@ export const createOrder = async (req, res) => {
     const processedItems = await buildProcessedItems(items, session);
 
     const activeStoreCount = await Store.countDocuments({ status: "ACTIVE" }).session(session);
-    const canUseStoreRouting = activeStoreCount > 0 && effectiveFulfillment !== "IN_STORE";
+    // Disable automatic routing for HOME_DELIVERY. Only use routing if preferredStoreId is provided (typically for CLICK_AND_COLLECT)
+    const canUseStoreRouting = activeStoreCount > 0 && (effectiveFulfillment === "CLICK_AND_COLLECT" && preferredStoreId);
 
     if (canUseStoreRouting) {
       if (effectiveFulfillment === "CLICK_AND_COLLECT") {
@@ -882,42 +883,19 @@ export const createOrder = async (req, res) => {
             err.httpStatus = 400;
             throw err;
           }
-        } else {
-          const nearestStores = await routingService.findNearestStoreWithStock(
-            processedItems,
-            shippingAddress?.province,
-            shippingAddress?.district
-          );
-
-          if (!nearestStores.length) {
-            const err = new Error("Khong tim thay cua hang co san hang trong khu vuc");
-            err.httpStatus = 400;
-            throw err;
-          }
-
-          assignedStore = await Store.findById(nearestStores[0]._id).session(session);
         }
-      } else {
-        const routingResult = await routingService.findBestStore(processedItems, shippingAddress || {});
-
-        if (!routingResult.success) {
-          const err = new Error(routingResult.message || "Khong tim thay cua hang phu hop");
-          err.httpStatus = 400;
-          err.payload = { suggestPreOrder: routingResult.suggestPreOrder };
-          throw err;
-        }
-
-        assignedStore = await Store.findById(routingResult.store._id).session(session);
       }
 
-      await routingService.reserveInventory(assignedStore._id, processedItems, { session });
-      usedStoreRouting = true;
+      if (assignedStore) {
+        await routingService.reserveInventory(assignedStore._id, processedItems, { session });
+        usedStoreRouting = true;
 
-      omniLog.info("createOrder: inventory reserved", {
-        storeId: assignedStore._id,
-        storeCode: assignedStore.code,
-        items: processedItems.length,
-      });
+        omniLog.info("createOrder: inventory reserved", {
+          storeId: assignedStore._id,
+          storeCode: assignedStore.code,
+          items: processedItems.length,
+        });
+      }
     }
 
     const subtotal = processedItems.reduce((sum, item) => sum + toNumber(item.price) * toNumber(item.quantity, 1), 0);
@@ -1113,7 +1091,7 @@ export const updateOrderStatus = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status, note, shipperId } = req.body;
+    const { status, note, shipperId, assignedStoreId } = req.body;
     const targetStatus = normalizeRequestedOrderStatus(status);
     const isManagerRole = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
     const canAssignCarrier = ["ADMIN", "ORDER_MANAGER"].includes(
@@ -1325,6 +1303,73 @@ export const updateOrderStatus = async (req, res) => {
         assignedAt: new Date(),
         assignedBy: req.user._id,
       };
+    }
+
+    // Handle manual store assignment
+    if (assignedStoreId) {
+      if (!isManagerRole) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: "Chi ORDER_MANAGER hoac ADMIN moi duoc gan chi nhanh",
+        });
+      }
+
+      if (order.assignedStore?.storeId) {
+        // If already assigned, check if we're swapping
+        if (order.assignedStore.storeId.toString() !== assignedStoreId) {
+          omniLog.info("updateOrderStatus: swapping assigned store", {
+            orderId: order._id,
+            from: order.assignedStore.storeId,
+            to: assignedStoreId,
+          });
+
+          await routingService.releaseInventory(order.assignedStore.storeId, order.items, { session });
+          await decrementStoreCapacity(order.assignedStore.storeId, session);
+        }
+      }
+
+      const store = await Store.findById(assignedStoreId).session(session);
+      if (!store || store.status !== "ACTIVE") {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Chi nhanh duoc chon khong hop le hoac dang ngung hoat dong",
+        });
+      }
+
+      // Reserve inventory at the new store
+      await routingService.reserveInventory(store._id, order.items, { session });
+
+      order.assignedStore = {
+        storeId: store._id,
+        storeName: store.name,
+        storeCode: store.code,
+        storeAddress: `${store.address?.street || ""}, ${store.address?.district || ""}, ${store.address?.province || ""}`,
+        storePhone: store.phone,
+        assignedAt: new Date(),
+        assignedBy: req.user._id,
+      };
+
+      store.capacity.currentOrders = toNumber(store.capacity?.currentOrders, 0) + 1;
+      store.stats.totalOrders = toNumber(store.stats?.totalOrders, 0) + 1;
+      await store.save({ session });
+
+      omniLog.info("updateOrderStatus: store assigned manually", {
+        orderId: order._id,
+        storeId: store._id,
+        storeCode: store.code,
+      });
+    }
+
+    if (["PROCESSING", "PREPARING", "SHIPPING"].includes(targetStatus)) {
+      if (!order.assignedStore?.storeId && !assignedStoreId) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Vui long gan chi nhanh truoc khi chuyen sang trang thai nay",
+        });
+      }
     }
 
     if (targetStatus === "SHIPPING") {
@@ -2224,6 +2269,92 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
+
+export const assignStore = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { id } = req.params;
+    const { storeId } = req.body;
+
+    if (!storeId) {
+      throw badRequest("Vui lòng chọn chi nhánh");
+    }
+
+    const order = await Order.findById(id).session(session);
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+    }
+
+    const store = await Store.findById(storeId).session(session);
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy chi nhánh" });
+    }
+
+    // Check if store is different
+    const currentStoreId = order.assignedStore?.storeId?.toString();
+    if (currentStoreId === storeId) {
+      return res.status(400).json({ success: false, message: "Đơn hàng đã được gán cho chi nhánh này" });
+    }
+
+    const oldStoreName = order.assignedStore?.storeName || "chưa gán";
+
+    // Release inventory from old branch if exists
+    if (order.assignedStore?.storeId) {
+      await routingService.releaseInventory(order.assignedStore.storeId, order.items, { session });
+      await decrementStoreCapacity(order.assignedStore.storeId, session);
+    }
+
+    // Reserve inventory in new branch
+    try {
+      await routingService.reserveInventory(storeId, order.items, { session });
+    } catch (inventoryError) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Chi nhánh mới không đủ hàng: ${inventoryError.message}`,
+      });
+    }
+
+    // Update branch capacity
+    const currentOrders = toNumber(store.capacity?.currentOrders, 0);
+    if (!store.capacity) store.capacity = {};
+    store.capacity.currentOrders = currentOrders + 1;
+    await store.save({ session });
+
+    // Update order
+    order.assignedStore = {
+      storeId: store._id,
+      storeName: store.name,
+      storeCode: store.code,
+      storeAddress: `${store.address.street}, ${store.address.ward}, ${store.address.district}, ${store.address.province}`,
+      storePhone: store.phone,
+      assignedAt: new Date(),
+      assignedBy: req.user._id,
+    };
+
+    appendHistory(order, order.status, req.user._id, `Chuyển đơn từ ${oldStoreName} sang ${store.name}`);
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
+
+    res.json({
+      success: true,
+      message: `Đã chuyển đơn sang chi nhánh ${store.name}`,
+      order: normalizedOrder,
+      data: { order: normalizedOrder },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    omniLog.error("assignStore failed", { orderId: req.params.id, error: error.message });
+    res.status(500).json({ success: false, message: "Lỗi khi chuyển chi nhánh", error: error.message });
+  } finally {
+    session.endSession();
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -2234,4 +2365,5 @@ export default {
   updatePaymentStatus,
   getOrderStats,
   cancelOrder,
+  assignStore,
 };

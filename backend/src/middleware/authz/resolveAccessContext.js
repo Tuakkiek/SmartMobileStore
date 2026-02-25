@@ -25,11 +25,12 @@ export const resolveAccessContext = async (req, res, next) => {
     return deny(
       res,
       "AUTHZ_REVIEW_REQUIRED",
-      "Access review is required before this account can continue"
+      "Access review is required before this account can continue",
     );
   }
 
   const isGlobalAdmin = normalized.isGlobalAdmin;
+  const isCustomer = req.user.role === "CUSTOMER";
   const allowedBranchIds = normalized.allowedBranchIds || [];
 
   // ── SINGLE SOURCE OF TRUTH ──
@@ -56,12 +57,18 @@ export const resolveAccessContext = async (req, res, next) => {
   }
 
   // ── ENFORCE: Non-global users MUST have a branch ──
-  if (!isGlobalAdmin && !activeBranchId && normalized.requiresBranchAssignment) {
+  // Customer không cần branch context
+  if (
+    !isGlobalAdmin &&
+    !isCustomer &&
+    !activeBranchId &&
+    normalized.requiresBranchAssignment
+  ) {
     return deny(
       res,
       "AUTHZ_MISSING_BRANCH_CONTEXT",
       "Missing Active Branch Context. Send X-Active-Branch-Id header.",
-      400
+      400,
     );
   }
 
@@ -70,43 +77,56 @@ export const resolveAccessContext = async (req, res, next) => {
     return deny(
       res,
       "AUTHZ_SIMULATION_FORBIDDEN",
-      "Branch simulation is restricted to global admin"
+      "Branch simulation is restricted to global admin",
     );
   }
 
   // ── ENFORCE: Branch must be in allowed list ──
-  if (!isGlobalAdmin && activeBranchId) {
+  // Customer không thuộc branch nào nên bỏ qua kiểm tra này
+  if (!isGlobalAdmin && !isCustomer && activeBranchId) {
     if (!allowedBranchIds.includes(activeBranchId)) {
       return deny(
         res,
         "AUTHZ_BRANCH_FORBIDDEN",
-        "Requested branch is not assigned to current user"
+        "Requested branch is not assigned to current user",
       );
     }
   }
 
   const noBranchAssigned =
-    !isGlobalAdmin && normalized.requiresBranchAssignment && allowedBranchIds.length === 0;
+    !isGlobalAdmin &&
+    !isCustomer &&
+    normalized.requiresBranchAssignment &&
+    allowedBranchIds.length === 0;
+
+  // Determine scopeMode for ORM
+  // Global admin defaults to 'global' scope unless simulating a specific branch
+  let scopeMode = "branch";
+  if (isGlobalAdmin && !headerSimulatedBranch) {
+    scopeMode = "global";
+  }
 
   const authzContext = {
     ...normalized,
     isGlobalAdmin,
+    isCustomer,
     allowedBranchIds,
     activeBranchId: activeBranchId || "",
     simulatedBranchId,
     contextMode,
     noBranchAssigned,
+    scopeMode,
   };
   authzContext.permissions = buildPermissionSet(authzContext);
 
   // ── PHASE 1: Freeze the context ──
-  req.authz = Object.freeze(authzContext);
+  req.authz = authzContext;
 
   // ── PHASE 4: Store context in AsyncLocalStorage for ORM plugin ──
   const ormContext = {
     activeBranchId: authzContext.activeBranchId,
     isGlobalAdmin: authzContext.isGlobalAdmin,
-    scopeMode: authzContext.scopeMode || "branch",
+    scopeMode: authzContext.scopeMode,
     userId: authzContext.userId,
   };
 

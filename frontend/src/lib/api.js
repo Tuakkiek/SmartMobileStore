@@ -128,6 +128,7 @@ export const orderAPI = {
   updateStatus: (id, data) => api.put(`/orders/${id}/status`, data),
   assignCarrier: (id, data) => api.patch(`/orders/${id}/assign-carrier`, data),
   cancel: (id, data = {}) => api.post(`/orders/${id}/cancel`, data),
+  assignStore: (id, data) => api.patch(`/orders/${id}/assign-store`, data),
 };
 
 export const notificationAPI = {
