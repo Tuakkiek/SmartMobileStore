@@ -23,12 +23,11 @@ export const useAuthStore = create(
           const response = await authAPI.login(credentials);
           const { user, token, authz } = response.data.data;
 
-          // ── KILL-SWITCH: Extract active branch from authz or first allowed branch ──
+          // ── KILL-SWITCH: Extract active branch ──
           const activeBranchId =
             authz?.activeBranchId ||
             user?.storeLocation ||
-            (authz?.allowedBranchIds?.[0]) ||
-            null;
+            (authz?.allowedBranchIds && authz.allowedBranchIds.length > 0 ? authz.allowedBranchIds[0] : null);
 
           set({
             user,
@@ -101,8 +100,7 @@ export const useAuthStore = create(
             currentActiveBranch ||
             authz?.activeBranchId ||
             user?.storeLocation ||
-            (authz?.allowedBranchIds?.[0]) ||
-            null;
+            (authz?.allowedBranchIds && authz.allowedBranchIds.length > 0 ? authz.allowedBranchIds[0] : null);
 
           set({
             user,

@@ -60,7 +60,7 @@ const buildEffectivePermissionsPayload = (user, resolvedContext = null) => {
     taskRoles: normalized.taskRoles,
     branchAssignments: normalized.branchAssignments,
     allowedBranchIds: normalized.allowedBranchIds,
-    activeBranchId: normalized.activeBranchId || "",
+    activeBranchId: normalized.activeBranchId || normalized.defaultBranchId || "",
     simulatedBranchId: normalized.simulatedBranchId || "",
     contextMode: normalized.contextMode || "STANDARD",
     noBranchAssigned: Boolean(normalized.noBranchAssigned),
