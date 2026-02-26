@@ -176,7 +176,8 @@ export const create = async (req, res) => {
       productType: productData.productType,
       specifications: productData.specifications || {},
       condition: productData.condition || "NEW",
-      status: productData.status || "AVAILABLE",
+      lifecycleStage: "SKELETON",
+      status: "OUT_OF_STOCK",
       installmentBadge: productData.installmentBadge || "NONE",
       createdBy: productData.createdBy,
       featuredImages: productData.featuredImages || [],
@@ -505,6 +506,12 @@ export const findAll = async (req, res) => {
     if (brand) uniQuery.brand = brand;
     if (productType) uniQuery.productType = productType; // Filter by ID
 
+    // Public requests (no auth) should not see SKELETON products
+    const isPublicRequest = !req.user;
+    if (isPublicRequest) {
+      uniQuery.lifecycleStage = { $ne: "SKELETON" };
+    }
+
     // Debug queries and pagination/sorting.
     console.log(
       "[UNIVERSAL_PRODUCTS][LIST] Query:",
@@ -641,6 +648,14 @@ export const getProductDetail = async (req, res) => {
         .populate("createdBy", "fullName email");
 
       if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m",
+        });
+      }
+
+      // Block public access to SKELETON products
+      if (!req.user && product.lifecycleStage === "SKELETON") {
         return res.status(404).json({
           success: false,
           message: "KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m",

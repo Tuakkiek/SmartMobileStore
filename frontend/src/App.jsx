@@ -36,6 +36,7 @@ import WarehouseConfigPage from "@/pages/admin/WarehouseConfigPage";
 import InventoryDashboard from "@/pages/admin/InventoryDashboard";
 import StoreManagementPage from "@/pages/admin/StoreManagementPage";
 import WarehouseVisualizerPage from "@/pages/admin/WarehouseVisualizerPage";
+import StockInPage from "@/pages/admin/StockInPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import WarehouseStaffDashboard from "@/pages/warehouse-staff/WarehouseStaffDashboard";
@@ -224,6 +225,7 @@ function App() {
           <Route path="/admin/product-types" element={<ProductTypeManagementPage />} />
           <Route path="/admin/stores" element={<StoreManagementPage />} />
           <Route path="/admin/inventory-dashboard" element={<InventoryDashboard />} />
+          <Route path="/admin/stock-in" element={<StockInPage />} />
         </Route>
 
         <Route

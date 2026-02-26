@@ -85,10 +85,18 @@ const universalProductSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Lifecycle stage: SKELETON = product definition only (invisible to customers)
+    // ACTIVE = fully visible and can be ordered
+    lifecycleStage: {
+      type: String,
+      enum: ["SKELETON", "ACTIVE"],
+      default: "SKELETON",
+    },
+
     status: {
       type: String,
       enum: ["AVAILABLE", "OUT_OF_STOCK", "DISCONTINUED", "PRE_ORDER"],
-      default: "AVAILABLE",
+      default: "OUT_OF_STOCK",
     },
 
     installmentBadge: {
@@ -126,6 +134,7 @@ universalProductSchema.methods.incrementSales = async function (quantity = 1) {
 
 universalProductSchema.index({ name: "text", model: "text", description: "text" });
 universalProductSchema.index({ status: 1 });
+universalProductSchema.index({ lifecycleStage: 1 });
 universalProductSchema.index({ createdAt: -1 });
 universalProductSchema.index({ salesCount: -1 });
 

@@ -5,6 +5,7 @@
 
 import express from "express";
 import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import resolveAccessContext from "../../middleware/authz/resolveAccessContext.js";
 import {
   updateProfile,
   addAddress,
@@ -30,7 +31,7 @@ router.put("/addresses/:addressId", restrictTo("CUSTOMER"), updateAddress);
 router.delete("/addresses/:addressId", restrictTo("CUSTOMER"), deleteAddress);
 
 // Admin/Manager routes
-router.get("/employees", restrictTo("ADMIN", "PRODUCT_MANAGER", "ORDER_MANAGER"), getAllEmployees);
+router.get("/employees", restrictTo("ADMIN", "PRODUCT_MANAGER", "ORDER_MANAGER"), resolveAccessContext, getAllEmployees);
 
 // ✅ NEW: Get all shippers (for Order Manager to assign)
 router.get("/shippers", restrictTo("ADMIN", "ORDER_MANAGER"), getAllShippers);

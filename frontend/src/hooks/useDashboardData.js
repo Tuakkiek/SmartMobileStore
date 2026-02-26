@@ -38,14 +38,7 @@ export const useDashboardData = (timeRange) => {
     try {
       const { startDate, endDate } = getDateRange(timeRange);
 
-      const [
-        ordersRes,
-        deliveredRes,
-        employeesRes,
-        productsRes,
-        promotionsRes,
-        employeeKPIRes,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         orderAPI.getAll({ limit: 1000, startDate, endDate }),
         orderAPI.getAll({
           status: "DELIVERED",
@@ -61,6 +54,22 @@ export const useDashboardData = (timeRange) => {
           headers: { Authorization: `Bearer ${getToken()}` },
         }),
       ]);
+
+      const failedIndex = results.findIndex((r) => r.status === "rejected");
+      if (failedIndex !== -1) {
+        const apiNames = ["orders", "deliveredOrders", "employees", "products", "promotions", "employeeKPI"];
+        console.error(`Error fetching ${apiNames[failedIndex]}:`, results[failedIndex].reason);
+        throw results[failedIndex].reason;
+      }
+
+      const [
+        ordersRes,
+        deliveredRes,
+        employeesRes,
+        productsRes,
+        promotionsRes,
+        employeeKPIRes,
+      ] = results.map((r) => r.value);
 
       const processedStats = processAllData({
         ordersRes,
