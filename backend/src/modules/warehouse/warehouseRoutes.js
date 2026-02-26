@@ -8,8 +8,29 @@ import { protect, restrictTo } from "../../middleware/authMiddleware.js";
 import * as warehouseController from "./warehouseController.js";
 import * as goodsReceiptController from "./goodsReceiptController.js";
 import * as stockOperationsController from "./stockOperationsController.js";
+import * as stockInController from "./stockInController.js";
 
 const router = express.Router();
+
+// ============================================
+// DIRECT STOCK-IN (Global Admin)
+// ============================================
+
+// Nhập kho trực tiếp (không cần PO)
+router.post(
+  "/stock-in",
+  protect,
+  restrictTo("ADMIN"),
+  stockInController.directStockIn
+);
+
+// Lịch sử nhập kho
+router.get(
+  "/stock-in/history",
+  protect,
+  restrictTo("ADMIN"),
+  stockInController.getStockInHistory
+);
 
 // ============================================
 // WAREHOUSE LOCATIONS

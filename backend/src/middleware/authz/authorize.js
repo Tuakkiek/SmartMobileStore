@@ -67,9 +67,12 @@ export const authorize = (actionOrResolver, options = {}) => async (req, res, ne
     });
   }
 
-  req.authz.authorizedAction = action;
-  req.authz.scopeMode = scopeMode;
-  req.authz.authorizedResource = resource || null;
+  req.authz = {
+    ...req.authz,
+    authorizedAction: action,
+    scopeMode,
+    authorizedResource: resource || null,
+  };
 
   if (options.audit !== false) {
     await logAuthzDecision({

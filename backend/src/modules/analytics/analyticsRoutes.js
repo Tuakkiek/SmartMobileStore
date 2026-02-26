@@ -10,9 +10,12 @@ import { getEmployeeKPI, getPersonalStats } from "./analyticsController.js";
 const router = express.Router();
 
 const resolveKpiScopeMode = (req) => {
-  const view = String(req.query?.view || "branch").trim().toLowerCase();
+  const view = String(req.query?.view || "").trim().toLowerCase();
   if (view === "global") return "global";
   if (view === "assigned") return "assigned";
+  if (view === "branch") return "branch";
+  
+  if (req.user?.role === "GLOBAL_ADMIN") return "global";
   return "branch";
 };
 

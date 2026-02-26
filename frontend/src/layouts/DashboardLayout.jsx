@@ -29,6 +29,7 @@ import {
   Percent,
   Smartphone,
   PackageCheck,
+  PackagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -72,6 +73,7 @@ const DashboardLayout = () => {
           icon: Boxes,
           label: "Inventory Dashboard",
         },
+        { path: "/admin/stock-in", icon: PackagePlus, label: "Nhập kho" },
         { path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" },
         { path: "/admin/brands", icon: Tags, label: "Quản lý Hãng" },
         { path: "/admin/product-types", icon: Layers, label: "Loại sản phẩm" },
