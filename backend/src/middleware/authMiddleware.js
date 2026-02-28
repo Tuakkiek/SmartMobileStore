@@ -70,7 +70,10 @@ export const protect = async (req, res, next) => {
 
 export const restrictTo = (...roles) => {
   return (req, res, next) => {
-    if (req.user.role === "GLOBAL_ADMIN") {
+    const hasSystemGlobalAdminRole =
+      Array.isArray(req?.user?.systemRoles) && req.user.systemRoles.includes("GLOBAL_ADMIN");
+
+    if (req.user.role === "GLOBAL_ADMIN" || req?.authz?.isGlobalAdmin || hasSystemGlobalAdminRole) {
       return next();
     }
 

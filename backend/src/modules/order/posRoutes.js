@@ -18,15 +18,22 @@ import {
 
 const router = express.Router();
 
+const resolvePosScopeMode = (req) => {
+  if (req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN") {
+    return "global";
+  }
+  return "branch";
+};
+
 const requireOrdersRead = authorize(AUTHZ_ACTIONS.ORDERS_READ, {
-  scopeMode: "branch",
-  requireActiveBranch: true,
+  scopeMode: resolvePosScopeMode,
+  requireActiveBranchFor: ["branch"],
   resourceType: "ORDER",
 });
 
 const requireOrdersWrite = authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
-  scopeMode: "branch",
-  requireActiveBranch: true,
+  scopeMode: resolvePosScopeMode,
+  requireActiveBranchFor: ["branch"],
   resourceType: "ORDER",
 });
 

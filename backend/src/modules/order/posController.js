@@ -24,16 +24,31 @@ const buildHttpError = (httpStatus, code, message) => {
 
 const getActiveBranchIdFromReq = (req) => String(req?.authz?.activeBranchId || "").trim();
 
-const ensureActiveBranchContext = (req) => {
+const isGlobalAdminRequest = (req) =>
+  Boolean(req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN");
+
+const ensureActiveBranchContext = (req, { allowGlobalWithoutBranch = false, fallbackBranchId = "" } = {}) => {
   const activeBranchId = getActiveBranchIdFromReq(req);
-  if (!activeBranchId) {
-    throw buildHttpError(
-      403,
-      "AUTHZ_ACTIVE_BRANCH_REQUIRED",
-      "Active branch context is required for POS operations",
-    );
+  if (activeBranchId) {
+    return activeBranchId;
   }
-  return activeBranchId;
+
+  if (isGlobalAdminRequest(req)) {
+    const normalizedFallbackBranchId = String(fallbackBranchId || "").trim();
+    if (normalizedFallbackBranchId) {
+      return normalizedFallbackBranchId;
+    }
+
+    if (allowGlobalWithoutBranch) {
+      return "";
+    }
+  }
+
+  throw buildHttpError(
+    403,
+    "AUTHZ_ACTIVE_BRANCH_REQUIRED",
+    "Active branch context is required for POS operations",
+  );
 };
 
 const extractRequestedBranchId = (body = {}) => {
@@ -64,8 +79,8 @@ const buildAssignedStoreSnapshot = (store, assignedBy) => ({
   assignedBy,
 });
 
-const resolveActiveStore = async (req, session = null) => {
-  const activeBranchId = ensureActiveBranchContext(req);
+const resolveActiveStore = async (req, session = null, { requestedBranchId = "" } = {}) => {
+  const activeBranchId = ensureActiveBranchContext(req, { fallbackBranchId: requestedBranchId });
   const query = Store.findById(activeBranchId);
   if (session) {
     query.session(session);
@@ -80,7 +95,6 @@ const resolveActiveStore = async (req, session = null) => {
 };
 
 const assertOrderInActiveBranch = (req, order) => {
-  const activeBranchId = ensureActiveBranchContext(req);
   const orderBranchId = String(order?.assignedStore?.storeId || "").trim();
 
   if (!orderBranchId) {
@@ -90,6 +104,12 @@ const assertOrderInActiveBranch = (req, order) => {
       "In-store order is missing branch assignment and cannot be processed",
     );
   }
+
+  if (isGlobalAdminRequest(req)) {
+    return getActiveBranchIdFromReq(req) || orderBranchId;
+  }
+
+  const activeBranchId = ensureActiveBranchContext(req);
 
   if (orderBranchId !== activeBranchId) {
     throw buildHttpError(403, "ORDER_BRANCH_FORBIDDEN", "Order does not belong to your assigned branch");
@@ -119,9 +139,9 @@ export const createPOSOrder = async (req, res) => {
   try {
     const { items, customerInfo, totalAmount, promotionCode } = req.body;
     const requestedBranchId = extractRequestedBranchId(req.body);
-    const { activeBranchId, store } = await resolveActiveStore(req, session);
+    const { activeBranchId, store } = await resolveActiveStore(req, session, { requestedBranchId });
 
-    if (requestedBranchId && requestedBranchId !== activeBranchId) {
+    if (requestedBranchId && requestedBranchId !== activeBranchId && !isGlobalAdminRequest(req)) {
       throw buildHttpError(
         403,
         "ORDER_BRANCH_FORBIDDEN",
@@ -298,13 +318,12 @@ export const createPOSOrder = async (req, res) => {
 
 export const getPendingOrders = async (req, res) => {
   try {
-    const activeBranchId = ensureActiveBranchContext(req);
+    const activeBranchId = ensureActiveBranchContext(req, { allowGlobalWithoutBranch: true });
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 20);
 
     const query = {
       orderSource: "IN_STORE",
-      "assignedStore.storeId": activeBranchId,
       $or: [
         { statusStage: "PENDING_PAYMENT" },
         { status: "PENDING_PAYMENT" },
@@ -313,6 +332,9 @@ export const getPendingOrders = async (req, res) => {
         { statusStage: "PENDING_ORDER_MANAGEMENT" },
       ],
     };
+    if (activeBranchId) {
+      query["assignedStore.storeId"] = activeBranchId;
+    }
 
     const [orders, total] = await Promise.all([
       Order.find(query)
@@ -829,15 +851,17 @@ export const issueVATInvoice = async (req, res) => {
 
 export const getPOSOrderHistory = async (req, res) => {
   try {
-    const activeBranchId = ensureActiveBranchContext(req);
+    const activeBranchId = ensureActiveBranchContext(req, { allowGlobalWithoutBranch: true });
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 10);
     const { startDate, endDate, search } = req.query;
 
     const query = {
       orderSource: "IN_STORE",
-      "assignedStore.storeId": activeBranchId,
     };
+    if (activeBranchId) {
+      query["assignedStore.storeId"] = activeBranchId;
+    }
 
     if (req.user.role === "POS_STAFF") {
       query["posInfo.staffId"] = req.user._id;
@@ -896,15 +920,17 @@ export const getPOSOrderHistory = async (req, res) => {
 
 export const getPOSStats = async (req, res) => {
   try {
-    const activeBranchId = ensureActiveBranchContext(req);
+    const activeBranchId = ensureActiveBranchContext(req, { allowGlobalWithoutBranch: true });
     const { startDate, endDate } = req.query;
     const userId = req.user._id;
     const userRole = req.user.role;
 
     const query = {
       orderSource: "IN_STORE",
-      "assignedStore.storeId": activeBranchId,
     };
+    if (activeBranchId) {
+      query["assignedStore.storeId"] = activeBranchId;
+    }
 
     if (userRole === "CASHIER") {
       query["posInfo.cashierId"] = userId;
