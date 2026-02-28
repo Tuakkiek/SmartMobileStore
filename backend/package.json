@@ -12,6 +12,7 @@
     "migrate:authz-v2": "node src/scripts/migrate-authz-v2.js",
     "seed:role-definitions": "node src/scripts/seed-role-definitions.js",
     "migrate:order-status-stage": "node src/scripts/migrate-order-status-stage.js",
+    "migrate:order-audit-baseline": "node src/scripts/migrate-order-audit-baseline.js",
     "migrate:instore-order-branch": "node src/scripts/migrate-instore-order-branch.js",
     "migrate:product-warehouse-sync": "node src/scripts/migrate-product-warehouse-sync.js",
     "check:authz-boundary": "node src/scripts/check-authz-boundary.js",

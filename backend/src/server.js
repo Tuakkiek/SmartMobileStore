@@ -36,6 +36,7 @@ import inventoryRoutes from "./modules/inventory/inventoryRoutes.js";
 import { startReplenishmentScheduler } from "./modules/inventory/replenishmentScheduler.js";
 import monitoringRoutes from "./modules/monitoring/monitoringRoutes.js";
 import notificationRoutes from "./modules/notification/notificationRoutes.js";
+import orderAuditRoutes from "./modules/audit/orderAuditRoutes.js";
 
 
 
@@ -173,6 +174,7 @@ app.use("/api/stores", storeRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/monitoring", monitoringRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/audit-logs", orderAuditRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

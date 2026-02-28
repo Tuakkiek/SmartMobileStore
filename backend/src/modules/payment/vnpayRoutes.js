@@ -1,5 +1,8 @@
 import express from "express";
 import { protect } from "../../middleware/authMiddleware.js";
+import { orderAuditMiddleware } from "../order/orderAuditMiddleware.js";
+import { ORDER_AUDIT_ACTIONS } from "../order/orderAuditActions.js";
+import { resolveOrderIdFromVnpTxnRef } from "../order/orderAuditAdapter.js";
 import {
   createPaymentUrl,
   vnpayIPN,
@@ -8,13 +11,19 @@ import {
 
 const router = express.Router();
 
-// Tạo payment URL (cần auth)
-router.post("/create-payment-url", protect, createPaymentUrl);
+const auditCreatePaymentLink = orderAuditMiddleware({
+  actionType: ORDER_AUDIT_ACTIONS.CREATE_PAYMENT_LINK,
+  source: "VNPAY_API",
+});
 
-// IPN - webhook từ VNPay (không cần auth)
-router.get("/ipn", vnpayIPN);
+const auditVnpayIPN = orderAuditMiddleware({
+  actionType: ORDER_AUDIT_ACTIONS.PROCESS_VNPAY_IPN,
+  source: "VNPAY_IPN",
+  resolveOrderId: (req) => resolveOrderIdFromVnpTxnRef(req?.query?.vnp_TxnRef),
+});
 
-// Return URL - user quay lại (không cần auth vì là GET redirect)
+router.post("/create-payment-url", protect, auditCreatePaymentLink, createPaymentUrl);
+router.get("/ipn", auditVnpayIPN, vnpayIPN);
 router.get("/return", vnpayReturn);
 
 export default router;
