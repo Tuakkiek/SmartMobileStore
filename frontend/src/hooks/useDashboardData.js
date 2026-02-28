@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import {
+  api,
   orderAPI,
   userAPI,
   promotionAPI,
   universalProductAPI,
 } from "@/lib/api";
-
-const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 const toNumber = (value) => Number(value || 0);
 
@@ -49,10 +47,7 @@ export const useDashboardData = (timeRange) => {
         userAPI.getAllEmployees(),
         universalProductAPI.getAll({ limit: 1000 }),
         promotionAPI.getAllPromotions(),
-        axios.get(`${BASE_URL}/analytics/employee/kpi`, {
-          params: { startDate, endDate },
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }),
+        api.get("/analytics/employee/kpi", { params: { startDate, endDate } }),
       ]);
 
       const failedIndex = results.findIndex((r) => r.status === "rejected");
@@ -126,18 +121,6 @@ const getDateRange = (timeRange) => {
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
   };
-};
-
-const getToken = () => {
-  const authStorage = localStorage.getItem("auth-storage");
-  if (!authStorage) return null;
-
-  try {
-    const { state } = JSON.parse(authStorage);
-    return state?.token || null;
-  } catch {
-    return null;
-  }
 };
 
 const processAllData = ({

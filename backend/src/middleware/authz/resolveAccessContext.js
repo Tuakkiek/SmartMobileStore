@@ -2,12 +2,6 @@ import { normalizeUserAccess } from "../../authz/userAccessResolver.js";
 import { buildPermissionSet } from "../../authz/policyEngine.js";
 import { runWithBranchContext } from "../../authz/branchContext.js";
 
-// ============================================
-// KILL-SWITCH: Single source of truth
-// Only X-Active-Branch-Id header is accepted.
-// No cookies. No query params. No body params.
-// ============================================
-
 const deny = (res, code, message, status = 403) =>
   res.status(status).json({
     success: false,
@@ -31,18 +25,47 @@ export const resolveAccessContext = async (req, res, next) => {
 
   const isGlobalAdmin = normalized.isGlobalAdmin;
   const isCustomer = req.user.role === "CUSTOMER";
+  const isShipper = req.user.role === "SHIPPER";
   const allowedBranchIds = normalized.allowedBranchIds || [];
 
-  // ── SINGLE SOURCE OF TRUTH ──
-  // Active branch: ONLY from X-Active-Branch-Id header
   const headerActiveBranch = req.headers?.["x-active-branch-id"]
     ? String(req.headers["x-active-branch-id"]).trim()
     : "";
-
-  // Simulation: ONLY from X-Simulate-Branch-Id header (GLOBAL_ADMIN only)
   const headerSimulatedBranch = req.headers?.["x-simulate-branch-id"]
     ? String(req.headers["x-simulate-branch-id"]).trim()
     : "";
+
+  const isBranchScopedStaff =
+    !isGlobalAdmin &&
+    !isCustomer &&
+    !isShipper &&
+    normalized.requiresBranchAssignment;
+
+  if (isBranchScopedStaff && allowedBranchIds.length !== 1) {
+    return deny(
+      res,
+      "AUTHZ_INVALID_BRANCH_ASSIGNMENT",
+      "Staff account must have exactly one active branch assignment",
+    );
+  }
+
+  const fixedBranchId = isBranchScopedStaff ? String(allowedBranchIds[0] || "") : "";
+
+  if (isBranchScopedStaff && headerActiveBranch && headerActiveBranch !== fixedBranchId) {
+    return deny(
+      res,
+      "AUTHZ_BRANCH_SWITCH_FORBIDDEN",
+      "Branch context is fixed for this account",
+    );
+  }
+
+  if (!isGlobalAdmin && headerSimulatedBranch) {
+    return deny(
+      res,
+      "AUTHZ_SIMULATION_FORBIDDEN",
+      "Branch simulation is restricted to global admin",
+    );
+  }
 
   let contextMode = "STANDARD";
   let activeBranchId = "";
@@ -52,38 +75,13 @@ export const resolveAccessContext = async (req, res, next) => {
     contextMode = "SIMULATED";
     simulatedBranchId = headerSimulatedBranch;
     activeBranchId = headerSimulatedBranch;
+  } else if (isBranchScopedStaff) {
+    activeBranchId = fixedBranchId;
   } else if (headerActiveBranch) {
     activeBranchId = headerActiveBranch;
   }
 
-  // ── ENFORCE: Non-global users MUST have a branch ──
-  // Customer không cần branch context
-  if (
-    !isGlobalAdmin &&
-    !isCustomer &&
-    !activeBranchId &&
-    normalized.requiresBranchAssignment
-  ) {
-    return deny(
-      res,
-      "AUTHZ_MISSING_BRANCH_CONTEXT",
-      "Missing Active Branch Context. Send X-Active-Branch-Id header.",
-      400,
-    );
-  }
-
-  // ── ENFORCE: Simulation is GLOBAL_ADMIN only ──
-  if (!isGlobalAdmin && headerSimulatedBranch) {
-    return deny(
-      res,
-      "AUTHZ_SIMULATION_FORBIDDEN",
-      "Branch simulation is restricted to global admin",
-    );
-  }
-
-  // ── ENFORCE: Branch must be in allowed list ──
-  // Customer không thuộc branch nào nên bỏ qua kiểm tra này
-  if (!isGlobalAdmin && !isCustomer && activeBranchId) {
+  if (!isGlobalAdmin && !isCustomer && !isShipper && activeBranchId) {
     if (!allowedBranchIds.includes(activeBranchId)) {
       return deny(
         res,
@@ -96,11 +94,10 @@ export const resolveAccessContext = async (req, res, next) => {
   const noBranchAssigned =
     !isGlobalAdmin &&
     !isCustomer &&
+    !isShipper &&
     normalized.requiresBranchAssignment &&
     allowedBranchIds.length === 0;
 
-  // Determine scopeMode for ORM
-  // Global admin defaults to 'global' scope unless simulating a specific branch
   let scopeMode = "branch";
   if (isGlobalAdmin && !headerSimulatedBranch) {
     scopeMode = "global";
@@ -119,10 +116,8 @@ export const resolveAccessContext = async (req, res, next) => {
   };
   authzContext.permissions = buildPermissionSet(authzContext);
 
-  // ── PHASE 1: Freeze the context ──
   req.authz = authzContext;
 
-  // ── PHASE 4: Store context in AsyncLocalStorage for ORM plugin ──
   const ormContext = {
     activeBranchId: authzContext.activeBranchId,
     isGlobalAdmin: authzContext.isGlobalAdmin,

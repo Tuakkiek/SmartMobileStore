@@ -113,6 +113,37 @@ const isOrderOwnedByUser = (order, userId) => {
   return requester && (customerId === requester || ownerId === requester);
 };
 
+const isBranchScopedStaffActor = (req) => {
+  return Boolean(req?.authz && !req.authz.isGlobalAdmin && req.authz.requiresBranchAssignment);
+};
+
+const enforceInStoreBranchAccess = (req, order) => {
+  if (!isInStoreOrder(order) || !isBranchScopedStaffActor(req)) {
+    return { allowed: true };
+  }
+
+  const activeBranchId = String(req.authz?.activeBranchId || "").trim();
+  const orderBranchId = String(order?.assignedStore?.storeId || "").trim();
+
+  if (!orderBranchId) {
+    return {
+      allowed: false,
+      code: "ORDER_BRANCH_MISSING",
+      message: "In-store order is missing branch assignment and is blocked by policy",
+    };
+  }
+
+  if (!activeBranchId || orderBranchId !== activeBranchId) {
+    return {
+      allowed: false,
+      code: "ORDER_BRANCH_FORBIDDEN",
+      message: "Order does not belong to your assigned branch",
+    };
+  }
+
+  return { allowed: true };
+};
+
 const normalizeOrderForResponse = (order) => {
   const source = order?.toObject ? order.toObject() : order;
   const items = Array.isArray(source?.items) ? source.items : [];
@@ -747,6 +778,15 @@ export const getOrderById = async (req, res) => {
       });
     }
 
+    const branchDecision = enforceInStoreBranchAccess(req, order);
+    if (!branchDecision.allowed) {
+      return res.status(403).json({
+        success: false,
+        code: branchDecision.code,
+        message: branchDecision.message,
+      });
+    }
+
     if (req.user.role === "CUSTOMER" && !isOrderOwnedByUser(order, req.user._id)) {
       return res.status(403).json({
         success: false,
@@ -1115,6 +1155,16 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Khong tim thay don hang",
+      });
+    }
+
+    const branchDecision = enforceInStoreBranchAccess(req, order);
+    if (!branchDecision.allowed) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        code: branchDecision.code,
+        message: branchDecision.message,
       });
     }
 

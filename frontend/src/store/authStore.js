@@ -1,7 +1,75 @@
-// FILE: frontend/src/store/authStore.js
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { authAPI } from '@/lib/api';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { authAPI } from "@/lib/api";
+
+const BRANCH_SCOPED_ROLES = new Set([
+  "ADMIN",
+  "BRANCH_ADMIN",
+  "WAREHOUSE_MANAGER",
+  "WAREHOUSE_STAFF",
+  "PRODUCT_MANAGER",
+  "ORDER_MANAGER",
+  "POS_STAFF",
+  "CASHIER",
+]);
+
+const normalizeBranchId = (value) => {
+  if (!value) return "";
+  return String(value).trim();
+};
+
+const normalizeAllowedBranchIds = (authz) => {
+  const allowed = Array.isArray(authz?.allowedBranchIds) ? authz.allowedBranchIds : [];
+  return [...new Set(allowed.map(normalizeBranchId).filter(Boolean))];
+};
+
+const isGlobalAdminContext = (user, authz) => {
+  return Boolean(authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN");
+};
+
+const isBranchScopedStaff = (user, authz) => {
+  if (isGlobalAdminContext(user, authz)) return false;
+  if (authz?.requiresBranchAssignment === true) return true;
+  return BRANCH_SCOPED_ROLES.has(String(user?.role || "").toUpperCase());
+};
+
+const deriveFixedBranchId = (user, authz) => {
+  const allowedBranchIds = normalizeAllowedBranchIds(authz);
+  const authzActiveBranchId = normalizeBranchId(authz?.activeBranchId);
+
+  if (authzActiveBranchId) {
+    if (allowedBranchIds.length === 0 || allowedBranchIds.includes(authzActiveBranchId)) {
+      return authzActiveBranchId;
+    }
+  }
+
+  if (allowedBranchIds.length > 0) {
+    return allowedBranchIds[0];
+  }
+
+  const legacyStoreLocation = normalizeBranchId(user?.storeLocation);
+  if (legacyStoreLocation) {
+    return legacyStoreLocation;
+  }
+
+  return "";
+};
+
+const resolveActiveBranchId = ({ user, authz, currentActiveBranchId = "" }) => {
+  const fixedBranchId = deriveFixedBranchId(user, authz);
+
+  if (isBranchScopedStaff(user, authz)) {
+    return fixedBranchId || null;
+  }
+
+  if (isGlobalAdminContext(user, authz)) {
+    const current = normalizeBranchId(currentActiveBranchId);
+    return current || fixedBranchId || null;
+  }
+
+  const current = normalizeBranchId(currentActiveBranchId);
+  return current || fixedBranchId || null;
+};
 
 export const useAuthStore = create(
   persist(
@@ -11,23 +79,20 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
-
-      // ── KILL-SWITCH: Branch context fields ──
       activeBranchId: null,
       authz: null,
 
-      // Login
       login: async (credentials) => {
         set({ isLoading: true, error: null });
         try {
           const response = await authAPI.login(credentials);
           const { user, token, authz } = response.data.data;
 
-          // ── KILL-SWITCH: Extract active branch ──
-          const activeBranchId =
-            authz?.activeBranchId ||
-            user?.storeLocation ||
-            (authz?.allowedBranchIds && authz.allowedBranchIds.length > 0 ? authz.allowedBranchIds[0] : null);
+          const activeBranchId = resolveActiveBranchId({
+            user,
+            authz,
+            currentActiveBranchId: null,
+          });
 
           set({
             user,
@@ -40,17 +105,16 @@ export const useAuthStore = create(
 
           return { success: true };
         } catch (error) {
-          const message = error.response?.data?.message || 'Đăng nhập thất bại';
+          const message = error.response?.data?.message || "Dang nhap that bai";
           set({
             error: message,
             isLoading: false,
-            isAuthenticated: false
+            isAuthenticated: false,
           });
           return { success: false, message };
         }
       },
 
-      // Register
       register: async (data) => {
         set({ isLoading: true, error: null });
         try {
@@ -58,18 +122,17 @@ export const useAuthStore = create(
           set({ isLoading: false });
           return { success: true };
         } catch (error) {
-          const message = error.response?.data?.message || 'Đăng ký thất bại';
+          const message = error.response?.data?.message || "Dang ky that bai";
           set({ error: message, isLoading: false });
           return { success: false, message };
         }
       },
 
-      // Logout
       logout: async () => {
         try {
           await authAPI.logout();
         } catch (error) {
-          console.error('Logout error:', error);
+          console.error("Logout error:", error);
         } finally {
           set({
             user: null,
@@ -82,7 +145,6 @@ export const useAuthStore = create(
         }
       },
 
-      // Get current user (để refresh thông tin user)
       getCurrentUser: async () => {
         const token = get().token;
 
@@ -94,13 +156,11 @@ export const useAuthStore = create(
           const response = await authAPI.getCurrentUser();
           const { user, authz } = response.data.data;
 
-          // ── KILL-SWITCH: Refresh authz context ──
-          const currentActiveBranch = get().activeBranchId;
-          const activeBranchId =
-            currentActiveBranch ||
-            authz?.activeBranchId ||
-            user?.storeLocation ||
-            (authz?.allowedBranchIds && authz.allowedBranchIds.length > 0 ? authz.allowedBranchIds[0] : null);
+          const activeBranchId = resolveActiveBranchId({
+            user,
+            authz,
+            currentActiveBranchId: get().activeBranchId,
+          });
 
           set({
             user,
@@ -121,12 +181,15 @@ export const useAuthStore = create(
         }
       },
 
-      // ── KILL-SWITCH: Switch active branch ──
       setActiveBranch: (branchId) => {
-        set({ activeBranchId: branchId || null });
+        const { user, authz } = get();
+        if (!isGlobalAdminContext(user, authz)) {
+          return;
+        }
+
+        set({ activeBranchId: normalizeBranchId(branchId) || null });
       },
 
-      // Change password
       changePassword: async (data) => {
         set({ isLoading: true, error: null });
         try {
@@ -134,25 +197,23 @@ export const useAuthStore = create(
           set({ isLoading: false });
           return { success: true };
         } catch (error) {
-          const message = error.response?.data?.message || 'Đổi mật khẩu thất bại';
+          const message = error.response?.data?.message || "Doi mat khau that bai";
           set({ error: message, isLoading: false });
           return { success: false, message };
         }
       },
 
-      // Clear error
-      clearError: () => set({ error: null })
+      clearError: () => set({ error: null }),
     }),
     {
-      name: 'auth-storage', // Key trong localStorage
-      // Chỉ persist những field cần thiết
+      name: "auth-storage",
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
         activeBranchId: state.activeBranchId,
         authz: state.authz,
-      })
-    }
-  )
+      }),
+    },
+  ),
 );

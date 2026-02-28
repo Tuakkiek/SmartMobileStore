@@ -421,7 +421,6 @@ const POSDashboard = () => {
           phoneNumber: customerPhone.trim(),
         },
         totalAmount,
-        storeLocation: "Ninh Kiều iStore",
         promotionCode: appliedPromotion?.code || null,
       });
 
@@ -716,4 +715,3 @@ const POSDashboard = () => {
 };
 
 export default POSDashboard;
-

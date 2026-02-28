@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MapPin, Loader2, Warehouse } from "lucide-react";
+import { Loader2, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 
 const BranchSwitcher = ({ className }) => {
@@ -16,49 +16,55 @@ const BranchSwitcher = ({ className }) => {
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const isGlobalAdmin = Boolean(
+    authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN",
+  );
+
   useEffect(() => {
     const fetchBranches = async () => {
-      if (!user) return;
+      if (!user || !isGlobalAdmin) {
+        setBranches([]);
+        return;
+      }
+
       setLoading(true);
       try {
         const res = await storeAPI.getAll({ limit: 100 });
-        const allStores = res.data?.data || [];
-        
-        // Filter based on permissions
-        if (authz?.isGlobalAdmin) {
-          setBranches(allStores);
-        } else {
-          const allowedIds = authz?.allowedBranchIds || [];
-          setBranches(allStores.filter(s => allowedIds.includes(s._id)));
-        }
-      } catch (err) {
-        console.error("Failed to fetch branches:", err);
+        const payload = res.data?.data;
+        const allStores = Array.isArray(payload) ? payload : payload?.stores || [];
+        setBranches(Array.isArray(allStores) ? allStores : []);
+      } catch (error) {
+        console.error("Failed to fetch branches:", error);
+        setBranches([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchBranches();
-  }, [user, authz]);
+  }, [user, isGlobalAdmin]);
 
   const handleSwitch = async (branchId) => {
-    if (branchId === activeBranchId) return;
+    if (!isGlobalAdmin || branchId === activeBranchId) {
+      return;
+    }
 
     try {
       const res = await authAPI.setActiveBranchContext({ branchId });
       if (res.data?.success) {
         setActiveBranch(branchId);
-        toast.success("Đã chuyển đổi chi nhánh");
-        // Reload to apply new context consistently across all hooks/components
+        toast.success("Da chuyen doi chi nhanh");
         window.location.reload();
       }
-    } catch (err) {
-      console.error("Failed to switch branch:", err);
-      toast.error("Không thể chuyển đổi chi nhánh");
+    } catch (error) {
+      console.error("Failed to switch branch:", error);
+      toast.error(error.response?.data?.message || "Khong the chuyen doi chi nhanh");
     }
   };
 
-  if (branches.length <= 1 && !authz?.isGlobalAdmin) return null;
+  if (!isGlobalAdmin) {
+    return null;
+  }
 
   return (
     <div className={className}>
@@ -70,16 +76,16 @@ const BranchSwitcher = ({ className }) => {
             ) : (
               <Warehouse className="h-4 w-4 shrink-0 text-primary" />
             )}
-            <SelectValue placeholder="Chọn chi nhánh" />
+            <SelectValue placeholder="Chon chi nhanh" />
           </div>
         </SelectTrigger>
         <SelectContent>
           {branches.map((branch) => (
             <SelectItem key={branch._id} value={branch._id}>
               <div className="flex flex-col">
-                <span className="font-medium text-sm">{branch.storeCode}</span>
+                <span className="font-medium text-sm">{branch.code || branch.storeCode}</span>
                 <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                  {branch.storeName}
+                  {branch.name || branch.storeName}
                 </span>
               </div>
             </SelectItem>

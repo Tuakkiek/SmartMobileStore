@@ -632,6 +632,13 @@ orderSchema.pre("validate", function normalizeCustomerAndSource(next) {
     this.fulfillmentType = this.orderSource === "IN_STORE" ? "IN_STORE" : "HOME_DELIVERY";
   }
 
+  if (this.orderSource === "IN_STORE" && !this.assignedStore?.storeId) {
+    this.invalidate(
+      "assignedStore.storeId",
+      "IN_STORE orders must include assignedStore.storeId",
+    );
+  }
+
   next();
 });
 

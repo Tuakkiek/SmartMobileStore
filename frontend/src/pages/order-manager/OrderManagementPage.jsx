@@ -63,7 +63,7 @@ const OrderManagementPage = () => {
   const [statusDialogOrder, setStatusDialogOrder] = useState(null);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [stores, setStores] = useState([]);
-  const [isAssigning, setIsAssigning] = useState(false);
+  const [assigningOrderIds, setAssigningOrderIds] = useState({});
   
   const { user, authz } = useAuthStore();
   const isGlobalAdmin = user?.role === "GLOBAL_ADMIN" || authz?.isGlobalAdmin;
@@ -120,20 +120,80 @@ const OrderManagementPage = () => {
     }
   };
 
+  const patchOrderById = (orderId, updater) => {
+    setOrders((prevOrders) =>
+      prevOrders.map((order) => (order._id === orderId ? updater(order) : order)),
+    );
+    setSelectedOrder((prevOrder) =>
+      prevOrder?._id === orderId ? updater(prevOrder) : prevOrder,
+    );
+    setStatusDialogOrder((prevOrder) =>
+      prevOrder?._id === orderId ? updater(prevOrder) : prevOrder,
+    );
+  };
+
+  const setOrderAssigningState = (orderId, isAssigning) => {
+    setAssigningOrderIds((prev) => {
+      const next = { ...prev };
+      if (isAssigning) {
+        next[orderId] = true;
+      } else {
+        delete next[orderId];
+      }
+      return next;
+    });
+  };
+
+  const isOrderAssigning = (orderId) => Boolean(assigningOrderIds[orderId]);
+
   const handleReassignStore = async (orderId, storeId) => {
     if (!storeId) return;
+    if (isOrderAssigning(orderId)) return;
+
+    const normalizedStoreId = String(storeId);
+    const currentOrder = orders.find((order) => order._id === orderId);
+    const currentStoreId = currentOrder?.assignedStore?.storeId
+      ? String(currentOrder.assignedStore.storeId)
+      : "";
+
+    if (currentStoreId === normalizedStoreId) return;
+
+    const targetStore = stores.find((store) => String(store._id) === normalizedStoreId);
+    const fallbackAssignedStore = targetStore
+      ? {
+          storeId: targetStore._id,
+          storeName: targetStore.name,
+          storeCode: targetStore.code,
+          storePhone: targetStore.phone,
+          assignedAt: new Date().toISOString(),
+        }
+      : null;
+
     try {
-      setIsAssigning(true);
-      const response = await orderAPI.assignStore(orderId, { storeId });
+      setOrderAssigningState(orderId, true);
+      const response = await orderAPI.assignStore(orderId, { storeId: normalizedStoreId });
       if (response.data.success) {
+        const updatedOrder = response.data.order || response.data.data?.order || null;
+
+        if (updatedOrder) {
+          patchOrderById(orderId, (order) => ({ ...order, ...updatedOrder }));
+        } else if (fallbackAssignedStore) {
+          patchOrderById(orderId, (order) => ({
+            ...order,
+            assignedStore: {
+              ...order.assignedStore,
+              ...fallbackAssignedStore,
+            },
+          }));
+        }
+
         toast.success(response.data.message || "Đã chuyển đơn hàng thành công");
-        fetchOrders();
       }
     } catch (error) {
       console.error("Reassign error:", error);
       toast.error(error.response?.data?.message || "Không thể chuyển đơn hàng");
     } finally {
-      setIsAssigning(false);
+      setOrderAssigningState(orderId, false);
     }
   };
 
@@ -649,13 +709,25 @@ const OrderManagementPage = () => {
                               <div className="flex flex-col gap-2 h-full justify-center">
                                 {isGlobalAdmin && (
                                   <div className="flex flex-col gap-1.5 mb-2">
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">
-                                      Chuyển chi nhánh
-                                    </p>
+                                    <div className="flex items-center justify-between gap-2 ml-1">
+                                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                        Chuyển chi nhánh
+                                      </p>
+                                      {isOrderAssigning(order._id) && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600">
+                                          <RefreshCw className="w-3 h-3 animate-spin" />
+                                          Đang chuyển
+                                        </span>
+                                      )}
+                                    </div>
                                     <Select
-                                      disabled={isAssigning || !canUpdateOrderStatus(order) || stores.length === 0}
+                                      disabled={
+                                        isOrderAssigning(order._id) ||
+                                        !canUpdateOrderStatus(order) ||
+                                        stores.length === 0
+                                      }
                                       onValueChange={(value) => handleReassignStore(order._id, value)}
-                                      value={order.assignedStore?.storeId || ""}
+                                      value={order.assignedStore?.storeId ? String(order.assignedStore.storeId) : ""}
                                     >
                                       <SelectTrigger className="h-9 border-slate-200 bg-white hover:border-blue-400 transition-colors">
                                         <div className="flex items-center gap-2 truncate">
@@ -837,13 +909,25 @@ const OrderManagementPage = () => {
                           <div className="flex flex-col gap-3 pt-2">
                             {isGlobalAdmin && (
                               <div className="flex flex-col gap-1.5">
-                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider ml-1">
-                                  Chuyển chi nhánh
-                                </p>
+                                <div className="flex items-center justify-between gap-2 ml-1">
+                                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                    Chuyển chi nhánh
+                                  </p>
+                                  {isOrderAssigning(order._id) && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600">
+                                      <RefreshCw className="w-3 h-3 animate-spin" />
+                                      Đang chuyển
+                                    </span>
+                                  )}
+                                </div>
                                 <Select
-                                  disabled={isAssigning || !canUpdateOrderStatus(order) || stores.length === 0}
+                                  disabled={
+                                    isOrderAssigning(order._id) ||
+                                    !canUpdateOrderStatus(order) ||
+                                    stores.length === 0
+                                  }
                                   onValueChange={(value) => handleReassignStore(order._id, value)}
-                                  value={order.assignedStore?.storeId || ""}
+                                  value={order.assignedStore?.storeId ? String(order.assignedStore.storeId) : ""}
                                 >
                                   <SelectTrigger className="h-10 border-slate-200 bg-white shadow-sm">
                                     <div className="flex items-center gap-2 truncate">

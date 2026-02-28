@@ -64,6 +64,8 @@ const buildEffectivePermissionsPayload = (user, resolvedContext = null) => {
     simulatedBranchId: normalized.simulatedBranchId || "",
     contextMode: normalized.contextMode || "STANDARD",
     noBranchAssigned: Boolean(normalized.noBranchAssigned),
+    requiresBranchAssignment: Boolean(normalized.requiresBranchAssignment),
+    isGlobalAdmin: Boolean(normalized.isGlobalAdmin),
     permissions: Array.from(permissions).sort(),
   };
 };
@@ -510,6 +512,14 @@ export const setActiveBranchContext = async (req, res) => {
         success: false,
         code: "AUTHZ_CONTEXT_MISSING",
         message: "Authorization context is missing",
+      });
+    }
+
+    if (!req.authz.isGlobalAdmin && req.authz.requiresBranchAssignment) {
+      return res.status(403).json({
+        success: false,
+        code: "AUTHZ_BRANCH_SWITCH_FORBIDDEN",
+        message: "Branch context is fixed for staff accounts and cannot be switched manually",
       });
     }
 

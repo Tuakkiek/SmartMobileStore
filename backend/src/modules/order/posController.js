@@ -1,14 +1,8 @@
-// ============================================
-// FILE: backend/src/controllers/posController.js
-// ✅ ADDED: Stats API for Cashier Dashboard
-// ============================================
-
 import mongoose from "mongoose";
 import Order, { mapStatusToStage } from "./Order.js";
 import User from "../auth/User.js";
-import UniversalProduct, {
-  UniversalVariant,
-} from "../product/UniversalProduct.js";
+import Store from "../store/Store.js";
+import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 import Inventory from "../warehouse/Inventory.js";
 import WarehouseLocation from "../warehouse/WarehouseLocation.js";
 import StockMovement from "../warehouse/StockMovement.js";
@@ -17,98 +11,171 @@ import {
   sendOrderStageNotifications,
 } from "../notification/notificationService.js";
 
-const getModelsByType = (productType) => {
-  // Unified catalog: all product types now point to Universal models
-  return { Product: UniversalProduct, Variant: UniversalVariant };
+const getModelsByType = () => ({ Product: UniversalProduct, Variant: UniversalVariant });
+
+const resolveOrderStage = (order) => order?.statusStage || mapStatusToStage(order?.status);
+
+const buildHttpError = (httpStatus, code, message) => {
+  const error = new Error(message);
+  error.httpStatus = httpStatus;
+  error.code = code;
+  return error;
 };
 
-const resolveOrderStage = (order) => {
-  return order?.statusStage || mapStatusToStage(order?.status);
+const getActiveBranchIdFromReq = (req) => String(req?.authz?.activeBranchId || "").trim();
+
+const ensureActiveBranchContext = (req) => {
+  const activeBranchId = getActiveBranchIdFromReq(req);
+  if (!activeBranchId) {
+    throw buildHttpError(
+      403,
+      "AUTHZ_ACTIVE_BRANCH_REQUIRED",
+      "Active branch context is required for POS operations",
+    );
+  }
+  return activeBranchId;
 };
 
-// ============================================
-// 1. TẠO ĐƠN HÀNG POS
-// ============================================
+const extractRequestedBranchId = (body = {}) => {
+  const raw =
+    body?.branchId ||
+    body?.storeId ||
+    body?.assignedStore?.storeId ||
+    body?.assignedStoreId ||
+    "";
+  return String(raw || "").trim();
+};
+
+const formatStoreAddress = (store) => {
+  const address = store?.address || {};
+  return [address.street, address.ward, address.district, address.province]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+};
+
+const buildAssignedStoreSnapshot = (store, assignedBy) => ({
+  storeId: store._id,
+  storeName: store.name,
+  storeCode: store.code,
+  storeAddress: formatStoreAddress(store),
+  storePhone: store.phone || "",
+  assignedAt: new Date(),
+  assignedBy,
+});
+
+const resolveActiveStore = async (req, session = null) => {
+  const activeBranchId = ensureActiveBranchContext(req);
+  const query = Store.findById(activeBranchId);
+  if (session) {
+    query.session(session);
+  }
+  const store = await query;
+
+  if (!store || store.status !== "ACTIVE") {
+    throw buildHttpError(403, "ORDER_BRANCH_FORBIDDEN", "Assigned branch is not available for POS operations");
+  }
+
+  return { activeBranchId, store };
+};
+
+const assertOrderInActiveBranch = (req, order) => {
+  const activeBranchId = ensureActiveBranchContext(req);
+  const orderBranchId = String(order?.assignedStore?.storeId || "").trim();
+
+  if (!orderBranchId) {
+    throw buildHttpError(
+      403,
+      "ORDER_BRANCH_MISSING",
+      "In-store order is missing branch assignment and cannot be processed",
+    );
+  }
+
+  if (orderBranchId !== activeBranchId) {
+    throw buildHttpError(403, "ORDER_BRANCH_FORBIDDEN", "Order does not belong to your assigned branch");
+  }
+
+  return activeBranchId;
+};
+
+const handleError = (res, error, fallbackMessage) => {
+  const status = error?.httpStatus || 500;
+  const payload = {
+    success: false,
+    message: error?.message || fallbackMessage,
+  };
+
+  if (error?.code) {
+    payload.code = error.code;
+  }
+
+  return res.status(status).json(payload);
+};
+
 export const createPOSOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const { items, customerInfo, storeLocation, totalAmount, promotionCode } =
-      req.body;
+    const { items, customerInfo, totalAmount, promotionCode } = req.body;
+    const requestedBranchId = extractRequestedBranchId(req.body);
+    const { activeBranchId, store } = await resolveActiveStore(req, session);
+
+    if (requestedBranchId && requestedBranchId !== activeBranchId) {
+      throw buildHttpError(
+        403,
+        "ORDER_BRANCH_FORBIDDEN",
+        "Request branch does not match authenticated staff branch",
+      );
+    }
+
     const customerPhone = String(customerInfo?.phoneNumber || "").trim();
     const customerName = String(customerInfo?.fullName || "").trim();
 
     if (!items?.length) {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ success: false, message: "Giỏ hàng trống" });
+      throw buildHttpError(400, "ORDER_ITEMS_REQUIRED", "Cart is empty");
     }
+
     if (!customerName || !customerPhone) {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ success: false, message: "Thiếu thông tin khách hàng" });
+      throw buildHttpError(400, "ORDER_CUSTOMER_REQUIRED", "Customer information is required");
     }
+
     const customer = await User.findOne({
       phoneNumber: customerPhone,
       role: "CUSTOMER",
     }).session(session);
 
     if (!customer) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message:
-          "Khach hang chua co tai khoan. Vui long tao tai khoan truoc khi tao don.",
-      });
+      throw buildHttpError(
+        400,
+        "ORDER_CUSTOMER_NOT_FOUND",
+        "Customer account is required before creating an in-store order",
+      );
     }
+
     const orderItems = [];
     let subtotal = 0;
 
     for (const item of items) {
       const { variantId, productType, quantity } = item;
       const models = getModelsByType(productType);
-      if (!models) {
-        await session.abortTransaction();
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `Loại sản phẩm không hợp lệ: ${productType}`,
-          });
-      }
 
       const variant = await models.Variant.findById(variantId).session(session);
       if (!variant) {
-        await session.abortTransaction();
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message: `Không tìm thấy biến thể ID: ${variantId}`,
-          });
+        throw buildHttpError(404, "ORDER_VARIANT_NOT_FOUND", `Variant not found: ${variantId}`);
       }
 
-      const product = await models.Product.findById(variant.productId).session(
-        session
-      );
+      const product = await models.Product.findById(variant.productId).session(session);
       if (!product) {
-        await session.abortTransaction();
-        return res
-          .status(404)
-          .json({ success: false, message: "Không tìm thấy sản phẩm" });
+        throw buildHttpError(404, "ORDER_PRODUCT_NOT_FOUND", "Product not found");
       }
 
       if (variant.stock < quantity) {
-        await session.abortTransaction();
-        return res.status(400).json({
-          success: false,
-          message: `${product.name} (${variant.color || ""}) chỉ còn ${
-            variant.stock
-          } sản phẩm`,
-        });
+        throw buildHttpError(
+          400,
+          "ORDER_OUT_OF_STOCK",
+          `${product.name} (${variant.color || ""}) only has ${variant.stock} item(s) left`,
+        );
       }
 
       variant.stock -= quantity;
@@ -119,8 +186,7 @@ export const createPOSOrder = async (req, res) => {
       await product.save({ session });
 
       const price = item.price ?? variant.price;
-      const originalPrice =
-        item.originalPrice ?? variant.originalPrice ?? variant.price;
+      const originalPrice = item.originalPrice ?? variant.originalPrice ?? variant.price;
       const itemTotal = price * quantity;
       subtotal += itemTotal;
 
@@ -132,7 +198,7 @@ export const createPOSOrder = async (req, res) => {
         variantId: variant._id,
         productType,
         productName: product.name,
-        name: product.name, // Ensure compatible naming
+        name: product.name,
         variantSku: variant.sku,
         variantColor: variant.color || "",
         variantStorage: variant.storage || "",
@@ -145,15 +211,14 @@ export const createPOSOrder = async (req, res) => {
         originalPrice,
         total: itemTotal,
         subtotal: itemTotal,
-        images: images,
-        image: image,
+        images,
+        image,
       });
     }
 
     const receiptNumber = `TMP${Date.now().toString().slice(-8)}`;
     const finalTotal = totalAmount ?? subtotal;
 
-    // Generate Order Number
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
     const randomPart = Math.floor(Math.random() * 1000)
@@ -161,65 +226,52 @@ export const createPOSOrder = async (req, res) => {
       .padStart(3, "0");
     const orderNumber = `POS-${datePart}-${Date.now().toString().slice(-6)}${randomPart}`;
 
-    const status = "PENDING_ORDER_MANAGEMENT"; // ✅ NEW STATUS
-    const paymentStatus = "UNPAID";
-    const paidAt = null;
-    const deliveredAt = null;
-
-    const order = (
-      await Order.create(
+    const [order] = await Order.create(
       [
         {
           orderNumber,
           orderSource: "IN_STORE",
           fulfillmentType: "IN_STORE",
-            customerId: customer._id,
+          customerId: customer._id,
           items: orderItems,
           shippingAddress: {
-              fullName: customerName,
-              phoneNumber: customerPhone,
-            province: storeLocation || "Cần Thơ",
-            ward: "Ninh Kiều",
-            detailAddress: "Mua tại cửa hàng",
+            fullName: customerName,
+            phoneNumber: customerPhone,
+            province: store?.address?.province || "",
+            district: store?.address?.district || "",
+            ward: store?.address?.ward || "",
+            detailAddress: "Mua tai cua hang",
           },
           paymentMethod: "CASH",
-          paymentStatus,
-          paidAt,
-          status,
-          deliveredAt,
+          paymentStatus: "UNPAID",
+          paidAt: null,
+          status: "PENDING_ORDER_MANAGEMENT",
+          deliveredAt: null,
           subtotal,
           shippingFee: 0,
           promotionDiscount: 0,
-          appliedPromotion: promotionCode
-            ? { code: promotionCode, discountAmount: 0 }
-            : null,
+          appliedPromotion: promotionCode ? { code: promotionCode, discountAmount: 0 } : null,
           totalAmount: finalTotal,
+          assignedStore: buildAssignedStoreSnapshot(store, req.user._id),
           posInfo: {
             staffId: req.user._id,
             staffName: req.user.fullName,
-            storeLocation: storeLocation || "Ninh Kiều iStore",
+            storeLocation: store.name,
             receiptNumber,
             paymentReceived: 0,
             changeGiven: 0,
           },
           createdByInfo: {
             userId: req.user._id,
-            userName: req.user.fullName,
+            userName: req.user.fullName || req.user.name,
             userRole: req.user.role,
           },
         },
       ],
-      { session }
-      )
-    )[0];
+      { session },
+    );
 
-    order.createdByInfo = {
-      userId: req.user._id,
-      userName: req.user.fullName || req.user.name,
-      userRole: req.user.role
-    };
     await order.save({ session });
-
     await session.commitTransaction();
 
     await sendOrderStageNotifications({
@@ -228,10 +280,9 @@ export const createPOSOrder = async (req, res) => {
       triggeredBy: req.user?._id,
       source: "create_pos_order",
     });
-    // Notification for Order Manager
     await notifyOrderManagerPendingInStoreOrder({ order });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Da tao don chuyen kho thanh cong. Don dang cho Order Manager xu ly.",
       data: { order },
@@ -239,27 +290,26 @@ export const createPOSOrder = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("CREATE POS ORDER ERROR:", error);
-    res
-      .status(500)
-      .json({ success: false, message: error.message || "Lỗi tạo đơn hàng" });
+    return handleError(res, error, "Loi tao don hang");
   } finally {
     session.endSession();
   }
 };
 
-// ============================================
-// 2. DANH SÁCH ĐƠN CHỜ THANH TOÁN (CASHIER)
-// ============================================
 export const getPendingOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const activeBranchId = ensureActiveBranchContext(req);
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 20);
+
     const query = {
       orderSource: "IN_STORE",
+      "assignedStore.storeId": activeBranchId,
       $or: [
         { statusStage: "PENDING_PAYMENT" },
         { status: "PENDING_PAYMENT" },
-        { status: "PROCESSING" }, // ✅ ADDED: Include paid but not finalized orders
-        { status: "PENDING_ORDER_MANAGEMENT" }, // ✅ ADDED: Allow new orders
+        { status: "PROCESSING" },
+        { status: "PENDING_ORDER_MANAGEMENT" },
         { statusStage: "PENDING_ORDER_MANAGEMENT" },
       ],
     };
@@ -269,47 +319,87 @@ export const getPendingOrders = async (req, res) => {
         .populate("posInfo.staffId", "fullName")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .limit(limit)
         .lean(),
       Order.countDocuments(query),
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         orders,
         pagination: {
           total,
           totalPages: Math.ceil(total / limit),
-          currentPage: parseInt(page),
+          currentPage: page,
         },
       },
     });
   } catch (error) {
     console.error("GET PENDING ORDERS ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi server" });
+    return handleError(res, error, "Loi server");
   }
 };
 
-// ============================================
-// 3. XỬ LÝ THANH TOÁN (CASHIER)
-// ============================================
+export const getPOSOrderById = async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      orderSource: "IN_STORE",
+    })
+      .populate("customerId", "fullName email phoneNumber")
+      .populate("userId", "fullName email phoneNumber")
+      .populate("posInfo.staffId", "fullName")
+      .populate("posInfo.cashierId", "fullName");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay don hang",
+      });
+    }
+
+    assertOrderInActiveBranch(req, order);
+
+    if (req.user.role === "POS_STAFF") {
+      const staffId = String(order?.posInfo?.staffId?._id || order?.posInfo?.staffId || "");
+      if (!staffId || staffId !== String(req.user._id)) {
+        return res.status(403).json({
+          success: false,
+          code: "ORDER_BRANCH_FORBIDDEN",
+          message: "POS staff chi duoc xem don do chinh minh tao trong chi nhanh cua minh",
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: { order },
+    });
+  } catch (error) {
+    console.error("GET POS ORDER BY ID ERROR:", error);
+    return handleError(res, error, "Loi lay chi tiet don hang POS");
+  }
+};
+
 export const processPayment = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { paymentReceived } = req.body;
 
     if (!paymentReceived || paymentReceived < 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Số tiền thanh toán không hợp lệ" });
+      return res.status(400).json({
+        success: false,
+        message: "So tien thanh toan khong hop le",
+      });
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay don hang",
+      });
     }
 
     if (order.orderSource !== "IN_STORE") {
@@ -319,35 +409,37 @@ export const processPayment = async (req, res) => {
       });
     }
 
+    assertOrderInActiveBranch(req, order);
+
     const currentStage = resolveOrderStage(order);
     if (
       currentStage !== "PENDING_PAYMENT" &&
-      currentStage !== "PENDING_ORDER_MANAGEMENT" && // ✅ ALLOW NEW STATUS
+      currentStage !== "PENDING_ORDER_MANAGEMENT" &&
       order.paymentStatus !== "PENDING" &&
-      order.paymentStatus !== "UNPAID" // ✅ ALLOW UNPAID
+      order.paymentStatus !== "UNPAID"
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Đơn hàng không ở trạng thái chờ thanh toán",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Don hang khong o trang thai cho thanh toan",
+      });
     }
 
     if (paymentReceived < order.totalAmount) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Số tiền thanh toán không đủ" });
+      return res.status(400).json({
+        success: false,
+        message: "So tien thanh toan khong du",
+      });
     }
 
     const changeGiven = paymentReceived - order.totalAmount;
 
     order.paymentStatus = "PAID";
-    order.status = "PROCESSING"; // ✅ CHANGED: Wait for IMEI update before DELIVERED
+    order.status = "PROCESSING";
 
     if (!order.posInfo) {
       order.posInfo = {};
     }
+
     order.posInfo.cashierId = req.user._id;
     order.posInfo.cashierName = req.user.fullName;
     order.posInfo.paymentReceived = paymentReceived;
@@ -360,11 +452,15 @@ export const processPayment = async (req, res) => {
       changeGiven,
     };
 
+    if (!Array.isArray(order.statusHistory)) {
+      order.statusHistory = [];
+    }
+
     order.statusHistory.push({
       status: "PROCESSING",
       updatedBy: req.user._id,
       updatedAt: new Date(),
-      note: `Đã thanh toán - Thu ngân: ${req.user.fullName} - Chờ nhập IMEI`,
+      note: `Da thanh toan - Thu ngan: ${req.user.fullName} - Cho nhap IMEI`,
     });
 
     await order.save();
@@ -376,20 +472,17 @@ export const processPayment = async (req, res) => {
       source: "pos_process_payment",
     });
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Thanh toán thành công! Vui lòng nhập IMEI để hoàn tất.",
+      message: "Thanh toan thanh cong! Vui long nhap IMEI de hoan tat.",
       data: { order },
     });
   } catch (error) {
     console.error("PROCESS PAYMENT ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi xử lý thanh toán" });
+    return handleError(res, error, "Loi xu ly thanh toan");
   }
 };
 
-// ============================================
-// 4. HOÀN TẤT ĐƠN HÀNG (NHẬP IMEI & IN HÓA ĐƠN)
-// ============================================
 export const finalizePOSOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -400,116 +493,97 @@ export const finalizePOSOrder = async (req, res) => {
 
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      await session.abortTransaction();
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+      throw buildHttpError(404, "ORDER_NOT_FOUND", "Khong tim thay don hang");
     }
+
+    if (order.orderSource !== "IN_STORE") {
+      throw buildHttpError(400, "ORDER_SOURCE_INVALID", "Only in-store POS orders can be finalized");
+    }
+
+    assertOrderInActiveBranch(req, order);
 
     if (order.status !== "PROCESSING" && order.status !== "PENDING_PAYMENT") {
-       // Allow finalizing if it's processing or pending payment (if paid via other means?)
-       // But strictly for this flow, it should be PROCESSING or PAID.
-       if (order.paymentStatus !== "PAID") {
-          await session.abortTransaction();
-          return res.status(400).json({ success: false, message: "Đơn hàng chưa được thanh toán" });
-       }
+      if (order.paymentStatus !== "PAID") {
+        throw buildHttpError(400, "ORDER_NOT_PAID", "Don hang chua duoc thanh toan");
+      }
     }
 
-    // Update Items with IMEI
     if (items && items.length > 0) {
-      // Create a map for easier lookup
-      const itemMap = new Map(items.map(i => [String(i._id) || String(i.variantId), i]));
+      const itemMap = new Map(items.map((item) => [String(item._id || item.variantId), item]));
 
       for (const orderItem of order.items) {
-        // Try to find matching item by specific ID or variantID
-        let updateItem = itemMap.get(String(orderItem._id));
-        if (!updateItem) updateItem = itemMap.get(String(orderItem.variantId));
-        
-        if (updateItem) {
-          if (updateItem.imei) orderItem.imei = updateItem.imei; // Assuming schema supports it, wait, simple Order items usually don't have IMEI in basic schema?
-          // The current schema in Order.js doesn't show IMEI in orderItemSchema!
-          // Wait, I need to check if orderItemSchema supports IMEI.
-          // Viewing Order.js line 83-144... NO IMEI FIELD!
-          // BUT the user script in EditInvoiceDialog uses `item.imei`.
-          // If the schema doesn't have it, it won't be saved.
-          
-          // CRITICAL: Check Order.js schema again. 
-          // I see `variantSku`, `variantColor`... but NO `imei`.
-          // However, lines 233 in CASHIERDashboard says `${item.imei || "N/A"}`.
-          // So maybe it's in `variantId` populate? No, that's stock.
-          // Maybe `Order` items should have `imei`.
-          
-          // Wait, if Order schema doesn't have IMEI, where is it stored?
-          // User said: "chưa nhập IMEI máy".
-          // In online orders, IMEI is usually selected during fulfillment.
-          // Here, we manually enter it. 
-          // I MUST ADD IMEI TO ORDER SCHEMA if it's missing.
+        const updateItem = itemMap.get(String(orderItem._id)) || itemMap.get(String(orderItem.variantId));
+        if (updateItem?.imei) {
+          orderItem.imei = String(updateItem.imei).trim();
         }
       }
     }
-    
-    // Check Order.js for IMEI.
-    // It is MISSING.
-    // I will need to update Order.js too.
 
-    // Calculate Invoce Number if not exists
     if (!order.paymentInfo || !order.paymentInfo.invoiceNumber) {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const lastInvoice = await Order.findOne({
+      const date = new Date();
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const lastInvoice = await Order.findOne({
         "paymentInfo.invoiceNumber": new RegExp(`^INV${year}${month}`),
-        }).sort({ "paymentInfo.invoiceNumber": -1 }).session(session);
+      })
+        .sort({ "paymentInfo.invoiceNumber": -1 })
+        .session(session);
 
-        let seq = 1;
-        if (lastInvoice?.paymentInfo?.invoiceNumber) {
-        const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6));
-        if (!isNaN(lastSeq)) seq = lastSeq + 1;
+      let seq = 1;
+      if (lastInvoice?.paymentInfo?.invoiceNumber) {
+        const lastSeq = parseInt(lastInvoice.paymentInfo.invoiceNumber.slice(-6), 10);
+        if (!Number.isNaN(lastSeq)) {
+          seq = lastSeq + 1;
         }
-        const invoiceNumber = `INV${year}${month}${seq
-        .toString()
-        .padStart(6, "0")}`;
-        
-        if (!order.paymentInfo) order.paymentInfo = {};
-        order.paymentInfo.invoiceNumber = invoiceNumber;
+      }
+
+      const invoiceNumber = `INV${year}${month}${seq.toString().padStart(6, "0")}`;
+      if (!order.paymentInfo) {
+        order.paymentInfo = {};
+      }
+      order.paymentInfo.invoiceNumber = invoiceNumber;
     }
 
     order.status = "DELIVERED";
     order.deliveredAt = new Date();
-    
-    // Update Customer Info if changed
+
     if (customerInfo) {
-        if (customerInfo.name) order.shippingAddress.fullName = customerInfo.name;
-        if (customerInfo.phone) order.shippingAddress.phoneNumber = customerInfo.phone;
-        // Address update if needed
+      if (customerInfo.name) {
+        order.shippingAddress.fullName = customerInfo.name;
+      }
+      if (customerInfo.phone) {
+        order.shippingAddress.phoneNumber = customerInfo.phone;
+      }
+    }
+
+    if (!Array.isArray(order.statusHistory)) {
+      order.statusHistory = [];
     }
 
     order.statusHistory.push({
       status: "DELIVERED",
       updatedBy: req.user._id,
       updatedAt: new Date(),
-      note: `Hoàn tất đơn hàng - Hóa đơn ${order.paymentInfo.invoiceNumber}`,
+      note: `Hoan tat don hang - Hoa don ${order.paymentInfo.invoiceNumber}`,
     });
 
     await order.save({ session });
     await session.commitTransaction();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Đơn hàng đã hoàn tất!",
+      message: "Don hang da hoan tat!",
       data: { order },
     });
-
   } catch (error) {
     await session.abortTransaction();
     console.error("FINALIZE ORDER ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi hoàn tất đơn hàng" });
+    return handleError(res, error, "Loi hoan tat don hang");
   } finally {
-      session.endSession();
+    session.endSession();
   }
 };
 
-// ============================================
-// 4. HỦY ĐƠN CHỜ THANH TOÁN (CASHIER)
-// ============================================
 export const cancelPendingOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -520,32 +594,20 @@ export const cancelPendingOrder = async (req, res) => {
 
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      await session.abortTransaction();
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy đơn hàng" });
+      throw buildHttpError(404, "ORDER_NOT_FOUND", "Khong tim thay don hang");
     }
 
     if (order.orderSource !== "IN_STORE") {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Only in-store POS orders can be canceled at cashier",
-      });
+      throw buildHttpError(400, "ORDER_SOURCE_INVALID", "Only in-store POS orders can be canceled at cashier");
     }
+
+    assertOrderInActiveBranch(req, order);
 
     const currentStage = resolveOrderStage(order);
     if (currentStage !== "PENDING_PAYMENT") {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Chỉ hủy được đơn đang chờ thanh toán",
-        });
+      throw buildHttpError(400, "ORDER_STATUS_INVALID", "Chi huy duoc don dang cho thanh toan");
     }
 
-    // Restore warehouse-location inventory for already picked items
     const pickMovements = await StockMovement.find({
       type: "OUTBOUND",
       referenceType: "ORDER",
@@ -555,12 +617,14 @@ export const cancelPendingOrder = async (req, res) => {
     const restoreBatches = new Map();
     for (const movement of pickMovements) {
       const locationId = movement.fromLocationId?.toString();
-      if (!locationId) continue;
+      if (!locationId) {
+        continue;
+      }
 
       const key = `${movement.sku}::${locationId}`;
-      const prev = restoreBatches.get(key);
-      if (prev) {
-        prev.quantity += Number(movement.quantity) || 0;
+      const previous = restoreBatches.get(key);
+      if (previous) {
+        previous.quantity += Number(movement.quantity) || 0;
         continue;
       }
 
@@ -575,7 +639,9 @@ export const cancelPendingOrder = async (req, res) => {
     }
 
     for (const batch of restoreBatches.values()) {
-      if (!batch.quantity) continue;
+      if (!batch.quantity) {
+        continue;
+      }
 
       const inventory = await Inventory.findOne({
         sku: batch.sku,
@@ -598,13 +664,11 @@ export const cancelPendingOrder = async (req, res) => {
               status: "GOOD",
             },
           ],
-          { session }
+          { session },
         );
       }
 
-      const location = await WarehouseLocation.findById(batch.locationId).session(
-        session
-      );
+      const location = await WarehouseLocation.findById(batch.locationId).session(session);
       if (location) {
         location.currentLoad += batch.quantity;
         await location.save({ session });
@@ -627,105 +691,99 @@ export const cancelPendingOrder = async (req, res) => {
             notes: "Inventory restored from cashier cancellation",
           },
         ],
-        { session }
+        { session },
       );
     }
 
     for (const item of order.items) {
       const models = getModelsByType(item.productType);
-      if (models) {
-        const variant = await models.Variant.findById(item.variantId).session(
-          session
-        );
-        if (variant) {
-          variant.stock += item.quantity;
-          variant.salesCount = Math.max(
-            0,
-            (variant.salesCount || 0) - item.quantity
-          );
-          await variant.save({ session });
-        }
+      const variant = await models.Variant.findById(item.variantId).session(session);
+      if (variant) {
+        variant.stock += item.quantity;
+        variant.salesCount = Math.max(0, (variant.salesCount || 0) - item.quantity);
+        await variant.save({ session });
+      }
 
-        const product = await models.Product.findById(item.productId).session(
-          session
-        );
-        if (product) {
-          product.salesCount = Math.max(
-            0,
-            (product.salesCount || 0) - item.quantity
-          );
-          await product.save({ session });
-        }
+      const product = await models.Product.findById(item.productId).session(session);
+      if (product) {
+        product.salesCount = Math.max(0, (product.salesCount || 0) - item.quantity);
+        await product.save({ session });
       }
     }
 
     order.status = "CANCELLED";
     order.cancelledAt = new Date();
-    order.cancelReason = reason || "Huy boi Thu ngan";
+    order.cancelReason = reason || "Huy boi thu ngan";
+
     if (!Array.isArray(order.statusHistory)) {
       order.statusHistory = [];
     }
+
     order.statusHistory.push({
       status: "CANCELLED",
       updatedBy: req.user._id,
       updatedAt: new Date(),
       note: order.cancelReason,
     });
-    await order.save({ session });
 
+    await order.save({ session });
     await session.commitTransaction();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Đã hủy đơn hàng và hoàn kho thành công",
+      message: "Da huy don hang va hoan kho thanh cong",
       data: { order },
     });
   } catch (error) {
     await session.abortTransaction();
     console.error("CANCEL ORDER ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi hủy đơn hàng" });
+    return handleError(res, error, "Loi huy don hang");
   } finally {
     session.endSession();
   }
 };
 
-// ============================================
-// 5. XUẤT HÓA ĐƠN VAT
-// ============================================
 export const issueVATInvoice = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { companyName, taxCode, companyAddress } = req.body;
 
     if (!companyName || !taxCode) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Thiếu thông tin công ty hoặc mã số thuế",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Thieu thong tin cong ty hoac ma so thue",
+      });
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay don hang",
+      });
     }
 
+    if (order.orderSource !== "IN_STORE") {
+      return res.status(400).json({
+        success: false,
+        message: "Only in-store POS orders support VAT invoice issuance in this flow",
+      });
+    }
+
+    assertOrderInActiveBranch(req, order);
+
     if (order.paymentStatus !== "PAID") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Chỉ xuất hóa đơn cho đơn đã thanh toán",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Chi xuat hoa don cho don da thanh toan",
+      });
     }
 
     if (order.vatInvoice?.invoiceNumber) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Đơn hàng đã có hóa đơn VAT" });
+      return res.status(400).json({
+        success: false,
+        message: "Don hang da co hoa don VAT",
+      });
     }
 
     const date = new Date();
@@ -734,17 +792,18 @@ export const issueVATInvoice = async (req, res) => {
 
     const lastVAT = await Order.findOne({
       "vatInvoice.invoiceNumber": new RegExp(`^VAT${year}${month}`),
+      "assignedStore.storeId": order.assignedStore.storeId,
     }).sort({ "vatInvoice.invoiceNumber": -1 });
 
     let seq = 1;
     if (lastVAT?.vatInvoice?.invoiceNumber) {
-      const lastSeq = parseInt(lastVAT.vatInvoice.invoiceNumber.slice(-6));
-      if (!isNaN(lastSeq)) seq = lastSeq + 1;
+      const lastSeq = parseInt(lastVAT.vatInvoice.invoiceNumber.slice(-6), 10);
+      if (!Number.isNaN(lastSeq)) {
+        seq = lastSeq + 1;
+      }
     }
 
-    const invoiceNumber = `VAT${year}${month}${seq
-      .toString()
-      .padStart(6, "0")}`;
+    const invoiceNumber = `VAT${year}${month}${seq.toString().padStart(6, "0")}`;
 
     order.vatInvoice = {
       invoiceNumber,
@@ -757,24 +816,28 @@ export const issueVATInvoice = async (req, res) => {
 
     await order.save();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Xuất hóa đơn VAT thành công",
+      message: "Xuat hoa don VAT thanh cong",
       data: { order },
     });
   } catch (error) {
     console.error("ISSUE VAT INVOICE ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi xuất hóa đơn" });
+    return handleError(res, error, "Loi xuat hoa don");
   }
 };
 
-// ============================================
-// 6. LỊCH SỬ ĐƠN HÀNG POS
-// ============================================
 export const getPOSOrderHistory = async (req, res) => {
   try {
-    const { page = 1, limit = 10, startDate, endDate, search } = req.query;
-    const query = { orderSource: "IN_STORE" };
+    const activeBranchId = ensureActiveBranchContext(req);
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 10);
+    const { startDate, endDate, search } = req.query;
+
+    const query = {
+      orderSource: "IN_STORE",
+      "assignedStore.storeId": activeBranchId,
+    };
 
     if (req.user.role === "POS_STAFF") {
       query["posInfo.staffId"] = req.user._id;
@@ -782,10 +845,16 @@ export const getPOSOrderHistory = async (req, res) => {
 
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate)
-        query.createdAt.$gte = new Date(startDate).setHours(0, 0, 0, 0);
-      if (endDate)
-        query.createdAt.$lte = new Date(endDate).setHours(23, 59, 59, 999);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
     }
 
     if (search) {
@@ -803,119 +872,109 @@ export const getPOSOrderHistory = async (req, res) => {
         .populate("items.productId", "name")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(parseInt(limit))
+        .limit(limit)
         .lean(),
       Order.countDocuments(query),
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         orders,
         pagination: {
           total,
           totalPages: Math.ceil(total / limit),
-          currentPage: parseInt(page),
+          currentPage: page,
         },
       },
     });
   } catch (error) {
     console.error("GET POS HISTORY ERROR:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Lỗi lấy lịch sử đơn hàng" });
+    return handleError(res, error, "Loi lay lich su don hang");
   }
 };
 
-// ============================================
-// ✅ 7. NEW: STATS API FOR CASHIER/ADMIN
-// ============================================
 export const getPOSStats = async (req, res) => {
   try {
+    const activeBranchId = ensureActiveBranchContext(req);
     const { startDate, endDate } = req.query;
     const userId = req.user._id;
     const userRole = req.user.role;
 
-    // Base query
-    const query = { orderSource: "IN_STORE" };
+    const query = {
+      orderSource: "IN_STORE",
+      "assignedStore.storeId": activeBranchId,
+    };
 
-    // Nếu là Cashier, chỉ lấy đơn của mình xử lý
     if (userRole === "CASHIER") {
       query["posInfo.cashierId"] = userId;
     }
 
-    // Filter by date range
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+    if (userRole === "POS_STAFF") {
+      query["posInfo.staffId"] = userId;
     }
 
-    // Get all orders matching query
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.createdAt.$lte = new Date(endDate);
+      }
+    }
+
     const allOrders = await Order.find(query).lean();
 
-    // Calculate stats
     const stats = {
       totalOrders: allOrders.length,
-      totalRevenue: allOrders.reduce((sum, o) => sum + o.totalAmount, 0),
-      totalVATInvoices: allOrders.filter((o) => o.vatInvoice?.invoiceNumber)
-        .length,
-
-      // By payment status
-      paidOrders: allOrders.filter((o) => o.paymentStatus === "PAID").length,
-      unpaidOrders: allOrders.filter((o) => o.paymentStatus === "UNPAID")
-        .length,
-
-      // By status
-      pendingPayment: allOrders.filter((o) => o.status === "PENDING_PAYMENT")
-        .length,
-      delivered: allOrders.filter((o) => o.status === "DELIVERED").length,
-      cancelled: allOrders.filter((o) => o.status === "CANCELLED").length,
-
-      // Average order value
+      totalRevenue: allOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+      totalVATInvoices: allOrders.filter((order) => order.vatInvoice?.invoiceNumber).length,
+      paidOrders: allOrders.filter((order) => order.paymentStatus === "PAID").length,
+      unpaidOrders: allOrders.filter((order) => order.paymentStatus === "UNPAID").length,
+      pendingPayment: allOrders.filter((order) => order.status === "PENDING_PAYMENT").length,
+      delivered: allOrders.filter((order) => order.status === "DELIVERED").length,
+      cancelled: allOrders.filter((order) => order.status === "CANCELLED").length,
       avgOrderValue:
         allOrders.length > 0
-          ? allOrders.reduce((sum, o) => sum + o.totalAmount, 0) /
-            allOrders.length
+          ? allOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0) / allOrders.length
           : 0,
-
-      // Today's stats
-      todayOrders: allOrders.filter((o) => {
+      todayOrders: allOrders.filter((order) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const orderDate = new Date(o.createdAt);
+        const orderDate = new Date(order.createdAt);
         orderDate.setHours(0, 0, 0, 0);
         return orderDate.getTime() === today.getTime();
       }).length,
-
       todayRevenue: allOrders
-        .filter((o) => {
+        .filter((order) => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const orderDate = new Date(o.createdAt);
+          const orderDate = new Date(order.createdAt);
           orderDate.setHours(0, 0, 0, 0);
           return orderDate.getTime() === today.getTime();
         })
-        .reduce((sum, o) => sum + o.totalAmount, 0),
+        .reduce((sum, order) => sum + (order.totalAmount || 0), 0),
     };
 
-    res.json({
+    return res.json({
       success: true,
       data: stats,
     });
   } catch (error) {
     console.error("GET POS STATS ERROR:", error);
-    res.status(500).json({ success: false, message: "Lỗi lấy thống kê" });
+    return handleError(res, error, "Loi lay thong ke");
   }
 };
 
 export default {
   createPOSOrder,
   getPendingOrders,
+  getPOSOrderById,
   processPayment,
   cancelPendingOrder,
   issueVATInvoice,
   getPOSOrderHistory,
-  getPOSStats, // ✅ NEW
-  finalizePOSOrder, // ✅ ADDED
+  getPOSStats,
+  finalizePOSOrder,
 };

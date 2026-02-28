@@ -6,6 +6,59 @@
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const BRANCH_SCOPED_ROLES = new Set([
+  "ADMIN",
+  "BRANCH_ADMIN",
+  "WAREHOUSE_MANAGER",
+  "WAREHOUSE_STAFF",
+  "PRODUCT_MANAGER",
+  "ORDER_MANAGER",
+  "POS_STAFF",
+  "CASHIER",
+]);
+
+const normalizeBranchId = (value) => {
+  if (!value) return "";
+  return String(value).trim();
+};
+
+const toAllowedBranchIds = (authz) => {
+  const raw = Array.isArray(authz?.allowedBranchIds) ? authz.allowedBranchIds : [];
+  return [...new Set(raw.map(normalizeBranchId).filter(Boolean))];
+};
+
+const isGlobalAdminState = (state) => {
+  const role = String(state?.user?.role || "").toUpperCase();
+  return Boolean(state?.authz?.isGlobalAdmin || role === "GLOBAL_ADMIN");
+};
+
+const isBranchScopedStaffState = (state) => {
+  if (isGlobalAdminState(state)) return false;
+
+  if (state?.authz?.requiresBranchAssignment === true) {
+    return true;
+  }
+
+  const role = String(state?.user?.role || "").toUpperCase();
+  return BRANCH_SCOPED_ROLES.has(role);
+};
+
+const deriveFixedBranchIdFromState = (state) => {
+  const allowedBranchIds = toAllowedBranchIds(state?.authz);
+  const authzActiveBranchId = normalizeBranchId(state?.authz?.activeBranchId);
+
+  if (authzActiveBranchId) {
+    if (allowedBranchIds.length === 0 || allowedBranchIds.includes(authzActiveBranchId)) {
+      return authzActiveBranchId;
+    }
+  }
+
+  if (allowedBranchIds.length > 0) {
+    return allowedBranchIds[0];
+  }
+
+  return normalizeBranchId(state?.user?.storeLocation);
+};
 
 // ============================================
 // AXIOS INSTANCE
@@ -34,8 +87,28 @@ api.interceptors.request.use(
           config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // ── KILL-SWITCH: Inject X-Active-Branch-Id header ──
-        const activeBranchId = state?.activeBranchId;
+        const allowedBranchIds = toAllowedBranchIds(state?.authz);
+        const fixedBranchId = deriveFixedBranchIdFromState(state);
+        const mutableBranchId = normalizeBranchId(state?.activeBranchId);
+
+        let activeBranchId = "";
+        if (isBranchScopedStaffState(state)) {
+          activeBranchId = fixedBranchId;
+        } else if (mutableBranchId) {
+          activeBranchId = mutableBranchId;
+        } else {
+          activeBranchId = fixedBranchId;
+        }
+
+        if (
+          activeBranchId &&
+          allowedBranchIds.length > 0 &&
+          !allowedBranchIds.includes(activeBranchId) &&
+          !isGlobalAdminState(state)
+        ) {
+          activeBranchId = fixedBranchId;
+        }
+
         if (activeBranchId) {
           config.headers["X-Active-Branch-Id"] = activeBranchId;
         }
@@ -96,6 +169,10 @@ export const authAPI = {
   login: (data) => api.post("/auth/login", data),
   logout: () => api.post("/auth/logout"),
   getCurrentUser: () => api.get("/auth/me"),
+  getEffectivePermissions: () => api.get("/auth/context/permissions"),
+  setActiveBranchContext: (data) => api.put("/auth/context/active-branch", data),
+  setSimulatedBranchContext: (data) => api.put("/auth/context/simulate-branch", data),
+  clearSimulatedBranchContext: () => api.delete("/auth/context/simulate-branch"),
   changePassword: (data) => api.put("/auth/change-password", data),
   updateAvatar: (avatar) => api.put("/auth/avatar", { avatar }),
   checkCustomer: (phoneNumber) =>
@@ -534,5 +611,4 @@ export const monitoringAPI = {
   getOmnichannelEvents: (params = {}) =>
     api.get("/monitoring/omnichannel/events", { params }),
 };
-
 

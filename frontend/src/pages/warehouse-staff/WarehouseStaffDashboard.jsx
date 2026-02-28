@@ -157,6 +157,14 @@ const WarehouseStaffDashboard = () => {
     }
 
     try {
+      const allowForbidden = (promise, fallbackData) =>
+        promise.catch((error) => {
+          if (error?.response?.status === 403) {
+            return { data: fallbackData };
+          }
+          throw error;
+        });
+
       const [
         posRes,
         receiptsRes,
@@ -170,24 +178,44 @@ const WarehouseStaffDashboard = () => {
         replenishmentRes,
         predictionsRes,
       ] = await Promise.all([
-        api.get("/warehouse/purchase-orders", {
-          params: { status: "CONFIRMED", limit: 100 },
+        allowForbidden(
+          api.get("/warehouse/purchase-orders", {
+            params: { status: "CONFIRMED", limit: 100 },
+          }),
+          { purchaseOrders: [], pagination: { total: 0 } }
+        ),
+        allowForbidden(
+          api.get("/warehouse/goods-receipt", { params: { page: 1, limit: 100 } }),
+          { goodsReceipts: [] }
+        ),
+        allowForbidden(orderAPI.getByStage("CONFIRMED", { limit: 100 }), {
+          orders: [],
+          pagination: { total: 0 },
         }),
-        api.get("/warehouse/goods-receipt", { params: { page: 1, limit: 100 } }),
-        orderAPI.getByStage("CONFIRMED", { limit: 100 }),
-        orderAPI.getByStage("PICKING", { limit: 100 }),
-        inventoryAPI.getConsolidated(),
-        inventoryAPI.getStoreComparison(),
-        inventoryAPI.getAlerts({ limit: 8 }),
-        inventoryAPI.getMovements({ days: 7, limit: 10 }),
-        stockTransferAPI.getAll({ limit: 10 }),
-        inventoryAPI.getReplenishment({ limit: 8 }),
-        inventoryAPI.getPredictions({
-          limit: 8,
-          lowStockOnly: true,
-          daysAhead: 7,
-          historicalDays: 90,
+        allowForbidden(orderAPI.getByStage("PICKING", { limit: 100 }), {
+          orders: [],
+          pagination: { total: 0 },
         }),
+        allowForbidden(inventoryAPI.getConsolidated(), { summary: {}, inventory: [] }),
+        allowForbidden(inventoryAPI.getStoreComparison(), { needsAttention: [] }),
+        allowForbidden(inventoryAPI.getAlerts({ limit: 8 }), { alerts: [], summary: {} }),
+        allowForbidden(inventoryAPI.getMovements({ days: 7, limit: 10 }), {
+          movements: [],
+        }),
+        allowForbidden(stockTransferAPI.getAll({ limit: 10 }), { transfers: [] }),
+        allowForbidden(inventoryAPI.getReplenishment({ limit: 8 }), {
+          recommendations: [],
+          summary: {},
+        }),
+        allowForbidden(
+          inventoryAPI.getPredictions({
+            limit: 8,
+            lowStockOnly: true,
+            daysAhead: 7,
+            historicalDays: 90,
+          }),
+          { predictions: [], summary: {} }
+        ),
       ]);
 
       const today = new Date().toISOString().split("T")[0];
