@@ -3,7 +3,7 @@
 // ĐÃ SỬA: Lưu giá final sau khi áp mã giảm giá vào DB
 // ============================================
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,7 @@ const CheckoutPage = () => {
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
   const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
+  const skipEmptySelectionGuardRef = useRef(false);
   const effectiveFulfillmentType = isOmnichannelCheckoutEnabled
     ? formData.fulfillmentType
     : "HOME_DELIVERY";
@@ -244,6 +245,9 @@ const CheckoutPage = () => {
   // Kiểm tra khi mount
   useEffect(() => {
     if (selectedForCheckout.length === 0) {
+      if (skipEmptySelectionGuardRef.current) {
+        return;
+      }
       toast.error("Vui lòng chọn sản phẩm để thanh toán");
       navigate("/cart");
       return;
@@ -541,6 +545,9 @@ const CheckoutPage = () => {
         // ✅ COD/BANK_TRANSFER - Đảm bảo xóa giỏ hàng
         console.log(`📦 Processing order ${createdOrder.orderNumber}`);
 
+        // Bỏ qua guard "không có sản phẩm" khi vừa đặt hàng thành công
+        skipEmptySelectionGuardRef.current = true;
+
         // Clear selection ngay lập tức
         setSelectedForCheckout([]);
 
@@ -619,24 +626,13 @@ const CheckoutPage = () => {
         <span className="font-medium">Quay lại giỏ hàng</span>
       </button>
       <h1 className="text-3xl font-bold mb-8">Thanh toán</h1>
-      {isLocalOmnichannelFlagEnabled && (
+      {/* {isLocalOmnichannelFlagEnabled && (
         <div className="mb-6 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
             {isOmnichannelCheckoutEnabled ? "Canary" : "Rollout"}
           </Badge>
-          <span>
-            {rolloutDecision.loading
-              ? "Checking omnichannel rollout eligibility..."
-              : isOmnichannelCheckoutEnabled
-              ? `Omnichannel checkout is enabled (${rolloutDecision.mode}${
-                  rolloutDecision.mode === "percentage"
-                    ? ` ${rolloutDecision.percent}%`
-                    : ""
-                }).`
-              : "Omnichannel checkout is not enabled for this account yet."}
-          </span>
         </div>
-      )}
+      )} */}
 
       <form onSubmit={handleCheckout}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

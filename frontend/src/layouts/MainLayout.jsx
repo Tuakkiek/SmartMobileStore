@@ -118,13 +118,18 @@ const MainLayout = () => {
   };
 
   const handleProfileNavigation = () => {
-    if (user?.role === "CUSTOMER") navigate("/profile");
-    else if (user?.role === "ADMIN") navigate("/admin");
-    else if (user?.role === "WAREHOUSE_MANAGER") navigate("/warehouse-staff");
-    else if (user?.role === "PRODUCT_MANAGER") navigate("/kho/san-pham");
-    else if (user?.role === "ORDER_MANAGER") navigate("/order-manager/orders");
-    else if (user?.role === "POS_STAFF") navigate("/pos/dashboard");
-    else if (user?.role === "CASHIER") navigate("/CASHIER/dashboard");
+    const normalizedRole = String(user?.role || "").toUpperCase();
+
+    if (normalizedRole === "CUSTOMER") navigate("/profile");
+    else if (normalizedRole === "ADMIN" || normalizedRole === "GLOBAL_ADMIN")
+      navigate("/admin");
+    else if (normalizedRole === "WAREHOUSE_MANAGER")
+      navigate("/warehouse-staff");
+    else if (normalizedRole === "PRODUCT_MANAGER") navigate("/kho/san-pham");
+    else if (normalizedRole === "ORDER_MANAGER")
+      navigate("/order-manager/orders");
+    else if (normalizedRole === "POS_STAFF") navigate("/pos/dashboard");
+    else if (normalizedRole === "CASHIER") navigate("/CASHIER/dashboard");
   };
 
   const filteredStores =

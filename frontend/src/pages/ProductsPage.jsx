@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { SlidersHorizontal, Package, ArrowUpDown } from "lucide-react";
 import {
   iPhoneAPI,
@@ -8,6 +8,7 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
+  universalProductAPI,
 } from "@/lib/api";
 import {
   Sheet,
@@ -24,7 +25,7 @@ import { Button } from "@/components/ui/button";
 // ============================================
 // API MAPPING
 // ============================================
-const API_MAP = {
+const LEGACY_API_MAP = {
   iPhone: iPhoneAPI,
   iPad: iPadAPI,
   Mac: macAPI,
@@ -36,7 +37,7 @@ const API_MAP = {
 // ============================================
 // FILTER OPTIONS
 // ============================================
-const FILTER_OPTIONS = {
+const LEGACY_FILTER_OPTIONS = {
   iPhone: {
     storage: ["64GB", "128GB", "256GB", "512GB", "1TB"],
     condition: ["NEW", "LIKE_NEW"],
@@ -62,7 +63,12 @@ const FILTER_OPTIONS = {
   },
 };
 
-const DISPLAY_LABELS = {
+const UNIVERSAL_FILTER_OPTIONS = {
+  storage: ["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"],
+  condition: ["NEW", "LIKE_NEW"],
+};
+
+const LEGACY_DISPLAY_LABELS = {
   iPhone: "iPhone",
   iPad: "iPad",
   Mac: "MacBook",
@@ -79,15 +85,55 @@ const SORT_OPTIONS = [
   { value: "popular", label: "Bán chạy" },
 ];
 
+const getVariantFieldValue = (variant, field) => {
+  if (!variant) return "";
+
+  const directValue = variant[field];
+  if (directValue !== undefined && directValue !== null && directValue !== "") {
+    return String(directValue).trim();
+  }
+
+  const attributeValue = variant?.attributes?.[field];
+  if (
+    attributeValue !== undefined &&
+    attributeValue !== null &&
+    attributeValue !== ""
+  ) {
+    return String(attributeValue).trim();
+  }
+
+  if (field === "storage") {
+    const fromName = String(variant?.variantName || "").match(/(\d+(?:GB|TB))/i);
+    if (fromName) return fromName[1].toUpperCase();
+  }
+
+  return "";
+};
+
+const getProductMinPrice = (product) => {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  if (!variants.length) return Number(product?.price || 0);
+
+  const prices = variants
+    .map((variant) => Number(variant?.price || 0))
+    .filter((price) => Number.isFinite(price));
+
+  if (!prices.length) return Number(product?.price || 0);
+  return Math.min(...prices);
+};
+
 // ============================================
 // COMPONENT
 // ============================================
 const ProductsPage = ({ category: forcedCategory } = {}) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // Lấy category từ URL query
+  const productTypeFromQuery = searchParams.get("productType") || "";
+  const productTypeNameFromQuery = searchParams.get("productTypeName") || "";
+  const isUniversalMode = Boolean(productTypeFromQuery);
+
+  // Legacy category from URL query
   const categoryFromQuery = searchParams.get("category");
   const category = categoryFromQuery || forcedCategory || "iPhone";
 
@@ -95,8 +141,16 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const searchQuery = searchParams.get("search") || "";
   const sortParam = searchParams.get("sort") || "default";
 
-  const api = API_MAP[category] || iPhoneAPI;
-  const availableFilters = FILTER_OPTIONS[category] || {};
+  const api = isUniversalMode
+    ? universalProductAPI
+    : LEGACY_API_MAP[category] || iPhoneAPI;
+  const availableFilters = useMemo(
+    () =>
+      isUniversalMode
+        ? UNIVERSAL_FILTER_OPTIONS
+        : LEGACY_FILTER_OPTIONS[category] || {},
+    [isUniversalMode, category]
+  );
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -106,9 +160,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   const limit = 12;
 
   const [filters, setFilters] = useState({});
-  const [expandedSections, setExpandedSections] = useState({});
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
-  const [selectedPricePreset, setSelectedPricePreset] = useState(null);
   const [sortBy, setSortBy] = useState(sortParam);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   // ============================================
@@ -116,16 +168,13 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   // ============================================
   useEffect(() => {
     const newFilters = {};
-    const newExpanded = {};
 
     Object.keys(availableFilters).forEach((key) => {
       const urlValue = searchParams.get(key);
       newFilters[key] = urlValue ? urlValue.split(",") : [];
-      newExpanded[key] = true;
     });
 
     setFilters(newFilters);
-    setExpandedSections(newExpanded);
 
     const minPrice = searchParams.get("minPrice");
     const maxPrice = searchParams.get("maxPrice");
@@ -134,13 +183,12 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
         min: minPrice || "",
         max: maxPrice || "",
       });
-      setSelectedPricePreset(null);
     }
 
     // Sync sort from URL
     const urlSort = searchParams.get("sort") || "default";
     setSortBy(urlSort);
-  }, [category, searchParams, availableFilters]);
+  }, [category, searchParams, availableFilters, isUniversalMode, productTypeFromQuery]);
 
   // ============================================
   // FETCH PRODUCTS
@@ -162,6 +210,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
         status: "AVAILABLE",
       };
 
+      if (isUniversalMode) {
+        params.productType = productTypeFromQuery;
+      }
       if (searchQuery) params.search = searchQuery;
       if (modelParam) params.model = modelParam;
 
@@ -179,24 +230,26 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
         fetchedProducts = fetchedProducts.filter((product) => {
           // Filter by storage
           if (filters.storage?.length > 0) {
-            const matchStorage = product.variants?.some((v) =>
-              filters.storage.includes(v.storage)
+            const matchStorage = product.variants?.some((variant) =>
+              filters.storage.includes(getVariantFieldValue(variant, "storage"))
             );
             if (!matchStorage) return false;
           }
 
           // Filter by RAM
           if (filters.ram?.length > 0) {
-            const matchRam = product.variants?.some((v) =>
-              filters.ram.includes(v.ram)
+            const matchRam = product.variants?.some((variant) =>
+              filters.ram.includes(getVariantFieldValue(variant, "ram"))
             );
             if (!matchRam) return false;
           }
 
           // Filter by connectivity
           if (filters.connectivity?.length > 0) {
-            const matchConnectivity = product.variants?.some((v) =>
-              filters.connectivity.includes(v.connectivity)
+            const matchConnectivity = product.variants?.some((variant) =>
+              filters.connectivity.includes(
+                getVariantFieldValue(variant, "connectivity")
+              )
             );
             if (!matchConnectivity) return false;
           }
@@ -213,8 +266,8 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               ? parseFloat(priceRange.max)
               : Infinity;
 
-            const hasPriceInRange = product.variants?.some((v) => {
-              const price = v.price || 0;
+            const hasPriceInRange = product.variants?.some((variant) => {
+              const price = variant?.price || 0;
               return price >= minPrice && price <= maxPrice;
             });
 
@@ -246,7 +299,18 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [api, searchQuery, modelParam, filters, priceRange, page, limit, sortBy]);
+  }, [
+    api,
+    searchQuery,
+    modelParam,
+    filters,
+    priceRange,
+    page,
+    limit,
+    sortBy,
+    isUniversalMode,
+    productTypeFromQuery,
+  ]);
 
   // ============================================
   // SORT PRODUCTS
@@ -256,18 +320,14 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
 
     switch (sortType) {
       case "price_asc":
-        return sorted.sort((a, b) => {
-          const priceA = Math.min(...a.variants.map((v) => v.price || 0));
-          const priceB = Math.min(...b.variants.map((v) => v.price || 0));
-          return priceA - priceB;
-        });
+        return sorted.sort(
+          (a, b) => getProductMinPrice(a) - getProductMinPrice(b)
+        );
 
       case "price_desc":
-        return sorted.sort((a, b) => {
-          const priceA = Math.min(...a.variants.map((v) => v.price || 0));
-          const priceB = Math.min(...b.variants.map((v) => v.price || 0));
-          return priceB - priceA;
-        });
+        return sorted.sort(
+          (a, b) => getProductMinPrice(b) - getProductMinPrice(a)
+        );
 
       case "newest":
         return sorted.sort(
@@ -288,7 +348,7 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
-  }, [category, modelParam, page]);
+  }, [category, productTypeFromQuery, modelParam, page]);
 
   // ============================================
   // FILTER HANDLERS
@@ -308,8 +368,15 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     setPage(1);
   };
 
-  const toggleSection = (section) => {
-    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  const applyBaseCategoryParams = (params) => {
+    if (isUniversalMode) {
+      params.set("productType", productTypeFromQuery);
+      if (productTypeNameFromQuery) {
+        params.set("productTypeName", productTypeNameFromQuery);
+      }
+    } else {
+      params.set("category", category);
+    }
   };
 
   const clearFilters = () => {
@@ -319,10 +386,12 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
     });
     setFilters(emptyFilters);
     setPriceRange({ min: "", max: "" });
-    setSelectedPricePreset(null);
     setSortBy("default");
 
-    navigate(`/products?category=${category}&page=1`, { replace: true });
+    const params = new URLSearchParams();
+    applyBaseCategoryParams(params);
+    params.set("page", "1");
+    navigate(`/products?${params.toString()}`, { replace: true });
     setPage(1);
   };
 
@@ -354,12 +423,15 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   ) => {
     const params = new URLSearchParams();
 
-    // Category (required)
-    params.set("category", category);
+    // Base category params (required)
+    applyBaseCategoryParams(params);
+
+    if (modelParam) params.set("model", modelParam);
+    if (searchQuery) params.set("search", searchQuery);
 
     // Filters
     Object.keys(currentFilters).forEach((key) => {
-      if (currentFilters[key].length > 0) {
+      if (currentFilters[key]?.length > 0) {
         params.set(key, currentFilters[key].join(","));
       }
     });
@@ -387,12 +459,12 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
   // CATEGORY CHANGE HANDLER
   // ============================================
   const handleCategoryChange = (newCategory) => {
+    if (isUniversalMode) return;
     if (newCategory === category) return;
 
     // Reset everything
     setFilters({});
     setPriceRange({ min: "", max: "" });
-    setSelectedPricePreset(null);
     setSortBy("default");
     setPage(1);
 
@@ -421,7 +493,11 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
       0
     ) + (priceRange.min || priceRange.max ? 1 : 0);
 
-  const categoryLabel = DISPLAY_LABELS[category] || category;
+  const categoryLabel = isUniversalMode
+    ? productTypeNameFromQuery ||
+      products?.[0]?.productType?.name ||
+      "Sản phẩm"
+    : LEGACY_DISPLAY_LABELS[category] || category;
 
   // ============================================
   // RENDER
@@ -456,9 +532,9 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
               availableFilters={availableFilters}
               onClearFilters={clearFilters}
               activeFiltersCount={activeFiltersCount}
-              currentCategory={category}
-              hideCategory={false}
-              isCategoryPage={false}
+              currentCategory={isUniversalMode ? "" : category}
+              hideCategory={isUniversalMode}
+              isCategoryPage={isUniversalMode}
               onCategoryChange={handleCategoryChange}
             />
           </aside>
@@ -545,13 +621,13 @@ const ProductsPage = ({ category: forcedCategory } = {}) => {
                           
                         }}
                         activeFiltersCount={activeFiltersCount}
-                        currentCategory={category}
+                        currentCategory={isUniversalMode ? "" : category}
                         onCategoryChange={(newCat) => {
                           handleCategoryChange(newCat);
                           
                         }}
-                        hideCategory={false}
-                        isCategoryPage={false}
+                        hideCategory={isUniversalMode}
+                        isCategoryPage={isUniversalMode}
                       />
                     </div>
 

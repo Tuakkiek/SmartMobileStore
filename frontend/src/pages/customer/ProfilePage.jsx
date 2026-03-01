@@ -182,6 +182,21 @@ const OrdersSection = () => {
 
   const navigate = useNavigate(); // THÊM ĐỂ CHUYỂN TRANG
   const pageSize = 5;
+  const extractOrderListPayload = (response) => {
+    const payload = response?.data?.data || response?.data || {};
+    const orders = Array.isArray(payload.orders) ? payload.orders : [];
+    const total = Number(
+      payload?.total ??
+        payload?.pagination?.total ??
+        response?.data?.pagination?.total ??
+        0
+    );
+
+    return {
+      orders,
+      total: Number.isFinite(total) ? total : 0,
+    };
+  };
 
   // === FETCH SỐ LƯỢNG ĐƠN THEO TRẠNG THÁI ===
   useEffect(() => {
@@ -198,12 +213,12 @@ const OrdersSection = () => {
       try {
         // Fetch cho "all"
         const allRes = await orderAPI.getMyOrders({ page: 1, limit: 1 });
-        counts.all = allRes.data.data.total || 0;
+        counts.all = extractOrderListPayload(allRes).total;
 
         // Fetch cho từng trạng thái
         for (const status of statuses) {
           const res = await orderAPI.getMyOrders({ page: 1, limit: 1, status });
-          counts[status] = res.data.data.total || 0;
+          counts[status] = extractOrderListPayload(res).total;
         }
 
         setStatusCounts(counts);
@@ -229,8 +244,7 @@ const OrdersSection = () => {
         status: statusFilter === "all" ? undefined : statusFilter,
       });
 
-      const newOrders = response.data.data.orders || [];
-      const total = response.data.data.total || 0;
+      const { orders: newOrders, total } = extractOrderListPayload(response);
 
       if (reset) {
         setTotalOrders(total);

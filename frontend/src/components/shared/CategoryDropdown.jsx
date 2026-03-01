@@ -1,66 +1,219 @@
 // ============================================
 // FILE: frontend/src/components/shared/CategoryDropdown.jsx
-// UPDATED: Fixed mobile UI - 2/3 screen height, toggle functionality
+// Dynamic category dropdown based on universal products
 // ============================================
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Menu, Package, X, ChevronRight } from "lucide-react";
+import { universalProductAPI } from "@/lib/api";
 
-// API imports
-import {
-  iPhoneAPI,
-  iPadAPI,
-  macAPI,
-  airPodsAPI,
-  appleWatchAPI,
-  accessoryAPI,
-} from "@/lib/api";
-
-import { useTopSellers } from "@/hooks/useTopSellers";
-
-const API_MAP = {
-  iPhone: iPhoneAPI,
-  iPad: iPadAPI,
-  Mac: macAPI,
-  AirPods: airPodsAPI,
-  "Apple Watch": appleWatchAPI,
-  "Phụ Kiện": accessoryAPI,
+const PRODUCT_TYPE_TO_CATEGORY_PATH = {
+  smartphone: "dien-thoai",
+  tablet: "may-tinh-bang",
+  laptop: "macbook",
+  smartwatch: "apple-watch",
+  headphone: "tai-nghe",
+  tv: "tivi",
+  monitor: "man-hinh",
+  keyboard: "ban-phim",
+  mouse: "chuot",
+  speaker: "loa",
+  camera: "may-anh",
+  "gaming-console": "may-choi-game",
+  accessories: "phu-kien",
 };
 
-const categories = [
-  "iPhone",
-  "iPad",
-  "Mac",
-  "AirPods",
-  "Apple Watch",
-  "Phụ Kiện",
-];
-
-const CATEGORY_IMAGES = {
-  iPhone: "/iphone_17_pro_bac.png",
-  iPad: "/ipad_air_xanh.png",
-  Mac: "/mac.png",
-  AirPods: "/airpods.png",
-  "Apple Watch": "/applewatch.png",
-  "Phụ Kiện": "/op_ip_17_pro.png",
+const CATEGORY_FALLBACK_IMAGES = {
+  smartphone: "/iphone_17_pro_bac.png",
+  tablet: "/ipad_air_xanh.png",
+  laptop: "/mac.png",
+  headphone: "/airpods.png",
+  smartwatch: "/applewatch.png",
+  accessories: "/op_ip_17_pro.png",
 };
 
-const CATEGORY_DISPLAY_MAP = {
-  iPhone: "iPhone",
-  iPad: "iPad",
-  Mac: "Mac",
-  AirPods: "AirPods",
-  "Apple Watch": "Apple Watch",
-  "Phụ Kiện": "Phụ Kiện",
+const normalizeText = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+const slugify = (value = "") =>
+  normalizeText(value)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+
+const getVariantStorageSuffix = (variantName = "") => {
+  const match = String(variantName).match(/^(\d+(?:GB|TB))/i);
+  return match ? `-${match[1].toLowerCase()}` : "";
 };
 
-const CATEGORY_TO_PATH = {
-  iPhone: "/timkiem?",
-  iPad: "/may-tinh-bang",
-  Mac: "/macbook",
-  AirPods: "/tai-nghe",
-  "Apple Watch": "/apple-watch",
-  "Phụ Kiện": "/phu-kien",
+const pickBestVariant = (variants = []) => {
+  if (!Array.isArray(variants) || variants.length === 0) return null;
+  let variant = variants.find((v) => v?.stock > 0 && v?.sku && v?.slug);
+  if (!variant) variant = variants.find((v) => v?.sku && v?.slug);
+  if (!variant) variant = variants.find((v) => v?.sku);
+  if (!variant) variant = variants[0];
+  return variant || null;
+};
+
+const getProductImage = (product) => {
+  const bestVariant = pickBestVariant(product?.variants);
+  return (
+    bestVariant?.images?.[0] ||
+    product?.featuredImages?.[0] ||
+    product?.images?.[0] ||
+    "/placeholder.png"
+  );
+};
+
+const getSeriesName = (product, categorySlug, categoryName) => {
+  const sourceName = String(product?.name || product?.model || "").trim();
+  if (!sourceName) return categoryName || "Sản phẩm";
+
+  const normalized = normalizeText(sourceName);
+  const normalizedCategory = normalizeText(categoryName);
+  const normalizedSlug = normalizeText(categorySlug);
+
+  if (normalized.includes("iphone")) {
+    const match = sourceName.match(/iPhone\s+(\d+[A-Za-z]*)/i);
+    if (match) return `iPhone ${match[1]} Series`;
+  }
+
+  if (normalized.includes("ipad")) {
+    if (/pro/i.test(sourceName)) return "iPad Pro";
+    if (/air/i.test(sourceName)) return "iPad Air";
+    if (/mini/i.test(sourceName)) return "iPad Mini";
+    return "iPad";
+  }
+
+  if (normalized.includes("macbook") || normalized.includes("mac ")) {
+    if (/macbook\s+pro/i.test(sourceName)) return "MacBook Pro";
+    if (/macbook\s+air/i.test(sourceName)) return "MacBook Air";
+    if (/imac/i.test(sourceName)) return "iMac";
+    return "Mac";
+  }
+
+  if (normalized.includes("airpods")) {
+    if (/max/i.test(sourceName)) return "AirPods Max";
+    if (/pro/i.test(sourceName)) return "AirPods Pro";
+    return "AirPods";
+  }
+
+  if (normalized.includes("watch")) {
+    if (/ultra/i.test(sourceName)) return "Apple Watch Ultra";
+    if (/se/i.test(sourceName)) return "Apple Watch SE";
+    const series = sourceName.match(/Series\s+(\d+)/i);
+    if (series) return `Apple Watch Series ${series[1]}`;
+    return "Apple Watch";
+  }
+
+  if (normalizedSlug === "accessories" || normalizedCategory.includes("phu kien")) {
+    return "Phụ kiện";
+  }
+
+  return String(product?.model || product?.name || categoryName || "Sản phẩm").trim();
+};
+
+const getSortedSeries = (products, categorySlug, categoryName) => {
+  const groups = {};
+  products.forEach((product) => {
+    const seriesName = getSeriesName(product, categorySlug, categoryName);
+    if (!groups[seriesName]) {
+      groups[seriesName] = { seriesName, products: [], image: "" };
+    }
+    groups[seriesName].products.push(product);
+  });
+
+  return Object.values(groups)
+    .map((group) => ({
+      ...group,
+      image: getProductImage(group.products[0]),
+      products: [...group.products].sort((a, b) =>
+        String(a?.name || "").localeCompare(String(b?.name || ""), "vi")
+      ),
+    }))
+    .sort((a, b) => {
+      const aNum = parseInt(String(a.seriesName).match(/\d+/)?.[0] || "0", 10);
+      const bNum = parseInt(String(b.seriesName).match(/\d+/)?.[0] || "0", 10);
+      if (aNum && bNum) return bNum - aNum;
+      return String(a.seriesName).localeCompare(String(b.seriesName), "vi");
+    });
+};
+
+const calculateTopSellers = (products = []) => {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  const withSales = products.filter((p) => (p?.salesCount || 0) > 0);
+  const source = withSales.length > 0 ? withSales : products;
+  return [...source]
+    .sort((a, b) => {
+      if ((b?.salesCount || 0) !== (a?.salesCount || 0)) {
+        return (b?.salesCount || 0) - (a?.salesCount || 0);
+      }
+      return new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0);
+    })
+    .slice(0, 4);
+};
+
+const buildDynamicCategories = (products = []) => {
+  const map = new Map();
+
+  products.forEach((product) => {
+    const typeObj = typeof product?.productType === "object" ? product.productType : null;
+    const typeId = String(typeObj?._id || product?.productType || "").trim();
+    const typeName = String(typeObj?.name || "Sản phẩm").trim();
+    const typeSlug = String(typeObj?.slug || slugify(typeName)).trim();
+    const key = typeId || typeSlug || typeName;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        id: typeId || typeSlug,
+        name: typeName,
+        slug: typeSlug,
+        products: [],
+      });
+    }
+    map.get(key).products.push(product);
+  });
+
+  return Array.from(map.values())
+    .map((category) => {
+      const categoryImage =
+        CATEGORY_FALLBACK_IMAGES[category.slug] || getProductImage(category.products[0]);
+      return {
+        ...category,
+        image: categoryImage,
+        series: getSortedSeries(category.products, category.slug, category.name),
+        topSellers: calculateTopSellers(category.products),
+      };
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
+};
+
+const buildProductDetailUrl = (product) => {
+  if (!product) return "";
+  const baseSlug = product.baseSlug || product.slug;
+  if (!baseSlug) return "";
+
+  const variant = pickBestVariant(product.variants);
+  const categoryPath =
+    PRODUCT_TYPE_TO_CATEGORY_PATH[product?.productType?.slug] || "products";
+  const storageSuffix = getVariantStorageSuffix(variant?.variantName || "");
+  const productSlug = `${baseSlug}${storageSuffix}`;
+
+  if (variant?.sku) {
+    if (categoryPath === "products") {
+      return `/products/${baseSlug}?sku=${variant.sku}`;
+    }
+    return `/${categoryPath}/${productSlug}?sku=${variant.sku}`;
+  }
+
+  if (categoryPath === "products") {
+    return `/products/${baseSlug}`;
+  }
+
+  return `/${categoryPath}/${productSlug}`;
 };
 
 const CategoryDropdown = ({
@@ -71,358 +224,107 @@ const CategoryDropdown = ({
   const navigate = useNavigate();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(0);
-  const [categoryData, setCategoryData] = useState({});
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const dropdownRef = useRef(null);
-  const { topSellers: displayBestSellers } = useTopSellers();
 
-  // Use controlled state if provided (for mobile), otherwise use internal state (for desktop)
-  const isOpen = isMobileMenu ? controlledIsOpen : internalIsOpen;
-  const setIsOpen = isMobileMenu ? () => {} : setInternalIsOpen;
+  const isOpen = isMobileMenu ? Boolean(controlledIsOpen) : internalIsOpen;
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const loadedCategories = Object.values(categoryData).filter(
-      (cat) => cat?.allProducts?.length > 0
-    );
-
-    if (loadedCategories.length >= 2) {
-      const allProducts = loadedCategories
-        .flatMap((cat) => cat.allProducts)
-        .filter(Boolean);
-
-      useTopSellers.getState().calculateTopSellers(allProducts);
-    } else {
-      useTopSellers.getState().calculateTopSellers([]);
+  const closePanel = useCallback(() => {
+    if (isMobileMenu) {
+      onClose();
+      return;
     }
-  }, [isOpen, categoryData]);
+    setInternalIsOpen(false);
+  }, [isMobileMenu, onClose]);
 
-  const getSeriesKey = (productName = "", categoryName) => {
-    if (!productName || !categoryName) return categoryName;
-
-    const name = productName.trim();
-
-    if (categoryName === "iPhone") {
-      // Bắt iPhone 16, 16 Pro, 16 Plus, 16 Pro Max, 16e, 16mini, 16s, v.v.
-      const match = name.match(/iPhone\s+(\d+)[A-Za-z]*/i);
-      if (match) {
-        return `iPhone ${match[1]} Series`;
-      }
-    }
-
-    if (categoryName === "iPad") {
-      if (/Pro/i.test(name)) {
-        const size = name.match(/(11|12\.9|13)\s*[-–]?\s*inch/i);
-        return size ? `iPad Pro ${size[1]}-inch` : "iPad Pro";
-      }
-      if (/Air/i.test(name)) return "iPad Air";
-      if (/Mini/i.test(name)) return "iPad Mini";
-      const gen = name.match(/iPad\s*\(?\s*(\d+[a-z]*)\s*\)?/i);
-      if (gen) return `iPad (${gen[1]})`;
-    }
-
-    if (categoryName === "Mac") {
-      if (/MacBook Pro/i.test(name)) {
-        const size = name.match(/(13|14|16)\s*[-–]?\s*inch/i);
-        return size ? `MacBook Pro ${size[1]}-inch` : "MacBook Pro";
-      }
-      if (/MacBook Air/i.test(name)) return "MacBook Air";
-      if (/iMac/i.test(name)) return "iMac";
-      if (/Mac Mini/i.test(name)) return "Mac Mini";
-      if (/Mac Studio/i.test(name)) return "Mac Studio";
-      if (/Mac Pro/i.test(name)) return "Mac Pro";
-    }
-
-    if (categoryName === "Apple Watch") {
-      if (/Ultra/i.test(name)) return "Apple Watch Ultra";
-      if (/SE/i.test(name)) return "Apple Watch SE";
-      const series = name.match(/Series\s+(\d+)/i);
-      if (series) return `Apple Watch Series ${series[1]}`;
-    }
-
-    if (categoryName === "AirPods") {
-      if (/Pro\s+2|Pro\s*\(2nd/i.test(name))
-        return "AirPods Pro (2nd generation)";
-      if (/Pro/i.test(name)) return "AirPods Pro";
-      if (/Max/i.test(name)) return "AirPods Max";
-      const gen = name.match(/AirPods\s+(\d+[a-z]*)/i);
-      if (gen) return `AirPods (${gen[1]} generation)`;
-    }
-
-    if (categoryName === "Phụ Kiện") {
-      const lowerName = name.toLowerCase();
-
-      if (
-        lowerName.includes("ốp") ||
-        lowerName.includes("case") ||
-        lowerName.includes("bao da") ||
-        lowerName.includes("ốp lưng")
-      ) {
-        return "Ốp lưng & Bao da";
-      }
-
-      if (
-        lowerName.includes("kính") ||
-        lowerName.includes("cường lực") ||
-        lowerName.includes("dán") ||
-        lowerName.includes("tempered") ||
-        lowerName.includes("glass")
-      ) {
-        return "Kính cường lực & Miếng dán";
-      }
-
-      if (
-        lowerName.includes("cáp") ||
-        lowerName.includes("sạc") ||
-        lowerName.includes("charger") ||
-        lowerName.includes("cable") ||
-        lowerName.includes("dây")
-      ) {
-        return "Cáp sạc & Bộ sạc";
-      }
-
-      if (
-        lowerName.includes("pin") &&
-        (lowerName.includes("dự phòng") ||
-          lowerName.includes("sạc dự phòng") ||
-          lowerName.includes("powerbank") ||
-          lowerName.includes("power bank"))
-      ) {
-        return "Pin sạc dự phòng";
-      }
-
-      if (
-        (lowerName.includes("tai nghe") ||
-          lowerName.includes("headphone") ||
-          lowerName.includes("earphone")) &&
-        !lowerName.includes("airpods")
-      ) {
-        return "Tai nghe có dây & Bluetooth";
-      }
-
-      if (lowerName.includes("loa")) {
-        return "Loa Bluetooth";
-      }
-
-      if (
-        lowerName.includes("gậy") ||
-        lowerName.includes("selfie") ||
-        lowerName.includes("tripod") ||
-        lowerName.includes("giá đỡ") ||
-        lowerName.includes("đế")
-      ) {
-        return "Gậy selfie & Giá đỡ";
-      }
-
-      if (
-        lowerName.includes("thẻ nhớ") ||
-        lowerName.includes("usb") ||
-        lowerName.includes("ổ cứng") ||
-        lowerName.includes("ssd")
-      ) {
-        return "Thẻ nhớ & Lưu trữ";
-      }
-
-      if (lowerName.includes("pencil") || lowerName.includes("bút")) {
-        return "Apple Pencil & Bút cảm ứng";
-      }
-
-      return "Phụ kiện khác";
-    }
-
-    return categoryName;
-  };
-
-  const getRepresentativeImage = (products) => {
-    const priority = ["Pro Max", "Pro", "Max", "Ultra", "Plus", ""];
-    for (const term of priority) {
-      const match = products.find((p) => p.name.includes(term));
-      if (match) {
-        return match.images?.[0] || match.variants?.[0]?.images?.[0] || "";
-      }
-    }
-    return (
-      products[0]?.images?.[0] || products[0]?.variants?.[0]?.images?.[0] || ""
-    );
-  };
-
-  const groupBySeries = (products, categoryName) => {
-    const groups = {};
-    products.forEach((product) => {
-      const seriesKey = getSeriesKey(
-        product.name || product.model,
-        categoryName
-      );
-      if (!groups[seriesKey]) {
-        groups[seriesKey] = { seriesName: seriesKey, products: [], image: "" };
-      }
-      groups[seriesKey].products.push(product);
-    });
-    return Object.values(groups)
-      .map((group) => ({
-        ...group,
-        image: getRepresentativeImage(group.products),
-        products: group.products.sort((a, b) => {
-          const order = ["Pro Max", "Pro", "Max", "Plus", "Ultra", ""];
-          const aIdx = order.findIndex((t) => a.name.includes(t));
-          const bIdx = order.findIndex((t) => b.name.includes(t));
-          return aIdx - bIdx;
-        }),
-      }))
-      .sort((a, b) => {
-        const aNum = parseInt(a.seriesName.match(/\d+/)?.[0] || 0);
-        const bNum = parseInt(b.seriesName.match(/\d+/)?.[0] || 0);
-        return bNum - aNum;
+  const fetchCategoryData = useCallback(async () => {
+    if (loading || loaded) return;
+    setLoading(true);
+    try {
+      const response = await universalProductAPI.getAll({
+        page: 1,
+        limit: 500,
+        status: "AVAILABLE",
       });
-  };
-
-  const fetchCategoryData = useCallback(
-    async (categoryName) => {
-      if (categoryData[categoryName]) return;
-      setLoading(true);
-      try {
-        const api = API_MAP[categoryName];
-        if (!api) return;
-        const response = await api.getAll({ limit: 100 });
-        const products = response.data?.data?.products || response.data || [];
-        const series = groupBySeries(products, categoryName);
-        setCategoryData((prev) => ({
-          ...prev,
-          [categoryName]: { series, allProducts: products },
-        }));
-      } catch (error) {
-        console.error(`Error loading ${categoryName}:`, error);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [categoryData]
-  );
+      const products = response?.data?.data?.products || [];
+      const dynamicCategories = buildDynamicCategories(products);
+      setCategories(dynamicCategories);
+      setSelectedCategory(0);
+      setLoaded(true);
+    } catch (error) {
+      console.error("Error loading dynamic categories:", error);
+      setCategories([]);
+      setLoaded(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, loaded]);
 
   useEffect(() => {
     if (!isOpen) return;
-
-    if (!categoryData["iPhone"]?.allProducts) {
-      fetchCategoryData("iPhone");
-      setSelectedCategory(0);
-    }
-
-    if (!categoryData["Mac"]?.allProducts) {
-      setTimeout(() => {
-        fetchCategoryData("Mac");
-      }, 0);
-    }
-  }, [isOpen, categoryData]);
+    fetchCategoryData();
+  }, [isOpen, fetchCategoryData]);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         if (!isMobileMenu) {
           setInternalIsOpen(false);
         }
       }
     };
+
     if (isOpen && !isMobileMenu) {
       document.addEventListener("mousedown", handleClickOutside);
     }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [isOpen, isMobileMenu]);
 
-  const handleCategoryClick = (name, idx) => {
-    setSelectedCategory(idx);
-    fetchCategoryData(name);
+  const currentCategory = categories[selectedCategory];
+  const currentSeries = currentCategory?.series || [];
+  const currentTopSellers = useMemo(
+    () => currentCategory?.topSellers || [],
+    [currentCategory]
+  );
 
-    const isMobile = window.innerWidth < 768;
-    if (isMobile) {
-      // Mobile: không đóng menu, chỉ load data
-      return;
-    }
+  const handleCategoryClick = (index) => {
+    setSelectedCategory(index);
   };
 
-  const navigateToCategory = (categoryName, seriesName) => {
-    if (categoryName === "Phụ Kiện") {
-      navigate("/phu-kien");
-      setIsOpen(false);
-      if (isMobileMenu) onClose();
+  const navigateToCategory = (category, seriesName = "") => {
+    if (!category) return;
+
+    if (!category.id) {
+      const fallbackKeyword = seriesName || category.name || "";
+      navigate(`/tim-kiem?s=${encodeURIComponent(fallbackKeyword)}`);
+      closePanel();
       return;
     }
 
-    let keyword = seriesName
-      .replace(/Series/gi, "")
-      .replace(/\(.*?\)/g, "")
-      .replace(/inch/gi, "")
-      .replace(/generation/gi, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
+    const params = new URLSearchParams();
+    params.set("productType", category.id);
+    params.set("productTypeName", category.name || "Sản phẩm");
+    if (seriesName) params.set("model", seriesName);
+    params.set("page", "1");
 
-    if (categoryName === "iPhone") {
-      const match = seriesName.match(/iPhone\s+(\d+[A-Za-z]*)/i);
-      if (match) {
-        keyword = `iphone ${match[1].toLowerCase()}`;
-      }
-    }
-
-    const prettyMap = {
-      "macbook pro": "macbook pro",
-      "macbook air": "macbook air",
-      "airpods pro": "airpods pro",
-      "apple watch ultra": "apple watch ultra",
-      "apple watch se": "apple watch se",
-    };
-
-    const lowerSeries = keyword.toLowerCase();
-    for (const key in prettyMap) {
-      if (lowerSeries.includes(key)) {
-        keyword = prettyMap[key];
-        break;
-      }
-    }
-
-    navigate(`/tim-kiem?s=${encodeURIComponent(keyword)}`);
-    setIsOpen(false);
-    if (isMobileMenu) onClose();
+    navigate(`/products?${params.toString()}`);
+    closePanel();
   };
 
   const navigateToProductDetail = (product) => {
-    const catParam = {
-      iPhone: "dien-thoai",
-      iPad: "may-tinh-bang",
-      Mac: "macbook",
-      AirPods: "tai-nghe",
-      "Apple Watch": "apple-watch",
-      "Phụ Kiện": "phu-kien",
-    }[product.category || categories[selectedCategory]];
-
-    const slug = product.slug || generateSlug(product.model || product.name);
-    const variant =
-      product.variants?.find((v) => v.stock > 0) || product.variants?.[0];
-    const targetUrl = variant?.sku
-      ? `/${catParam}/${slug}?sku=${variant.sku}`
-      : `/${catParam}/${slug}`;
-
-    setIsOpen(false);
-    if (isMobileMenu) onClose();
+    const targetUrl = buildProductDetailUrl(product);
+    if (!targetUrl) return;
+    closePanel();
     window.location.href = targetUrl;
   };
 
-  const generateSlug = (text) => {
-    return text
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
-
-  const currentData = categoryData[categories[selectedCategory]];
-
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Trigger Button - Desktop only (not shown in mobile menu mode) */}
       {!isMobileMenu && (
         <button
           onMouseEnter={() => setInternalIsOpen(true)}
@@ -433,21 +335,12 @@ const CategoryDropdown = ({
         </button>
       )}
 
-      {/* Panel - shown when triggered (desktop hover or mobile click) */}
       {isOpen && (
         <>
-          {/* Mobile backdrop - only show on mobile  */}
           {isMobileMenu && (
-            <div
-              className="md:hidden fixed inset-0 z-40"
-              onClick={() => {
-                setIsOpen(false);
-                onClose();
-              }}
-            />
+            <div className="md:hidden fixed inset-0 z-40" onClick={closePanel} />
           )}
 
-          {/* Panel */}
           <div
             className={`
               ${
@@ -457,9 +350,8 @@ const CategoryDropdown = ({
               }
               md:inset-auto md:top-20 md:left-1/2 md:-translate-x-1/2 md:w-[1200px] md:h-[600px] md:rounded-3xl md:shadow-2xl md:overflow-hidden md:bg-white/40 md:backdrop-blur-3xl md:border md:border-white/20
             `}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
-            {/* Mobile Header with drag indicator */}
             {isMobileMenu && (
               <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex flex-col items-center flex-shrink-0">
                 <div className="w-12 h-1 bg-gray-300 rounded-full mb-2" />
@@ -468,10 +360,7 @@ const CategoryDropdown = ({
                     Danh mục sản phẩm
                   </h2>
                   <button
-                    onClick={() => {
-                      setIsOpen(false);
-                      onClose();
-                    }}
+                    onClick={closePanel}
                     className="text-gray-700 hover:text-black"
                   >
                     <X className="w-6 h-6" />
@@ -485,61 +374,54 @@ const CategoryDropdown = ({
                 isMobileMenu ? "flex-col" : "flex-col md:flex-row"
               }`}
             >
-              {/* Left: Categories */}
               <div
                 className={`w-full bg-gray-50 p-2 md:w-80 md:p-6 md:overflow-y-auto ${
                   isMobileMenu ? "flex-shrink-0" : ""
                 }`}
               >
                 <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden pb-2 md:pb-0 scrollbar-hide">
-                  {categories.map((cat, idx) => {
-                    const imgSrc = CATEGORY_IMAGES[cat];
-                    const displayName = CATEGORY_DISPLAY_MAP[cat] || cat;
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => handleCategoryClick(cat, idx)}
-                        onMouseEnter={() => {
-                          setSelectedCategory(idx);
-                          fetchCategoryData(cat);
-                        }}
-                        className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl 
-                                    md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
-                                      selectedCategory === idx
-                                        ? "bg-white text-black shadow-sm"
-                                        : "text-gray-600 hover:bg-gray-100"
-                                    }`}
-                      >
-                        <img
-                          src={imgSrc}
-                          alt={displayName}
-                          className="w-14 h-14 md:w-10 md:h-10 object-contain"
-                        />
-                        <span className="text-center text-xs md:text-left md:text-base">
-                          {displayName}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {categories.map((category, index) => (
+                    <button
+                      key={category.id || `${category.slug}-${index}`}
+                      onClick={() => handleCategoryClick(index)}
+                      onMouseEnter={() => handleCategoryClick(index)}
+                      className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
+                        selectedCategory === index
+                          ? "bg-white text-black shadow-sm"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      <img
+                        src={category.image || "/placeholder.png"}
+                        alt={category.name}
+                        className="w-14 h-14 md:w-10 md:h-10 object-contain"
+                      />
+                      <span className="text-center text-xs md:text-left md:text-base">
+                        {category.name}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Right: Content */}
               <div className="flex-1 p-4 overflow-y-auto md:p-8 bg-white md:bg-transparent pb-6">
                 {loading ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      {[...Array(4)].map((_, i) => (
-                        <div key={i} className="animate-pulse">
-                          <div className="w-16 h-16 bg-gray-200 rounded-lg mx-auto"></div>
-                          <div className="h-3 bg-gray-200 rounded mt-2 w-16 mx-auto"></div>
+                      {[...Array(4)].map((_, index) => (
+                        <div key={index} className="animate-pulse">
+                          <div className="w-16 h-16 bg-gray-200 rounded-lg mx-auto" />
+                          <div className="h-3 bg-gray-200 rounded mt-2 w-16 mx-auto" />
                         </div>
                       ))}
                     </div>
                   </div>
-                ) : currentData ? (
+                ) : !currentCategory ? (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    <p>Không có dữ liệu danh mục</p>
+                  </div>
+                ) : (
                   <>
-                    {/* Top Sellers */}
                     <div className="mb-6 md:mb-10">
                       <h3 className="text-base md:text-lg font-bold mb-4 md:mb-5 flex items-center gap-2 text-gray-900">
                         <span className="inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
@@ -548,29 +430,22 @@ const CategoryDropdown = ({
                         Sản phẩm bán chạy
                       </h3>
 
-                      {displayBestSellers.length > 0 ? (
+                      {currentTopSellers.length > 0 ? (
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                          {displayBestSellers.map((product) => (
+                          {currentTopSellers.map((product) => (
                             <button
                               key={product._id}
                               onClick={() => navigateToProductDetail(product)}
-                              // **Đã thêm: flex, flex-col, h-full, justify-start**
                               className="group relative text-center hover:-translate-y-2 transition-all duration-300 flex flex-col h-full justify-start"
                             >
-                              {/* **Phần ảnh sản phẩm** */}
                               <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-white rounded-2xl overflow-hidden shadow-md mb-2 md:mb-3 flex-shrink-0">
                                 <img
-                                  src={
-                                    product.images?.[0] ||
-                                    product.variants?.[0]?.images?.[0] ||
-                                    "/placeholder.png"
-                                  }
+                                  src={getProductImage(product)}
                                   alt={product.name}
                                   className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
                                   loading="lazy"
                                 />
                               </div>
-                              {/* **Phần tên sản phẩm** */}
                               <p className="text-xs md:text-sm font-medium line-clamp-2 text-gray-800 px-1 leading-tight">
                                 {product.name}
                               </p>
@@ -579,8 +454,8 @@ const CategoryDropdown = ({
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                          {[...Array(4)].map((_, i) => (
-                            <div key={i} className="animate-pulse text-center">
+                          {[...Array(4)].map((_, index) => (
+                            <div key={index} className="animate-pulse text-center">
                               <div className="w-20 h-20 md:w-24 md:h-24 mx-auto bg-gray-200 rounded-2xl mb-2 md:mb-3" />
                               <div className="h-3 md:h-4 bg-gray-200 rounded-full w-16 md:w-20 mx-auto" />
                             </div>
@@ -589,19 +464,15 @@ const CategoryDropdown = ({
                       )}
                     </div>
 
-                    {/* Series Grid */}
                     <h3 className="text-sm text-black font-semibold mb-3 md:mb-4 md:text-lg">
-                      Chọn theo dòng {categories[selectedCategory]}
+                      Chọn theo dòng {currentCategory.name}
                     </h3>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
-                      {currentData.series.map((series, idx) => (
+                      {currentSeries.map((series, index) => (
                         <button
-                          key={idx}
+                          key={`${series.seriesName}-${index}`}
                           onClick={() =>
-                            navigateToCategory(
-                              categories[selectedCategory],
-                              series.seriesName
-                            )
+                            navigateToCategory(currentCategory, series.seriesName)
                           }
                           className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
                         >
@@ -624,22 +495,23 @@ const CategoryDropdown = ({
                                 {series.seriesName}
                               </h4>
                               <p className="text-xs text-gray-500">
-                                {series.products.length} phiên bản
+                                {series.products.length} sản phẩm
                               </p>
                             </div>
                             <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
                           </div>
+
                           <div className="space-y-1 text-xs text-gray-600 md:text-sm">
-                            {series.products.slice(0, 2).map((p, i) => (
+                            {series.products.slice(0, 2).map((product, itemIndex) => (
                               <p
-                                key={i}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigateToProductDetail(p);
+                                key={`${product._id}-${itemIndex}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigateToProductDetail(product);
                                 }}
                                 className="hover:text-black cursor-pointer pl-1 line-clamp-1"
                               >
-                                • {p.name}
+                                • {product.name}
                               </p>
                             ))}
                             {series.products.length > 2 && (
@@ -652,10 +524,6 @@ const CategoryDropdown = ({
                       ))}
                     </div>
                   </>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    <p>Không có dữ liệu</p>
-                  </div>
                 )}
               </div>
             </div>
@@ -667,13 +535,3 @@ const CategoryDropdown = ({
 };
 
 export default CategoryDropdown;
-
-// Export helper to open mobile menu
-export const useCategoryDropdown = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  return {
-    isOpen,
-    openMenu: () => setIsOpen(true),
-    closeMenu: () => setIsOpen(false),
-  };
-};

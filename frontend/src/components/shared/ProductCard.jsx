@@ -1,6 +1,6 @@
 // FILE: frontend/src/components/shared/ProductCard.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,27 @@ const VARIANT_KEY_FIELD = {
   AppleWatch: "variantName",
   Accessories: "variantName",
 };
+
+// Chuẩn hóa dung lượng để có thể so sánh chính xác (VD: 1TB = 1024GB)
+const normalizeStorageValue = (value) => {
+  if (!value) return null;
+  const str = String(value).trim().toUpperCase();
+  const match = str.match(/(\d+(?:\.\d+)?)\s*(GB|TB)/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2];
+  return unit === "TB" ? amount * 1024 : amount;
+};
+
+const getVariantStorageValue = (variant) => {
+  if (!variant) return null;
+  const byStorage = normalizeStorageValue(variant.storage);
+  if (Number.isFinite(byStorage)) return byStorage;
+  return normalizeStorageValue(variant.variantName);
+};
+
+const isUsableVariant = (variant, baseSlug) =>
+  Boolean(variant?.sku && (variant?.slug || baseSlug));
 
 // ============================================================================
 // COMPONENT CON: Hiển thị sao đánh giá
@@ -103,7 +124,11 @@ const ProductCard = ({
   const isAdmin = ["ADMIN", "PRODUCT_MANAGER"].includes(user?.role);
 
   // Đảm bảo variants luôn là array
-  const safeVariants = Array.isArray(product?.variants) ? product.variants : [];
+  const safeVariants = useMemo(
+    () => (Array.isArray(product?.variants) ? product.variants : []),
+    [product?.variants]
+  );
+  const keyField = VARIANT_KEY_FIELD[product.category] || "variantName";
 
   // ==========================================================================
   // 1. TỰ ĐỘNG CHỌN VARIANT MẶC ĐỊNH (Ưu tiên stock > 0 + slug)
@@ -115,14 +140,39 @@ const ProductCard = ({
       return;
     }
 
-    let variant = safeVariants.find((v) => v.stock > 0 && v.sku && v.slug);
-    if (!variant) variant = safeVariants.find((v) => v.sku && v.slug);
-    if (!variant) variant = safeVariants.find((v) => v.sku);
-    if (!variant) variant = safeVariants[0];
+    const hasStorageVariants = safeVariants.some((v) =>
+      Number.isFinite(getVariantStorageValue(v))
+    );
+
+    const variantsForDefault = hasStorageVariants
+      ? [...safeVariants].sort((a, b) => {
+          const storageA = getVariantStorageValue(a);
+          const storageB = getVariantStorageValue(b);
+          const hasStorageA = Number.isFinite(storageA);
+          const hasStorageB = Number.isFinite(storageB);
+
+          if (hasStorageA && hasStorageB) {
+            const diff = storageA - storageB;
+            if (diff !== 0) return diff;
+            return (a?.price || 0) - (b?.price || 0);
+          }
+          if (hasStorageA) return -1;
+          if (hasStorageB) return 1;
+          return 0;
+        })
+      : safeVariants;
+
+    let variant = variantsForDefault.find(
+      (v) => v.stock > 0 && isUsableVariant(v, product.baseSlug)
+    );
+    if (!variant)
+      variant = variantsForDefault.find((v) => isUsableVariant(v, product.baseSlug));
+    if (!variant) variant = variantsForDefault.find((v) => v.sku);
+    if (!variant) variant = variantsForDefault[0];
 
     setSelectedVariant(variant);
     setIsVariantReady(!!(variant?.sku && (variant?.slug || product.baseSlug)));
-  }, [product.variants, product.baseSlug, product.name, safeVariants]);
+  }, [product.baseSlug, safeVariants, keyField]);
 
   // ==========================================================================
   // 2. DỮ LIỆU HIỂN THỊ HIỆN TẠI
@@ -172,24 +222,23 @@ const ProductCard = ({
   // ==========================================================================
   // 4. DANH SÁCH NÚT CHỌN VARIANT (128GB, 256GB, 1TB...)
   // ==========================================================================
-  const keyField = VARIANT_KEY_FIELD[product.category] || "variantName";
-
-  // Hàm chuẩn hóa dung lượng: chuyển TB → GB để so sánh đúng
-  const normalizeStorage = (value) => {
-    if (!value) return 0;
-    const str = String(value).trim().toUpperCase();
-    const num = parseInt(str);
-    if (isNaN(num)) return 0;
-    return str.includes("TB") ? num * 1024 : num; // 1TB = 1024GB
-  };
-
   const variantKeyOptions = Array.from(
     new Set(
       safeVariants.filter((v) => v && v[keyField]).map((v) => v[keyField])
     )
   )
     // SẮP XẾP ĐÚNG: 128GB → 256GB → 512GB → 1TB → 2TB
-    .sort((a, b) => normalizeStorage(a) - normalizeStorage(b));
+    .sort((a, b) => {
+      const storageA = normalizeStorageValue(a);
+      const storageB = normalizeStorageValue(b);
+      const hasStorageA = Number.isFinite(storageA);
+      const hasStorageB = Number.isFinite(storageB);
+
+      if (hasStorageA && hasStorageB) return storageA - storageB;
+      if (hasStorageA) return -1;
+      if (hasStorageB) return 1;
+      return String(a).localeCompare(String(b), "vi");
+    });
 
   const totalStock = safeVariants.reduce((sum, v) => sum + (v?.stock || 0), 0);
 
@@ -199,13 +248,20 @@ const ProductCard = ({
   const handleVariantKeyClick = (e, keyValue) => {
     e.stopPropagation();
     let variant = safeVariants.find(
-      (v) => v[keyField] === keyValue && v.stock > 0 && v.slug
+      (v) =>
+        v[keyField] === keyValue &&
+        v.stock > 0 &&
+        isUsableVariant(v, product.baseSlug)
     );
     if (!variant)
-      variant = safeVariants.find((v) => v[keyField] === keyValue && v.slug);
+      variant = safeVariants.find(
+        (v) => v[keyField] === keyValue && isUsableVariant(v, product.baseSlug)
+      );
+    if (!variant)
+      variant = safeVariants.find((v) => v[keyField] === keyValue && v.sku);
     if (variant) {
       setSelectedVariant(variant);
-      setIsVariantReady(!!(variant.sku && variant.slug));
+      setIsVariantReady(!!(variant.sku && (variant.slug || product.baseSlug)));
     }
   };
 

@@ -686,8 +686,9 @@ const buildFilter = (req) => {
     andClauses.push({ orderSource: "IN_STORE" });
   }
 
-  // ── KILL-SWITCH: Use req.authz.activeBranchId ──
-  if (!req.authz?.isGlobalAdmin) {
+  // Customer order history must not be scoped by active branch context.
+  // Customers should always see all of their own orders.
+  if (!req.authz?.isGlobalAdmin && req.user.role !== "CUSTOMER") {
     if (req.authz?.activeBranchId) {
       andClauses.push({ "assignedStore.storeId": req.authz.activeBranchId });
     } else if (req.user.role !== "CUSTOMER") {
