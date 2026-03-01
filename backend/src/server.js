@@ -23,6 +23,7 @@ import salesRoutes from "./modules/analytics/salesRoutes.js";
 import posRoutes from "./modules/order/posRoutes.js";
 import homePageRoutes from "./modules/content/homePageRoutes.js";
 import vnpayRoutes from "./modules/payment/vnpayRoutes.js";
+import sepayRoutes, { sepayWebhookRouter } from "./modules/payment/sepayRoutes.js";
 import { cancelExpiredVNPayOrders } from "./modules/order/orderCleanupService.js";
 import searchRoutes from "./modules/search/searchRoutes.js";
 import shortVideoRoutes from "./modules/content/shortVideoRoutes.js";
@@ -155,6 +156,8 @@ app.use("/api/sales", salesRoutes);
 app.use("/api/pos", posRoutes);
 
 app.use("/api/payment/vnpay", vnpayRoutes);
+app.use("/api/payment/sepay", sepayRoutes);
+app.use("/api/sepay", sepayWebhookRouter);
 
 app.use("/api/homepage", homePageRoutes);
 app.use("/api/search", searchRoutes);

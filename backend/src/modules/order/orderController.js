@@ -970,9 +970,10 @@ export const createOrder = async (req, res) => {
     const finalTotal = Number.isFinite(Number(total)) ? Number(total) : computedTotal;
 
     const orderNumber = generateOrderNumber();
-    const isVNPay = paymentMethod === "VNPAY";
+    const deferredPaymentMethods = new Set(["VNPAY", "BANK_TRANSFER"]);
+    const isDeferredPayment = deferredPaymentMethods.has(paymentMethod);
     const pickupCode = effectiveFulfillment === "CLICK_AND_COLLECT" ? generatePickupCode() : null;
-    const initialStatus = isVNPay ? "PENDING_PAYMENT" : "PENDING";
+    const initialStatus = isDeferredPayment ? "PENDING_PAYMENT" : "PENDING";
     const initialStatusStage = mapStatusToStage(initialStatus);
     const requestedStatusStage = normalizeStatusStage(statusStage);
 
@@ -1045,7 +1046,7 @@ export const createOrder = async (req, res) => {
       await assignedStore.save({ session });
     }
 
-    if (!isVNPay) {
+    if (!isDeferredPayment) {
       await removeOrderedItemsFromCart(req.user._id, processedItems, session);
     }
 

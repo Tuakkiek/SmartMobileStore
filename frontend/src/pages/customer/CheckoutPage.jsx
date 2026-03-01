@@ -23,15 +23,19 @@ import {
   promotionAPI,
   userAPI,
   vnpayAPI,
+  sepayAPI,
   cartAPI,
   monitoringAPI,
 } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
-import { Plus, MapPin, ChevronRight, ArrowLeft } from "lucide-react";
+import { Plus, MapPin, ChevronRight, ArrowLeft, Copy, RefreshCw } from "lucide-react";
 import AddressFormDialog from "@/components/shared/AddressFormDialog";
 import StoreSelector from "@/components/StoreSelector";
+
+const VNPAY_PENDING_KEY = "pending_vnpay_order";
+const SEPAY_PENDING_KEY = "pending_sepay_order";
 
 const isTruthyEnvValue = (value, defaultValue = true) => {
   if (value === undefined || value === null || value === "") return defaultValue;
@@ -83,7 +87,11 @@ const CheckoutPage = () => {
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
   const [isRedirectingToPayment, setIsRedirectingToPayment] = useState(false);
+  const [showSepayDialog, setShowSepayDialog] = useState(false);
+  const [sepaySession, setSepaySession] = useState(null);
+  const [sepayTimeLeft, setSepayTimeLeft] = useState("");
   const skipEmptySelectionGuardRef = useRef(false);
+  const sepayPollingRef = useRef(null);
   const effectiveFulfillmentType = isOmnichannelCheckoutEnabled
     ? formData.fulfillmentType
     : "HOME_DELIVERY";
@@ -308,7 +316,7 @@ const CheckoutPage = () => {
   ]);
 
   useEffect(() => {
-    const pendingOrder = localStorage.getItem("pending_vnpay_order");
+    const pendingOrder = localStorage.getItem(VNPAY_PENDING_KEY);
     if (pendingOrder) {
       try {
         const { orderId, orderNumber, timestamp } = JSON.parse(pendingOrder);
@@ -330,13 +338,155 @@ const CheckoutPage = () => {
           toast.info("Đơn hàng VNPay đã hết hạn - Vui lòng đặt lại", {
             duration: 6000,
           });
-          localStorage.removeItem("pending_vnpay_order");
+          localStorage.removeItem(VNPAY_PENDING_KEY);
         }
       } catch {
-        localStorage.removeItem("pending_vnpay_order");
+        localStorage.removeItem(VNPAY_PENDING_KEY);
       }
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const pendingSepay = localStorage.getItem(SEPAY_PENDING_KEY);
+    if (!pendingSepay) {
+      return;
+    }
+
+    try {
+      const { orderId, orderNumber, timestamp } = JSON.parse(pendingSepay);
+      const ageMinutes = (Date.now() - Number(timestamp || 0)) / 1000 / 60;
+      if (ageMinutes >= 15) {
+        localStorage.removeItem(SEPAY_PENDING_KEY);
+        return;
+      }
+
+      toast.warning(`Don #${orderNumber} dang cho xac nhan Chuyển khoản (SePay)`, {
+        duration: 10000,
+        action: {
+          label: "Xem don",
+          onClick: () => navigate(`/orders/${orderId}`),
+        },
+      });
+    } catch {
+      localStorage.removeItem(SEPAY_PENDING_KEY);
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (sepayPollingRef.current) {
+        clearInterval(sepayPollingRef.current);
+        sepayPollingRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showSepayDialog || !sepaySession?.expiresAt) {
+      setSepayTimeLeft("");
+      return;
+    }
+
+    const updateCountdown = () => {
+      const expiresAt = new Date(sepaySession.expiresAt).getTime();
+      const remainingMs = expiresAt - Date.now();
+
+      if (remainingMs <= 0) {
+        setSepayTimeLeft("Expired");
+        return;
+      }
+
+      const minutes = Math.floor(remainingMs / 60000);
+      const seconds = Math.floor((remainingMs % 60000) / 1000);
+      setSepayTimeLeft(`${minutes}:${String(seconds).padStart(2, "0")}`);
+    };
+
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(countdownInterval);
+  }, [showSepayDialog, sepaySession?.expiresAt]);
+
+  const clearSepayPendingOrder = () => {
+    localStorage.removeItem(SEPAY_PENDING_KEY);
+    if (sepayPollingRef.current) {
+      clearInterval(sepayPollingRef.current);
+      sepayPollingRef.current = null;
+    }
+  };
+
+  const checkSepayOrderStatus = async (orderId, options = {}) => {
+    if (!orderId) {
+      return false;
+    }
+
+    try {
+      const response = await orderAPI.getById(orderId);
+      const order = response?.data?.order || response?.data?.data?.order;
+      if (!order) {
+        return false;
+      }
+
+      if (order.paymentStatus === "PAID") {
+        skipEmptySelectionGuardRef.current = true;
+        setSelectedForCheckout([]);
+        await getCart();
+        clearSepayPendingOrder();
+        setShowSepayDialog(false);
+        toast.success("Thanh toan Chuyển khoản (SePay) thanh cong!");
+        navigate(`/orders/${orderId}`, { replace: true });
+        return true;
+      }
+
+      if (order.status === "CANCELLED" || order.status === "PAYMENT_FAILED") {
+        clearSepayPendingOrder();
+        setShowSepayDialog(false);
+        toast.info("Don hang da het han hoac bi huy");
+        return true;
+      }
+
+      if (!options.silent) {
+        toast.info("He thong van dang cho xac nhan thanh toan");
+      }
+      return false;
+    } catch {
+      if (!options.silent) {
+        toast.error("Khong the kiem tra trang thai thanh toan");
+      }
+      return false;
+    }
+  };
+
+  const startSepayPolling = (orderId) => {
+    if (!orderId) {
+      return;
+    }
+
+    if (sepayPollingRef.current) {
+      clearInterval(sepayPollingRef.current);
+    }
+
+    sepayPollingRef.current = setInterval(() => {
+      void checkSepayOrderStatus(orderId, { silent: true });
+    }, 5000);
+  };
+
+  const handleCopySepayContent = async () => {
+    const orderCode = String(sepaySession?.orderCode || "").trim();
+    if (!orderCode) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(orderCode);
+      toast.success("Da sao chep noi dung chuyen khoan");
+    } catch {
+      toast.error("Khong the sao chep noi dung");
+    }
+  };
+
+  const handleSepayManualCheck = async () => {
+    await checkSepayOrderStatus(sepaySession?.orderId, { silent: false });
+  };
 
   // Áp dụng mã khuyến mãi
   const handleApplyPromotion = async () => {
@@ -426,14 +576,14 @@ const CheckoutPage = () => {
     setError("");
 
     if (checkoutItems.length === 0) {
-      setError("Không có sản phẩm nào để thanh toán");
+      setError("Khong co san pham nao de thanh toan");
       setIsLoading(false);
       navigate("/cart", { replace: true });
       return;
     }
 
     if (!selectedAddressId) {
-      setError("Vui lòng chọn địa chỉ nhận hàng");
+      setError("Vui long chon dia chi nhan hang");
       setIsLoading(false);
       return;
     }
@@ -442,7 +592,7 @@ const CheckoutPage = () => {
       effectiveFulfillmentType === "CLICK_AND_COLLECT" &&
       !selectedPickupStoreId
     ) {
-      const message = "Vui lòng chọn cửa hàng nhận hàng";
+      const message = "Vui long chon cua hang nhan hang";
       setError(message);
       setIsLoading(false);
       toast.error(message);
@@ -450,7 +600,7 @@ const CheckoutPage = () => {
     }
 
     if (!selectedAddress) {
-      setError("Không tìm thấy địa chỉ nhận hàng");
+      setError("Khong tim thay dia chi nhan hang");
       setIsLoading(false);
       return;
     }
@@ -476,32 +626,23 @@ const CheckoutPage = () => {
         items: checkoutItemsWithFinalPrice.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
-          productType: item.productType, // ✅ PHẢI CÓ FIELD NÀY
+          productType: item.productType,
           price: item.finalizedPrice || item.originalPrice,
           originalPrice: item.originalPrice,
         })),
       };
 
-      console.log("=== BEFORE ORDER CREATION ===");
-      console.log(
-        "Checkout items:",
-        checkoutItems.map((i) => ({
-          variantId: i.variantId,
-          productName: i.productName,
-        }))
-      );
-      console.log("Payment method:", formData.paymentMethod);
-
       const response = await orderAPI.create(orderData);
       const createdOrder = response?.data?.order || response?.data?.data?.order;
       if (!createdOrder?._id) {
-        throw new Error("Không nhận được thông tin đơn hàng từ server");
+        throw new Error("Khong nhan duoc thong tin don hang tu server");
       }
 
-      console.log("=== AFTER ORDER CREATION ===");
-      console.log("Order ID:", createdOrder._id);
-      console.log("Order status:", createdOrder.status);
-      console.log("Should clear cart:", formData.paymentMethod !== "VNPAY");
+      const deferredMethods = ["VNPAY", "BANK_TRANSFER"];
+      console.log(
+        "Should clear cart:",
+        !deferredMethods.includes(formData.paymentMethod)
+      );
 
       if (formData.paymentMethod === "VNPAY") {
         setIsRedirectingToPayment(true);
@@ -513,56 +654,69 @@ const CheckoutPage = () => {
             language: "vn",
           });
 
-          if (vnpayResponse.data?.success) {
-            // ✅ THÊM: Lưu thông tin chi tiết hơn
-            localStorage.setItem(
-              "pending_vnpay_order",
-              JSON.stringify({
-                orderId: createdOrder._id,
-                orderNumber: createdOrder.orderNumber, // ← THÊM
-                selectedItems: selectedForCheckout,
-                totalAmount: createdOrder.totalAmount, // ← THÊM
-                timestamp: Date.now(),
-              })
-            );
-
-            // ✅ QUAN TRỌNG: Không xóa selectedForCheckout ở đây
-            // Chỉ xóa sau khi thanh toán thành công
-
-            window.location.href = vnpayResponse.data.data.paymentUrl;
-          } else {
-            throw new Error("Không thể tạo link thanh toán");
+          if (!vnpayResponse.data?.success) {
+            throw new Error("Khong the tao link thanh toan");
           }
+
+          localStorage.setItem(
+            VNPAY_PENDING_KEY,
+            JSON.stringify({
+              orderId: createdOrder._id,
+              orderNumber: createdOrder.orderNumber,
+              selectedItems: selectedForCheckout,
+              totalAmount: createdOrder.totalAmount,
+              timestamp: Date.now(),
+            })
+          );
+
+          window.location.href = vnpayResponse.data.data.paymentUrl;
         } catch {
           setIsRedirectingToPayment(false);
-          // ✅ HỦY ĐƠN HÀNG NẾU TẠO LINK THẤT BẠI
           await orderAPI.cancel(createdOrder._id, {
-            reason: "Không thể tạo link thanh toán VNPay",
+            reason: "Khong the tao link thanh toan VNPay",
           });
-          toast.error("Lỗi khi tạo link thanh toán VNPay");
+          toast.error("Loi khi tao link thanh toan VNPay");
+        }
+      } else if (formData.paymentMethod === "BANK_TRANSFER") {
+        try {
+          const sepayResponse = await sepayAPI.createQr({
+            orderId: createdOrder._id,
+          });
+          const sepayData = sepayResponse?.data?.data;
+          if (!sepayResponse?.data?.success || !sepayData?.qrUrl) {
+            throw new Error("Khong the tao ma QR Chuyển khoản (SePay)");
+          }
+
+          const session = {
+            orderId: createdOrder._id,
+            orderNumber: createdOrder.orderNumber,
+            amount: Number(sepayData.amount || createdOrder.totalAmount || 0),
+            qrUrl: sepayData.qrUrl,
+            orderCode: sepayData.orderCode,
+            instruction: sepayData.instruction,
+            expiresAt: sepayData.expiresAt,
+            timestamp: Date.now(),
+          };
+
+          setSepaySession(session);
+          setShowSepayDialog(true);
+          localStorage.setItem(SEPAY_PENDING_KEY, JSON.stringify(session));
+          startSepayPolling(createdOrder._id);
+          toast.success("Don hang da tao. Vui long quet QR de thanh toan");
+        } catch {
+          await orderAPI.cancel(createdOrder._id, {
+            reason: "Khong the tao ma QR Chuyển khoản (SePay)",
+          });
+          toast.error("Loi khi tao QR thanh toan Chuyển khoản (SePay)");
         }
       } else {
-        // ✅ COD/BANK_TRANSFER - Đảm bảo xóa giỏ hàng
-        console.log(`📦 Processing order ${createdOrder.orderNumber}`);
-
-        // Bỏ qua guard "không có sản phẩm" khi vừa đặt hàng thành công
         skipEmptySelectionGuardRef.current = true;
-
-        // Clear selection ngay lập tức
         setSelectedForCheckout([]);
 
-        // Đợi 500ms để backend xử lý xong
         await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // Refresh cart từ server
         await getCart();
 
-        // ✅ Lấy state mới nhất từ store (tránh stale closure)
         const freshCart = useCartStore.getState().cart;
-        const remainingItems = freshCart?.items?.length || 0;
-        console.log(`🛒 Cart after order: ${remainingItems} items`);
-
-        // Nếu backend không xóa, xóa thủ công (fallback)
         const selectedVariantIds = checkoutItems.map((i) => i.variantId);
         const stillInCart =
           freshCart?.items?.filter((item) =>
@@ -570,36 +724,27 @@ const CheckoutPage = () => {
           ) || [];
 
         if (stillInCart.length > 0) {
-          console.warn(
-            `Warning Backend didn't remove ${stillInCart.length} items, removing manually...`
-          );
           for (const item of stillInCart) {
             try {
-              // Dùng variantId để xóa
               await cartAPI.removeItem(item.variantId);
             } catch (err) {
-              // 404 nghĩa là đã xóa rồi -> tốt
-              if (err.response?.status === 404) {
-                 console.log(`Item ${item.variantId} already removed (404)`);
-              } else {
-                 console.error(`Failed to remove ${item.variantId}:`, err);
+              if (err.response?.status !== 404) {
+                console.error(`Failed to remove ${item.variantId}:`, err);
               }
             }
           }
-          // Refresh lại lần nữa
           await getCart();
         }
 
-        toast.success("Đặt hàng thành công!");
-
+        toast.success("Dat hang thanh cong!");
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });
         }, 300);
       }
     } catch (error) {
       console.error("Order error:", error);
-      setError(error.response?.data?.message || "Đặt hàng thất bại");
-      toast.error("Đặt hàng thất bại");
+      setError(error.response?.data?.message || "Dat hang that bai");
+      toast.error("Dat hang that bai");
     } finally {
       if (formData.paymentMethod !== "VNPAY") {
         setIsLoading(false);
@@ -794,6 +939,23 @@ const CheckoutPage = () => {
                     </p>
                   </div>
                 </label>
+
+                <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-muted transition">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="BANK_TRANSFER"
+                    checked={formData.paymentMethod === "BANK_TRANSFER"}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <div>
+                    <p className="font-medium">Chuyển khoản (SePay)</p>
+                    <p className="text-sm text-muted-foreground">
+                      Quet QR, he thong tu dong xac nhan thanh toan
+                    </p>
+                  </div>
+                </label>
               </CardContent>
             </Card>
           </div>
@@ -968,6 +1130,80 @@ const CheckoutPage = () => {
           </div>
         </div>
       </form>
+
+      <Dialog
+        open={showSepayDialog}
+        onOpenChange={(open) => {
+          setShowSepayDialog(open);
+          if (!open && sepayPollingRef.current) {
+            clearInterval(sepayPollingRef.current);
+            sepayPollingRef.current = null;
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Thanh toan Chuyển khoản (SePay)</DialogTitle>
+            <DialogDescription>
+              Quet QR de chuyen khoan, he thong se tu dong cap nhat khi nhan tien.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3 text-sm">
+              <p>
+                <span className="font-medium">Ma don:</span>{" "}
+                {sepaySession?.orderNumber}
+              </p>
+              <p>
+                <span className="font-medium">So tien:</span>{" "}
+                {formatPrice(sepaySession?.amount || 0)}
+              </p>
+              <p>
+                <span className="font-medium">Noi dung:</span>{" "}
+                {sepaySession?.orderCode}
+              </p>
+              <p>
+                <span className="font-medium">Con lai:</span>{" "}
+                {sepayTimeLeft || "..."}
+              </p>
+            </div>
+
+            {sepaySession?.qrUrl && (
+              <div className="flex justify-center rounded-lg border p-3">
+                <img
+                  src={sepaySession.qrUrl}
+                  alt="QR Chuyển khoản (SePay)"
+                  className="h-56 w-56 object-contain"
+                />
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              {sepaySession?.instruction ||
+                "Vui long chuyen khoan dung noi dung de xac nhan tu dong."}
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={handleCopySepayContent}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy noi dung
+              </Button>
+              <Button onClick={handleSepayManualCheck}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Toi da chuyen
+              </Button>
+            </div>
+
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => navigate(`/orders/${sepaySession?.orderId}`)}
+            >
+              Xem don hang
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog chọn địa chỉ */}
       <Dialog

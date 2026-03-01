@@ -344,6 +344,14 @@ export const vnpayAPI = {
   returnHandler: (params) => api.get("/payment/vnpay/return", { params }),
 };
 
+export const sepayAPI = {
+  createQr: (data) => api.post("/payment/sepay/create-qr", data),
+  webhookTest: (data, authorization = "") =>
+    api.post("/payment/sepay/webhook", data, {
+      headers: authorization ? { Authorization: authorization } : {},
+    }),
+};
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -508,6 +516,7 @@ export default {
   userAPI,
   analyticsAPI,
   vnpayAPI,
+  sepayAPI,
   getTopSelling,
   getAllProductsForCategory,
   getTopNewProducts,

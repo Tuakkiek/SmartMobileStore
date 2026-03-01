@@ -89,7 +89,7 @@ export const getPaymentMethodText = (method) => {
   const textMap = {
     COD: "COD",
     VNPAY: "VNPay",
-    BANK_TRANSFER: "Chuyen khoan",
+    BANK_TRANSFER: "Chuyển khoản (SePay)",
     MOMO: "MoMo",
     CASH: "Tien mat",
     INSTALLMENT: "Tra gop",

@@ -663,7 +663,7 @@ const OrderDetailDialog = ({
               <span>
                 {order.paymentMethod === "COD"
                   ? "Thanh toán khi nhận hàng"
-                  : "Chuyển khoản"}
+                  : "Chuyển khoản (SePay)"}
               </span>
             </div>
           </div>

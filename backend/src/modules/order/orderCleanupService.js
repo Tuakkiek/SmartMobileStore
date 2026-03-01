@@ -11,9 +11,17 @@ const getModelsByType = () => {
 
 const buildJobMetadata = () => {
   return {
-    jobName: "cancelExpiredVNPayOrders",
+    jobName: "cancelExpiredPendingPaymentOrders",
     trigger: "interval_5_minutes",
   };
+};
+
+const getSepayPaymentTtlMinutes = () => {
+  const ttl = Number(process.env.SEPAY_PAYMENT_TTL_MINUTES);
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    return 15;
+  }
+  return Math.floor(ttl);
 };
 
 export const cancelExpiredVNPayOrders = async () => {
@@ -22,12 +30,27 @@ export const cancelExpiredVNPayOrders = async () => {
   let activeOrderContext = null;
 
   try {
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const now = new Date();
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const sepayTtlMinutes = getSepayPaymentTtlMinutes();
+    const sepayThreshold = new Date(now.getTime() - sepayTtlMinutes * 60 * 1000);
 
     const expiredOrders = await Order.find({
-      paymentMethod: "VNPAY",
       status: "PENDING_PAYMENT",
-      createdAt: { $lte: fifteenMinutesAgo },
+      $or: [
+        {
+          paymentMethod: "VNPAY",
+          createdAt: { $lte: fifteenMinutesAgo },
+        },
+        {
+          paymentMethod: "BANK_TRANSFER",
+          "paymentInfo.sepayOrderCode": { $exists: true, $ne: "" },
+          $or: [
+            { "paymentInfo.sepayExpiresAt": { $lte: now } },
+            { createdAt: { $lte: sepayThreshold } },
+          ],
+        },
+      ],
     }).session(session);
 
     if (expiredOrders.length === 0) {
@@ -35,7 +58,7 @@ export const cancelExpiredVNPayOrders = async () => {
       return { success: true, cancelled: 0 };
     }
 
-    console.log(`Found ${expiredOrders.length} expired VNPay orders to cancel`);
+    console.log(`Found ${expiredOrders.length} expired pending-payment orders to cancel`);
 
     for (const order of expiredOrders) {
       const beforeOrder = order.toObject ? order.toObject() : { ...order };
@@ -79,12 +102,20 @@ export const cancelExpiredVNPayOrders = async () => {
 
       order.status = "CANCELLED";
       order.cancelledAt = new Date();
-      order.cancelReason = "VNPay payment expired after 15 minutes";
+      const isSepayOrder = order.paymentMethod === "BANK_TRANSFER";
+      const expiredReason = isSepayOrder
+        ? `SePay bank transfer payment expired after ${sepayTtlMinutes} minutes`
+        : "VNPay payment expired after 15 minutes";
+      const historyNote = isSepayOrder
+        ? "Auto-cancelled because SePay payment window expired"
+        : "Auto-cancelled because payment window expired";
+
+      order.cancelReason = expiredReason;
       order.statusHistory.push({
         status: "CANCELLED",
         updatedBy: orderOwnerId,
         updatedAt: new Date(),
-        note: "Auto-cancelled because payment window expired",
+        note: historyNote,
       });
 
       await order.save({ session });
@@ -98,7 +129,9 @@ export const cancelExpiredVNPayOrders = async () => {
         afterOrder: order.toObject ? order.toObject() : { ...order },
         statusCode: 200,
         resBody: {
-          message: "Order auto-cancelled due to expired VNPay payment window",
+          message: isSepayOrder
+            ? "Order auto-cancelled due to expired SePay payment window"
+            : "Order auto-cancelled due to expired VNPay payment window",
         },
         metadata: buildJobMetadata(),
       });

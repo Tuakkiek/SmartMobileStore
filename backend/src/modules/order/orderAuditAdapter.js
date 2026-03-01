@@ -21,6 +21,25 @@ const toISOStringOrNull = (value) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
+const SEPAY_ORDER_CODE_PRIMARY_REGEX = /DH\d{9}/i;
+const SEPAY_ORDER_CODE_FALLBACK_REGEX = /DH\d+/i;
+
+const normalizeSepayOrderCode = (value) => {
+  const text = String(value || "").trim().toUpperCase();
+  if (!text) {
+    return "";
+  }
+  const primary = text.match(SEPAY_ORDER_CODE_PRIMARY_REGEX);
+  if (primary?.[0]) {
+    return primary[0].toUpperCase();
+  }
+  const fallback = text.match(SEPAY_ORDER_CODE_FALLBACK_REGEX);
+  if (fallback?.[0]) {
+    return fallback[0].toUpperCase();
+  }
+  return "";
+};
+
 export const buildOrderAuditSnapshot = (orderDoc) => {
   if (!orderDoc) {
     return null;
@@ -206,6 +225,43 @@ export const resolveOrderIdFromCarrierPayload = async (payload = {}) => {
   return order?._id ? String(order._id) : "";
 };
 
+export const resolveOrderIdFromSepayPayload = async (payload = {}) => {
+  const directId = String(payload?.orderId || "").trim();
+  if (directId && mongoose.Types.ObjectId.isValid(directId)) {
+    return directId;
+  }
+
+  const candidates = [
+    payload?.orderCode,
+    payload?.referenceCode,
+    payload?.content,
+    payload?.description,
+    payload?.transferContent,
+    payload?.transactionContent,
+    payload?.note,
+  ];
+
+  const normalizedCodes = [
+    ...new Set(
+      candidates
+        .map((value) => normalizeSepayOrderCode(value))
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!normalizedCodes.length) {
+    return "";
+  }
+
+  const order = await Order.findOne({
+    "paymentInfo.sepayOrderCode": { $in: normalizedCodes },
+  })
+    .select("_id")
+    .lean();
+
+  return order?._id ? String(order._id) : "";
+};
+
 const deriveBranchId = ({ req, beforeOrder, afterOrder } = {}) => {
   const candidates = [
     toStringId(afterOrder?.assignedStore?.storeId),
@@ -318,5 +374,6 @@ export default {
   resolveOrderIdFromRequest,
   resolveOrderIdFromResponseBody,
   resolveOrderIdFromCarrierPayload,
+  resolveOrderIdFromSepayPayload,
   resolveOrderIdFromVnpTxnRef,
 };

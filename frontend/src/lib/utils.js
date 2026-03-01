@@ -87,7 +87,7 @@ export const getStatusText = (status) => {
     PAID: "Đã thanh toán",
     UNPAID: "Chưa thanh toán",
     COD: "Thanh toán khi nhận hàng",
-    BANK_TRANSFER: "Chuyển khoản",
+    BANK_TRANSFER: "Chuyển khoản (SePay)",
     VNPAY: "Thanh toán VNPay",
     CASH: "Tiền mặt",
     CARD: "Thẻ",

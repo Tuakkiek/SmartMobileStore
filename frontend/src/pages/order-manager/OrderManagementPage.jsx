@@ -275,7 +275,7 @@ const OrderManagementPage = () => {
       COD: "COD",
       VNPAY: "VNPay",
       CASH: "Tiền mặt",
-      BANK_TRANSFER: "Chuyển khoản",
+      BANK_TRANSFER: "Chuyển khoản (SePay)",
       MOMO: "MoMo",
       CREDIT_CARD: "Thẻ",
     };

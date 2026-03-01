@@ -37,6 +37,7 @@ import InventoryDashboard from "@/pages/admin/InventoryDashboard";
 import StoreManagementPage from "@/pages/admin/StoreManagementPage";
 import WarehouseVisualizerPage from "@/pages/admin/WarehouseVisualizerPage";
 import StockInPage from "@/pages/admin/StockInPage";
+import AuditLogPage from "@/pages/admin/AuditLogPage";
 
 import WarehouseProductsPage from "@/pages/warehouse/ProductsPage";
 import WarehouseStaffDashboard from "@/pages/warehouse-staff/WarehouseStaffDashboard";
@@ -56,7 +57,7 @@ import VATInvoicesPage from "@/pages/cashier/VATInvoicesPage";
 
 import Page404 from "@/pages/page404";
 import SearchResultsPage from "@/pages/SearchResultsPage";
-import VideosPage from "@/pages/VideosPage"; // ï¿½o. NEW
+import VideosPage from "@/pages/VideosPage"; // Thêm mới: Videos Page
 
 import VNPayReturnPage from "@/pages/customer/VNPayReturnPage";
 
@@ -116,7 +117,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
 
-          {/* ï¿½o. NEW: Videos Page */}
+          {/* Thêm mới: Videos Page */}
           <Route path="/videos" element={<VideosPage />} />
 
           {/* Products */}
@@ -148,7 +149,7 @@ function App() {
           {/* Search */}
           <Route path="/tim-kiem" element={<SearchResultsPage />} />
 
-          {/* ï¿½o. NEW: Universal Product Detail (must come before legacy routes) */}
+          {/* Thêm mới: Universal Product Detail (must come before legacy routes) */}
           <Route
             path="/products/:productSlug"
             element={<ProductDetailPage />}
@@ -226,6 +227,7 @@ function App() {
           <Route path="/admin/stores" element={<StoreManagementPage />} />
           <Route path="/admin/inventory-dashboard" element={<InventoryDashboard />} />
           <Route path="/admin/stock-in" element={<StockInPage />} />
+          <Route path="/admin/audit-logs" element={<AuditLogPage />} />
         </Route>
 
         <Route

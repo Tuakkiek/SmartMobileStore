@@ -866,7 +866,7 @@ const ShipperDashboard = () => {
                 {selectedOrder.paymentMethod === "BANK_TRANSFER" && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm">
-                      <strong>Chuyển khoản ngân hàng</strong>
+                      <strong>Chuyển khoản (SePay)</strong>
                       {selectedOrder.paymentStatus === "PAID" && (
                         <span className="text-green-600 ml-2">
                           Đã thanh toán
