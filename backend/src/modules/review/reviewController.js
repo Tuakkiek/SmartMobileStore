@@ -101,14 +101,19 @@ export const canReviewProduct = async (req, res) => {
           remainingReviews: o.remainingReviews,
         })),
         orderReviewCounts,
-        existingReviews: existingReviews.map((r) => ({
-          _id: r._id,
-          orderId: r.orderId._id,
-          orderNumber: r.orderId.orderNumber,
-          rating: r.rating,
-          comment: r.comment.substring(0, 100),
-          createdAt: r.createdAt,
-        })),
+        existingReviews: existingReviews.map((r) => {
+          const populatedOrder =
+            r.orderId && typeof r.orderId === "object" ? r.orderId : null;
+
+          return {
+            _id: r._id,
+            orderId: populatedOrder?._id || null,
+            orderNumber: populatedOrder?.orderNumber || "N/A",
+            rating: r.rating,
+            comment: String(r.comment || "").substring(0, 100),
+            createdAt: r.createdAt,
+          };
+        }),
         stats: {
           totalOrders: orders.length,
           totalReviews,
@@ -455,8 +460,10 @@ export const toggleReviewVisibility = async (req, res) => {
       });
     }
 
+    const productId = review.productId;
     review.isHidden = !review.isHidden;
     await review.save();
+    await findProductAndUpdateRating(productId);
 
     res.json({
       success: true,

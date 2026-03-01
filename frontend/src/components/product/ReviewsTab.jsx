@@ -4,7 +4,7 @@
 // ✅ FIXED: Prevent duplicate reviews + highlight existing review
 // ============================================
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { reviewAPI } from "@/lib/api";
 import { toast } from "sonner";
@@ -35,7 +35,7 @@ import { formatDate, getNameInitials } from "@/lib/utils";
 import ReviewImageUploader from "@/components/product/ReviewImageUploader";
 import ImageModal from "@/components/product/ImageModal";
 
-export const ReviewsTab = ({ productId, product }) => {
+export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
   const { user, isAuthenticated } = useAuthStore();
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +55,7 @@ export const ReviewsTab = ({ productId, product }) => {
   const [availableOrders, setAvailableOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [checkingPurchase, setCheckingPurchase] = useState(false);
-  const [orderReviewCounts, setOrderReviewCounts] = useState([]);
+  const [, setOrderReviewCounts] = useState([]);
   const [reviewStats, setReviewStats] = useState({
     totalOrders: 0,
     totalReviews: 0,
@@ -63,7 +63,6 @@ export const ReviewsTab = ({ productId, product }) => {
     availableSlots: 0,
   });
 
-  const isAdmin = user?.role === "ADMIN";
   const isCustomer = user?.role === "CUSTOMER";
 
   // ✅ Add CSS for highlight animation
@@ -83,18 +82,7 @@ export const ReviewsTab = ({ productId, product }) => {
     return () => document.head.removeChild(style);
   }, []);
 
-  useEffect(() => {
-    fetchReviews();
-  }, [productId, showImagesOnly]);
-
-  // ✅ Check if user can review
-  useEffect(() => {
-    if (isAuthenticated && isCustomer) {
-      checkCanReview();
-    }
-  }, [isAuthenticated, isCustomer, productId]);
-
-  const checkCanReview = async () => {
+  const checkCanReview = useCallback(async () => {
     try {
       setCheckingPurchase(true);
       const response = await reviewAPI.canReview(productId);
@@ -120,14 +108,14 @@ export const ReviewsTab = ({ productId, product }) => {
     } finally {
       setCheckingPurchase(false);
     }
-  };
+  }, [productId]);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
+    if (!productId) return;
+
     try {
       setIsLoading(true);
-      const response = await reviewAPI.getByProduct(productId, {
-        hasImages: showImagesOnly ? "true" : undefined,
-      });
+      const response = await reviewAPI.getByProduct(productId);
       setReviews(response.data.data.reviews || []);
     } catch (error) {
       console.error("Error fetching reviews:", error);
@@ -135,7 +123,18 @@ export const ReviewsTab = ({ productId, product }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [productId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  // ✅ Check if user can review
+  useEffect(() => {
+    if (isAuthenticated && isCustomer) {
+      checkCanReview();
+    }
+  }, [isAuthenticated, isCustomer, checkCanReview]);
 
   const ratingDistribution = {
     5: reviews.filter((r) => r.rating === 5).length,
@@ -146,11 +145,33 @@ export const ReviewsTab = ({ productId, product }) => {
   };
 
   const maxCount = Math.max(...Object.values(ratingDistribution), 1);
+  const totalVisibleReviews = reviews.length;
+  const computedAverageRating =
+    totalVisibleReviews > 0
+      ? Math.round(
+          (reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) /
+            totalVisibleReviews) *
+            10
+        ) / 10
+      : 0;
 
-  const filteredReviews =
+  useEffect(() => {
+    if (typeof onReviewStatsChange !== "function") return;
+    onReviewStatsChange({
+      averageRating: computedAverageRating,
+      totalReviews: totalVisibleReviews,
+    });
+  }, [computedAverageRating, totalVisibleReviews, onReviewStatsChange]);
+
+  const filteredByRating =
     activeFilter === "all"
       ? reviews
       : reviews.filter((r) => r.rating === parseInt(activeFilter));
+  const filteredReviews = showImagesOnly
+    ? filteredByRating.filter(
+        (review) => Array.isArray(review.images) && review.images.length > 0
+      )
+    : filteredByRating;
 
   const handleSubmitReview = async () => {
     if (!isAuthenticated) {
@@ -222,14 +243,14 @@ export const ReviewsTab = ({ productId, product }) => {
           <div className="bg-white border rounded-2xl p-6 sticky top-4">
             <div className="text-center mb-6">
               <div className="text-5xl font-bold text-gray-900 mb-2">
-                {product.averageRating?.toFixed(1) || 0}
+                {computedAverageRating.toFixed(1)}
               </div>
               <div className="flex justify-center mb-2">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Star
                     key={star}
                     className={`w-6 h-6 ${
-                      star <= Math.round(product.averageRating)
+                      star <= Math.round(computedAverageRating)
                         ? "fill-yellow-400 text-yellow-400"
                         : "text-gray-300"
                     }`}
@@ -237,7 +258,7 @@ export const ReviewsTab = ({ productId, product }) => {
                 ))}
               </div>
               <p className="text-sm text-gray-600">
-                {product.totalReviews || 0} lượt đánh giá
+                {totalVisibleReviews} lượt đánh giá
               </p>
             </div>
 
@@ -533,8 +554,6 @@ export const ReviewsTab = ({ productId, product }) => {
                 <ReviewItem
                   key={review._id}
                   review={review}
-                  isAdmin={isAdmin}
-                  isCustomer={isCustomer}
                   currentUserId={user?._id}
                   onUpdate={fetchReviews}
                   isAuthenticated={isAuthenticated}
@@ -556,7 +575,6 @@ const ReviewItem = ({
   isAuthenticated,
   currentUserId,
   onUpdate,
-  isCustomer,
 }) => {
   // States
   const [localHelpful, setLocalHelpful] = useState(review.helpful || 0);
@@ -578,18 +596,13 @@ const ReviewItem = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const customerName = review.customerId?.fullName || "Người dùng";
+  const reviewOwnerId = review?.customerId?._id || review?.customerId;
 
   // ✅ FIX: Check ownership properly
   const isOwner =
-    currentUserId &&
-    review.customerId &&
-    review.customerId._id.toString() === currentUserId.toString();
-
-  console.log("Review ownership check:", {
-    currentUserId,
-    reviewCustomerId: review.customerId?._id,
-    isOwner,
-  });
+    Boolean(currentUserId) &&
+    Boolean(reviewOwnerId) &&
+    String(reviewOwnerId) === String(currentUserId);
 
   // Like handler
   const handleLike = async () => {
@@ -597,6 +610,8 @@ const ReviewItem = ({
       toast.error("Vui lòng đăng nhập để thích đánh giá");
       return;
     }
+    const previousHasLiked = hasLiked;
+    const previousHelpful = localHelpful;
 
     try {
       setIsLiking(true);
@@ -612,9 +627,9 @@ const ReviewItem = ({
         setLocalHelpful(response.data.data.helpful);
         setHasLiked(response.data.data.hasLiked);
       }
-    } catch (error) {
-      setHasLiked(hasLiked);
-      setLocalHelpful(localHelpful);
+    } catch {
+      setHasLiked(previousHasLiked);
+      setLocalHelpful(previousHelpful);
       toast.error("Không thể thích đánh giá");
     } finally {
       setIsLiking(false);
@@ -928,3 +943,5 @@ const ReviewItem = ({
 };
 
 export default ReviewsTab;
+
+

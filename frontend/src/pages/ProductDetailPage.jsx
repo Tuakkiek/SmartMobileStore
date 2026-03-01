@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import {
   Star,
@@ -79,7 +79,7 @@ const ProductDetailPage = () => {
   const [variants, setVariants] = useState([]);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [userSelectedKey, setUserSelectedKey] = useState(null);
+  const [userSelectedKey, _setUserSelectedKey] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
@@ -331,6 +331,28 @@ const ProductDetailPage = () => {
       });
     }
   };
+
+  const handleReviewStatsChange = useCallback(({ averageRating, totalReviews }) => {
+    setProduct((prev) => {
+      if (!prev) return prev;
+
+      const normalizedAverage = Number(averageRating) || 0;
+      const normalizedTotal = Number(totalReviews) || 0;
+
+      if (
+        prev.averageRating === normalizedAverage &&
+        prev.totalReviews === normalizedTotal
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        averageRating: normalizedAverage,
+        totalReviews: normalizedTotal,
+      };
+    });
+  }, []);
 
   if (isLoading) {
     return (
@@ -953,7 +975,11 @@ const ProductDetailPage = () => {
       {/* Reviews Section - Độc lập */}
       <div className="mt-4 sm:mt-8 bg-white rounded-lg p-4 sm:p-8 sm:px-24">
         <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
-        <ReviewsTab productId={product._id} product={product} />
+        <ReviewsTab
+          productId={product._id}
+          product={product}
+          onReviewStatsChange={handleReviewStatsChange}
+        />
       </div>
 
       {/* Slide-in Panels */}
@@ -985,8 +1011,6 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
-
-
 
 
 
