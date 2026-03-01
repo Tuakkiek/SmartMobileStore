@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ProductCard from "@/components/shared/ProductCard";
 import {
@@ -8,11 +8,9 @@ import {
   airPodsAPI,
   appleWatchAPI,
   accessoryAPI,
+  universalProductAPI,
 } from "@/lib/api";
 
-// ============================================
-// CATEGORY MAPPING
-// ============================================
 const CATEGORY_API_MAP = {
   iPhone: { api: iPhoneAPI, route: "dien-thoai" },
   iPad: { api: iPadAPI, route: "may-tinh-bang" },
@@ -20,54 +18,182 @@ const CATEGORY_API_MAP = {
   AirPods: { api: airPodsAPI, route: "tai-nghe" },
   AppleWatch: { api: appleWatchAPI, route: "apple-watch" },
   Accessory: { api: accessoryAPI, route: "phu-kien" },
-  Accessories: { api: accessoryAPI, route: "phu-kien" }, // ✅ Alias cho Accessory
+  Accessories: { api: accessoryAPI, route: "phu-kien" },
 };
 
-// ============================================
-// TYPO CORRECTION & TOKENIZATION
-// ============================================
+const PRODUCT_TYPE_TO_ROUTE_MAP = {
+  smartphone: "dien-thoai",
+  tablet: "may-tinh-bang",
+  laptop: "macbook",
+  smartwatch: "apple-watch",
+  headphone: "tai-nghe",
+  tv: "tivi",
+  monitor: "man-hinh",
+  keyboard: "ban-phim",
+  mouse: "chuot",
+  speaker: "loa",
+  camera: "may-anh",
+  "gaming-console": "may-choi-game",
+  accessories: "phu-kien",
+};
+
+const CATEGORY_TO_PRODUCT_TYPE_SLUG_MAP = {
+  iPhone: "smartphone",
+  iPad: "tablet",
+  Mac: "laptop",
+  AirPods: "headphone",
+  AppleWatch: "smartwatch",
+  Accessory: "accessories",
+  Accessories: "accessories",
+};
+
+const PRODUCT_TYPE_ALIAS_MAP = {
+  smartphone: "smartphone",
+  phone: "smartphone",
+  iphone: "smartphone",
+  tablet: "tablet",
+  ipad: "tablet",
+  laptop: "laptop",
+  mac: "laptop",
+  macbook: "laptop",
+  notebook: "laptop",
+  smartwatch: "smartwatch",
+  "apple watch": "smartwatch",
+  applewatch: "smartwatch",
+  watch: "smartwatch",
+  headphone: "headphone",
+  headphones: "headphone",
+  airpod: "headphone",
+  airpods: "headphone",
+  earbud: "headphone",
+  earbuds: "headphone",
+  accessories: "accessories",
+  accessory: "accessories",
+};
+
+const CATEGORY_ALIAS_MAP = {
+  iphone: "iPhone",
+  smartphone: "iPhone",
+  phone: "iPhone",
+  "dien-thoai": "iPhone",
+  "dien thoai": "iPhone",
+  ipad: "iPad",
+  tablet: "iPad",
+  "may-tinh-bang": "iPad",
+  "may tinh bang": "iPad",
+  mac: "Mac",
+  macbook: "Mac",
+  laptop: "Mac",
+  notebook: "Mac",
+  airpods: "AirPods",
+  airpod: "AirPods",
+  headphone: "AirPods",
+  headphones: "AirPods",
+  earbud: "AirPods",
+  earbuds: "AirPods",
+  "tai-nghe": "AirPods",
+  "tai nghe": "AirPods",
+  applewatch: "AppleWatch",
+  "apple watch": "AppleWatch",
+  smartwatch: "AppleWatch",
+  watch: "AppleWatch",
+  "dong-ho-thong-minh": "AppleWatch",
+  "dong ho thong minh": "AppleWatch",
+  accessory: "Accessory",
+  accessories: "Accessories",
+  "phu-kien": "Accessories",
+  "phu kien": "Accessories",
+};
+
 const TYPO_MAPPINGS = {
-  // iPhone
   ip: "iphone",
   ifone: "iphone",
   iphon: "iphone",
-  plus: "plus",
-  pro: "pro",
   promax: "pro max",
-  max: "max",
-  mini: "mini",
-
-  // iPad
   iapd: "ipad",
   pad: "ipad",
-  air: "air",
-
-  // Mac
-  mac: "macbook",
   macbok: "macbook",
   mb: "macbook",
   mba: "macbook air",
   mbp: "macbook pro",
-
-  // AirPods
   airpod: "airpods",
   aripod: "airpods",
-
-  // Watch
   wach: "apple watch",
   wacth: "apple watch",
   aw: "apple watch",
+};
 
-  // Accessories
-  sac: "sạc",
-  cap: "cáp",
-  "op lung": "ốp lưng",
+const normalizeCategory = (category, productType) => {
+  let catStr = "";
+
+  if (typeof category === "string" && category.trim()) {
+    catStr = category;
+  } else if (productType && typeof productType === "object") {
+    catStr = productType.slug || productType.name || "";
+  } else if (typeof productType === "string") {
+    catStr = productType;
+  }
+
+  if (!catStr) return null;
+
+  const normalizedInput = catStr.toLowerCase().trim();
+  return CATEGORY_ALIAS_MAP[normalizedInput] || catStr;
+};
+
+const resolveProductTypeSlug = (productType, normalizedCategory) => {
+  if (productType && typeof productType === "object") {
+    const normalizedValue = String(productType.slug || productType.name || "")
+      .trim()
+      .toLowerCase();
+    if (PRODUCT_TYPE_ALIAS_MAP[normalizedValue]) {
+      return PRODUCT_TYPE_ALIAS_MAP[normalizedValue];
+    }
+  }
+
+  if (typeof productType === "string") {
+    const normalizedValue = productType.trim().toLowerCase();
+    if (PRODUCT_TYPE_ALIAS_MAP[normalizedValue]) {
+      return PRODUCT_TYPE_ALIAS_MAP[normalizedValue];
+    }
+  }
+
+  if (normalizedCategory && CATEGORY_TO_PRODUCT_TYPE_SLUG_MAP[normalizedCategory]) {
+    return CATEGORY_TO_PRODUCT_TYPE_SLUG_MAP[normalizedCategory];
+  }
+
+  return null;
+};
+
+const extractProductTypeId = (productType) => {
+  if (!productType || typeof productType !== "object" || !productType._id) {
+    return null;
+  }
+  return String(productType._id);
+};
+
+const extractProductsFromResponse = (response) => {
+  const payload = response?.data;
+
+  if (Array.isArray(payload?.data?.products)) return payload.data.products;
+  if (Array.isArray(payload?.products)) return payload.products;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload)) return payload;
+
+  return [];
+};
+
+const resolveRouteFromProductType = (productType, fallbackRoute = "products") => {
+  const productTypeSlug = resolveProductTypeSlug(productType, null);
+  if (productTypeSlug && PRODUCT_TYPE_TO_ROUTE_MAP[productTypeSlug]) {
+    return PRODUCT_TYPE_TO_ROUTE_MAP[productTypeSlug];
+  }
+  return fallbackRoute;
 };
 
 const correctTypos = (input) => {
   if (!input) return "";
-  let corrected = input.toLowerCase().trim();
 
+  let corrected = input.toLowerCase().trim();
   if (TYPO_MAPPINGS[corrected]) return TYPO_MAPPINGS[corrected];
 
   Object.keys(TYPO_MAPPINGS).forEach((key) => {
@@ -85,81 +211,64 @@ const tokenizeQuery = (query) => {
 
   const corrected = correctTypos(query);
   const tokens = corrected.toLowerCase().trim().split(/\s+/);
+  const stopWords = ["the", "a", "an", "and", "or", "cua", "cho", "voi", "va"];
 
-  const stopWords = ["the", "a", "an", "and", "or", "của", "cho", "với", "và"];
-  return tokens.filter(
-    (token) => !stopWords.includes(token) && token.length > 0
-  );
+  return tokens.filter((token) => !stopWords.includes(token) && token.length > 0);
 };
 
-// ============================================
-// RELEVANCE SCORING
-// ============================================
 const calculateRelevanceScore = (productName, baseName) => {
-  const name = productName.toLowerCase();
-  const base = baseName.toLowerCase();
+  const name = String(productName || "").toLowerCase();
+  const base = String(baseName || "").toLowerCase();
+
+  if (!name || !base) return 0;
 
   const nameTokens = tokenizeQuery(productName);
   const baseTokens = tokenizeQuery(baseName);
-
   if (nameTokens.length === 0 || baseTokens.length === 0) return 0;
 
   let score = 0;
   let matchedTokens = 0;
 
-  // Khớp chính xác toàn bộ
   if (name === base) return 100;
 
-  // Tính điểm cho từng token
   baseTokens.forEach((baseToken) => {
     nameTokens.forEach((nameToken) => {
-      // Khớp chính xác từ
       if (nameToken === baseToken) {
-        matchedTokens++;
+        matchedTokens += 1;
         score += 30;
-
-        // Bonus nếu token xuất hiện ở đầu
         if (name.startsWith(baseToken)) {
           score += 15;
         }
-      }
-      // Khớp một phần
-      else if (nameToken.includes(baseToken) || baseToken.includes(nameToken)) {
-        matchedTokens++;
+      } else if (nameToken.includes(baseToken) || baseToken.includes(nameToken)) {
+        matchedTokens += 1;
         score += 15;
       }
     });
   });
 
-  // Tỷ lệ khớp
-  const matchRatio =
-    matchedTokens / Math.max(baseTokens.length, nameTokens.length);
-
+  const matchRatio = matchedTokens / Math.max(baseTokens.length, nameTokens.length);
   if (matchRatio >= 0.8) {
     score += 20;
   } else if (matchRatio >= 0.5) {
     score += 10;
   }
 
-  // Bonus nếu base xuất hiện liên tiếp trong name
   if (name.includes(base)) {
     score += 25;
   }
 
-  // Cùng dòng sản phẩm (iPhone 15 vs iPhone 15 Pro)
   const modelRegex = /(\w+\s+\d+)\s*(pro|max|plus|mini|air)?/i;
   const nameMatch = name.match(modelRegex);
   const baseMatch = base.match(modelRegex);
 
   if (nameMatch && baseMatch) {
     if (nameMatch[1] === baseMatch[1]) {
-      score += 40; // Cùng dòng model
+      score += 40;
     } else if (nameMatch[1].split(" ")[0] === baseMatch[1].split(" ")[0]) {
-      score += 20; // Cùng thương hiệu
+      score += 20;
     }
   }
 
-  // Penalty nếu tên quá khác biệt
   const lengthDiff = Math.abs(name.length - base.length);
   if (lengthDiff > 30) {
     score -= 10;
@@ -168,20 +277,25 @@ const calculateRelevanceScore = (productName, baseName) => {
   return Math.min(Math.max(score, 0), 100);
 };
 
-// ============================================
-// MAIN COMPONENT
-// ============================================
 const SimilarProducts = ({ productId, category, currentProduct }) => {
   const [similarProducts, setSimilarProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scrollPosition, setScrollPosition] = useState(0);
-  const scrollContainerRef = React.useRef(null);
+  const scrollContainerRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSimilarProducts = async () => {
-      if (!productId || !category) {
-        console.log("[SimilarProducts] Missing productId or category");
+      if (!productId) {
+        setSimilarProducts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!category && !currentProduct?.productType) {
+        setSimilarProducts([]);
         setIsLoading(false);
         return;
       }
@@ -190,62 +304,133 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
         setIsLoading(true);
         setError(null);
 
-        console.log("[SimilarProducts] Fetching for:", {
-          productId,
-          category,
-          currentProductName: currentProduct?.name,
-        });
+        const normalizedCat = normalizeCategory(category, currentProduct?.productType);
+        const categoryInfo = CATEGORY_API_MAP[normalizedCat] || CATEGORY_API_MAP[category];
+        const currentProductTypeSlug = resolveProductTypeSlug(
+          currentProduct?.productType,
+          normalizedCat
+        );
+        const currentProductTypeId = extractProductTypeId(currentProduct?.productType);
+        const hasUniversalShape = Boolean(
+          currentProduct?.isUniversal || currentProduct?.productType
+        );
 
-        const categoryInfo = CATEGORY_API_MAP[category];
+        let categoryRoute =
+          categoryInfo?.route ||
+          PRODUCT_TYPE_TO_ROUTE_MAP[currentProductTypeSlug] ||
+          "products";
 
-        if (!categoryInfo) {
-          console.warn("[SimilarProducts] Unknown category:", category);
-          setIsLoading(false);
-          return;
+        const fetchFromUniversalAPI = async () => {
+          const query = {
+            limit: 100,
+            status: "AVAILABLE",
+          };
+
+          if (currentProductTypeId) {
+            query.productType = currentProductTypeId;
+          }
+
+          const response = await universalProductAPI.getAll(query);
+          let list = extractProductsFromResponse(response);
+
+          if (!currentProductTypeId && currentProductTypeSlug) {
+            const hasProductTypeData = list.some((item) =>
+              Boolean(resolveProductTypeSlug(item?.productType, null))
+            );
+
+            if (hasProductTypeData) {
+              list = list.filter(
+                (item) =>
+                  resolveProductTypeSlug(item?.productType, null) ===
+                  currentProductTypeSlug
+              );
+            }
+          }
+
+          return list;
+        };
+
+        const fetchFromCategoryAPI = async () => {
+          if (!categoryInfo) return [];
+
+          const response = await categoryInfo.api.getAll({
+            limit: 100,
+            status: "AVAILABLE",
+          });
+
+          return extractProductsFromResponse(response);
+        };
+
+        let products = [];
+
+        if (hasUniversalShape) {
+          try {
+            products = await fetchFromUniversalAPI();
+          } catch (universalError) {
+            console.warn("[SimilarProducts] Universal fetch failed", universalError);
+          }
+
+          if ((!Array.isArray(products) || products.length === 0) && categoryInfo) {
+            try {
+              products = await fetchFromCategoryAPI();
+            } catch (categoryError) {
+              console.warn("[SimilarProducts] Category fallback failed", categoryError);
+            }
+          }
+        } else {
+          if (categoryInfo) {
+            try {
+              products = await fetchFromCategoryAPI();
+            } catch (categoryError) {
+              console.warn("[SimilarProducts] Category fetch failed", categoryError);
+            }
+          }
+
+          if (!Array.isArray(products) || products.length === 0) {
+            try {
+              products = await fetchFromUniversalAPI();
+            } catch (universalError) {
+              console.warn("[SimilarProducts] Universal fallback failed", universalError);
+            }
+          }
         }
 
-        // Fetch tất cả sản phẩm cùng category
-        const response = await categoryInfo.api.getAll({
-          limit: 100,
-          status: "AVAILABLE",
-        });
-
-        let products = response.data?.data?.products || [];
-
         if (!Array.isArray(products)) {
-          console.warn("[SimilarProducts] Invalid products data");
           products = [];
         }
 
-        // Loại bỏ sản phẩm hiện tại
-        products = products.filter((p) => p._id !== productId);
+        products = products.filter((p) => String(p?._id) !== String(productId));
 
-        console.log(`[SimilarProducts] Found ${products.length} products`);
+        const productsWithScore = products.map((product) => {
+          const itemNormalizedCategory = normalizeCategory(
+            product?.category,
+            product?.productType
+          );
+          const itemRoute = resolveRouteFromProductType(
+            product?.productType,
+            categoryRoute
+          );
 
-        // Tính điểm liên quan
-        const productsWithScore = products.map((product) => ({
-          ...product,
-          _relevanceScore: calculateRelevanceScore(
-            product.name || product.model,
-            currentProduct?.name || currentProduct?.model || ""
-          ),
-          _category: categoryInfo.route,
-          _categoryName: category,
-        }));
+          return {
+            ...product,
+            _relevanceScore: calculateRelevanceScore(
+              product?.name || product?.model,
+              currentProduct?.name || currentProduct?.model || ""
+            ),
+            _category: itemRoute,
+            _categoryName: itemNormalizedCategory || normalizedCat || category,
+          };
+        });
 
-        // Sắp xếp theo điểm số, rating, và salesCount
         productsWithScore.sort((a, b) => {
-          // Ưu tiên điểm liên quan
           if (b._relevanceScore !== a._relevanceScore) {
             return b._relevanceScore - a._relevanceScore;
           }
 
-          // Sau đó là rating
           if ((b.averageRating || 0) !== (a.averageRating || 0)) {
             return (b.averageRating || 0) - (a.averageRating || 0);
           }
 
-          // Cuối cùng là lượt bán
           if ((b.salesCount || 0) !== (a.salesCount || 0)) {
             return (b.salesCount || 0) - (a.salesCount || 0);
           }
@@ -253,30 +438,29 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
           return 0;
         });
 
-        // Lấy top 10 sản phẩm
         const topProducts = productsWithScore.slice(0, 10);
 
-        console.log(
-          "[SimilarProducts] Top products:",
-          topProducts.map((p) => ({
-            name: p.name,
-            score: p._relevanceScore,
-            rating: p.averageRating,
-            sales: p.salesCount,
-          }))
-        );
-
-        setSimilarProducts(topProducts);
+        if (!cancelled) {
+          setSimilarProducts(topProducts);
+        }
       } catch (err) {
-        console.error("[SimilarProducts] Error:", err);
-        setError(err.message);
-        setSimilarProducts([]);
+        if (!cancelled) {
+          console.error("[SimilarProducts] Error:", err);
+          setError(err?.message || "Failed to load similar products");
+          setSimilarProducts([]);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchSimilarProducts();
+
+    return () => {
+      cancelled = true;
+    };
   }, [productId, category, currentProduct]);
 
   const scroll = (direction) => {
@@ -296,61 +480,50 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
   };
 
   const handleProductClick = (product) => {
-    console.log("[SimilarProducts] Product clicked:", {
-      name: product.name,
-      baseSlug: product.baseSlug,
-    });
-
-    if (!product.baseSlug) {
-      console.warn("[SimilarProducts] Product missing baseSlug");
+    const targetSlug = product?.baseSlug || product?.slug;
+    if (!targetSlug) {
+      console.warn("[SimilarProducts] Product missing slug", product);
       return;
     }
 
-    // Chọn variant đầu tiên có stock
     const selectedVariant =
-      product.variants?.find((v) => v.stock > 0) || product.variants?.[0];
-    const sku = selectedVariant?.sku;
+      product?.variants?.find((variant) => variant?.stock > 0) ||
+      product?.variants?.[0];
 
-    let url = `/${product._category}/${product.baseSlug}`;
+    const sku = selectedVariant?.sku;
+    let url = `/${product?._category || "products"}/${targetSlug}`;
+
     if (sku) {
       url += `?sku=${sku}`;
     }
 
-    console.log("[SimilarProducts] Navigating to:", url);
     window.location.href = url;
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="py-8">
         <div className="flex items-center justify-center min-h-[300px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     console.warn("[SimilarProducts] Error state:", error);
     return null;
   }
 
-  // Empty state
   if (!similarProducts || similarProducts.length === 0) {
-    console.log("[SimilarProducts] No similar products to display");
     return null;
   }
 
   return (
     <div className="py-8 bg-white rounded-lg">
       <div className="container mx-auto px-4">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
-            Có thể bạn cũng thích
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-900">Có thể bạn cũng thích</h2>
           <div className="flex gap-2">
             <button
               onClick={() => scroll("left")}
@@ -369,7 +542,6 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
           </div>
         </div>
 
-        {/* Products Carousel */}
         <div
           ref={scrollContainerRef}
           className="flex gap-4 overflow-x-auto pb-4 scroll-smooth"
@@ -386,7 +558,6 @@ const SimilarProducts = ({ productId, category, currentProduct }) => {
           ))}
         </div>
 
-        {/* Hide scrollbar */}
         <style>{`
           div::-webkit-scrollbar {
             display: none;

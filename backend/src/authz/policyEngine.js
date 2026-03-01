@@ -91,7 +91,8 @@ export const evaluatePolicy = ({
     return DENY("AUTHZ_GLOBAL_SCOPE_DENIED", "Global scope is not allowed");
   }
 
-  if (requireActiveBranch && mode === "branch" && !activeBranchId) {
+  // GLOBAL_ADMIN bypasses the active-branch requirement — they can operate across all branches
+  if (requireActiveBranch && mode === "branch" && !activeBranchId && !isGlobalAdmin) {
     return DENY("AUTHZ_ACTIVE_BRANCH_REQUIRED", "Active branch context is required");
   }
 

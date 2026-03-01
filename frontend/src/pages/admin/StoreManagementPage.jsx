@@ -28,9 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuthStore } from "@/store/authStore";
 import { api } from "@/lib/api"; // Assuming api is available, or use axios directly
-import { Plus, Pencil, Trash2, MapPin, Phone, Mail } from "lucide-react";
+import { Plus, Pencil, Trash2, Phone, Mail } from "lucide-react";
 import { provinces } from "@/province";
 import { toast } from "sonner";
 
@@ -62,6 +61,26 @@ const StoreManagementPage = () => {
   useEffect(() => {
     fetchStores();
   }, []);
+
+  const buildDeleteBlockedMessage = (payload = {}) => {
+    const counts = payload?.blockerCounts || {};
+    const storeName = payload?.storeName || "cửa hàng";
+
+    const parts = [];
+    const usersCount = Number(counts?.users || 0);
+    const orderCount = Number(counts?.orders || 0);
+    const inventoryCount = Number(counts?.inventory || 0);
+
+    if (usersCount > 0) parts.push(`${usersCount} nhân viên`);
+    if (orderCount > 0) parts.push(`${orderCount} đơn hàng`);
+    if (inventoryCount > 0) parts.push(`${inventoryCount} bản ghi tồn kho`);
+
+    if (parts.length > 0) {
+      return `Không thể xóa chi nhánh "${storeName}" vì vẫn còn ${parts.join(", ")}. Vui lòng xóa dữ liệu con trước khi xóa chi nhánh.`;
+    }
+
+    return payload?.message || "Không thể xóa cửa hàng vì vẫn còn dữ liệu con.";
+  };
 
   const fetchStores = async () => {
     try {
@@ -134,14 +153,22 @@ const StoreManagementPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa cửa hàng này?")) return;
+  const handleDelete = async (id, storeName) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa (vô hiệu hóa) chi nhánh "${storeName}" không?`)) return;
+
     try {
-      await api.delete(`/stores/${id}`);
-      toast.success("Xóa cửa hàng thành công");
+      const res = await api.delete(`/stores/${id}`);
+      toast.success(res.data?.message || "Đã vô hiệu hóa cửa hàng thành công");
       fetchStores();
     } catch (err) {
-      toast.error("Xóa thất bại");
+      const payload = err?.response?.data;
+
+      if (payload?.code === "STORE_DELETE_BLOCKED") {
+        toast.error(buildDeleteBlockedMessage(payload), { duration: 8000 });
+        return;
+      }
+
+      toast.error(payload?.message || "Xóa thất bại");
     }
   };
 
@@ -242,7 +269,7 @@ const StoreManagementPage = () => {
                         variant="ghost"
                         size="icon"
                         className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDelete(store._id)}
+                        onClick={() => handleDelete(store._id, store.name)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

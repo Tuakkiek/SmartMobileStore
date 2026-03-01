@@ -1,5 +1,63 @@
 import User from "./User.js";
 import { deriveAuthzWriteFromLegacyInput } from "../../authz/userAccessResolver.js";
+import mongoose from "mongoose";
+import Store from "../store/Store.js";
+
+const BRANCH_REQUIRED_EMPLOYEE_ROLES = new Set([
+  "ADMIN",
+  "BRANCH_ADMIN",
+  "WAREHOUSE_MANAGER",
+  "WAREHOUSE_STAFF",
+  "PRODUCT_MANAGER",
+  "ORDER_MANAGER",
+  "POS_STAFF",
+  "CASHIER",
+  "SHIPPER",
+]);
+
+const normalizeText = (value) => String(value || "").trim();
+
+const roleRequiresStoreLocation = (role) =>
+  BRANCH_REQUIRED_EMPLOYEE_ROLES.has(String(role || "").trim().toUpperCase());
+
+const resolveHoChiMinhStoreId = async () => {
+  const hcmRegex = /ho\s*chi\s*minh|tp\.?\s*hcm|sai\s*gon|^hcm$/i;
+  const filter = {
+    $or: [
+      { code: /HCM/i },
+      { name: hcmRegex },
+      { "address.province": hcmRegex },
+    ],
+  };
+
+  let store = await Store.findOne({ ...filter, status: "ACTIVE" })
+    .select("_id")
+    .lean();
+  if (!store) {
+    store = await Store.findOne(filter).select("_id").lean();
+  }
+  return normalizeText(store?._id);
+};
+
+const resolveEmployeeStoreLocation = async ({ role, storeLocation }) => {
+  const normalizedRole = normalizeText(role).toUpperCase();
+  const normalizedStoreLocation = normalizeText(storeLocation);
+
+  if (normalizedStoreLocation) {
+    return normalizedStoreLocation;
+  }
+
+  if (!roleRequiresStoreLocation(normalizedRole)) {
+    return "";
+  }
+
+  const hoChiMinhStoreId = await resolveHoChiMinhStoreId();
+  if (!hoChiMinhStoreId) {
+    throw new Error("Khong tim thay chi nhanh Ho Chi Minh de gan mac dinh");
+  }
+
+  return hoChiMinhStoreId;
+};
 
 // Cập nhật thông tin người dùng
 export const updateProfile = async (req, res) => {
@@ -197,9 +255,13 @@ export const createEmployee = async (req, res) => {
     const { fullName, phoneNumber, email, province, password, role, avatar, storeLocation } =
       req.body;
     const legacyRole = String(role || "").trim().toUpperCase();
-    const authzWrite = deriveAuthzWriteFromLegacyInput({
+    const effectiveStoreLocation = await resolveEmployeeStoreLocation({
       role: legacyRole,
       storeLocation,
+    });
+    const authzWrite = deriveAuthzWriteFromLegacyInput({
+      role: legacyRole,
+      storeLocation: effectiveStoreLocation,
       assignedBy: req.user?._id,
     });
 
@@ -217,7 +279,7 @@ export const createEmployee = async (req, res) => {
       authzState: authzWrite.authzState,
       authzVersion: 2,
       permissionsVersion: 1,
-      storeLocation: storeLocation || "",
+      storeLocation: effectiveStoreLocation,
     });
     res.status(201).json({
       success: true,
@@ -309,8 +371,12 @@ export const updateEmployee = async (req, res) => {
     }
 
     const nextRole = role ? String(role).trim().toUpperCase() : user.role;
-    const nextStoreLocation =
+    const requestedStoreLocation =
       storeLocation !== undefined ? storeLocation : user.storeLocation;
+    const nextStoreLocation = await resolveEmployeeStoreLocation({
+      role: nextRole,
+      storeLocation: requestedStoreLocation,
+    });
     const authzWrite = deriveAuthzWriteFromLegacyInput({
       role: nextRole,
       storeLocation: nextStoreLocation,
@@ -358,10 +424,38 @@ export const updateEmployee = async (req, res) => {
 
 export const getAllShippers = async (req, res) => {
   try {
-    const shippers = await User.find({ 
+    const filter = {
       role: "SHIPPER",
       status: "ACTIVE",
-    })
+    };
+
+    const isGlobalAdmin = Boolean(req.authz?.isGlobalAdmin || req.user?.role === "GLOBAL_ADMIN");
+
+    if (!isGlobalAdmin) {
+      const activeBranchId = String(req.authz?.activeBranchId || "").trim();
+      if (!activeBranchId) {
+        return res.json({
+          success: true,
+          data: { shippers: [] },
+        });
+      }
+
+      const branchFilters = [{ storeLocation: activeBranchId }];
+      if (mongoose.Types.ObjectId.isValid(activeBranchId)) {
+        branchFilters.push({
+          branchAssignments: {
+            $elemMatch: {
+              storeId: new mongoose.Types.ObjectId(activeBranchId),
+              status: "ACTIVE",
+            },
+          },
+        });
+      }
+
+      filter.$or = branchFilters;
+    }
+
+    const shippers = await User.find(filter)
       .select("_id fullName phoneNumber email")
       .sort({ fullName: 1 });
 

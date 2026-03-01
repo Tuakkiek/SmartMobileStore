@@ -54,6 +54,16 @@ const validateTransferItemsForRequest = async ({
 }) => {
   const normalizedItems = [];
 
+  // Bug #1 fix: Check for duplicate SKUs before processing
+  const skuSet = new Set();
+  for (const rawItem of rawItems) {
+    const sku = normalizeSku(rawItem.variantSku || rawItem.sku);
+    if (sku && skuSet.has(sku)) {
+      throw new Error(`SKU trùng lặp trong danh sách yêu cầu: ${sku}. Vui lòng gộp số lượng vào một dòng.`);
+    }
+    if (sku) skuSet.add(sku);
+  }
+
   for (const rawItem of rawItems) {
     const variantSku = normalizeSku(rawItem.variantSku || rawItem.sku);
     const requestedQuantity = toPositiveInteger(
@@ -75,7 +85,8 @@ const validateTransferItemsForRequest = async ({
 
     const sourceInventory = await StoreInventory.findOne(inventoryFilter)
       .populate("productId", "name")
-      .session(session);
+      .session(session)
+      .setOptions({ skipBranchIsolation: true });
 
     if (!sourceInventory) {
       throw new Error(`Khong tim thay ton kho nguon cho SKU ${variantSku}`);
@@ -318,7 +329,9 @@ export const approveTransfer = async (req, res) => {
         storeId: transfer.fromStore.storeId,
         productId: item.productId,
         variantSku: item.variantSku,
-      }).session(session);
+      })
+        .session(session)
+        .setOptions({ skipBranchIsolation: true });
 
       if (!sourceInventory) {
         throw new Error(`Khong tim thay ton kho nguon cho SKU ${item.variantSku}`);
@@ -432,7 +445,9 @@ export const shipTransfer = async (req, res) => {
         storeId: transfer.fromStore.storeId,
         productId: item.productId,
         variantSku: item.variantSku,
-      }).session(session);
+      })
+        .session(session)
+        .setOptions({ skipBranchIsolation: true });
 
       if (!sourceInventory) {
         throw new Error(`Khong tim thay ton kho nguon cho SKU ${item.variantSku}`);
@@ -440,9 +455,15 @@ export const shipTransfer = async (req, res) => {
 
       const quantity = Number(sourceInventory.quantity) || 0;
       const reserved = Number(sourceInventory.reserved) || 0;
-      if (quantity < approvedQty || reserved < approvedQty) {
+      // Bug #10 fix: Split into two checks for clearer race-condition detection
+      if (quantity < approvedQty) {
         throw new Error(
-          `Ton kho/du tru khong hop le cho SKU ${item.variantSku} (qty=${quantity}, reserved=${reserved})`
+          `Không đủ tồn kho thực tế để xuất SKU ${item.variantSku}. Cần ${approvedQty}, hiện có ${quantity}. Có thể đã xảy ra xung đột đồng thời.`
+        );
+      }
+      if (reserved < approvedQty) {
+        throw new Error(
+          `Số lượng dự trữ không đủ cho SKU ${item.variantSku}. Dự trữ: ${reserved}, Cần xuất: ${approvedQty}. Vui lòng kiểm tra lại trạng thái transfer.`
         );
       }
 
@@ -613,7 +634,9 @@ export const receiveTransfer = async (req, res) => {
         storeId: transfer.toStore.storeId,
         productId: item.productId,
         variantSku: item.variantSku,
-      }).session(session);
+      })
+        .session(session)
+        .setOptions({ skipBranchIsolation: true });
 
       if (!destinationInventory) {
         destinationInventory = new StoreInventory({
@@ -679,7 +702,11 @@ export const receiveTransfer = async (req, res) => {
               await targetLocation.save({ session });
               
           } else {
-               console.warn(`[StockTransfer] Could not find any valid location in ${transfer.toStore.storeCode} to receive item ${item.variantSku}`); // eslint-disable-line no-console
+               // Bug #3 fix: Log warning AND append to receivingNotes so the mismatch is visible in the record
+               const warnMsg = `[CẢNH BÁO] Không tìm thấy vị trí kho vật lý cho SKU ${item.variantSku} tại ${transfer.toStore.storeCode}. Tồn kho logic đã được cập nhật nhưng tồn kho vật lý CHƯA được đồng bộ.`;
+               console.warn(`[StockTransfer] ${warnMsg}`); // eslint-disable-line no-console
+               // Append to receivingNotes so warehouse staff can see and fix manually
+               transfer.receivingNotes = [transfer.receivingNotes, warnMsg].filter(Boolean).join(" | ");
           }
       }
       // =================================================================
@@ -794,7 +821,9 @@ export const cancelTransfer = async (req, res) => {
           storeId: transfer.fromStore.storeId,
           productId: item.productId,
           variantSku: item.variantSku,
-        }).session(session);
+        })
+          .session(session)
+          .setOptions({ skipBranchIsolation: true });
 
         if (!sourceInventory) continue;
         sourceInventory.reserved = Math.max(

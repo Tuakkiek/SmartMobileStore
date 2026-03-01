@@ -177,6 +177,7 @@ const EmployeesPage = () => {
       phoneNumber: "",
       email: "",
       avatar: "",
+      storeLocation: "",
     });
     setShowCreateDialog(true);
   };
@@ -191,6 +192,7 @@ const EmployeesPage = () => {
       password: "",
       role: emp.role,
       avatar: emp.avatar || "",
+      storeLocation: emp.storeLocation || "",
     });
   };
 
@@ -205,6 +207,7 @@ const EmployeesPage = () => {
       password: "",
       role: "SHIPPER",
       avatar: "",
+      storeLocation: "",
     });
     setError("");
   };

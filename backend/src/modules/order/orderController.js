@@ -144,6 +144,78 @@ const enforceInStoreBranchAccess = (req, order) => {
   return { allowed: true };
 };
 
+const normalizeBranchId = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (value?._id) return String(value._id).trim();
+  return value?.toString ? value.toString().trim() : String(value).trim();
+};
+
+const collectActiveBranchIds = (user) => {
+  const ids = new Set();
+  const assignments = Array.isArray(user?.branchAssignments) ? user.branchAssignments : [];
+
+  for (const assignment of assignments) {
+    const status = String(assignment?.status || "ACTIVE").trim().toUpperCase();
+    if (status !== "ACTIVE") continue;
+
+    const storeId = normalizeBranchId(assignment?.storeId);
+    if (storeId) {
+      ids.add(storeId);
+    }
+  }
+
+  const legacyStoreId = normalizeBranchId(user?.storeLocation);
+  if (legacyStoreId) {
+    ids.add(legacyStoreId);
+  }
+
+  return Array.from(ids);
+};
+
+const validateShipperBranchScope = ({ req, order, shipper }) => {
+  if (!shipper) return { allowed: true };
+
+  const isGlobalAdmin = Boolean(req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN");
+  if (isGlobalAdmin) return { allowed: true };
+
+  const activeBranchId = normalizeBranchId(req?.authz?.activeBranchId);
+  const orderBranchId = normalizeBranchId(order?.assignedStore?.storeId);
+  const requiredBranchId =
+    activeBranchId || orderBranchId || normalizeBranchId(req?.user?.storeLocation);
+
+  if (!requiredBranchId) {
+    return {
+      allowed: false,
+      message: "Khong xac dinh duoc chi nhanh hien tai de gan shipper",
+    };
+  }
+
+  const shipperBranchIds = collectActiveBranchIds(shipper);
+  if (shipperBranchIds.length === 0) {
+    return {
+      allowed: false,
+      message: "Shipper chua duoc gan chi nhanh hoat dong",
+    };
+  }
+
+  if (orderBranchId && !shipperBranchIds.includes(orderBranchId)) {
+    return {
+      allowed: false,
+      message: "Shipper phai thuoc chi nhanh dang xu ly don hang",
+    };
+  }
+
+  if (!shipperBranchIds.includes(requiredBranchId)) {
+    return {
+      allowed: false,
+      message: "Chi duoc chon shipper cung chi nhanh hien tai",
+    };
+  }
+
+  return { allowed: true };
+};
+
 const normalizeOrderForResponse = (order) => {
   const source = order?.toObject ? order.toObject() : order;
   const items = Array.isArray(source?.items) ? source.items : [];
@@ -1347,6 +1419,15 @@ export const updateOrderStatus = async (req, res) => {
         });
       }
 
+      const shipperBranchDecision = validateShipperBranchScope({ req, order, shipper });
+      if (!shipperBranchDecision.allowed) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: shipperBranchDecision.message,
+        });
+      }
+
       order.shipperInfo = {
         ...order.shipperInfo,
         shipperId: shipper._id,
@@ -1659,6 +1740,17 @@ export const assignCarrier = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Shipper được chọn không hợp lệ",
+        });
+      }
+    }
+
+    if (shipper) {
+      const shipperBranchDecision = validateShipperBranchScope({ req, order, shipper });
+      if (!shipperBranchDecision.allowed) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          message: shipperBranchDecision.message,
         });
       }
     }

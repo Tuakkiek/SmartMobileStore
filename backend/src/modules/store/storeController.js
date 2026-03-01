@@ -387,25 +387,62 @@ export const deleteStore = async (req, res) => {
       });
     }
 
-    // Prevent orphaned references and soft-delete the store when safe.
-    const [legacyUserRef, branchUserRef, orderRef, inventoryRef] = await Promise.all([
-      User.exists({ storeLocation: String(store._id) }),
-      User.exists({ "branchAssignments.storeId": store._id }),
-      Order.exists({ "assignedStore.storeId": store._id }),
-      StoreInventory.exists({ storeId: store._id }),
+    // Prevent orphaned references and soft-delete only when no child data exists.
+    const storeId = store._id;
+    const storeIdAsString = String(storeId);
+    const employeeScopeFilter = {
+      $or: [
+        { storeLocation: storeIdAsString },
+        { branchAssignments: { $elemMatch: { storeId } } },
+      ],
+    };
+
+    const [
+      legacyEmployeeCount,
+      branchAssignmentEmployeeCount,
+      employeeCount,
+      orderCount,
+      inventoryCount,
+    ] = await Promise.all([
+      User.countDocuments({ storeLocation: storeIdAsString }),
+      User.countDocuments({ branchAssignments: { $elemMatch: { storeId } } }),
+      User.countDocuments(employeeScopeFilter),
+      Order.countDocuments({ "assignedStore.storeId": storeId }),
+      // skipBranchIsolation: true — this is a system-level admin operation that must
+      // count ALL inventory records for this store regardless of active branch context.
+      StoreInventory.countDocuments({ storeId }, { skipBranchIsolation: true }),
     ]);
 
-    if (legacyUserRef || branchUserRef || orderRef || inventoryRef) {
+    if (employeeCount > 0 || orderCount > 0 || inventoryCount > 0) {
+      const blockerSummary = [];
+      if (employeeCount > 0) blockerSummary.push(`${employeeCount} nhân viên`);
+      if (orderCount > 0) blockerSummary.push(`${orderCount} đơn hàng`);
+      if (inventoryCount > 0) blockerSummary.push(`${inventoryCount} bản ghi tồn kho`);
+
+      const storeName = store.name || `chi nhánh (ID: ${storeId})`;
+      const blockerList = blockerSummary.join(", ");
+
       return res.status(409).json({
         success: false,
         code: "STORE_DELETE_BLOCKED",
-        message: "Khong the xoa cua hang vi du lieu tham chieu van ton tai",
+        message:
+          `Không thể xóa chi nhánh "${storeName}" vì vẫn còn ${blockerList}. Vui lòng xóa dữ liệu con trước khi xóa chi nhánh.`,
+        storeName,
         blockers: {
-          usersLegacyStoreLocation: Boolean(legacyUserRef),
-          usersBranchAssignments: Boolean(branchUserRef),
-          orders: Boolean(orderRef),
-          inventory: Boolean(inventoryRef),
+          usersLegacyStoreLocation: legacyEmployeeCount > 0,
+          usersBranchAssignments: branchAssignmentEmployeeCount > 0,
+          users: employeeCount > 0,
+          orders: orderCount > 0,
+          inventory: inventoryCount > 0,
         },
+        blockerCounts: {
+          usersLegacyStoreLocation: legacyEmployeeCount,
+          usersBranchAssignments: branchAssignmentEmployeeCount,
+          users: employeeCount,
+          orders: orderCount,
+          inventory: inventoryCount,
+        },
+        blockerSummary,
       });
     }
 
@@ -414,13 +451,13 @@ export const deleteStore = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Da vo hieu hoa cua hang thanh cong",
+      message: `Đã vô hiệu hóa chi nhánh "${store.name}" thành công`,
     });
   } catch (error) {
-    omniLog.error("deleteStore failed", { error: error.message });
+    omniLog.error("deleteStore failed", { storeId: req.params.id, error: error.message });
     res.status(500).json({
       success: false,
-      message: "Loi khi vo hieu hoa cua hang",
+      message: "Lỗi khi vô hiệu hóa cửa hàng",
       error: error.message,
     });
   }

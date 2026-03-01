@@ -25,6 +25,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { api, stockTransferAPI, storeAPI } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -151,6 +158,14 @@ const TransferStockPage = () => {
     notes: "",
     items: [{ variantSku: "", requestedQuantity: "" }],
   });
+
+  // ── Modal states for approve / receive / ship / reject / cancel ──
+  const [approveModal, setApproveModal] = useState({ open: false, transfer: null, items: [] });
+  const [receiveModal, setReceiveModal] = useState({ open: false, transfer: null, items: [] });
+  const [shipModal, setShipModal] = useState({ open: false, transfer: null, trackingNumber: "", carrier: "" });
+  const [rejectModal, setRejectModal] = useState({ open: false, transfer: null, reason: "" });
+  const [cancelModal, setCancelModal] = useState({ open: false, transfer: null, reason: "" });
+  const [modalLoading, setModalLoading] = useState(false);
 
   const branchSummary = useMemo(() => summarizeTransfers(transfers), [transfers]);
 
@@ -354,35 +369,138 @@ const TransferStockPage = () => {
     }
   };
 
-  const handleTransferAction = async (transfer, action) => {
+  // ── Open modals instead of window.prompt ──
+  const handleTransferAction = (transfer, action) => {
+    if (action === "approve") {
+      setApproveModal({
+        open: true,
+        transfer,
+        items: transfer.items.map((item) => ({
+          variantSku: item.variantSku,
+          name: item.name || item.variantSku,
+          requestedQuantity: item.requestedQuantity,
+          approvedQuantity: String(item.requestedQuantity), // default = full quantity
+        })),
+      });
+    } else if (action === "receive") {
+      setReceiveModal({
+        open: true,
+        transfer,
+        items: transfer.items
+          .filter((item) => (item.approvedQuantity || 0) > 0)
+          .map((item) => ({
+            variantSku: item.variantSku,
+            name: item.name || item.variantSku,
+            approvedQuantity: item.approvedQuantity,
+            receivedQuantity: String(item.approvedQuantity), // default = full approved
+            reason: "",
+          })),
+      });
+    } else if (action === "ship") {
+      setShipModal({ open: true, transfer, trackingNumber: "", carrier: "" });
+    } else if (action === "reject") {
+      setRejectModal({ open: true, transfer, reason: "" });
+    } else if (action === "cancel") {
+      setCancelModal({ open: true, transfer, reason: "" });
+    } else if (action === "complete") {
+      handleDirectAction(transfer._id, "complete");
+    }
+  };
+
+  // ── Direct action (no modal needed) ──
+  const handleDirectAction = async (transferId, action, body = {}) => {
     try {
       setBranchLoading(true);
-
-      if (action === "approve") {
-        await stockTransferAPI.approve(transfer._id);
-      } else if (action === "reject") {
-        const reasonValue = window.prompt("Lý do từ chối (tùy chọn):", "") || "";
-        await stockTransferAPI.reject(transfer._id, { reason: reasonValue });
-      } else if (action === "ship") {
-        const trackingNumber =
-          window.prompt("Mã vận đơn (tùy chọn):", "") || "";
-        const carrier = window.prompt("Đơn vị vận chuyển (tùy chọn):", "") || "";
-        await stockTransferAPI.ship(transfer._id, { trackingNumber, carrier });
-      } else if (action === "receive") {
-        await stockTransferAPI.receive(transfer._id);
-      } else if (action === "complete") {
-        await stockTransferAPI.complete(transfer._id);
-      } else if (action === "cancel") {
-        const reasonValue = window.prompt("Lý do hủy (tùy chọn):", "") || "";
-        await stockTransferAPI.cancel(transfer._id, { reason: reasonValue });
-      }
-
+      if (action === "complete") await stockTransferAPI.complete(transferId, body);
       toast.success("Đã cập nhật trạng thái chuyển kho");
       await fetchBranchData();
     } catch (error) {
       toast.error(error.response?.data?.message || "Không thể cập nhật chuyển kho");
     } finally {
       setBranchLoading(false);
+    }
+  };
+
+  // ── Modal submit handlers ──
+  const submitApprove = async () => {
+    try {
+      setModalLoading(true);
+      const approvedItems = approveModal.items.map((item) => ({
+        variantSku: item.variantSku,
+        quantity: Number(item.approvedQuantity) || 0,
+      }));
+      await stockTransferAPI.approve(approveModal.transfer._id, { approvedItems });
+      toast.success("Đã duyệt yêu cầu chuyển kho");
+      setApproveModal({ open: false, transfer: null, items: [] });
+      await fetchBranchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể duyệt transfer");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const submitReceive = async () => {
+    try {
+      setModalLoading(true);
+      const receivedItems = receiveModal.items.map((item) => ({
+        variantSku: item.variantSku,
+        quantity: Number(item.receivedQuantity) || 0,
+        reason: item.reason,
+      }));
+      await stockTransferAPI.receive(receiveModal.transfer._id, { receivedItems });
+      toast.success("Đã xác nhận nhận hàng");
+      setReceiveModal({ open: false, transfer: null, items: [] });
+      await fetchBranchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể nhận hàng");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const submitShip = async () => {
+    try {
+      setModalLoading(true);
+      await stockTransferAPI.ship(shipModal.transfer._id, {
+        trackingNumber: shipModal.trackingNumber,
+        carrier: shipModal.carrier,
+      });
+      toast.success("Đã xác nhận vận chuyển");
+      setShipModal({ open: false, transfer: null, trackingNumber: "", carrier: "" });
+      await fetchBranchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể xuất hàng");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const submitReject = async () => {
+    try {
+      setModalLoading(true);
+      await stockTransferAPI.reject(rejectModal.transfer._id, { reason: rejectModal.reason });
+      toast.success("Đã từ chối yêu cầu chuyển kho");
+      setRejectModal({ open: false, transfer: null, reason: "" });
+      await fetchBranchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể từ chối transfer");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const submitCancel = async () => {
+    try {
+      setModalLoading(true);
+      await stockTransferAPI.cancel(cancelModal.transfer._id, { reason: cancelModal.reason });
+      toast.success("Đã hủy yêu cầu chuyển kho");
+      setCancelModal({ open: false, transfer: null, reason: "" });
+      await fetchBranchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Không thể hủy transfer");
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -960,6 +1078,222 @@ const TransferStockPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Approve Modal ── */}
+      <Dialog open={approveModal.open} onOpenChange={(open) => !open && setApproveModal({ open: false, transfer: null, items: [] })}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Duyệt yêu cầu chuyển kho</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Xác nhận số lượng duyệt cho từng sản phẩm. Mặc định là số lượng yêu cầu ban đầu.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Tên sản phẩm</TableHead>
+                  <TableHead className="text-center">Yêu cầu</TableHead>
+                  <TableHead className="text-center">Duyệt</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {approveModal.items.map((item, idx) => (
+                  <TableRow key={item.variantSku}>
+                    <TableCell className="font-mono text-sm">{item.variantSku}</TableCell>
+                    <TableCell>{item.name}</TableCell>
+                    <TableCell className="text-center">{item.requestedQuantity}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={item.requestedQuantity}
+                        value={item.approvedQuantity}
+                        onChange={(e) => {
+                          const next = [...approveModal.items];
+                          next[idx] = { ...next[idx], approvedQuantity: e.target.value };
+                          setApproveModal((prev) => ({ ...prev, items: next }));
+                        }}
+                        className="w-24 text-center"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveModal({ open: false, transfer: null, items: [] })} disabled={modalLoading}>
+              Hủy
+            </Button>
+            <Button onClick={submitApprove} disabled={modalLoading}>
+              {modalLoading ? "Đang xử lý..." : "Xác nhận duyệt"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Receive Modal ── */}
+      <Dialog open={receiveModal.open} onOpenChange={(open) => !open && setReceiveModal({ open: false, transfer: null, items: [] })}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Xác nhận nhận hàng</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Nhập số lượng thực tế nhận được. Nếu khác với số lượng duyệt, vui lòng ghi lý do.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead className="text-center">Đã duyệt</TableHead>
+                  <TableHead className="text-center">Thực nhận</TableHead>
+                  <TableHead>Lý do chênh lệch</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {receiveModal.items.map((item, idx) => (
+                  <TableRow key={item.variantSku}>
+                    <TableCell className="font-mono text-sm">{item.variantSku}</TableCell>
+                    <TableCell className="text-center">{item.approvedQuantity}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={item.approvedQuantity}
+                        value={item.receivedQuantity}
+                        onChange={(e) => {
+                          const next = [...receiveModal.items];
+                          next[idx] = { ...next[idx], receivedQuantity: e.target.value };
+                          setReceiveModal((prev) => ({ ...prev, items: next }));
+                        }}
+                        className="w-24 text-center"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        placeholder="Lý do (nếu thiếu)"
+                        value={item.reason}
+                        onChange={(e) => {
+                          const next = [...receiveModal.items];
+                          next[idx] = { ...next[idx], reason: e.target.value };
+                          setReceiveModal((prev) => ({ ...prev, items: next }));
+                        }}
+                        disabled={Number(item.receivedQuantity) === item.approvedQuantity}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiveModal({ open: false, transfer: null, items: [] })} disabled={modalLoading}>
+              Hủy
+            </Button>
+            <Button onClick={submitReceive} disabled={modalLoading}>
+              {modalLoading ? "Đang xử lý..." : "Xác nhận nhận hàng"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Ship Modal ── */}
+      <Dialog open={shipModal.open} onOpenChange={(open) => !open && setShipModal({ open: false, transfer: null, trackingNumber: "", carrier: "" })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="w-5 h-5" /> Xác nhận vận chuyển
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Mã vận đơn (tùy chọn)</Label>
+              <Input
+                placeholder="VD: VNP123456789"
+                value={shipModal.trackingNumber}
+                onChange={(e) => setShipModal((prev) => ({ ...prev, trackingNumber: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Đơn vị vận chuyển (tùy chọn)</Label>
+              <Input
+                placeholder="VD: GHTK, GHN, ViettelPost..."
+                value={shipModal.carrier}
+                onChange={(e) => setShipModal((prev) => ({ ...prev, carrier: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShipModal({ open: false, transfer: null, trackingNumber: "", carrier: "" })} disabled={modalLoading}>
+              Hủy
+            </Button>
+            <Button onClick={submitShip} disabled={modalLoading}>
+              {modalLoading ? "Đang xử lý..." : "Xác nhận xuất hàng"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reject Modal ── */}
+      <Dialog open={rejectModal.open} onOpenChange={(open) => !open && setRejectModal({ open: false, transfer: null, reason: "" })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="w-5 h-5" /> Từ chối yêu cầu
+            </DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label>Lý do từ chối (tùy chọn)</Label>
+            <textarea
+              className="w-full mt-1 p-2 border rounded-md"
+              rows={3}
+              placeholder="Nhập lý do từ chối..."
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectModal({ open: false, transfer: null, reason: "" })} disabled={modalLoading}>
+              Hủy
+            </Button>
+            <Button variant="destructive" onClick={submitReject} disabled={modalLoading}>
+              {modalLoading ? "Đang xử lý..." : "Xác nhận từ chối"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Cancel Modal ── */}
+      <Dialog open={cancelModal.open} onOpenChange={(open) => !open && setCancelModal({ open: false, transfer: null, reason: "" })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hủy yêu cầu chuyển kho</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label>Lý do hủy (tùy chọn)</Label>
+            <textarea
+              className="w-full mt-1 p-2 border rounded-md"
+              rows={3}
+              placeholder="Nhập lý do hủy..."
+              value={cancelModal.reason}
+              onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelModal({ open: false, transfer: null, reason: "" })} disabled={modalLoading}>
+              Hủy thao tác
+            </Button>
+            <Button variant="destructive" onClick={submitCancel} disabled={modalLoading}>
+              {modalLoading ? "Đang xử lý..." : "Xác nhận hủy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

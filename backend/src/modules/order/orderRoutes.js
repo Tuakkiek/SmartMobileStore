@@ -37,6 +37,13 @@ const resolveAuditScopeMode = (req) => {
   return "branch";
 };
 
+const resolveOrderWriteScopeMode = (req) => {
+  if (req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN") {
+    return "global";
+  }
+  return "branch";
+};
+
 const auditCreateOrder = orderAuditMiddleware({
   actionType: ORDER_AUDIT_ACTIONS.CREATE_ORDER,
   source: "ORDERS_API",
@@ -111,8 +118,8 @@ router.post("/:id/cancel", auditCancelOrder, orderController.cancelOrder);
 router.patch(
   "/:id/status",
   authorize(resolveOrderStatusWriteAction, {
-    scopeMode: "branch",
-    requireActiveBranch: true,
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
     resourceType: "ORDER",
   }),
   auditUpdateStatus,
@@ -121,8 +128,8 @@ router.patch(
 router.put(
   "/:id/status",
   authorize(resolveOrderStatusWriteAction, {
-    scopeMode: "branch",
-    requireActiveBranch: true,
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
     resourceType: "ORDER",
   }),
   auditUpdateStatus,
@@ -131,26 +138,42 @@ router.put(
 
 router.patch(
   "/:id/assign-carrier",
-  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ORDER",
+  }),
   auditAssignCarrier,
   orderController.assignCarrier
 );
 router.put(
   "/:id/assign-carrier",
-  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ORDER",
+  }),
   auditAssignCarrier,
   orderController.assignCarrier
 );
 
 router.patch(
   "/:id/payment",
-  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ORDER",
+  }),
   auditUpdatePaymentStatus,
   orderController.updatePaymentStatus
 );
 router.put(
   "/:id/payment",
-  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, { scopeMode: "branch", requireActiveBranch: true, resourceType: "ORDER" }),
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ORDER",
+  }),
   auditUpdatePaymentStatus,
   orderController.updatePaymentStatus
 );

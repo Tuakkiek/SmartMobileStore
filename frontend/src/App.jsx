@@ -76,14 +76,14 @@ const ScrollToTop = () => {
 // PROTECTED ROUTE
 // ============================================
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { isAuthenticated, user, rehydrating } = useAuthStore();
+  const { isAuthenticated, user, authz, rehydrating } = useAuthStore();
 
   if (rehydrating) return <Loading />;
 
   if (!isAuthenticated || !user) return <Navigate to="/" replace />;
 
-  // ✅ GLOBAL_ADMIN bypass
-  if (user?.role === "GLOBAL_ADMIN") {
+  // ✅ GLOBAL_ADMIN bypass (role-based or authz system-role based)
+  if (user?.role === "GLOBAL_ADMIN" || authz?.isGlobalAdmin) {
     return children;
   }
 

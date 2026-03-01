@@ -34,7 +34,12 @@ router.delete("/addresses/:addressId", restrictTo("CUSTOMER"), deleteAddress);
 router.get("/employees", restrictTo("ADMIN", "PRODUCT_MANAGER", "ORDER_MANAGER"), resolveAccessContext, getAllEmployees);
 
 // ✅ NEW: Get all shippers (for Order Manager to assign)
-router.get("/shippers", restrictTo("ADMIN", "ORDER_MANAGER"), getAllShippers);
+router.get(
+  "/shippers",
+  restrictTo("ADMIN", "ORDER_MANAGER"),
+  resolveAccessContext,
+  getAllShippers
+);
 
 router.post("/employees", restrictTo("ADMIN"), createEmployee);
 router.patch(

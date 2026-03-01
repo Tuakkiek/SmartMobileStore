@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/cashier/VATInvoicesPage.jsx
-// ✅ FIXED: Sửa text hiển thị "Đã xuất VAT: {số hóa đơn}"
+// ✅ RESPONSIVE: Full mobile/tablet/desktop support
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -78,19 +78,15 @@ const VATInvoicesPage = () => {
         total: pag.total || 0,
       });
 
-      // ✅ FIXED: Tính stats từ TẤT CẢ orders (không chỉ trang hiện tại)
-      // Để có stats chính xác, cần gọi API lấy tất cả orders
-      // Hoặc backend trả về stats riêng
-      // Tạm thời tính từ orders hiện tại:
       const totalOrdersInPage = orders.length;
       const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
       const vatCount = orders.filter((o) => o.vatInvoice?.invoiceNumber).length;
 
       setStats({
-        totalOrders: pag.total || 0, // Tổng đơn từ backend
-        totalRevenue: revenue, // Revenue của trang hiện tại (có thể không chính xác)
+        totalOrders: pag.total || 0,
+        totalRevenue: revenue,
         avgOrderValue: totalOrdersInPage > 0 ? revenue / totalOrdersInPage : 0,
-        totalVATInvoices: vatCount, // ✅ FIXED: Đếm số đơn có VAT trong trang hiện tại
+        totalVATInvoices: vatCount,
       });
     } catch (error) {
       console.error("Lỗi tải đơn hàng:", error);
@@ -186,7 +182,6 @@ const VATInvoicesPage = () => {
           .text-right { text-align: right; }
           .w-32 { width: 8rem; }
           .w-24 { width: 6rem; }
-          .text-[10px] { font-size: 0.625rem; }
           .text-gray-600 { color: #4b5563; }
           .p-2 { padding: 0.5rem; }
           .list-disc { list-style-type: disc; }
@@ -209,26 +204,15 @@ const VATInvoicesPage = () => {
             </div>
             <div class="w-16 h-16 border border-black flex items-center justify-center"></div>
           </div>
-
           <div class="text-center mb-3">
             <h2 class="text-base font-bold">HÓA ĐƠN BÁN HÀNG KIÊM PHIẾU BẢO HÀNH</h2>
-            <p class="text-xs">Ngày lúc ${formatDate(
-              editableData.createdAt
-            )}</p>
+            <p class="text-xs">Ngày lúc ${formatDate(editableData.createdAt)}</p>
           </div>
-
           <div class="mb-3 space-y-0.5 text-xs">
-            <p><span class="font-semibold">Tên khách hàng:</span> ${
-              editableData.customerName
-            }</p>
-            <p><span class="font-semibold">Địa chỉ:</span> ${
-              editableData.customerAddress
-            }</p>
-            <p><span class="font-semibold">Số điện thoại:</span> ${
-              editableData.customerPhone
-            }</p>
+            <p><span class="font-semibold">Tên khách hàng:</span> ${editableData.customerName}</p>
+            <p><span class="font-semibold">Địa chỉ:</span> ${editableData.customerAddress}</p>
+            <p><span class="font-semibold">Số điện thoại:</span> ${editableData.customerPhone}</p>
           </div>
-
           <table class="w-full border border-black mb-3 text-xs">
             <thead>
               <tr class="border-b border-black">
@@ -244,67 +228,49 @@ const VATInvoicesPage = () => {
                 <tr class="border-b border-black">
                   <td class="border-r border-black p-1.5">
                     <div>${item.productName}</div>
-                    <div class="text-[10px] text-gray-600">
-                      ${item.variantColor}${
-                    item.variantStorage ? ` - ${item.variantStorage}` : ""
-                  }
-                    </div>
+                    <div class="text-gray-600">${item.variantColor}${item.variantStorage ? ` - ${item.variantStorage}` : ""}</div>
                   </td>
-                  <td class="border-r border-black p-1.5 text-center">${
-                    item.imei || "N/A"
-                  }</td>
-                  <td class="p-1.5 text-right font-semibold">${formatPrice(
-                    item.price * item.quantity
-                  )}</td>
+                  <td class="border-r border-black p-1.5 text-center">${item.imei || "N/A"}</td>
+                  <td class="p-1.5 text-right font-semibold">${formatPrice(item.price * item.quantity)}</td>
                 </tr>
               `
                 )
                 .join("")}
             </tbody>
           </table>
-
           <div class="border border-black p-2 mb-3 text-xs">
             <p class="font-bold mb-1">GÓI BẢO HÀNH CƠ BẢN Ninh Kiều iSTORE Care</p>
             <p class="font-bold mb-1">LƯU Ý NHỮNG TRƯỜNG HỢP KHÔNG ĐƯỢC BẢO HÀNH</p>
-            <ul class="list-disc ml-4 text-[10px] space-y-0.5 leading-tight">
+            <ul class="list-disc ml-4 leading-tight">
               <li>Mất tem máy, rách tem</li>
               <li>Kiểm tra màn hình (trường hợp màn sọc mực, đen màn, lỗi màn hình khi ra khỏi shop sẽ không bảo hành)</li>
               <li>Máy bị phơi đơm theo giấy bảo hành KHÔNG có hữu trách nhiệm tài khoản icloud</li>
               <li>Máy rơi/va đụp, máy trả góp shop không bỏ trợ bảo an tiền</li>
             </ul>
           </div>
-
           <div class="border border-black text-xs mb-3">
             <div class="flex justify-between p-1.5 border-b border-black">
               <span class="font-bold">Tiền sản phẩm:</span>
-              <span class="font-bold">${formatPrice(
-                editableData.totalAmount
-              )}</span>
+              <span class="font-bold">${formatPrice(editableData.totalAmount)}</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black">
               <span>Voucher:</span><span>0</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black bg-yellow-50">
               <span class="font-bold">Thành tiền:</span>
-              <span class="font-bold">${formatPrice(
-                editableData.totalAmount
-              )}</span>
+              <span class="font-bold">${formatPrice(editableData.totalAmount)}</span>
             </div>
             <div class="flex justify-between p-1.5 border-b border-black">
               <span class="font-bold">Tiền đã đưa:</span>
-              <span class="font-bold">${formatPrice(
-                editableData.paymentReceived
-              )}</span>
+              <span class="font-bold">${formatPrice(editableData.paymentReceived)}</span>
             </div>
             <div class="flex justify-between p-1.5">
               <span>Khoản vay còn lại:</span><span>0</span>
             </div>
           </div>
-
           <div class="text-center my-2">
             <p class="font-bold italic text-xs">CẢM ƠN QUÝ KHÁCH ĐÃ TIN TƯỞNG ỦNG HỘ Ninh Kiều iSTORE !!!</p>
           </div>
-
           <div class="flex justify-between mb-3">
             <div class="text-center text-xs">
               <p class="font-bold mb-12">NHÂN VIÊN</p>
@@ -315,10 +281,9 @@ const VATInvoicesPage = () => {
               <p>${editableData.customerName}</p>
             </div>
           </div>
-
-          <div class="text-center text-[10px] border-t border-black pt-2">
-            <p class="font-bold">BẢO HÀNH PHÂN CŨNG PHẦN MỀM TRỌNG 6 THÁNG (KHÔNG ĐỔI LỖI)</p>
-            <p>Xem thêm các điều khoản bảo hành tại <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span></p>
+          <div class="text-center border-t border-black pt-2">
+            <p class="font-bold text-xs">BẢO HÀNH PHẦN CỨNG VÀ PHẦN MỀM TRONG 6 THÁNG (KHÔNG ĐỔI LỖI)</p>
+            <p class="text-xs">Xem thêm các điều khoản bảo hành tại <span class="font-semibold">https://ninhkieu-istore-ct.onrender.com</span></p>
           </div>
         </div>
       </body>
@@ -335,28 +300,33 @@ const VATInvoicesPage = () => {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Lịch sử bán hàng</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1">
+            Lịch sử bán hàng
+          </h1>
+          <p className="text-sm text-muted-foreground">
             {isAdmin
               ? "Xem tất cả đơn hàng trong hệ thống"
               : "Xem các đơn hàng đã xử lý"}
           </p>
         </div>
-        <div className="flex w-full md:w-auto md:max-w-sm items-center gap-2">
+
+        {/* Search bar */}
+        <div className="flex w-full sm:w-auto sm:max-w-sm items-center gap-2">
           <Input
             type="text"
-            placeholder="Tìm theo mã đơn, phiếu, SĐT..."
+            placeholder="Tìm mã đơn, phiếu, SĐT..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSearch();
             }}
-            className="flex-1"
+            className="flex-1 text-sm"
           />
-          <Button onClick={handleSearch} aria-label="Tìm kiếm">
+          <Button onClick={handleSearch} size="icon" aria-label="Tìm kiếm">
             <Search className="w-4 h-4" />
           </Button>
           {filters.search && (
@@ -372,92 +342,99 @@ const VATInvoicesPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* ── Stats Cards: 2 cột trên mobile, 4 cột trên md+ ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1 truncate">
                   Tổng đơn hàng
                 </p>
-                <h3 className="text-2xl font-bold">{stats.totalOrders}</h3>
+                <h3 className="text-xl sm:text-2xl font-bold">
+                  {stats.totalOrders}
+                </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6 text-blue-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-full bg-blue-100 flex items-center justify-center ml-2">
+                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1 truncate">
                   Tổng doanh thu
                 </p>
-                <h3 className="text-xl font-bold">
+                <h3 className="text-base sm:text-xl font-bold truncate">
                   {formatPrice(stats.totalRevenue)}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-full bg-green-100 flex items-center justify-center ml-2">
+                <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1 truncate">
                   Giá trị TB/đơn
                 </p>
-                <h3 className="text-xl font-bold">
+                <h3 className="text-base sm:text-xl font-bold truncate">
                   {formatPrice(stats.avgOrderValue)}
                 </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-full bg-purple-100 flex items-center justify-center ml-2">
+                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1 truncate">
                   Hóa đơn VAT
                 </p>
-                <h3 className="text-2xl font-bold">{stats.totalVATInvoices}</h3>
+                <h3 className="text-xl sm:text-2xl font-bold">
+                  {stats.totalVATInvoices}
+                </h3>
               </div>
-              <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
-                <FileText className="w-6 h-6 text-orange-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-full bg-orange-100 flex items-center justify-center ml-2">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ── Order List ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Receipt className="w-5 h-5" />
+        <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
             Danh sách đơn hàng ({orders.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
+
+        <CardContent className="px-3 sm:px-6 pb-4">
           {isLoading ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">Đang tải...</p>
+            <div className="text-center py-10">
+              <p className="text-muted-foreground text-sm">Đang tải...</p>
             </div>
           ) : orders.length === 0 ? (
-            <div className="text-center py-8">
-              <Receipt className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">
+            <div className="text-center py-10">
+              <Receipt className="w-14 h-14 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-muted-foreground text-sm">
                 {filters.search
                   ? "Không tìm thấy đơn hàng"
                   : "Không có đơn hàng nào"}
@@ -468,84 +445,106 @@ const VATInvoicesPage = () => {
               {orders.map((order) => (
                 <div
                   key={order._id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
+                  className="border rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div>
-                        <p className="font-bold">#{order.orderNumber}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Phiếu: {order.posInfo?.receiptNumber || "N/A"}
-                        </p>
-                      </div>
-                      {order.vatInvoice?.invoiceNumber && (
-                        <Badge className="bg-green-100 text-green-800">
-                          <FileText className="w-3 h-3 mr-1" />
-                          VAT
-                        </Badge>
-                      )}
-                      <Badge
-                        className={
-                          order.paymentStatus === "PAID"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-orange-100 text-orange-800"
-                        }
-                      >
-                        {order.paymentStatus === "PAID"
-                          ? "Đã thanh toán"
-                          : "Chưa thanh toán"}
-                      </Badge>
+                  {/* Row 1: mã đơn + badges */}
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <div>
+                      <p className="font-bold text-sm sm:text-base">
+                        #{order.orderNumber}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Phiếu: {order.posInfo?.receiptNumber || "N/A"}
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-                      {isAdmin && (
-                        <div>
-                          <p className="text-muted-foreground">NV bán:</p>
-                          <p className="font-medium">
-                            {order.posInfo?.staffName || "N/A"}
-                          </p>
-                        </div>
-                      )}
+                    {order.vatInvoice?.invoiceNumber && (
+                      <Badge className="bg-green-100 text-green-800 text-xs">
+                        <FileText className="w-3 h-3 mr-1" />
+                        VAT
+                      </Badge>
+                    )}
+                    <Badge
+                      className={`text-xs ${
+                        order.paymentStatus === "PAID"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-orange-100 text-orange-800"
+                      }`}
+                    >
+                      {order.paymentStatus === "PAID"
+                        ? "Đã thanh toán"
+                        : "Chưa thanh toán"}
+                    </Badge>
+                  </div>
+
+                  {/* Row 2: info grid */}
+                  <div
+                    className={`grid gap-x-3 gap-y-1 text-xs sm:text-sm mb-3 ${
+                      isAdmin
+                        ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+                        : "grid-cols-2 sm:grid-cols-4"
+                    }`}
+                  >
+                    {isAdmin && (
                       <div>
-                        <p className="text-muted-foreground">Khách hàng:</p>
-                        <p className="font-medium">
-                          {order.shippingAddress?.fullName || "Khách lẻ"}
+                        <p className="text-muted-foreground text-xs">
+                          NV bán:
+                        </p>
+                        <p className="font-medium truncate">
+                          {order.posInfo?.staffName || "N/A"}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground">Thời gian:</p>
-                        <p className="font-medium">
-                          {formatDate(order.createdAt)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Số lượng:</p>
-                        <p className="font-medium">{order.items.length} SP</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Tổng tiền:</p>
-                        <p className="font-bold text-primary">
-                          {formatPrice(order.totalAmount)}
-                        </p>
-                      </div>
+                    )}
+                    <div>
+                      <p className="text-muted-foreground text-xs">
+                        Khách hàng:
+                      </p>
+                      <p className="font-medium truncate">
+                        {order.shippingAddress?.fullName || "Khách lẻ"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">
+                        Thời gian:
+                      </p>
+                      <p className="font-medium">
+                        {formatDate(order.createdAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">
+                        Số lượng:
+                      </p>
+                      <p className="font-medium">{order.items.length} SP</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">
+                        Tổng tiền:
+                      </p>
+                      <p className="font-bold text-primary">
+                        {formatPrice(order.totalAmount)}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* Row 3: action buttons — full width trên mobile */}
+                  <div className="flex flex-col xs:flex-row gap-2 sm:flex-row">
                     <Button
                       size="sm"
                       variant="outline"
+                      className="flex-1 sm:flex-none text-xs sm:text-sm"
                       onClick={() => handleViewDetail(order._id)}
                     >
-                      <Eye className="w-4 h-4 mr-2" />
+                      <Eye className="w-3.5 h-3.5 mr-1.5" />
                       Chi tiết
                     </Button>
                     {order.paymentStatus === "PAID" && (
                       <Button
                         size="sm"
+                        className="flex-1 sm:flex-none text-xs sm:text-sm"
                         onClick={() => handleReprintReceipt(order)}
                       >
-                        <Download className="w-4 h-4 mr-2" />
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
                         In lại
                       </Button>
                     )}
@@ -555,8 +554,9 @@ const VATInvoicesPage = () => {
             </div>
           )}
 
+          {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="flex justify-center items-center gap-6 mt-8">
+            <div className="flex justify-center items-center gap-4 mt-6">
               <Button
                 variant="outline"
                 size="sm"
@@ -565,7 +565,7 @@ const VATInvoicesPage = () => {
               >
                 Trước
               </Button>
-              <span className="text-sm font-medium min-w-[120px] text-center">
+              <span className="text-xs sm:text-sm font-medium min-w-[100px] text-center">
                 Trang {pagination.currentPage} / {pagination.totalPages}
               </span>
               <Button
@@ -583,72 +583,92 @@ const VATInvoicesPage = () => {
         </CardContent>
       </Card>
 
+      {/* ── Detail Dialog ── */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Chi tiết đơn hàng</DialogTitle>
-            <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
+          <DialogHeader className="mb-2">
+            <DialogTitle className="text-base sm:text-lg">
+              Chi tiết đơn hàng
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              {selectedOrder?.orderNumber}
+            </DialogDescription>
           </DialogHeader>
 
           {selectedOrder && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+            <div className="space-y-5">
+              {/* Order info + Customer info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 sm:p-4 bg-muted/50 rounded-lg text-sm">
                 <div>
-                  <h3 className="font-semibold mb-2">Thông tin đơn hàng</h3>
-                  <p className="text-sm">
-                    <strong>Mã đơn:</strong> #{selectedOrder.orderNumber}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Số phiếu:</strong>{" "}
-                    {selectedOrder.posInfo?.receiptNumber || "N/A"}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Thời gian:</strong>{" "}
-                    {formatDate(selectedOrder.createdAt)}
-                  </p>
-                  {isAdmin && (
-                    <p className="text-sm">
-                      <strong>NV bán:</strong>{" "}
-                      {selectedOrder.posInfo?.staffName || "N/A"}
+                  <h3 className="font-semibold mb-2 text-sm">
+                    Thông tin đơn hàng
+                  </h3>
+                  <div className="space-y-1 text-xs sm:text-sm">
+                    <p>
+                      <strong>Mã đơn:</strong> #{selectedOrder.orderNumber}
                     </p>
-                  )}
-                  <p className="text-sm">
-                    <strong>Thu ngân:</strong>{" "}
-                    {selectedOrder.posInfo?.cashierName || "N/A"}
-                  </p>
+                    <p>
+                      <strong>Số phiếu:</strong>{" "}
+                      {selectedOrder.posInfo?.receiptNumber || "N/A"}
+                    </p>
+                    <p>
+                      <strong>Thời gian:</strong>{" "}
+                      {formatDate(selectedOrder.createdAt)}
+                    </p>
+                    {isAdmin && (
+                      <p>
+                        <strong>NV bán:</strong>{" "}
+                        {selectedOrder.posInfo?.staffName || "N/A"}
+                      </p>
+                    )}
+                    <p>
+                      <strong>Thu ngân:</strong>{" "}
+                      {selectedOrder.posInfo?.cashierName || "N/A"}
+                    </p>
+                  </div>
                 </div>
+
                 <div>
-                  <h3 className="font-semibold mb-2">Thông tin khách hàng</h3>
-                  <p className="text-sm">
-                    <strong>Họ tên:</strong>{" "}
-                    {selectedOrder.shippingAddress?.fullName || "Khách lẻ"}
-                  </p>
-                  <p className="text-sm">
-                    <strong>SĐT:</strong>{" "}
-                    {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
-                  </p>
-                  {/* ✅ FIXED: Hiển thị đúng text "Đã xuất VAT: {số hóa đơn}" */}
-                  {selectedOrder.vatInvoice?.invoiceNumber && (
-                    <Badge className="bg-green-100 text-green-800 mt-2">
-                      Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
-                    </Badge>
-                  )}
+                  <h3 className="font-semibold mb-2 text-sm">
+                    Thông tin khách hàng
+                  </h3>
+                  <div className="space-y-1 text-xs sm:text-sm">
+                    <p>
+                      <strong>Họ tên:</strong>{" "}
+                      {selectedOrder.shippingAddress?.fullName || "Khách lẻ"}
+                    </p>
+                    <p>
+                      <strong>SĐT:</strong>{" "}
+                      {selectedOrder.shippingAddress?.phoneNumber || "N/A"}
+                    </p>
+                    {selectedOrder.vatInvoice?.invoiceNumber && (
+                      <Badge className="bg-green-100 text-green-800 mt-2 text-xs">
+                        Đã xuất VAT: {selectedOrder.vatInvoice.invoiceNumber}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
 
+              {/* Products */}
               <div>
-                <h3 className="font-semibold mb-3">Sản phẩm</h3>
+                <h3 className="font-semibold mb-2 text-sm">Sản phẩm</h3>
                 <div className="space-y-2">
                   {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="flex gap-4 p-3 border rounded-lg">
+                    <div
+                      key={idx}
+                      className="flex gap-3 p-3 border rounded-lg"
+                    >
                       <img
                         src={item.images?.[0] || "/placeholder.png"}
                         alt={item.productName}
-                        className="w-20 h-20 object-cover rounded"
+                        className="w-14 h-14 sm:w-20 sm:h-20 object-cover rounded shrink-0"
                       />
-                      <div className="flex-1">
-                        <p className="font-medium">{item.productName}</p>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {item.productName}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {[
                             item.variantColor,
                             item.variantStorage,
@@ -658,17 +678,20 @@ const VATInvoicesPage = () => {
                             .filter(Boolean)
                             .join(" • ")}
                         </p>
-                        <p className="text-sm">
+                        <p className="text-xs mt-1">
                           SL: {item.quantity} × {formatPrice(item.price)}
                         </p>
                       </div>
-                      <p className="font-bold">{formatPrice(item.total)}</p>
+                      <p className="font-bold text-sm shrink-0">
+                        {formatPrice(item.total)}
+                      </p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="border-t pt-4 space-y-2">
+              {/* Payment summary */}
+              <div className="border-t pt-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Tổng tiền:</span>
                   <span className="font-bold">
@@ -696,17 +719,16 @@ const VATInvoicesPage = () => {
                 )}
               </div>
 
-              <div className="flex gap-2">
-                {selectedOrder.paymentStatus === "PAID" && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => handleReprintReceipt(selectedOrder)}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    In lại phiếu thu
-                  </Button>
-                )}
-              </div>
+              {/* Actions */}
+              {selectedOrder.paymentStatus === "PAID" && (
+                <Button
+                  className="w-full"
+                  onClick={() => handleReprintReceipt(selectedOrder)}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  In lại phiếu thu
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>
