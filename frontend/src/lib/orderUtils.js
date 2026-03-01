@@ -27,24 +27,24 @@ export const FULFILLMENT_TYPE = {
 
 export const getStatusText = (status) => {
   const statusMap = {
-    PENDING: "Cho xu ly",
-    PENDING_PAYMENT: "Cho thanh toan",
-    PAYMENT_CONFIRMED: "Da thanh toan",
-    PAYMENT_VERIFIED: "Da thanh toan online",
-    CONFIRMED: "Da xac nhan",
-    PROCESSING: "Dang xu ly",
-    PREPARING: "Dang chuan bi",
-    READY_FOR_PICKUP: "San sang lay hang",
-    PREPARING_SHIPMENT: "Da hoan tat lay hang",
-    SHIPPING: "Dang van chuyen",
-    OUT_FOR_DELIVERY: "Dang giao hang",
-    DELIVERED: "Da giao hang",
-    PICKED_UP: "Da nhan tai cua hang",
-    COMPLETED: "Hoan tat",
-    DELIVERY_FAILED: "Giao hang that bai",
-    CANCELLED: "Da huy",
-    RETURN_REQUESTED: "Yeu cau tra hang",
-    RETURNED: "Da tra hang",
+    PENDING: "Chờ xử lý",
+    PENDING_PAYMENT: "Chờ thanh toán",
+    PAYMENT_CONFIRMED: "Đã thanh toán",
+    PAYMENT_VERIFIED: "Đã thanh toán online",
+    CONFIRMED: "Đã xác nhận",
+    PROCESSING: "Đang xử lý",
+    PREPARING: "Đang chuẩn bị",
+    READY_FOR_PICKUP: "Sẵn sàng lấy hàng",
+    PREPARING_SHIPMENT: "Đã hoàn tất lấy hàng",
+    SHIPPING: "Đang vận chuyển",
+    OUT_FOR_DELIVERY: "Đang giao hàng",
+    DELIVERED: "Đã giao hàng",
+    PICKED_UP: "Đã nhận tại cửa hàng",
+    COMPLETED: "Hoàn tất",
+    DELIVERY_FAILED: "Giao hàng thất bại",
+    CANCELLED: "Đã hủy",
+    RETURN_REQUESTED: "Yêu cầu trả hàng",
+    RETURNED: "Đã trả hàng",
   };
 
   return statusMap[status] || status;
@@ -77,9 +77,9 @@ export const getStatusColor = (status) => {
 
 export const getFulfillmentText = (type) => {
   const typeMap = {
-    HOME_DELIVERY: "Giao tan nha",
-    CLICK_AND_COLLECT: "Nhan tai cua hang",
-    IN_STORE: "Mua tai cua hang",
+    HOME_DELIVERY: "Giao tận nhà",
+    CLICK_AND_COLLECT: "Nhận tại cửa hàng",
+    IN_STORE: "Mua tại cửa hàng",
   };
 
   return typeMap[type] || type;
@@ -91,8 +91,8 @@ export const getPaymentMethodText = (method) => {
     VNPAY: "VNPay",
     BANK_TRANSFER: "Chuyển khoản (SePay)",
     MOMO: "MoMo",
-    CASH: "Tien mat",
-    INSTALLMENT: "Tra gop",
+    CASH: "Tiền mặt",
+    INSTALLMENT: "Trả góp",
   };
 
   return textMap[method] || method;

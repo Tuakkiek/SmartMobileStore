@@ -18,7 +18,11 @@ import {
   Layers,
   ArrowUpDown
 } from "lucide-react";
-import { universalProductAPI, productTypeAPI, brandAPI } from "@/lib/api";
+import {
+  universalProductAPI,
+  productTypeAPI,
+  brandAPI,
+} from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/shared/Loading";
@@ -42,6 +46,10 @@ import { Badge } from "@/components/ui/badge";
 const ProductsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const normalizedRole = String(user?.role || "").toUpperCase();
+  const canManageProducts = ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"].includes(
+    normalizedRole
+  );
   
   // Refs for potential future use
   const containerRef = useRef(null);
@@ -544,8 +552,6 @@ const ProductsPage = () => {
                         }}
                       >
                         {products.map((product, index) => {
-                          const isAdmin = ["ADMIN", "PRODUCT_MANAGER"].includes(user?.role);
-
                           return (
                             <div 
                               key={product._id} 
@@ -561,7 +567,7 @@ const ProductsPage = () => {
                                   onDelete={handleDelete}
                                   onUpdate={() => fetchProducts()}
                                   showVariantsBadge={true}
-                                  showAdminActions={isAdmin}
+                                  showAdminActions={canManageProducts}
                                   openInNewTab={true}
                                 />
                               </div>
@@ -575,8 +581,6 @@ const ProductsPage = () => {
                     {viewMode === "list" && (
                       <div className="space-y-3">
                         {products.map((product, index) => {
-                          const isAdmin = ["ADMIN", "PRODUCT_MANAGER"].includes(user?.role);
-
                           return (
                             <div 
                               key={product._id}
@@ -630,7 +634,7 @@ const ProductsPage = () => {
                                 </div>
 
                                 {/* Actions */}
-                                {isAdmin && (
+                                {canManageProducts && (
                                   <div className="flex gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                     <Button
                                       size="sm"

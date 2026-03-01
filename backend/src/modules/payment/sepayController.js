@@ -280,7 +280,7 @@ export const createSepayQr = async (req, res) => {
         orderCode,
         amount: Number(order.totalAmount) || 0,
         qrUrl,
-        instruction: `Vui long chuyen khoan voi noi dung: ${orderCode}`,
+        instruction: `Vui lòng chuyển khoản với nội dung: ${orderCode}`,
         expiresAt: expiresAt.toISOString(),
       },
     });

@@ -223,7 +223,7 @@ test("POST /api/sepay/webhook confirms payment, issues invoice, clears cart item
   const payload = {
     transferType: "in",
     transferAmount: 2300000,
-    content: "thanh toan don DH123456789",
+    content: "thanh toán đơn DH123456789",
     transactionId: "TXN-001",
   };
 
@@ -268,7 +268,7 @@ test("POST /api/payment/sepay/webhook handles duplicate idempotently without add
   const firstPayload = {
     transferType: "in",
     transferAmount: 3100000,
-    content: "nop tien DH555666777",
+    content: "nộp tiền DH555666777",
     transactionId: "TXN-DUP-1",
   };
 
@@ -309,7 +309,7 @@ test("webhook with insufficient amount keeps order pending payment", async () =>
     .send({
       transferType: "in",
       transferAmount: 3999999,
-      content: "chuyen khoan DH999888777",
+      content: "chuyển khoản DH999888777",
     });
 
   assert.equal(response.status, 200);
@@ -355,7 +355,7 @@ test("webhook without order code returns 200 and does not update orders", async 
     .send({
       transferType: "in",
       transferAmount: 2500000,
-      content: "thanh toan don hang khong ma",
+      content: "thanh toán đơn hàng không mã",
     });
 
   assert.equal(response.status, 200);

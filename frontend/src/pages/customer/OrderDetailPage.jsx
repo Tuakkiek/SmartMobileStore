@@ -123,7 +123,7 @@ const OrderDetailPage = () => {
       const remainingMs = targetExpiresAt - now;
 
       if (remainingMs <= 0) {
-        setTimeRemaining("Da het han");
+        setTimeRemaining("Đã hết hạn");
         fetchOrder();
         return;
       }
@@ -210,8 +210,8 @@ const OrderDetailPage = () => {
       const isSepay = order?.paymentMethod === "BANK_TRANSFER";
       await orderAPI.cancel(id, {
         reason: isSepay
-          ? "Khach hang huy don Chuyển khoản (SePay) chua thanh toan"
-          : "Khach hang huy don VNPay chua thanh toan",
+          ? "Khách hàng hủy đơn Chuyển khoản (SePay) chưa thanh toán"
+          : "Khách hàng hủy đơn VNPay chưa thanh toán",
       });
 
       try {
@@ -241,13 +241,13 @@ const OrderDetailPage = () => {
       await fetchOrder();
       toast.success(
         isSepay
-          ? "Da huy don hang Chuyển khoản (SePay) thanh cong"
-          : "Da huy don hang VNPay thanh cong"
+          ? "Đã hủy đơn hàng Chuyển khoản (SePay) thành công"
+          : "Đã hủy đơn hàng VNPay thành công"
       );
 
       setTimeout(() => navigate("/cart"), 2000);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Huy don that bai");
+      toast.error(error.response?.data?.message || "Hủy đơn thất bại");
     } finally {
       setIsCancellingVNPay(false);
     }
@@ -280,15 +280,15 @@ const OrderDetailPage = () => {
 
     try {
       await navigator.clipboard.writeText(orderCode);
-      toast.success("Da sao chep noi dung chuyen khoan");
+      toast.success("Đã sao chép nội dung chuyển khoản");
     } catch {
-      toast.error("Khong the sao chep noi dung");
+      toast.error("Không thể sao chép nội dung");
     }
   };
 
   const handleRefreshPaymentStatus = async () => {
     await fetchOrder();
-    toast.info("Da lam moi trang thai thanh toan");
+    toast.info("Đã làm mới trạng thái thanh toán");
   };
 
   // =============== EARLY RETURNS ===============
@@ -362,19 +362,19 @@ const OrderDetailPage = () => {
             </div>
             <div>
               <h3 className="font-bold text-green-900 text-lg">
-                Thanh toan thanh cong!
+                Thanh toán thành công!
               </h3>
               <p className="text-sm text-green-700 mt-1">
-                Don hang da duoc thanh toan qua{" "}
+                Đơn hàng đã được thanh toán qua{" "}
                 {order.paymentMethod === "BANK_TRANSFER"
                   ? "Chuyển khoản (SePay)"
                   : "VNPay"}.
-                Chung toi se xu ly giao hang som nhat.
+                Chúng tôi sẽ xử lý giao hàng sớm nhất.
               </p>
               {(order.paymentInfo?.vnpayTransactionNo ||
                 order.paymentInfo?.sepayTransactionId) && (
                 <p className="text-sm font-mono mt-2 text-gray-700">
-                  Ma GD:{" "}
+                  Mã GD:{" "}
                   {order.paymentInfo.vnpayTransactionNo ||
                     order.paymentInfo.sepayTransactionId}
                 </p>
@@ -571,15 +571,15 @@ const OrderDetailPage = () => {
               {order.paymentMethod === "VNPAY" &&
                 order.paymentInfo?.vnpayBankCode && (
                   <p className="text-sm text-muted-foreground mt-1">
-                    Ngan hang: {order.paymentInfo.vnpayBankCode}
+                    Ngân hàng: {order.paymentInfo.vnpayBankCode}
                   </p>
                 )}
               {order.paymentMethod === "BANK_TRANSFER" &&
                 order.paymentInfo?.sepayOrderCode && (
                   <div className="mt-1 text-sm text-muted-foreground">
-                    <p>Noi dung CK: {order.paymentInfo.sepayOrderCode}</p>
+                    <p>Nội dung CK: {order.paymentInfo.sepayOrderCode}</p>
                     {order.paymentInfo?.sepayTransactionId && (
-                      <p>Ma GD: {order.paymentInfo.sepayTransactionId}</p>
+                      <p>Mã GD: {order.paymentInfo.sepayTransactionId}</p>
                     )}
                   </div>
                 )}
@@ -659,17 +659,17 @@ const OrderDetailPage = () => {
                 <div className="space-y-3">
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm">
                     <p className="font-medium text-orange-900">
-                      Cho thanh toan{" "}
+                      Chờ thanh toán{" "}
                       {isPendingSepayOrder ? "Chuyển khoản (SePay)" : "VNPay"}
                     </p>
                     <p className="text-orange-700 mt-1">
-                      Con lai:{" "}
+                      Còn lại:{" "}
                       <span className="font-mono font-bold">
                         {timeRemaining || "..."}
                       </span>
                     </p>
                     <p className="text-xs text-orange-600 mt-1">
-                      Don se tu huy neu qua han
+                      Đơn sẽ tự hủy nếu quá hạn
                     </p>
                   </div>
 
@@ -681,7 +681,7 @@ const OrderDetailPage = () => {
                         className="mx-auto h-52 w-52 object-contain"
                       />
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Noi dung chuyen khoan: {order.paymentInfo?.sepayOrderCode}
+                        Nội dung chuyển khoản: {order.paymentInfo?.sepayOrderCode}
                       </p>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <Button variant="outline" onClick={handleCopySepayContent}>
@@ -690,7 +690,7 @@ const OrderDetailPage = () => {
                         </Button>
                         <Button onClick={handleRefreshPaymentStatus}>
                           <RefreshCw className="w-4 h-4 mr-2" />
-                          Lam moi
+                          Làm mới
                         </Button>
                       </div>
                     </div>
@@ -702,7 +702,7 @@ const OrderDetailPage = () => {
                     onClick={handleCancelVNPayOrder}
                     disabled={isCancellingVNPay}
                   >
-                    {isCancellingVNPay ? "Dang huy..." : "Huy don hang"}
+                    {isCancellingVNPay ? "Đang hủy..." : "Hủy đơn hàng"}
                   </Button>
                 </div>
               )}
@@ -771,9 +771,9 @@ const OrderDetailPage = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Huy don cho thanh toan online</AlertDialogTitle>
+            <AlertDialogTitle>Hủy đơn chờ thanh toán online</AlertDialogTitle>
             <AlertDialogDescription>
-              Ban sap huy don cho thanh toan{" "}
+              Bạn sắp hủy đơn chờ thanh toán{" "}
               {isPendingSepayOrder ? "Chuyển khoản (SePay)" : "VNPay"}.
               <br />
               <span className="text-orange-600 font-medium">

@@ -11,6 +11,8 @@ import { authorize } from "../../middleware/authz/authorize.js";
 import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 
 const router = express.Router();
+const resolveProductWriteScope = (req) =>
+  req?.authz?.isGlobalAdmin ? "global" : "branch";
 
 // Public routes (no auth required)
 router.get("/", controller.findAll);
@@ -28,8 +30,8 @@ router.use(protect, resolveAccessContext);
 router.post(
   "/",
   authorize(AUTHZ_ACTIONS.PRODUCT_CREATE, {
-    scopeMode: "branch",
-    requireActiveBranch: true,
+    scopeMode: resolveProductWriteScope,
+    requireActiveBranchFor: ["branch"],
     resourceType: "PRODUCT",
   }),
   controller.create
@@ -47,8 +49,8 @@ router.get(
 router.put(
   "/:id",
   authorize(AUTHZ_ACTIONS.PRODUCT_UPDATE, {
-    scopeMode: "branch",
-    requireActiveBranch: true,
+    scopeMode: resolveProductWriteScope,
+    requireActiveBranchFor: ["branch"],
     resourceType: "PRODUCT",
   }),
   controller.update
@@ -57,8 +59,8 @@ router.put(
 router.delete(
   "/:id",
   authorize(AUTHZ_ACTIONS.PRODUCT_DELETE, {
-    scopeMode: "branch",
-    requireActiveBranch: true,
+    scopeMode: resolveProductWriteScope,
+    requireActiveBranchFor: ["branch"],
     resourceType: "PRODUCT",
   }),
   controller.deleteProduct

@@ -360,10 +360,10 @@ const CheckoutPage = () => {
         return;
       }
 
-      toast.warning(`Don #${orderNumber} dang cho xac nhan Chuyển khoản (SePay)`, {
+      toast.warning(`Đơn #${orderNumber} đang chờ xác nhận Chuyển khoản (SePay)`, {
         duration: 10000,
         action: {
-          label: "Xem don",
+          label: "Xem đơn",
           onClick: () => navigate(`/orders/${orderId}`),
         },
       });
@@ -432,7 +432,7 @@ const CheckoutPage = () => {
         await getCart();
         clearSepayPendingOrder();
         setShowSepayDialog(false);
-        toast.success("Thanh toan Chuyển khoản (SePay) thanh cong!");
+        toast.success("Thanh toán Chuyển khoản (SePay) thành công!");
         navigate(`/orders/${orderId}`, { replace: true });
         return true;
       }
@@ -440,17 +440,17 @@ const CheckoutPage = () => {
       if (order.status === "CANCELLED" || order.status === "PAYMENT_FAILED") {
         clearSepayPendingOrder();
         setShowSepayDialog(false);
-        toast.info("Don hang da het han hoac bi huy");
+        toast.info("Đơn hàng đã hết hạn hoặc bị hủy");
         return true;
       }
 
       if (!options.silent) {
-        toast.info("He thong van dang cho xac nhan thanh toan");
+        toast.info("Hệ thống vẫn đang chờ xác nhận thanh toán");
       }
       return false;
     } catch {
       if (!options.silent) {
-        toast.error("Khong the kiem tra trang thai thanh toan");
+        toast.error("Không thể kiểm tra trạng thái thanh toán");
       }
       return false;
     }
@@ -478,9 +478,9 @@ const CheckoutPage = () => {
 
     try {
       await navigator.clipboard.writeText(orderCode);
-      toast.success("Da sao chep noi dung chuyen khoan");
+      toast.success("Đã sao chép nội dung chuyển khoản");
     } catch {
-      toast.error("Khong the sao chep noi dung");
+      toast.error("Không thể sao chép nội dung");
     }
   };
 
@@ -576,14 +576,14 @@ const CheckoutPage = () => {
     setError("");
 
     if (checkoutItems.length === 0) {
-      setError("Khong co san pham nao de thanh toan");
+      setError("Không có sản phẩm nào để thanh toán");
       setIsLoading(false);
       navigate("/cart", { replace: true });
       return;
     }
 
     if (!selectedAddressId) {
-      setError("Vui long chon dia chi nhan hang");
+      setError("Vui lòng chọn địa chỉ nhận hàng");
       setIsLoading(false);
       return;
     }
@@ -592,7 +592,7 @@ const CheckoutPage = () => {
       effectiveFulfillmentType === "CLICK_AND_COLLECT" &&
       !selectedPickupStoreId
     ) {
-      const message = "Vui long chon cua hang nhan hang";
+      const message = "Vui lòng chọn cửa hàng nhận hàng";
       setError(message);
       setIsLoading(false);
       toast.error(message);
@@ -600,7 +600,7 @@ const CheckoutPage = () => {
     }
 
     if (!selectedAddress) {
-      setError("Khong tim thay dia chi nhan hang");
+      setError("Không tìm thấy địa chỉ nhận hàng");
       setIsLoading(false);
       return;
     }
@@ -635,7 +635,7 @@ const CheckoutPage = () => {
       const response = await orderAPI.create(orderData);
       const createdOrder = response?.data?.order || response?.data?.data?.order;
       if (!createdOrder?._id) {
-        throw new Error("Khong nhan duoc thong tin don hang tu server");
+        throw new Error("Không nhận được thông tin đơn hàng từ server");
       }
 
       const deferredMethods = ["VNPAY", "BANK_TRANSFER"];
@@ -650,12 +650,12 @@ const CheckoutPage = () => {
           const vnpayResponse = await vnpayAPI.createPaymentUrl({
             orderId: createdOrder._id,
             amount: createdOrder.totalAmount,
-            orderDescription: `Thanh toan don hang ${createdOrder.orderNumber}`,
+            orderDescription: `Thanh toán đơn hàng ${createdOrder.orderNumber}`,
             language: "vn",
           });
 
           if (!vnpayResponse.data?.success) {
-            throw new Error("Khong the tao link thanh toan");
+            throw new Error("Không thể tạo link thanh toán");
           }
 
           localStorage.setItem(
@@ -673,9 +673,9 @@ const CheckoutPage = () => {
         } catch {
           setIsRedirectingToPayment(false);
           await orderAPI.cancel(createdOrder._id, {
-            reason: "Khong the tao link thanh toan VNPay",
+            reason: "Không thể tạo link thanh toán VNPay",
           });
-          toast.error("Loi khi tao link thanh toan VNPay");
+          toast.error("Lỗi khi tạo link thanh toán VNPay");
         }
       } else if (formData.paymentMethod === "BANK_TRANSFER") {
         try {
@@ -684,7 +684,7 @@ const CheckoutPage = () => {
           });
           const sepayData = sepayResponse?.data?.data;
           if (!sepayResponse?.data?.success || !sepayData?.qrUrl) {
-            throw new Error("Khong the tao ma QR Chuyển khoản (SePay)");
+            throw new Error("Không thể tạo mã QR Chuyển khoản (SePay)");
           }
 
           const session = {
@@ -702,12 +702,12 @@ const CheckoutPage = () => {
           setShowSepayDialog(true);
           localStorage.setItem(SEPAY_PENDING_KEY, JSON.stringify(session));
           startSepayPolling(createdOrder._id);
-          toast.success("Don hang da tao. Vui long quet QR de thanh toan");
+          toast.success("Đơn hàng đã tạo. Vui lòng quét QR để thanh toán");
         } catch {
           await orderAPI.cancel(createdOrder._id, {
-            reason: "Khong the tao ma QR Chuyển khoản (SePay)",
+            reason: "Không thể tạo mã QR Chuyển khoản (SePay)",
           });
-          toast.error("Loi khi tao QR thanh toan Chuyển khoản (SePay)");
+          toast.error("Lỗi khi tạo QR thanh toán Chuyển khoản (SePay)");
         }
       } else {
         skipEmptySelectionGuardRef.current = true;
@@ -736,15 +736,15 @@ const CheckoutPage = () => {
           await getCart();
         }
 
-        toast.success("Dat hang thanh cong!");
+        toast.success("Đặt hàng thành công!");
         setTimeout(() => {
           navigate(`/orders/${createdOrder._id}`, { replace: true });
         }, 300);
       }
     } catch (error) {
       console.error("Order error:", error);
-      setError(error.response?.data?.message || "Dat hang that bai");
-      toast.error("Dat hang that bai");
+      setError(error.response?.data?.message || "Đặt hàng thất bại");
+      toast.error("Đặt hàng thất bại");
     } finally {
       if (formData.paymentMethod !== "VNPAY") {
         setIsLoading(false);

@@ -438,7 +438,7 @@ const buildProcessedItems = async (rawItems, session) => {
   for (const rawItem of rawItems) {
     const quantity = toNumber(rawItem?.quantity, 0);
     if (quantity <= 0) {
-      throw badRequest("So luong san pham khong hop le");
+      throw badRequest("Số lượng sản phẩm không hợp lệ");
     }
 
     let variant = null;
@@ -447,7 +447,7 @@ const buildProcessedItems = async (rawItems, session) => {
     if (rawItem?.variantId) {
       variant = await UniversalVariant.findById(rawItem.variantId).session(session);
       if (!variant) {
-        throw badRequest(`Khong tim thay bien the: ${rawItem.variantId}`);
+        throw badRequest(`Không tìm thấy biến thể: ${rawItem.variantId}`);
       }
     } else if (rawItem?.variantSku) {
       variant = await UniversalVariant.findOne({ sku: rawItem.variantSku }).session(session);
@@ -462,12 +462,12 @@ const buildProcessedItems = async (rawItems, session) => {
     }
 
     if (!product) {
-      throw badRequest("Khong tim thay san pham trong don hang");
+      throw badRequest("Không tìm thấy sản phẩm trong đơn hàng");
     }
 
     if (variant) {
       if (toNumber(variant.stock, 0) < quantity) {
-        throw badRequest(`${product.name} chi con ${variant.stock} san pham`);
+        throw badRequest(`${product.name} chỉ còn ${variant.stock} sản phẩm`);
       }
 
       variant.stock -= quantity;
@@ -485,7 +485,7 @@ const buildProcessedItems = async (rawItems, session) => {
     );
 
     if (unitPrice < 0) {
-      throw badRequest("Gia san pham khong hop le");
+      throw badRequest("Giá sản phẩm không hợp lệ");
     }
 
     const variantSku = rawItem?.variantSku || variant?.sku;
@@ -627,7 +627,7 @@ const buildFilter = (req) => {
   if (statusStage) {
     const normalizedStage = normalizeStatusStage(statusStage);
     if (!normalizedStage) {
-      throw badRequest("Trang thai giai doan khong hop le");
+      throw badRequest("Trạng thái giai đoạn không hợp lệ");
     }
     andClauses.push({ statusStage: normalizedStage });
   }
@@ -643,7 +643,7 @@ const buildFilter = (req) => {
   if (fulfillmentType) {
     const normalizedFulfillment = normalizeFulfillmentType(fulfillmentType);
     if (!normalizedFulfillment) {
-      throw badRequest("Kieu hoan tat don hang khong hop le");
+      throw badRequest("Kiểu hoàn tất đơn hàng không hợp lệ");
     }
     andClauses.push({ fulfillmentType: normalizedFulfillment });
   }
@@ -651,7 +651,7 @@ const buildFilter = (req) => {
   if (orderSource) {
     const normalizedSource = normalizeOrderSource(orderSource);
     if (!normalizedSource) {
-      throw badRequest("Nguon don hang khong hop le");
+      throw badRequest("Nguồn đơn hàng không hợp lệ");
     }
     andClauses.push({ orderSource: normalizedSource });
   }
@@ -759,7 +759,7 @@ export const getAllOrders = async (req, res) => {
     res.status(statusCode).json({
       success: false,
       message:
-        statusCode === 500 ? "Khong the lay danh sach don hang" : error.message,
+        statusCode === 500 ? "Không thể lấy danh sách đơn hàng" : error.message,
       error: error.message,
     });
   }
@@ -775,7 +775,7 @@ export const getOrderById = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -791,7 +791,7 @@ export const getOrderById = async (req, res) => {
     if (req.user.role === "CUSTOMER" && !isOrderOwnedByUser(order, req.user._id)) {
       return res.status(403).json({
         success: false,
-        message: "Ban khong co quyen xem don hang nay",
+        message: "Bạn không có quyền xem đơn hàng này",
       });
     }
 
@@ -800,7 +800,7 @@ export const getOrderById = async (req, res) => {
       if (!shipperId || shipperId !== req.user._id.toString()) {
         return res.status(403).json({
           success: false,
-          message: "Ban khong co quyen xem don hang nay",
+          message: "Bạn không có quyền xem đơn hàng này",
         });
       }
     }
@@ -811,7 +811,7 @@ export const getOrderById = async (req, res) => {
       if (!isInStore || !staffId || staffId !== req.user._id.toString()) {
         return res.status(403).json({
           success: false,
-          message: "Ban khong co quyen xem don hang nay",
+          message: "Bạn không có quyền xem đơn hàng này",
         });
       }
     }
@@ -819,7 +819,7 @@ export const getOrderById = async (req, res) => {
     if (req.user.role === "CASHIER" && !isInStoreOrder(order)) {
       return res.status(403).json({
         success: false,
-        message: "Ban khong co quyen xem don hang nay",
+        message: "Bạn không có quyền xem đơn hàng này",
       });
     }
 
@@ -839,7 +839,7 @@ export const getOrderById = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Loi khi lay thong tin don hang",
+      message: "Lỗi khi lấy thông tin đơn hàng",
       error: error.message,
     });
   }
@@ -872,17 +872,17 @@ export const createOrder = async (req, res) => {
     } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
-      throw badRequest("Don hang phai co it nhat 1 san pham");
+      throw badRequest("Đơn hàng phải có ít nhất 1 sản phẩm");
     }
 
     const normalizedOrderSource = normalizeOrderSource(orderSource);
     if (orderSource && !normalizedOrderSource) {
-      throw badRequest("Nguon don hang khong hop le");
+      throw badRequest("Nguồn đơn hàng không hợp lệ");
     }
 
     const normalizedFulfillment = normalizeFulfillmentType(fulfillmentType);
     if (fulfillmentType && !normalizedFulfillment) {
-      throw badRequest("Kieu hoan tat don hang khong hop le");
+      throw badRequest("Kiểu hoàn tất đơn hàng không hợp lệ");
     }
 
     const effectiveFulfillment =
@@ -891,16 +891,16 @@ export const createOrder = async (req, res) => {
       normalizedOrderSource || getOrderSourceFromRequest(effectiveFulfillment);
 
     if (effectiveOrderSource === "IN_STORE" && effectiveFulfillment !== "IN_STORE") {
-      throw badRequest("Don IN_STORE phai co fulfillmentType IN_STORE");
+      throw badRequest("Đơn IN_STORE phải có fulfillmentType IN_STORE");
     }
 
     if (effectiveOrderSource === "ONLINE" && effectiveFulfillment === "IN_STORE") {
-      throw badRequest("Don ONLINE khong duoc co fulfillmentType IN_STORE");
+      throw badRequest("Đơn ONLINE không được có fulfillmentType IN_STORE");
     }
 
     if (effectiveFulfillment !== "IN_STORE") {
       if (!shippingAddress?.fullName || !shippingAddress?.phoneNumber || !shippingAddress?.detailAddress) {
-        throw badRequest("Thong tin dia chi giao hang khong day du");
+        throw badRequest("Thông tin địa chỉ giao hàng không đầy đủ");
       }
     }
 
@@ -920,7 +920,7 @@ export const createOrder = async (req, res) => {
           }).session(session);
 
           if (!assignedStore) {
-            const err = new Error("Khong tim thay cua hang nhan hang hop le");
+            const err = new Error("Không tìm thấy cửa hàng nhận hàng hợp lệ");
             err.httpStatus = 400;
             throw err;
           }
@@ -978,12 +978,12 @@ export const createOrder = async (req, res) => {
     const requestedStatusStage = normalizeStatusStage(statusStage);
 
     if (statusStage && !requestedStatusStage) {
-      throw badRequest("Trang thai giai doan khoi tao khong hop le");
+      throw badRequest("Trạng thái giai đoạn khởi tạo không hợp lệ");
     }
 
     if (requestedStatusStage && requestedStatusStage !== initialStatusStage) {
       throw badRequest(
-        `statusStage khoi tao phai la ${initialStatusStage} cho trang thai ${initialStatus}`
+        `statusStage khởi tạo phải là ${initialStatusStage} cho trạng thái ${initialStatus}`
       );
     }
 
@@ -1083,7 +1083,7 @@ export const createOrder = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Da tao don hang thanh cong",
+      message: "Đã tạo đơn hàng thành công",
       order: normalizedOrder,
       data: { order: normalizedOrder },
       pickupCode,
@@ -1119,7 +1119,7 @@ export const createOrder = async (req, res) => {
 
     res.status(status).json({
       success: false,
-      message: status === 500 ? "Loi khi tao don hang" : error.message,
+      message: status === 500 ? "Lỗi khi tạo đơn hàng" : error.message,
       error: error.message,
       ...(error.payload || {}),
     });
@@ -1146,7 +1146,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Trang thai khong hop le",
+        message: "Trạng thái không hợp lệ",
       });
     }
 
@@ -1156,7 +1156,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -1176,7 +1176,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
-          message: "Ban khong duoc cap nhat don hang nay",
+          message: "Bạn không được cập nhật đơn hàng này",
         });
       }
 
@@ -1184,7 +1184,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
-          message: "Shipper khong duoc cap nhat sang trang thai nay",
+          message: "Shipper không được cập nhật sang trạng thái này",
         });
       }
     }
@@ -1204,7 +1204,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
-          message: "POS staff chi duoc xu ly don tai quay do chinh minh tao",
+          message: "POS staff chỉ được xử lý đơn tại quầy do chính mình tạo",
         });
       }
 
@@ -1213,7 +1213,7 @@ export const updateOrderStatus = async (req, res) => {
         return res.status(400).json({
           success: false,
           message:
-            "POS staff chi duoc xac nhan ban giao hoac yeu cau doi may tai buoc ban giao",
+            "POS staff chỉ được xác nhận bàn giao hoặc yêu cầu đổi máy tại bước bàn giao",
         });
       }
     }
@@ -1234,7 +1234,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(transitionCheck.reason?.startsWith("Role") ? 403 : 400).json({
         success: false,
-        message: transitionCheck.reason || "Khong the chuyen trang thai",
+        message: transitionCheck.reason || "Không thể chuyển trạng thái",
       });
     }
 
@@ -1261,8 +1261,8 @@ export const updateOrderStatus = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: inStoreOrder
-            ? "Don IN_STORE phai duoc giao cho WAREHOUSE_MANAGER"
-            : "Nhan vien kho duoc chon khong hop le",
+            ? "Đơn IN_STORE phải được giao cho WAREHOUSE_MANAGER"
+            : "Nhân viên kho được chọn không hợp lệ",
         });
       }
     }
@@ -1277,7 +1277,7 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({
         success: false,
         message:
-          "ORDER_MANAGER chi duoc dieu phoi don sang trang thai Xac nhan, Lay hang, Dang giao hoac Huy",
+          "ORDER_MANAGER chỉ được điều phối đơn sang trạng thái Xác nhận, Lấy hàng, Đang giao hoặc Hủy",
       });
     }
 
@@ -1290,7 +1290,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Vui long chi dinh WAREHOUSE_MANAGER truoc khi dua don vao lay hang",
+        message: "Vui lòng chỉ định WAREHOUSE_MANAGER trước khi đưa đơn vào lấy hàng",
       });
     }
 
@@ -1300,7 +1300,7 @@ export const updateOrderStatus = async (req, res) => {
           await session.abortTransaction();
           return res.status(403).json({
             success: false,
-            message: "Chi WAREHOUSE_MANAGER duoc xac nhan san sang ban giao don IN_STORE",
+            message: "Chỉ WAREHOUSE_MANAGER được xác nhận sẵn sàng bàn giao đơn IN_STORE",
           });
         }
 
@@ -1309,14 +1309,14 @@ export const updateOrderStatus = async (req, res) => {
           await session.abortTransaction();
           return res.status(403).json({
             success: false,
-            message: "Don hang nay duoc phan cong cho Warehouse Manager khac",
+            message: "Đơn hàng này được phân công cho Warehouse Manager khác",
           });
         }
       } else if (!["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(req.user.role)) {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
-          message: "Chi WAREHOUSE_MANAGER hoac WAREHOUSE_STAFF moi duoc xac nhan hoan tat lay hang",
+          message: "Chỉ WAREHOUSE_MANAGER hoặc WAREHOUSE_STAFF mới được xác nhận hoàn tất lấy hàng",
         });
       }
     }
@@ -1325,7 +1325,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Chi don hang tai cua hang moi duoc chuyen sang cho thanh toan",
+        message: "Chỉ đơn hàng tại cửa hàng mới được chuyển sang chờ thanh toán",
       });
     }
 
@@ -1333,7 +1333,7 @@ export const updateOrderStatus = async (req, res) => {
       await session.abortTransaction();
       return res.status(403).json({
         success: false,
-        message: "Chi ORDER_MANAGER hoac ADMIN moi duoc giao shipper",
+        message: "Chỉ ORDER_MANAGER hoặc ADMIN mới được giao shipper",
       });
     }
 
@@ -1343,7 +1343,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: "Shipper duoc chon khong hop le",
+          message: "Shipper được chọn không hợp lệ",
         });
       }
 
@@ -1363,7 +1363,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
-          message: "Chi ORDER_MANAGER hoac ADMIN moi duoc gan chi nhanh",
+          message: "Chỉ ORDER_MANAGER hoặc ADMIN mới được gán chi nhánh",
         });
       }
 
@@ -1386,7 +1386,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: "Chi nhanh duoc chon khong hop le hoac dang ngung hoat dong",
+          message: "Chi nhánh được chọn không hợp lệ hoặc đang ngừng hoạt động",
         });
       }
 
@@ -1419,7 +1419,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: "Vui long gan chi nhanh truoc khi chuyen sang trang thai nay",
+          message: "Vui lòng gán chi nhánh trước khi chuyển sang trạng thái này",
         });
       }
     }
@@ -1437,7 +1437,7 @@ export const updateOrderStatus = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: "Vui long chon shipper hoac gan carrier truoc khi chuyen sang dang giao",
+          message: "Vui lòng chọn shipper hoặc gán carrier trước khi chuyển sang đang giao",
         });
       }
     }
@@ -1579,7 +1579,7 @@ export const updateOrderStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Da cap nhat trang thai don hang: ${targetStatus}`,
+      message: `Đã cập nhật trạng thái đơn hàng: ${targetStatus}`,
       order: normalizedOrder,
       data: { order: normalizedOrder },
     });
@@ -1595,7 +1595,7 @@ export const updateOrderStatus = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Loi khi cap nhat trang thai",
+      message: "Lỗi khi cập nhật trạng thái",
       error: error.message,
     });
   } finally {
@@ -1630,7 +1630,7 @@ export const assignCarrier = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Vui long cung cap shipper hoac thong tin carrier",
+        message: "Vui lòng cung cấp shipper hoặc thông tin carrier",
       });
     }
 
@@ -1639,7 +1639,7 @@ export const assignCarrier = async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -1647,7 +1647,7 @@ export const assignCarrier = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Don hang tai cua hang khong can gan shipper",
+        message: "Đơn hàng tại cửa hàng không cần gán shipper",
       });
     }
 
@@ -1658,7 +1658,7 @@ export const assignCarrier = async (req, res) => {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: "Shipper duoc chon khong hop le",
+          message: "Shipper được chọn không hợp lệ",
         });
       }
     }
@@ -1751,7 +1751,7 @@ export const assignCarrier = async (req, res) => {
     const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
     return res.json({
       success: true,
-      message: changedCarrier ? "Da chuyen carrier" : "Da cap nhat carrier",
+      message: changedCarrier ? "Đã chuyển carrier" : "Đã cập nhật carrier",
       order: normalizedOrder,
       data: { order: normalizedOrder },
     });
@@ -1759,7 +1759,7 @@ export const assignCarrier = async (req, res) => {
     await session.abortTransaction();
     return res.status(500).json({
       success: false,
-      message: "Loi khi gan shipper",
+      message: "Lỗi khi gán shipper",
       error: error.message,
     });
   } finally {
@@ -2033,7 +2033,7 @@ export const assignPicker = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Vui long chon nhan vien kho",
+        message: "Vui lòng chọn nhân viên kho",
       });
     }
 
@@ -2042,7 +2042,7 @@ export const assignPicker = async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -2051,7 +2051,7 @@ export const assignPicker = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Nhan vien kho khong hop le",
+        message: "Nhân viên kho không hợp lệ",
       });
     }
 
@@ -2074,7 +2074,7 @@ export const assignPicker = async (req, res) => {
     const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
     res.json({
       success: true,
-      message: `Da phan cong nhan vien lay hang: ${picker.fullName}`,
+      message: `Đã phân công nhân viên lấy hàng: ${picker.fullName}`,
       order: normalizedOrder,
       data: { order: normalizedOrder },
     });
@@ -2086,7 +2086,7 @@ export const assignPicker = async (req, res) => {
     });
     res.status(500).json({
       success: false,
-      message: "Loi khi phan cong nhan vien lay hang",
+      message: "Lỗi khi phân công nhân viên lấy hàng",
       error: error.message,
     });
   } finally {
@@ -2101,7 +2101,7 @@ export const updatePaymentStatus = async (req, res) => {
     if (!PAYMENT_STATUSES.has(paymentStatus)) {
       return res.status(400).json({
         success: false,
-        message: "Trang thai thanh toan khong hop le",
+        message: "Trạng thái thanh toán không hợp lệ",
       });
     }
 
@@ -2110,7 +2110,7 @@ export const updatePaymentStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -2134,7 +2134,7 @@ export const updatePaymentStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Da cap nhat trang thai thanh toan: ${paymentStatus}`,
+      message: `Đã cập nhật trạng thái thanh toán: ${paymentStatus}`,
       order: normalizedOrder,
       data: { order: normalizedOrder },
     });
@@ -2147,7 +2147,7 @@ export const updatePaymentStatus = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Loi khi cap nhat trang thai thanh toan",
+      message: "Lỗi khi cập nhật trạng thái thanh toán",
       error: error.message,
     });
   }
@@ -2221,7 +2221,7 @@ export const getOrderStats = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Loi khi lay thong ke",
+      message: "Lỗi khi lấy thống kê",
       error: error.message,
     });
   }
@@ -2238,7 +2238,7 @@ export const cancelOrder = async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay don hang",
+        message: "Không tìm thấy đơn hàng",
       });
     }
 
@@ -2246,7 +2246,7 @@ export const cancelOrder = async (req, res) => {
       await session.abortTransaction();
       return res.status(403).json({
         success: false,
-        message: "Ban khong co quyen huy don hang nay",
+        message: "Bạn không có quyền hủy đơn hàng này",
       });
     }
 
@@ -2266,7 +2266,7 @@ export const cancelOrder = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Khong the huy don hang o trang thai nay",
+        message: "Không thể hủy đơn hàng ở trạng thái này",
       });
     }
 
@@ -2298,7 +2298,7 @@ export const cancelOrder = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Da huy don hang",
+      message: "Đã hủy đơn hàng",
       order: normalizedOrder,
       data: { order: normalizedOrder },
     });
@@ -2313,7 +2313,7 @@ export const cancelOrder = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Loi khi huy don hang",
+      message: "Lỗi khi hủy đơn hàng",
       error: error.message,
     });
   } finally {

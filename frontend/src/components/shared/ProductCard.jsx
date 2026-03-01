@@ -107,6 +107,7 @@ const ProductCard = ({
   onDelete, // Callback xóa sản phẩm (Admin)
   onClick, // Optional: override default click behavior
   openInNewTab = false, // Optional: open URL in new tab
+  showAdminActions, // Optional: force show/hide admin actions from parent
 }) => {
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
@@ -120,8 +121,12 @@ const ProductCard = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false); // Dialog xóa
   const [isVariantReady, setIsVariantReady] = useState(false); // Sẵn sàng navigate
 
-  // Kiểm tra quyền Admin/Kho
-  const isAdmin = ["ADMIN", "PRODUCT_MANAGER"].includes(user?.role);
+  const normalizedRole = String(user?.role || "").toUpperCase();
+  const hasAdminRole = ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"].includes(
+    normalizedRole
+  );
+  const canShowAdminActions =
+    typeof showAdminActions === "boolean" ? showAdminActions : hasAdminRole;
 
   // Đảm bảo variants luôn là array
   const safeVariants = useMemo(
@@ -433,7 +438,7 @@ const ProductCard = ({
         )}
 
         {/* DEBUG UI: CHỈ ADMIN */}
-        {isAdmin && (
+        {canShowAdminActions && (
           <div className="absolute top-12 left-3 z-10 bg-black/90 text-white text-[7px] px-2 py-1 rounded font-mono space-y-1 max-w-[200px] opacity-80">
             <div className="truncate">
               Base:{" "}
@@ -456,7 +461,7 @@ const ProductCard = ({
           </div>
         )}
 
-        {isAdmin && (
+        {canShowAdminActions && (
           <>
             <div className="absolute bottom-3 right-12 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button
@@ -506,7 +511,7 @@ const ProductCard = ({
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
           />
 
-          {!isAdmin &&
+          {!hasAdminRole &&
             isAuthenticated &&
             user?.role === "CUSTOMER" &&
             totalStock > 0 && (
