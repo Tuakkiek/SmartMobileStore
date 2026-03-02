@@ -22,9 +22,15 @@ const shortVideoSchema = new mongoose.Schema(
       type: String,
       required: [true, "URL video không được để trống"],
     },
+    videoPublicId: {
+      type: String, // Cloudinary public_id for deletion
+    },
     thumbnailUrl: {
       type: String,
       required: [true, "URL thumbnail không được để trống"],
+    },
+    thumbnailPublicId: {
+      type: String, // Cloudinary public_id for deletion
     },
     duration: {
       type: Number, // in seconds

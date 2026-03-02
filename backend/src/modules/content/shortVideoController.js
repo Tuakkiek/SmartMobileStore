@@ -1,11 +1,47 @@
 // ============================================
-// FILE: backend/src/controllers/shortVideoController.js
-// Complete controller for short videos
+// FILE: backend/src/modules/content/shortVideoController.js
+// ✅ UPDATED: Upload video/thumbnail to Cloudinary
 // ============================================
 
 import ShortVideo from "./ShortVideo.js";
-import fs from "fs";
-import path from "path";
+import cloudinary from "../../lib/cloudinary.js";
+
+// ============================================
+// HELPER: Upload buffer to Cloudinary
+// ============================================
+const uploadBufferToCloudinary = (buffer, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const uploadOptions = {
+      resource_type: "auto",
+      ...options,
+    };
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+};
+
+// ============================================
+// HELPER: Delete from Cloudinary by public_id
+// ============================================
+const deleteFromCloudinary = async (publicId, resourceType = "video") => {
+  if (!publicId) return;
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
+    console.log(`🗑️ Deleted Cloudinary asset: ${publicId}`);
+  } catch (err) {
+    console.error(`⚠️ Failed to delete Cloudinary asset ${publicId}:`, err);
+  }
+};
 
 // ============================================
 // GET ALL VIDEOS (Admin only - with pagination)
@@ -22,12 +58,10 @@ export const getAllVideos = async (req, res) => {
 
     const query = {};
 
-    // Filter by status
     if (status && status !== "ALL") {
       query.status = status;
     }
 
-    // Search by title or description
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
@@ -99,7 +133,6 @@ export const getTrendingVideos = async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
-    // Calculate trending score: views * 0.5 + likes * 2 + shares * 3
     const videos = await ShortVideo.find({ status: "PUBLISHED" })
       .populate("createdBy", "fullName avatar")
       .populate("linkedProducts")
@@ -155,28 +188,19 @@ export const createVideo = async (req, res) => {
   try {
     console.log("📥 Create video request received");
     console.log("- Body:", req.body);
-    console.log("- Files:", req.files);
 
     const { title, description, status, linkedProducts } = req.body;
     const userId = req.user._id;
 
     // Validate required fields
     if (!title || !title.trim()) {
-      console.error("❌ Title is missing");
       return res.status(400).json({
         success: false,
         message: "Tiêu đề không được để trống",
       });
     }
 
-    // Check files
-    console.log("🔍 Checking files...");
-    console.log("- req.files:", req.files);
-    console.log("- req.files.video:", req.files?.video);
-    console.log("- req.files.thumbnail:", req.files?.thumbnail);
-
     if (!req.files) {
-      console.error("❌ No files uploaded");
       return res.status(400).json({
         success: false,
         message: "Vui lòng upload file",
@@ -184,7 +208,6 @@ export const createVideo = async (req, res) => {
     }
 
     if (!req.files.video) {
-      console.error("❌ Video file is missing");
       return res.status(400).json({
         success: false,
         message: "Vui lòng upload file video",
@@ -192,23 +215,36 @@ export const createVideo = async (req, res) => {
     }
 
     if (!req.files.thumbnail) {
-      console.error("❌ Thumbnail file is missing");
       return res.status(400).json({
         success: false,
         message: "Vui lòng upload ảnh thumbnail",
       });
     }
 
-    // Get file paths
-    const videoPath = `/uploads/videos/${req.files.video[0].filename}`;
-    const thumbnailPath = `/uploads/thumbnails/${req.files.thumbnail[0].filename}`;
+    const videoBuffer = req.files.video[0].buffer;
+    const thumbnailBuffer = req.files.thumbnail[0].buffer;
 
-    console.log("✅ Files uploaded:");
-    console.log("- Video:", videoPath);
-    console.log("- Thumbnail:", thumbnailPath);
+    console.log("☁️  Uploading video to Cloudinary...");
 
-    // Get video duration
-    const duration = 60; // Default
+    // Upload video to Cloudinary (no preset needed – server-side signed upload)
+    const videoUploadResult = await uploadBufferToCloudinary(videoBuffer, {
+      resource_type: "video",
+      folder: "short-videos/videos",
+    });
+
+    console.log("✅ Video uploaded:", videoUploadResult.secure_url);
+    console.log("☁️  Uploading thumbnail to Cloudinary...");
+
+    // Upload thumbnail to Cloudinary
+    const thumbnailUploadResult = await uploadBufferToCloudinary(
+      thumbnailBuffer,
+      {
+        resource_type: "image",
+        folder: "short-videos/thumbnails",
+      }
+    );
+
+    console.log("✅ Thumbnail uploaded:", thumbnailUploadResult.secure_url);
 
     // Find max order
     const maxOrderVideo = await ShortVideo.findOne().sort({ order: -1 });
@@ -227,12 +263,19 @@ export const createVideo = async (req, res) => {
       }
     }
 
-    // Create video
+    // Get video duration from Cloudinary result
+    const duration = videoUploadResult.duration
+      ? Math.round(videoUploadResult.duration)
+      : 60;
+
+    // Create video document
     const video = new ShortVideo({
       title: title.trim(),
       description: description?.trim() || "",
-      videoUrl: videoPath,
-      thumbnailUrl: thumbnailPath,
+      videoUrl: videoUploadResult.secure_url,
+      videoPublicId: videoUploadResult.public_id,
+      thumbnailUrl: thumbnailUploadResult.secure_url,
+      thumbnailPublicId: thumbnailUploadResult.public_id,
       duration,
       status: status || "DRAFT",
       createdBy: userId,
@@ -252,21 +295,13 @@ export const createVideo = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Create video error:", error);
-
-    // Clean up uploaded files if save fails
-    if (req.files) {
-      if (req.files.video) {
-        fs.unlink(req.files.video[0].path, (err) => {
-          if (err) console.error("Error deleting video file:", err);
-        });
-      }
-      if (req.files.thumbnail) {
-        fs.unlink(req.files.thumbnail[0].path, (err) => {
-          if (err) console.error("Error deleting thumbnail file:", err);
-        });
-      }
+    // Log Cloudinary-specific details if available
+    if (error.http_code || error.name === "Error") {
+      console.error("   Cloudinary error details:", {
+        http_code: error.http_code,
+        message: error.message,
+      });
     }
-
     res.status(500).json({
       success: false,
       message: error.message || "Lỗi khi tạo video",
@@ -305,24 +340,50 @@ export const updateVideo = async (req, res) => {
 
     // Update video file if provided
     if (req.files && req.files.video) {
-      // Delete old video file
-      const oldVideoPath = path.join(process.cwd(), video.videoUrl);
-      if (fs.existsSync(oldVideoPath)) {
-        fs.unlinkSync(oldVideoPath);
+      console.log("☁️ Replacing video on Cloudinary...");
+
+      // Delete old video from Cloudinary
+      await deleteFromCloudinary(video.videoPublicId, "video");
+
+      // Upload new video (server-side signed upload, no preset needed)
+      const videoUploadResult = await uploadBufferToCloudinary(
+        req.files.video[0].buffer,
+        {
+          resource_type: "video",
+          folder: "short-videos/videos",
+        }
+      );
+
+      video.videoUrl = videoUploadResult.secure_url;
+      video.videoPublicId = videoUploadResult.public_id;
+
+      if (videoUploadResult.duration) {
+        video.duration = Math.round(videoUploadResult.duration);
       }
 
-      video.videoUrl = `/uploads/videos/${req.files.video[0].filename}`;
+      console.log("✅ Video replaced:", videoUploadResult.secure_url);
     }
 
     // Update thumbnail if provided
     if (req.files && req.files.thumbnail) {
-      // Delete old thumbnail
-      const oldThumbnailPath = path.join(process.cwd(), video.thumbnailUrl);
-      if (fs.existsSync(oldThumbnailPath)) {
-        fs.unlinkSync(oldThumbnailPath);
-      }
+      console.log("☁️ Replacing thumbnail on Cloudinary...");
 
-      video.thumbnailUrl = `/uploads/thumbnails/${req.files.thumbnail[0].filename}`;
+      // Delete old thumbnail from Cloudinary
+      await deleteFromCloudinary(video.thumbnailPublicId, "image");
+
+      // Upload new thumbnail
+      const thumbnailUploadResult = await uploadBufferToCloudinary(
+        req.files.thumbnail[0].buffer,
+        {
+          resource_type: "image",
+          folder: "short-videos/thumbnails",
+        }
+      );
+
+      video.thumbnailUrl = thumbnailUploadResult.secure_url;
+      video.thumbnailPublicId = thumbnailUploadResult.public_id;
+
+      console.log("✅ Thumbnail replaced:", thumbnailUploadResult.secure_url);
     }
 
     // Update publishedAt if status changes to PUBLISHED
@@ -361,17 +422,11 @@ export const deleteVideo = async (req, res) => {
       });
     }
 
-    // Delete video file
-    const videoPath = path.join(process.cwd(), video.videoUrl);
-    if (fs.existsSync(videoPath)) {
-      fs.unlinkSync(videoPath);
-    }
-
-    // Delete thumbnail
-    const thumbnailPath = path.join(process.cwd(), video.thumbnailUrl);
-    if (fs.existsSync(thumbnailPath)) {
-      fs.unlinkSync(thumbnailPath);
-    }
+    // Delete video and thumbnail from Cloudinary
+    await Promise.all([
+      deleteFromCloudinary(video.videoPublicId, "video"),
+      deleteFromCloudinary(video.thumbnailPublicId, "image"),
+    ]);
 
     await video.deleteOne();
 
@@ -387,19 +442,6 @@ export const deleteVideo = async (req, res) => {
     });
   }
 };
-
-// ✅ THÊM LOG CHI TIẾT HƠN
-// console.log("✅ Files uploaded:");
-// console.log("- Video Path:", videoPath);
-// console.log("- Thumbnail Path:", thumbnailPath);
-// console.log(
-//   "- Video exists:",
-//   fs.existsSync(path.join(process.cwd(), videoPath))
-// );
-// console.log(
-//   "- Thumbnail exists:",
-//   fs.existsSync(path.join(process.cwd(), thumbnailPath))
-// );
 
 // ============================================
 // INCREMENT VIEW COUNT (Public)
@@ -451,13 +493,11 @@ export const toggleLike = async (req, res) => {
     const hasLiked = video.likedBy.includes(userId);
 
     if (hasLiked) {
-      // Unlike
       video.likedBy = video.likedBy.filter(
         (id) => id.toString() !== userId.toString()
       );
       video.likes = Math.max(0, video.likes - 1);
     } else {
-      // Like
       video.likedBy.push(userId);
       video.likes += 1;
     }
@@ -525,7 +565,6 @@ export const reorderVideos = async (req, res) => {
       });
     }
 
-    // Update order for each video
     const updatePromises = videoIds.map((id, index) =>
       ShortVideo.findByIdAndUpdate(id, { order: index + 1 })
     );
