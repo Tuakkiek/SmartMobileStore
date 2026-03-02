@@ -19,6 +19,76 @@ const toPositiveInteger = (value) => {
   return Math.floor(parsed);
 };
 
+const normalizeSku = (value) => String(value || "").trim();
+
+const sumQuantityBySku = (items = [], skuSelector) => {
+  const result = new Map();
+
+  for (const item of items) {
+    const sku = normalizeSku(skuSelector(item));
+    const quantity = Number(item?.quantity) || 0;
+    if (!sku || quantity <= 0) continue;
+
+    result.set(sku, (result.get(sku) || 0) + quantity);
+  }
+
+  return result;
+};
+
+const upsertPickedItems = (items = [], { sku, quantity, locationCode }) => {
+  const normalizedSku = normalizeSku(sku);
+  const normalizedLocationCode = String(locationCode || "").trim();
+  const pickedQty = Number(quantity) || 0;
+  const pickedItems = Array.isArray(items) ? [...items] : [];
+
+  const existingIndex = pickedItems.findIndex(
+    (item) =>
+      normalizeSku(item?.sku) === normalizedSku &&
+      String(item?.locationCode || "").trim() === normalizedLocationCode
+  );
+
+  if (existingIndex >= 0) {
+    const currentQty = Number(pickedItems[existingIndex]?.quantity) || 0;
+    pickedItems[existingIndex].quantity = currentQty + pickedQty;
+    return pickedItems;
+  }
+
+  pickedItems.push({
+    sku: normalizedSku,
+    quantity: pickedQty,
+    locationCode: normalizedLocationCode,
+  });
+
+  return pickedItems;
+};
+
+const isOrderPickCompleted = (orderItems = [], pickedItems = []) => {
+  const requiredBySku = sumQuantityBySku(orderItems, (item) => item?.sku || item?.variantSku);
+  if (requiredBySku.size === 0) return false;
+
+  const pickedBySku = sumQuantityBySku(pickedItems, (item) => item?.sku);
+  for (const [sku, requiredQty] of requiredBySku.entries()) {
+    if ((pickedBySku.get(sku) || 0) < requiredQty) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const appendStatusHistory = (order, status, updatedBy, note) => {
+  if (!Array.isArray(order.statusHistory)) {
+    order.statusHistory = [];
+  }
+
+  order.statusHistory.push({
+    status,
+    updatedBy,
+    updatedAt: new Date(),
+    note,
+  });
+};
+
 // ============================================
 // PHẦN 1: XUẤT KHO (PICK)
 // ============================================
@@ -120,8 +190,10 @@ export const pickItem = async (req, res) => {
     const { orderId, sku, locationCode, quantity } = req.body;
     const pickQty = toPositiveInteger(quantity);
     const actorName = getActorName(req.user);
+    const normalizedSku = normalizeSku(sku);
+    const normalizedLocationCode = String(locationCode || "").trim();
 
-    if (!sku?.trim() || !locationCode?.trim() || !pickQty) {
+    if (!normalizedSku || !normalizedLocationCode || !pickQty) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -162,14 +234,16 @@ export const pickItem = async (req, res) => {
     }
 
     // Tìm inventory
-    const location = await WarehouseLocation.findOne({ locationCode }).session(session);
+    const location = await WarehouseLocation.findOne({
+      locationCode: normalizedLocationCode,
+    }).session(session);
     if (!location) {
       await session.abortTransaction();
       return res.status(404).json({ success: false, message: "Không tìm thấy vị trí" });
     }
 
     const inventory = await Inventory.findOne({
-      sku,
+      sku: normalizedSku,
       locationId: location._id,
     }).session(session);
 
@@ -179,7 +253,7 @@ export const pickItem = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: `Không đủ hàng tại ${locationCode}. Tồn: ${availableQty}`,
+        message: `Không đủ hàng tại ${normalizedLocationCode}. Tồn: ${availableQty}`,
       });
     }
 
@@ -195,11 +269,11 @@ export const pickItem = async (req, res) => {
     // Ghi log
     const movement = new StockMovement({
       type: "OUTBOUND",
-      sku,
+      sku: normalizedSku,
       productId: inventory.productId,
       productName: inventory.productName,
       fromLocationId: location._id,
-      fromLocationCode: locationCode,
+      fromLocationCode: normalizedLocationCode,
       quantity: pickQty,
       referenceType: "ORDER",
       referenceId: orderId,
@@ -207,6 +281,44 @@ export const pickItem = async (req, res) => {
       performedByName: actorName,
     });
     await movement.save({ session });
+
+    const shippedNote = `Xuat kho ${pickQty} ${normalizedSku} tai ${normalizedLocationCode}`;
+    const pickedItems = upsertPickedItems(order?.shippedByInfo?.items, {
+      sku: normalizedSku,
+      quantity: pickQty,
+      locationCode: normalizedLocationCode,
+    });
+    const pickCompleted = isOrderPickCompleted(order.items, pickedItems);
+    const now = new Date();
+
+    order.shippedByInfo = {
+      ...order.shippedByInfo,
+      shippedBy: req.user._id,
+      shippedByName: actorName,
+      shippedAt: now,
+      shippedNote: shippedNote,
+      items: pickedItems,
+    };
+
+    let historyStatus = order.status;
+    let historyNote = shippedNote;
+
+    if (pickCompleted && ["CONFIRMED", "PROCESSING", "PREPARING"].includes(order.status)) {
+      order.status = "PREPARING_SHIPMENT";
+      historyStatus = "PREPARING_SHIPMENT";
+      historyNote = "Xuat kho hoan tat, san sang ban giao";
+
+      order.pickerInfo = {
+        ...order.pickerInfo,
+        pickerId: order.pickerInfo?.pickerId || req.user._id,
+        pickerName: order.pickerInfo?.pickerName || actorName,
+        pickedAt: order.pickerInfo?.pickedAt || now,
+        note: order.pickerInfo?.note || "",
+      };
+    }
+
+    appendStatusHistory(order, historyStatus, req.user._id, historyNote);
+    await order.save({ session });
 
     await session.commitTransaction();
 

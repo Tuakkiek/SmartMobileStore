@@ -436,6 +436,23 @@ const orderSchema = new mongoose.Schema(
       deliveryNote: String,
     },
 
+    shippedByInfo: {
+      shippedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      shippedByName: String,
+      shippedAt: Date,
+      shippedNote: String,
+      items: [
+        {
+          sku: String,
+          quantity: Number,
+          locationCode: String,
+        },
+      ],
+    },
+
     pickerInfo: {
       pickerId: {
         type: mongoose.Schema.Types.ObjectId,
