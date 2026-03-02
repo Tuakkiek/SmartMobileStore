@@ -74,6 +74,7 @@ const CARRIER_EVENT_TO_STATUS = Object.freeze({
   RETURNED: "RETURNED",
   CANCELLED: "CANCELLED",
 });
+const RETURN_RESTORE_STATUSES = new Set(["RETURNED", "DELIVERY_FAILED"]);
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -302,6 +303,213 @@ const getActorName = (user) => {
     user?.email?.trim() ||
     "POS Staff"
   );
+};
+
+const resolveMovementActor = ({ order, user } = {}) => {
+  const candidates = [
+    user?._id,
+    order?.shipperInfo?.shipperId,
+    order?.carrierAssignment?.assignedBy,
+    order?.createdByInfo?.userId,
+    order?.assignedStore?.assignedBy,
+    order?.customerId,
+    order?.userId,
+  ];
+
+  let performedBy = null;
+  for (const candidate of candidates) {
+    const resolved = candidate?._id || candidate;
+    if (resolved && mongoose.Types.ObjectId.isValid(resolved)) {
+      performedBy = resolved;
+      break;
+    }
+  }
+
+  const performedByName =
+    user?.fullName?.trim() ||
+    user?.name?.trim() ||
+    user?.email?.trim() ||
+    order?.shipperInfo?.shipperName?.trim() ||
+    order?.createdByInfo?.userName?.trim() ||
+    order?.carrierAssignment?.carrierName?.trim() ||
+    "System";
+
+  return { performedBy, performedByName };
+};
+
+const restoreInventoryForReturn = async ({
+  order,
+  user,
+  session,
+  reason = "",
+} = {}) => {
+  const movements = await StockMovement.find({
+    referenceType: "ORDER",
+    referenceId: String(order?._id),
+  }).session(session);
+
+  if (!movements.length) {
+    return [];
+  }
+
+  const grouped = new Map();
+  for (const movement of movements) {
+    const locationId =
+      movement.fromLocationId?.toString() || movement.toLocationId?.toString() || "";
+    const locationCode = movement.fromLocationCode || movement.toLocationCode || "";
+    if (!locationId && !locationCode) {
+      continue;
+    }
+
+    const key = `${movement.sku}::${locationId || locationCode}`;
+    const existing = grouped.get(key) || {
+      sku: movement.sku,
+      locationId: movement.fromLocationId || movement.toLocationId || null,
+      locationCode,
+      productId: movement.productId,
+      productName: movement.productName,
+      outboundQty: 0,
+      inboundQty: 0,
+    };
+
+    if (movement.type === "OUTBOUND") {
+      existing.outboundQty += Number(movement.quantity) || 0;
+      if (!existing.locationCode && movement.fromLocationCode) {
+        existing.locationCode = movement.fromLocationCode;
+      }
+    } else if (movement.type === "INBOUND") {
+      existing.inboundQty += Number(movement.quantity) || 0;
+      if (!existing.locationCode && movement.toLocationCode) {
+        existing.locationCode = movement.toLocationCode;
+      }
+    }
+
+    grouped.set(key, existing);
+  }
+
+  const { performedBy, performedByName } = resolveMovementActor({ order, user });
+  if (!performedBy) {
+    throw new Error("Cannot restore inventory for return because performedBy is missing");
+  }
+
+  const skuMetaMap = new Map();
+  for (const item of Array.isArray(order?.items) ? order.items : []) {
+    const sku = String(item?.variantSku || "").trim();
+    if (!sku || skuMetaMap.has(sku)) {
+      continue;
+    }
+    skuMetaMap.set(sku, {
+      productId: item?.productId || null,
+      productName: item?.productName || item?.name || sku,
+    });
+  }
+
+  const restoredItems = [];
+
+  for (const batch of grouped.values()) {
+    const toRestore = Math.max(0, batch.outboundQty - batch.inboundQty);
+    if (!toRestore) {
+      continue;
+    }
+
+    let location = null;
+    if (batch.locationId) {
+      location = await WarehouseLocation.findById(batch.locationId).session(session);
+    }
+    if (!location && batch.locationCode) {
+      location = await WarehouseLocation.findOne({
+        locationCode: batch.locationCode,
+      }).session(session);
+    }
+    if (!location) {
+      omniLog.warn("restoreInventoryForReturn: location not found", {
+        orderId: order?._id,
+        sku: batch.sku,
+        locationCode: batch.locationCode,
+      });
+      continue;
+    }
+
+    const skuMeta = skuMetaMap.get(batch.sku) || {};
+    let productId = batch.productId || skuMeta.productId || null;
+    let productName = batch.productName || skuMeta.productName || batch.sku;
+
+    const inventory = await Inventory.findOne({
+      sku: batch.sku,
+      locationId: location._id,
+    }).session(session);
+
+    if (inventory) {
+      inventory.quantity = (Number(inventory.quantity) || 0) + toRestore;
+      await inventory.save({ session });
+      productId = productId || inventory.productId || null;
+      productName = productName || inventory.productName || batch.sku;
+    } else {
+      if (!productId) {
+        omniLog.warn("restoreInventoryForReturn: missing productId", {
+          orderId: order?._id,
+          sku: batch.sku,
+          locationCode: location.locationCode,
+        });
+        continue;
+      }
+
+      await Inventory.create(
+        [
+          {
+            sku: batch.sku,
+            productId,
+            productName,
+            locationId: location._id,
+            locationCode: location.locationCode,
+            quantity: toRestore,
+            status: "GOOD",
+          },
+        ],
+        { session }
+      );
+    }
+
+    if (!productId) {
+      omniLog.warn("restoreInventoryForReturn: skip movement because productId is empty", {
+        orderId: order?._id,
+        sku: batch.sku,
+        locationCode: location.locationCode,
+      });
+      continue;
+    }
+
+    location.currentLoad = (Number(location.currentLoad) || 0) + toRestore;
+    await location.save({ session });
+
+    await StockMovement.create(
+      [
+        {
+          type: "INBOUND",
+          sku: batch.sku,
+          productId,
+          productName: productName || batch.sku,
+          toLocationId: location._id,
+          toLocationCode: location.locationCode,
+          quantity: toRestore,
+          referenceType: "ORDER",
+          referenceId: String(order._id),
+          performedBy,
+          performedByName,
+          notes: `Hoàn trả từ giao hàng thất bại${reason ? `: ${reason}` : ""}`,
+        },
+      ],
+      { session }
+    );
+
+    restoredItems.push({
+      sku: batch.sku,
+      locationCode: location.locationCode,
+      quantity: toRestore,
+    });
+  }
+
+  return restoredItems;
 };
 
 const restorePickedInventoryForExchange = async ({
@@ -2087,6 +2295,28 @@ export const handleCarrierWebhook = async (req, res) => {
           order.cancelReason = webhookNote;
         }
       }
+    }
+
+    if (RETURN_RESTORE_STATUSES.has(normalizedEventType)) {
+      order.returnedAt = order.returnedAt || eventTime;
+      await restoreInventoryForReturn({
+        order,
+        user: {
+          _id:
+            order?.shipperInfo?.shipperId ||
+            order?.carrierAssignment?.assignedBy ||
+            order?.createdByInfo?.userId ||
+            order?.customerId ||
+            order?.userId,
+          fullName:
+            order?.shipperInfo?.shipperName ||
+            normalizedCarrierName ||
+            order?.createdByInfo?.userName ||
+            "Carrier webhook",
+        },
+        session,
+        reason: webhookNote,
+      });
     }
 
     if (proof && typeof proof === "object") {

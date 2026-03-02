@@ -9,6 +9,21 @@ import Inventory from "./Inventory.js"; // Import Inventory model
 import QRCode from "qrcode";
 import mongoose from "mongoose";
 
+const toPositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
+
+const sortAlphaNumeric = (left, right) => {
+  return String(left || "").localeCompare(String(right || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+};
+
 // ============================================
 // GET ALL WAREHOUSE CONFIGURATIONS
 // ============================================
@@ -434,26 +449,105 @@ export const getWarehouseStats = async (req, res) => {
 export const getWarehouseLayout = async (req, res) => {
   try {
     const { id } = req.params;
-    
+    const zone = String(req.query?.zone || "").trim().toUpperCase();
+    const aisle = String(req.query?.aisle || "").trim();
+    const page = toPositiveInt(req.query?.page, 1);
+    const limit = Math.min(toPositiveInt(req.query?.limit, 5), 50);
+
     const warehouse = await WarehouseConfiguration.findById(id).select("warehouseCode name zones");
     if (!warehouse) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy kho" });
+      return res.status(404).json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y kho" });
     }
 
-    const locations = await WarehouseLocation.find({ warehouse: warehouse.warehouseCode })
-      .select("locationCode zone zoneName aisle shelf bin capacity currentLoad status productCategories")
+    const projection =
+      "locationCode zone zoneName aisle shelf bin capacity currentLoad status productCategories";
+    const sortOrder = { aisle: 1, shelf: 1, bin: 1 };
+
+    if (zone && !aisle) {
+      const allAisles = await WarehouseLocation.distinct("aisle", {
+        warehouse: warehouse.warehouseCode,
+        zone,
+      });
+      const sortedAisles = allAisles.sort(sortAlphaNumeric);
+      const totalAisles = sortedAisles.length;
+      const totalPages = totalAisles > 0 ? Math.ceil(totalAisles / limit) : 1;
+      const safePage = Math.min(page, totalPages);
+      const start = (safePage - 1) * limit;
+      const aislesInPage = sortedAisles.slice(start, start + limit);
+
+      let locations = [];
+      if (aislesInPage.length > 0) {
+        locations = await WarehouseLocation.find({
+          warehouse: warehouse.warehouseCode,
+          zone,
+          aisle: { $in: aislesInPage },
+        })
+          .select(projection)
+          .sort(sortOrder)
+          .lean();
+      }
+
+      return res.json({
+        success: true,
+        warehouse,
+        locations,
+        pagination: {
+          page: safePage,
+          limit,
+          total: totalAisles,
+          pages: totalPages,
+          hasNextPage: safePage < totalPages,
+          hasPrevPage: safePage > 1,
+        },
+        meta: {
+          zone,
+          aisle: null,
+          aisles: aislesInPage,
+          totalAisles,
+        },
+      });
+    }
+
+    const locationFilter = { warehouse: warehouse.warehouseCode };
+    if (zone) {
+      locationFilter.zone = zone;
+    }
+    if (aisle) {
+      locationFilter.aisle = aisle;
+    }
+
+    const locations = await WarehouseLocation.find(locationFilter)
+      .select(projection)
+      .sort(sortOrder)
       .lean();
 
-    res.json({
+    return res.json({
       success: true,
       warehouse,
-      locations
+      locations,
+      pagination: {
+        page: 1,
+        limit: locations.length,
+        total: locations.length,
+        pages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+      meta: {
+        zone: zone || null,
+        aisle: aisle || null,
+        aisles: Array.from(new Set(locations.map((location) => location.aisle))).sort(
+          sortAlphaNumeric
+        ),
+      },
     });
   } catch (error) {
     console.error("Error getting warehouse layout:", error);
-    res.status(500).json({ success: false, message: "Lỗi khi lấy layout kho", error: error.message });
+    res.status(500).json({ success: false, message: "Lá»—i khi láº¥y layout kho", error: error.message });
   }
 };
+
+
 
 export const searchLocationByProduct = async (req, res) => {
   try {
@@ -522,3 +616,4 @@ export default {
   getWarehouseLayout,
   searchLocationByProduct
 };
+
