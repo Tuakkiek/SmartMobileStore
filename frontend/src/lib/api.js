@@ -252,6 +252,8 @@ export const posAPI = {
 export const reviewAPI = {
   // ✅ NEW: Check if user can review
   canReview: (productId) => api.get(`/reviews/can-review/${productId}`),
+  getUploadSignature: (resourceType = "image") =>
+    api.post("/reviews/upload/signature", { resourceType }),
 
   // Get reviews (with optional filters)
   getByProduct: (productId, params = {}) =>

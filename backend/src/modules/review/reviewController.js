@@ -6,6 +6,7 @@
 import Review from "./Review.js";
 import Order from "../order/Order.js";
 import UniversalProduct from "../product/UniversalProduct.js";
+import { validateReviewImages } from "./reviewMediaValidation.js";
 
 const MAX_REVIEWS_PER_ORDER = 20; // ✅ Giới hạn 20 reviews/đơn
 
@@ -195,9 +196,13 @@ export const createReview = async (req, res) => {
     }
 
     // ✅ VALIDATE IMAGES (max 5)
-    const validImages = Array.isArray(images)
-      ? images.filter(Boolean).slice(0, 5)
-      : [];
+    const imageValidation = validateReviewImages(images);
+    if (!imageValidation.ok) {
+      return res.status(imageValidation.statusCode || 400).json({
+        success: false,
+        message: imageValidation.message,
+      });
+    }
 
     // ✅ CREATE REVIEW
     const review = await Review.create({
@@ -207,7 +212,7 @@ export const createReview = async (req, res) => {
       orderId,
       rating,
       comment,
-      images: validImages,
+      images: imageValidation.images,
       purchaseVerified: true,
       verified: true,
     });
@@ -263,10 +268,14 @@ export const updateReview = async (req, res) => {
     review.comment = comment;
 
     if (images !== undefined) {
-      const validImages = Array.isArray(images)
-        ? images.filter(Boolean).slice(0, 5)
-        : [];
-      review.images = validImages;
+      const imageValidation = validateReviewImages(images);
+      if (!imageValidation.ok) {
+        return res.status(imageValidation.statusCode || 400).json({
+          success: false,
+          message: imageValidation.message,
+        });
+      }
+      review.images = imageValidation.images;
     }
 
     await review.save();

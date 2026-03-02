@@ -49,6 +49,7 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
   const [comment, setComment] = useState("");
   const [reviewImages, setReviewImages] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
 
   // Purchase verification
   const [canReview, setCanReview] = useState(false);
@@ -196,6 +197,11 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
 
     if (!selectedOrderId) {
       toast.error("Vui lòng chọn đơn hàng");
+      return;
+    }
+
+    if (isImageUploading) {
+      toast.error("Image upload is still in progress. Please wait.");
       return;
     }
 
@@ -505,6 +511,7 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
                   images={reviewImages}
                   onChange={setReviewImages}
                   maxImages={5}
+                  onUploadingChange={setIsImageUploading}
                 />
               </div>
 
@@ -518,16 +525,25 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
                     setComment("");
                     setReviewImages([]);
                   }}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isImageUploading}
                 >
                   Hủy
                 </Button>
                 <Button
                   onClick={handleSubmitReview}
-                  disabled={isSubmitting || rating === 0 || !comment.trim()}
+                  disabled={
+                    isSubmitting ||
+                    isImageUploading ||
+                    rating === 0 ||
+                    !comment.trim()
+                  }
                   className="bg-red-600 hover:bg-red-700"
                 >
-                  {isSubmitting ? "Đang gửi..." : "Gửi đánh giá"}
+                  {isImageUploading
+                    ? "Dang tai anh..."
+                    : isSubmitting
+                    ? "Đang gửi..."
+                    : "Gửi đánh giá"}
                 </Button>
               </div>
             </div>
@@ -593,6 +609,7 @@ const ReviewItem = ({
   const [editComment, setEditComment] = useState(review.comment);
   const [editImages, setEditImages] = useState(review.images || []);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isEditImageUploading, setIsEditImageUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const customerName = review.customerId?.fullName || "Người dùng";
@@ -660,6 +677,11 @@ const ReviewItem = ({
 
     if (!editComment.trim()) {
       toast.error("Vui lòng nhập nội dung đánh giá");
+      return;
+    }
+
+    if (isEditImageUploading) {
+      toast.error("Image upload is still in progress. Please wait.");
       return;
     }
 
@@ -842,6 +864,7 @@ const ReviewItem = ({
               images={editImages}
               onChange={setEditImages}
               maxImages={5}
+              onUploadingChange={setIsEditImageUploading}
             />
           </div>
 
@@ -850,7 +873,7 @@ const ReviewItem = ({
             <Button
               variant="outline"
               onClick={handleCancelEdit}
-              disabled={isUpdating}
+              disabled={isUpdating || isEditImageUploading}
               className="gap-2"
             >
               <X className="w-4 h-4" />
@@ -858,11 +881,20 @@ const ReviewItem = ({
             </Button>
             <Button
               onClick={handleSaveEdit}
-              disabled={isUpdating || editRating === 0 || !editComment.trim()}
+              disabled={
+                isUpdating ||
+                isEditImageUploading ||
+                editRating === 0 ||
+                !editComment.trim()
+              }
               className="bg-red-600 hover:bg-red-700 gap-2"
             >
               <Check className="w-4 h-4" />
-              {isUpdating ? "Đang lưu..." : "Lưu thay đổi"}
+              {isEditImageUploading
+                ? "Dang tai anh..."
+                : isUpdating
+                ? "Đang lưu..."
+                : "Lưu thay đổi"}
             </Button>
           </div>
         </div>
