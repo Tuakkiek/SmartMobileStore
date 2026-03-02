@@ -1,299 +1,120 @@
-// ============================================
-// FILE: backend/src/controllers/reviewController.js
-// ✅ UPDATED: Allow up to 20 reviews per order
-// ============================================
-
 import Review from "./Review.js";
-import Order from "../order/Order.js";
-import UniversalProduct from "../product/UniversalProduct.js";
-import { validateReviewImages } from "./reviewMediaValidation.js";
+import {
+  createReview as createReviewService,
+  getReviewEligibility,
+  getVerifiedProductReviews,
+  recalculateVerifiedProductRating,
+  updateReview as updateReviewService,
+} from "./reviewService.js";
+import { isReviewServiceError } from "./reviewErrors.js";
 
-const MAX_REVIEWS_PER_ORDER = 20; // ✅ Giới hạn 20 reviews/đơn
-
-// Helper: Find product and update rating
-const findProductAndUpdateRating = async (productId) => {
-  const product = await UniversalProduct.findById(productId);
-  if (!product) return null;
-
-  const reviews = await Review.find({ productId, isHidden: false });
-  if (reviews.length > 0) {
-    const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-    product.averageRating = Math.round((sum / reviews.length) * 10) / 10;
-    product.totalReviews = reviews.length;
-  } else {
-    product.averageRating = 0;
-    product.totalReviews = 0;
+const handleReviewError = (res, error) => {
+  if (isReviewServiceError(error)) {
+    return res.status(error.status).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 
-  await product.save();
-  return product;
+  if (error?.name === "ValidationError") {
+    return res.status(400).json({
+      success: false,
+      code: "REVIEW_VALIDATION_ERROR",
+      message: error.message,
+    });
+  }
+
+  if (error?.code === 11000) {
+    return res.status(409).json({
+      success: false,
+      code: "REVIEW_DUPLICATE",
+      message: "A review already exists for this order and product.",
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    code: "REVIEW_INTERNAL_ERROR",
+    message: error?.message || "Internal server error.",
+  });
 };
 
-// ============================================
-// ✅ NEW: CHECK IF USER CAN REVIEW (với giới hạn 20 lần)
-// ============================================
 export const canReviewProduct = async (req, res) => {
   try {
-    const { productId } = req.params;
-    const customerId = req.user._id;
+    const eligibility = await getReviewEligibility({
+      userId: req.user._id,
+      productId: req.params.productId,
+    });
 
-    // ✅ Tìm các đơn hàng đã giao có chứa sản phẩm này
-    const orders = await Order.find({
-      customerId,
-      status: "DELIVERED",
-      "items.productId": productId,
-    }).select("_id orderNumber createdAt");
-
-    if (orders.length === 0) {
-      return res.json({
-        success: true,
-        data: {
-          canReview: false,
-          reason: "Bạn cần mua sản phẩm để đánh giá",
-          orders: [],
-        },
-      });
-    }
-
-    // ✅ Đếm số lượng reviews cho từng order
-    const orderReviewCounts = await Promise.all(
-      orders.map(async (order) => {
-        const reviewCount = await Review.countDocuments({
-          productId,
-          customerId,
-          orderId: order._id,
-        });
-
-        return {
-          _id: order._id,
-          orderNumber: order.orderNumber,
-          createdAt: order.createdAt,
-          reviewCount,
-          canReview: reviewCount < MAX_REVIEWS_PER_ORDER,
-          remainingReviews: MAX_REVIEWS_PER_ORDER - reviewCount,
-        };
-      })
-    );
-
-    // ✅ Lấy tất cả reviews hiện có
-    const existingReviews = await Review.find({
-      productId,
-      customerId,
-    })
-      .select("_id orderId rating comment createdAt")
-      .populate("orderId", "orderNumber")
-      .sort({ createdAt: -1 });
-
-    // ✅ Tìm order có thể review (chưa đủ 20 lần)
-    const availableOrders = orderReviewCounts.filter((o) => o.canReview);
-
-    // ✅ Tổng số reviews đã tạo
-    const totalReviews = existingReviews.length;
-    const maxPossibleReviews = orders.length * MAX_REVIEWS_PER_ORDER;
-
-    res.json({
+    return res.json({
       success: true,
-      data: {
-        canReview: availableOrders.length > 0,
-        orders: availableOrders.map((o) => ({
-          _id: o._id,
-          orderNumber: o.orderNumber,
-          reviewCount: o.reviewCount,
-          remainingReviews: o.remainingReviews,
-        })),
-        orderReviewCounts,
-        existingReviews: existingReviews.map((r) => {
-          const populatedOrder =
-            r.orderId && typeof r.orderId === "object" ? r.orderId : null;
-
-          return {
-            _id: r._id,
-            orderId: populatedOrder?._id || null,
-            orderNumber: populatedOrder?.orderNumber || "N/A",
-            rating: r.rating,
-            comment: String(r.comment || "").substring(0, 100),
-            createdAt: r.createdAt,
-          };
-        }),
-        stats: {
-          totalOrders: orders.length,
-          totalReviews,
-          maxPossibleReviews,
-          availableSlots: maxPossibleReviews - totalReviews,
-        },
-      },
+      data: eligibility,
     });
   } catch (error) {
-    console.error("❌ canReviewProduct error:", error);
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// GET PRODUCT REVIEWS
-// ============================================
 export const getProductReviews = async (req, res) => {
   try {
-    const { hasImages } = req.query;
+    const data = await getVerifiedProductReviews({
+      productId: req.params.productId,
+      page: req.query.page,
+      limit: req.query.limit,
+    });
 
-    const query = { productId: req.params.productId };
-
-    if (!req.user || req.user.role !== "ADMIN") {
-      query.isHidden = false;
-    }
-
-    if (hasImages === "true") {
-      query.images = { $exists: true, $not: { $size: 0 } };
-    }
-
-    const reviews = await Review.find(query)
-      .populate("customerId", "fullName avatar")
-      .populate("adminReply.adminId", "fullName role avatar")
-      .populate("orderId", "orderNumber")
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, data: { reviews } });
+    return res.json({
+      success: true,
+      data,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// ✅ UPDATED: CREATE REVIEW (giới hạn 20 lần/đơn)
-// ============================================
 export const createReview = async (req, res) => {
   try {
-    const { productId, orderId, rating, comment, images } = req.body;
-    const customerId = req.user._id;
-
-    // ✅ VERIFY ORDER
-    const order = await Order.findOne({
-      _id: orderId,
-      customerId,
-      status: "DELIVERED",
-      "items.productId": productId,
+    const review = await createReviewService({
+      userId: req.user._id,
+      productId: req.body?.productId,
+      orderId: req.body?.orderId,
+      rating: req.body?.rating,
+      comment: req.body?.comment,
+      images: req.body?.images,
     });
 
-    if (!order) {
-      return res.status(403).json({
-        success: false,
-        message: "Bạn cần mua và nhận sản phẩm trước khi đánh giá",
-      });
-    }
-
-    // ✅ CHECK: Đã đánh giá đủ 20 lần cho đơn này chưa?
-    const reviewCount = await Review.countDocuments({
-      productId,
-      customerId,
-      orderId,
-    });
-
-    if (reviewCount >= MAX_REVIEWS_PER_ORDER) {
-      return res.status(400).json({
-        success: false,
-        message: `Bạn đã đánh giá đơn hàng này ${MAX_REVIEWS_PER_ORDER} lần rồi. Vui lòng chọn đơn hàng khác.`,
-      });
-    }
-
-    // ✅ VALIDATE IMAGES (max 5)
-    const imageValidation = validateReviewImages(images);
-    if (!imageValidation.ok) {
-      return res.status(imageValidation.statusCode || 400).json({
-        success: false,
-        message: imageValidation.message,
-      });
-    }
-
-    // ✅ CREATE REVIEW
-    const review = await Review.create({
-      productId,
-      productModel: "UniversalProduct",
-      customerId,
-      orderId,
-      rating,
-      comment,
-      images: imageValidation.images,
-      purchaseVerified: true,
-      verified: true,
-    });
-
-    await findProductAndUpdateRating(productId);
-
-    // ✅ Đếm lại số reviews còn lại
-    const newReviewCount = await Review.countDocuments({
-      productId,
-      customerId,
-      orderId,
-    });
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Đánh giá sản phẩm thành công",
-      data: {
-        review,
-        reviewCount: newReviewCount,
-        remainingReviews: MAX_REVIEWS_PER_ORDER - newReviewCount,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Create review error:", error);
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// ============================================
-// UPDATE REVIEW
-// ============================================
-export const updateReview = async (req, res) => {
-  try {
-    const review = await Review.findById(req.params.id);
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy đánh giá",
-      });
-    }
-
-    if (review.customerId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Bạn không có quyền chỉnh sửa đánh giá này",
-      });
-    }
-
-    const { rating, comment, images } = req.body;
-
-    review.rating = rating;
-    review.comment = comment;
-
-    if (images !== undefined) {
-      const imageValidation = validateReviewImages(images);
-      if (!imageValidation.ok) {
-        return res.status(imageValidation.statusCode || 400).json({
-          success: false,
-          message: imageValidation.message,
-        });
-      }
-      review.images = imageValidation.images;
-    }
-
-    await review.save();
-    await findProductAndUpdateRating(review.productId);
-
-    res.json({
-      success: true,
-      message: "Cập nhật đánh giá thành công",
+      message: "Review created successfully.",
       data: { review },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// DELETE REVIEW
-// ============================================
+export const updateReview = async (req, res) => {
+  try {
+    const review = await updateReviewService({
+      reviewId: req.params.id,
+      userId: req.user._id,
+      rating: req.body?.rating,
+      comment: req.body?.comment,
+      images: req.body?.images,
+    });
+
+    return res.json({
+      success: true,
+      message: "Review updated successfully.",
+      data: { review },
+    });
+  } catch (error) {
+    return handleReviewError(res, error);
+  }
+};
+
 export const deleteReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -301,31 +122,35 @@ export const deleteReview = async (req, res) => {
     if (!review) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đánh giá",
+        code: "REVIEW_NOT_FOUND",
+        message: "Review not found.",
       });
     }
 
-    if (review.customerId.toString() !== req.user._id.toString()) {
+    const isAuthor = String(review.userId) === String(req.user._id);
+    const isAdmin = req.user.role === "ADMIN";
+
+    if (!isAuthor && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: "Bạn không có quyền xóa đánh giá này",
+        code: "REVIEW_DELETE_FORBIDDEN",
+        message: "You are not allowed to delete this review.",
       });
     }
 
     const productId = review.productId;
     await review.deleteOne();
+    await recalculateVerifiedProductRating(productId);
 
-    await findProductAndUpdateRating(productId);
-
-    res.json({ success: true, message: "Xóa đánh giá thành công" });
+    return res.json({
+      success: true,
+      message: "Review deleted successfully.",
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// LIKE/UNLIKE REVIEW
-// ============================================
 export const likeReview = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -333,30 +158,27 @@ export const likeReview = async (req, res) => {
     if (!review) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đánh giá",
+        code: "REVIEW_NOT_FOUND",
+        message: "Review not found.",
       });
     }
 
-    const userId = req.user._id;
-    const hasLiked = review.likedBy.some(
-      (id) => id.toString() === userId.toString()
-    );
+    const userId = String(req.user._id);
+    const hasLiked = review.likedBy.some((id) => String(id) === userId);
 
     if (hasLiked) {
-      review.likedBy = review.likedBy.filter(
-        (id) => id.toString() !== userId.toString()
-      );
-      review.helpful = Math.max(0, review.helpful - 1);
+      review.likedBy = review.likedBy.filter((id) => String(id) !== userId);
+      review.helpful = Math.max(0, Number(review.helpful || 0) - 1);
     } else {
-      review.likedBy.push(userId);
-      review.helpful += 1;
+      review.likedBy.push(req.user._id);
+      review.helpful = Number(review.helpful || 0) + 1;
     }
 
     await review.save();
 
-    res.json({
+    return res.json({
       success: true,
-      message: hasLiked ? "Đã bỏ thích" : "Đã thích đánh giá",
+      message: hasLiked ? "Review unliked." : "Review liked.",
       data: {
         review,
         hasLiked: !hasLiked,
@@ -364,35 +186,33 @@ export const likeReview = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Like review error:", error);
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// ADMIN: REPLY TO REVIEW
-// ============================================
 export const replyToReview = async (req, res) => {
   try {
-    const { content } = req.body;
+    const content = String(req.body?.content || "").trim();
+    if (!content) {
+      return res.status(400).json({
+        success: false,
+        code: "REVIEW_REPLY_REQUIRED",
+        message: "Reply content is required.",
+      });
+    }
+
     const review = await Review.findById(req.params.id);
 
     if (!review) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đánh giá",
-      });
-    }
-
-    if (!content || !content.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng nhập nội dung phản hồi",
+        code: "REVIEW_NOT_FOUND",
+        message: "Review not found.",
       });
     }
 
     review.adminReply = {
-      content: content.trim(),
+      content,
       adminId: req.user._id,
       repliedAt: new Date(),
     };
@@ -400,64 +220,61 @@ export const replyToReview = async (req, res) => {
     await review.save();
     await review.populate("adminReply.adminId", "fullName role avatar");
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Phản hồi thành công",
+      message: "Reply saved.",
       data: { review },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// ADMIN: UPDATE REPLY
-// ============================================
 export const updateAdminReply = async (req, res) => {
   try {
-    const { content } = req.body;
+    const content = String(req.body?.content || "").trim();
+    if (!content) {
+      return res.status(400).json({
+        success: false,
+        code: "REVIEW_REPLY_REQUIRED",
+        message: "Reply content is required.",
+      });
+    }
+
     const review = await Review.findById(req.params.id);
 
     if (!review) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đánh giá",
+        code: "REVIEW_NOT_FOUND",
+        message: "Review not found.",
       });
     }
 
     if (!review.adminReply?.content) {
       return res.status(400).json({
         success: false,
-        message: "Chưa có phản hồi để chỉnh sửa",
+        code: "REVIEW_REPLY_NOT_FOUND",
+        message: "No existing admin reply to update.",
       });
     }
 
-    if (!content || !content.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng nhập nội dung phản hồi",
-      });
-    }
-
-    review.adminReply.content = content.trim();
+    review.adminReply.content = content;
     review.adminReply.repliedAt = new Date();
 
     await review.save();
     await review.populate("adminReply.adminId", "fullName role avatar");
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Cập nhật phản hồi thành công",
+      message: "Reply updated.",
       data: { review },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
-// ============================================
-// ADMIN: TOGGLE REVIEW VISIBILITY
-// ============================================
 export const toggleReviewVisibility = async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -465,22 +282,22 @@ export const toggleReviewVisibility = async (req, res) => {
     if (!review) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đánh giá",
+        code: "REVIEW_NOT_FOUND",
+        message: "Review not found.",
       });
     }
 
-    const productId = review.productId;
     review.isHidden = !review.isHidden;
     await review.save();
-    await findProductAndUpdateRating(productId);
+    await recalculateVerifiedProductRating(review.productId);
 
-    res.json({
+    return res.json({
       success: true,
-      message: review.isHidden ? "Đã ẩn đánh giá" : "Đã hiển thị đánh giá",
+      message: review.isHidden ? "Review hidden." : "Review visible.",
       data: { review },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return handleReviewError(res, error);
   }
 };
 
