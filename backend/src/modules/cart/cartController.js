@@ -96,6 +96,24 @@ export const getCart = async (req, res) => {
 };
 
 // ============================================
+// GET CART COUNT (distinct items)
+// ============================================
+export const getCartCount = async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ customerId: req.user._id }).select("items");
+    const count = Array.isArray(cart?.items) ? cart.items.length : 0;
+
+    res.json({
+      success: true,
+      data: { count },
+    });
+  } catch (error) {
+    console.error("getCartCount error:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================
 // ADD TO CART
 // ============================================
 export const addToCart = async (req, res) => {
@@ -549,6 +567,7 @@ export const validateCart = async (req, res) => {
 
 export default {
   getCart,
+  getCartCount,
   addToCart,
   updateCartItem,
   removeFromCart,

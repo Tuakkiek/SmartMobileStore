@@ -1,13 +1,11 @@
 // ============================================
 // FILE: backend/src/routes/shortVideoRoutes.js
-// ✅ FIXED: Using correct middleware names
+// ✅ UPDATED: Using Cloudinary for video/thumbnail storage
 // ============================================
 
 import express from "express";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { protect, restrictTo } from "../../middleware/authMiddleware.js"; // ✅ FIXED
+import { protect, restrictTo } from "../../middleware/authMiddleware.js";
 import {
   getAllVideos,
   getPublishedVideos,
@@ -25,39 +23,9 @@ import {
 const router = express.Router();
 
 // ============================================
-// MULTER CONFIGURATION
+// MULTER CONFIGURATION – Memory Storage only
+// Files are uploaded to Cloudinary server-side
 // ============================================
-
-const ensureUploadDirs = () => {
-  const dirs = ["uploads/videos", "uploads/thumbnails"];
-  dirs.forEach((dir) => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      console.log(`📁 Created directory: ${dir}`);
-    }
-  });
-};
-
-ensureUploadDirs();
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === "video") {
-      cb(null, "uploads/videos/");
-    } else if (file.fieldname === "thumbnail") {
-      cb(null, "uploads/thumbnails/");
-    } else {
-      cb(new Error("Invalid field name"), false);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    const basename = path.basename(file.originalname, ext);
-    const sanitizedBasename = basename.replace(/[^a-zA-Z0-9]/g, "_");
-    cb(null, `${file.fieldname}-${sanitizedBasename}-${uniqueSuffix}${ext}`);
-  },
-});
 
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === "video") {
@@ -96,11 +64,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Use memoryStorage so files stay in RAM buffer → sent to Cloudinary
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   fileFilter: fileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
+    fileSize: 200 * 1024 * 1024, // 200MB to allow large video files
   },
 });
 
@@ -109,7 +78,7 @@ const handleMulterError = (err, req, res, next) => {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        message: "File quá lớn! Video tối đa 100MB, ảnh tối đa 5MB.",
+        message: "File quá lớn! Video tối đa 200MB, ảnh tối đa 5MB.",
       });
     }
     return res.status(400).json({
@@ -133,19 +102,19 @@ router.get("/published", getPublishedVideos);
 router.get("/trending", getTrendingVideos);
 router.get("/:id", getVideoById);
 router.post("/:id/view", incrementView);
-router.post("/:id/like", protect, toggleLike); // ✅ FIXED
+router.post("/:id/like", protect, toggleLike);
 router.post("/:id/share", incrementShare);
 
 // ============================================
 // ADMIN ROUTES
 // ============================================
 
-router.get("/", protect, restrictTo("ADMIN"), getAllVideos); // ✅ FIXED
+router.get("/", protect, restrictTo("ADMIN"), getAllVideos);
 
 router.post(
   "/",
-  protect, // ✅ FIXED
-  restrictTo("ADMIN"), // ✅ FIXED
+  protect,
+  restrictTo("ADMIN"),
   upload.fields([
     { name: "video", maxCount: 1 },
     { name: "thumbnail", maxCount: 1 },
@@ -156,8 +125,8 @@ router.post(
 
 router.put(
   "/:id",
-  protect, // ✅ FIXED
-  restrictTo("ADMIN"), // ✅ FIXED
+  protect,
+  restrictTo("ADMIN"),
   upload.fields([
     { name: "video", maxCount: 1 },
     { name: "thumbnail", maxCount: 1 },
@@ -166,8 +135,8 @@ router.put(
   updateVideo
 );
 
-router.delete("/:id", protect, restrictTo("ADMIN"), deleteVideo); // ✅ FIXED
+router.delete("/:id", protect, restrictTo("ADMIN"), deleteVideo);
 
-router.put("/reorder", protect, restrictTo("ADMIN"), reorderVideos); // ✅ FIXED
+router.put("/reorder", protect, restrictTo("ADMIN"), reorderVideos);
 
 export default router;

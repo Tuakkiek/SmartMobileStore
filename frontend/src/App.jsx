@@ -98,12 +98,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 // MAIN APP
 // ============================================
 function App() {
-  const { getCurrentUser } = useAuthStore();
+  const getCurrentUser = useAuthStore((state) => state.getCurrentUser);
+  const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
     if (token) getCurrentUser();
-  }, [getCurrentUser]);
+  }, [token, getCurrentUser]);
 
   return (
     <BrowserRouter>

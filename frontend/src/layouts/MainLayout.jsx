@@ -101,7 +101,8 @@ const isLikelyImageUrl = (value = "") => {
 const MainLayout = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
-  const { getItemCount } = useCartStore();
+  const cartItemCount = useCartStore((state) => state.cartCount);
+  const fetchCartCount = useCartStore((state) => state.fetchCartCount);
 
   // Mobile menus
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
@@ -117,7 +118,12 @@ const MainLayout = () => {
   const [selectedDistrict, setSelectedDistrict] = useState(0);
   const [footerProductTypes, setFooterProductTypes] = useState([]);
 
-  const cartItemCount = getItemCount();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (String(user?.role || "").toUpperCase() !== "CUSTOMER") return;
+
+    fetchCartCount();
+  }, [isAuthenticated, user?.role, fetchCartCount]);
 
   // Prevent body scroll when any menu is open
   useEffect(() => {
@@ -140,8 +146,7 @@ const MainLayout = () => {
         const items = response?.data?.data?.productTypes;
         if (!isMounted) return;
         setFooterProductTypes(Array.isArray(items) ? items : []);
-      } catch (error) {
-        console.error("MainLayout: failed to load footer product types", error);
+      } catch {
         if (isMounted) setFooterProductTypes([]);
       }
     };

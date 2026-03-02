@@ -1143,27 +1143,27 @@ const CheckoutPage = () => {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Thanh toan Chuyển khoản (SePay)</DialogTitle>
+            <DialogTitle>Thanh toán Chuyển khoản (SePay)</DialogTitle>
             <DialogDescription>
-              Quet QR de chuyen khoan, he thong se tu dong cap nhat khi nhan tien.
+              Quet QR để chuyển khoản, hệ thống sẽ tự động cập nhật khi nhận tiền.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg border p-3 text-sm">
               <p>
-                <span className="font-medium">Ma don:</span>{" "}
+                <span className="font-medium">Mã đơn:</span>{" "}
                 {sepaySession?.orderNumber}
               </p>
               <p>
-                <span className="font-medium">So tien:</span>{" "}
+                <span className="font-medium">Số tiền:</span>{" "}
                 {formatPrice(sepaySession?.amount || 0)}
               </p>
               <p>
-                <span className="font-medium">Noi dung:</span>{" "}
+                <span className="font-medium">Nội dung:</span>{" "}
                 {sepaySession?.orderCode}
               </p>
               <p>
-                <span className="font-medium">Con lai:</span>{" "}
+                <span className="font-medium">Còn lại:</span>{" "}
                 {sepayTimeLeft || "..."}
               </p>
             </div>
@@ -1180,17 +1180,17 @@ const CheckoutPage = () => {
 
             <p className="text-sm text-muted-foreground">
               {sepaySession?.instruction ||
-                "Vui long chuyen khoan dung noi dung de xac nhan tu dong."}
+                "Vui lòng chuyển khoản đúng nội dung để xác nhận tự động."}
             </p>
 
             <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" onClick={handleCopySepayContent}>
                 <Copy className="mr-2 h-4 w-4" />
-                Copy noi dung
+                Copy nội dung
               </Button>
               <Button onClick={handleSepayManualCheck}>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Toi da chuyen
+                Tôi đã chuyển
               </Button>
             </div>
 
@@ -1199,7 +1199,7 @@ const CheckoutPage = () => {
               className="w-full"
               onClick={() => navigate(`/orders/${sepaySession?.orderId}`)}
             >
-              Xem don hang
+              Xem đơn hàng
             </Button>
           </div>
         </DialogContent>

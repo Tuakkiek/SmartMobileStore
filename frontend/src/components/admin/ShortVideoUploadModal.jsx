@@ -28,9 +28,9 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
       return;
     }
 
-    const maxSize = 100 * 1024 * 1024;
+    const maxSize = 200 * 1024 * 1024; // 200MB (Cloudinary supports larger files)
     if (file.size > maxSize) {
-      toast.error("Video không được vượt quá 100MB");
+      toast.error("Video không được vượt quá 200MB");
       return;
     }
 
@@ -86,15 +86,16 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
       data.append("video", videoFile);
       data.append("thumbnail", thumbnailFile);
 
+      // Slower progress to account for Cloudinary upload time
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {
-          if (prev >= 90) {
+          if (prev >= 80) {
             clearInterval(progressInterval);
-            return 90;
+            return 80;
           }
-          return prev + 10;
+          return prev + 5;
         });
-      }, 500);
+      }, 800);
 
       const response = await shortVideoAPI.create(data);
 
@@ -198,7 +199,7 @@ const ShortVideoUploadModal = ({ isOpen, onClose, onSuccess }) => {
                     <Upload className="w-12 h-12 text-gray-400" />
                     <p className="font-semibold">Chọn video</p>
                     <p className="text-sm text-gray-500">
-                      MP4, MOV, AVI • Tối đa 100MB
+                      MP4, MOV, AVI • Tối đa 200MB
                     </p>
                   </div>
                 )}
