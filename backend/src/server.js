@@ -76,15 +76,14 @@ createUploadDirs();
 // ================================
 // 🔹 Middleware
 // ================================
+const corsOrigins = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5000",
-      "https://ninhkieu-istore-ct.onrender.com",
-      "https://sandbox.vnpayment.vn",
-      "https://vnpayment.vn",
-    ],
+    origin: corsOrigins,
     credentials: true,
   })
 );
@@ -303,4 +302,3 @@ const startServer = () => {
 mongoose.connection.once("open", startServer);
 
 export default app;
-
