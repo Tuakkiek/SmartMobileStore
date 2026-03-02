@@ -1029,13 +1029,19 @@ export const createOrder = async (req, res) => {
 
     if (effectiveFulfillment !== "HOME_DELIVERY") {
       finalShippingFee = 0;
-    } else if (!shippingFee && assignedStore) {
-      const zone = assignedStore.shippingZones?.find(
-        (entry) =>
-          entry?.province === shippingAddress?.province &&
-          entry?.district === shippingAddress?.district
-      );
-      finalShippingFee = toNumber(zone?.shippingFee, 50000);
+    } else if (!shippingFee) {
+      if (assignedStore) {
+        const zone = assignedStore.shippingZones?.find(
+          (entry) =>
+            entry?.province === shippingAddress?.province &&
+            entry?.district === shippingAddress?.district
+        );
+        finalShippingFee = toNumber(zone?.shippingFee, 50000);
+      } else {
+        // ✅ NEW: Default shipping fee logic if no store is assigned yet
+        // Free shipping for orders >= 5,000,000 VND, otherwise 50,000 VND
+        finalShippingFee = subtotal >= 5000000 ? 0 : 50000;
+      }
     }
 
     const computedTotal = Math.max(0, subtotal + finalShippingFee - totalDiscount);

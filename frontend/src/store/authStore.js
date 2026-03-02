@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { authAPI } from "@/lib/api";
+import { useCartStore } from "@/store/cartStore";
 
 const BRANCH_SCOPED_ROLES = new Set([
   "ADMIN",
@@ -103,6 +104,13 @@ export const useAuthStore = create(
             authz: authz || null,
           });
 
+          const cartStore = useCartStore.getState();
+          if (String(user?.role || "").toUpperCase() === "CUSTOMER") {
+            await cartStore.fetchCartCount(token);
+          } else {
+            cartStore.resetCartState();
+          }
+
           return { success: true };
         } catch (error) {
           const message = error.response?.data?.message || "Dang nhap that bai";
@@ -142,6 +150,7 @@ export const useAuthStore = create(
             activeBranchId: null,
             authz: null,
           });
+          useCartStore.getState().resetCartState();
         }
       },
 
@@ -168,8 +177,16 @@ export const useAuthStore = create(
             activeBranchId,
             authz: authz || get().authz,
           });
+
+          const cartStore = useCartStore.getState();
+          if (String(user?.role || "").toUpperCase() === "CUSTOMER") {
+            await cartStore.fetchCartCount(token);
+          } else {
+            cartStore.resetCartState();
+          }
+
           return { success: true };
-        } catch (error) {
+        } catch {
           set({
             user: null,
             token: null,
@@ -177,6 +194,7 @@ export const useAuthStore = create(
             activeBranchId: null,
             authz: null,
           });
+          useCartStore.getState().resetCartState();
           return { success: false };
         }
       },

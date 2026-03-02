@@ -1,105 +1,102 @@
-// ============================================
-// FILE: src/store/cartStore.js
-// FIXED: Dùng Array thay Set cho selectedForCheckout → Checkout hoạt động
-// ============================================
-
 import { create } from "zustand";
 import { cartAPI } from "@/lib/api";
 
+const normalizeCart = (cartData) =>
+  cartData && Array.isArray(cartData.items) ? cartData : { items: [] };
+
+const getDistinctItemCount = (cartData) =>
+  Array.isArray(cartData?.items) ? cartData.items.length : 0;
+
 export const useCartStore = create((set, get) => ({
   cart: { items: [] },
+  cartCount: 0,
   isLoading: false,
   error: null,
+  selectedForCheckout: [],
+  lastAddedItem: null,
 
-  // === DÙNG ARRAY THAY VÌ SET ===
-  selectedForCheckout: [], // ← Mảng các variantId được chọn
-  lastAddedItem: null, // { variantId, timestamp }
-
-  // Get cart
   getCart: async () => {
     set({ isLoading: true, error: null });
     try {
       const response = await cartAPI.getCart();
-      set({ cart: response.data.data, isLoading: false });
+      const cartData = normalizeCart(response.data?.data);
+      set({
+        cart: cartData,
+        cartCount: getDistinctItemCount(cartData),
+        isLoading: false,
+      });
     } catch (error) {
-      set({ error: error.response?.data?.message, isLoading: false });
+      set({
+        error: error.response?.data?.message || "Lay gio hang that bai",
+        isLoading: false,
+      });
     }
   },
 
-  // Add to cart
-  addToCart: async (variantId, quantity = 1, productType) => {
-    console.log("🔍 cartStore.addToCart called:", {
-      variantId,
-      quantity,
-      productType,
-      typeOf: {
-        variantId: typeof variantId,
-        productType: typeof productType,
-      },
-    });
+  fetchCartCount: async (token) => {
+    try {
+      const config = token
+        ? { headers: { Authorization: `Bearer ${token}` } }
+        : undefined;
+      const response = await cartAPI.getCartCount(config);
+      const count = Number(response?.data?.data?.count) || 0;
+      set({ cartCount: count });
+      return { success: true, count };
+    } catch (error) {
+      set({ cartCount: 0 });
+      return {
+        success: false,
+        message: error.response?.data?.message || "Lay so luong gio hang that bai",
+      };
+    }
+  },
 
+  addToCart: async (variantId, quantity = 1, productType) => {
     if (!variantId) {
-      console.error("❌ variantId is missing or invalid:", variantId);
-      const message = "Thiếu variantId";
+      const message = "Thieu variantId";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
     if (!productType) {
-      console.error("❌ productType is missing:", productType);
-      const message = "Thiếu productType";
+      const message = "Thieu productType";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
 
-    // ✅ BỎ VALIDATION ENUM - CHO PHÉP MỌI LOẠI
-    // Xóa phần này:
-    // const validTypes = ["iPhone", "iPad", ...];
-    // if (!validTypes.includes(productType)) { ... }
-
     set({ isLoading: true, error: null });
 
     try {
-      console.log("📤 Sending to cartAPI.addToCart:", {
-        variantId,
-        quantity,
-        productType,
-      });
-      
       const response = await cartAPI.addToCart({
         variantId,
         quantity,
         productType,
       });
-      
-      console.log("✅ cartAPI response:", response);
+
+      const cartData = normalizeCart(response.data?.data);
 
       set({
-        cart: response.data.data,
+        cart: cartData,
+        cartCount: getDistinctItemCount(cartData),
         isLoading: false,
         lastAddedItem: {
-          variantId: variantId,
+          variantId,
           timestamp: Date.now(),
         },
       });
 
-      return { success: true, message: response.data.message };
+      return { success: true, message: response.data?.message };
     } catch (error) {
-      console.error("❌ cartAPI error:", error.response?.data || error);
       const message =
-        error.response?.data?.message || "Thêm vào giỏ hàng thất bại";
+        error.response?.data?.message || "Them vao gio hang that bai";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
   },
 
-  // ============================================
-  // UPDATE CART ITEM - FIXED
-  // ============================================
   updateCartItem: async (itemId, quantity) => {
     if (!itemId || quantity < 0) {
-      console.error("Invalid update params:", { itemId, quantity });
-      return { success: false, message: "Thông tin không hợp lệ" };
+      return { success: false, message: "Thong tin khong hop le" };
     }
 
     set({ isLoading: true, error: null });
@@ -115,16 +112,8 @@ export const useCartStore = create((set, get) => ({
       });
 
       if (!item) {
-        console.error("Item not found in cart:", itemId);
-        throw new Error("Không tìm thấy sản phẩm trong giỏ hàng");
+        throw new Error("Khong tim thay san pham trong gio hang");
       }
-
-      console.log("Updating cart item:", {
-        itemId: item._id,
-        variantId: item.variantId,
-        productType: item.productType,
-        quantity,
-      });
 
       const response = await cartAPI.updateItem({
         variantId: item.variantId,
@@ -132,26 +121,26 @@ export const useCartStore = create((set, get) => ({
         quantity,
       });
 
-      set({ cart: response.data.data, isLoading: false });
+      const cartData = normalizeCart(response.data?.data);
+      set({
+        cart: cartData,
+        cartCount: getDistinctItemCount(cartData),
+        isLoading: false,
+      });
       return { success: true };
     } catch (error) {
-      console.error("updateCartItem error:", error);
       const message =
         error.response?.data?.message ||
         error.message ||
-        "Cập nhật giỏ hàng thất bại";
+        "Cap nhat gio hang that bai";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
   },
 
-  // ============================================
-  // REMOVE FROM CART - FIXED
-  // ============================================
   removeFromCart: async (itemId) => {
     if (!itemId) {
-      console.error("No itemId provided");
-      return { success: false, message: "Thiếu thông tin sản phẩm" };
+      return { success: false, message: "Thieu thong tin san pham" };
     }
 
     set({ isLoading: true, error: null });
@@ -167,28 +156,22 @@ export const useCartStore = create((set, get) => ({
       });
 
       if (!item) {
-        console.error("Item not found in cart:", itemId);
-        throw new Error("Không tìm thấy sản phẩm trong giỏ hàng");
+        throw new Error("Khong tim thay san pham trong gio hang");
       }
 
       const deleteId = item._id || item.variantId;
-
-      console.log("Removing cart item:", {
-        searchId: itemId,
-        foundItemId: item._id,
-        foundVariantId: item.variantId,
-        deleteId: deleteId,
-      });
-
       const response = await cartAPI.removeItem(deleteId);
-      set({ cart: response.data.data, isLoading: false });
+
+      const cartData = normalizeCart(response.data?.data);
+      set({
+        cart: cartData,
+        cartCount: getDistinctItemCount(cartData),
+        isLoading: false,
+      });
       return { success: true };
     } catch (error) {
-      console.error("removeFromCart error:", error);
       const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Xóa sản phẩm thất bại";
+        error.response?.data?.message || error.message || "Xoa san pham that bai";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
@@ -198,10 +181,10 @@ export const useCartStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await cartAPI.clearCart();
-      set({ cart: { items: [] }, isLoading: false });
+      set({ cart: { items: [] }, cartCount: 0, isLoading: false });
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || "Xóa giỏ hàng thất bại";
+      const message = error.response?.data?.message || "Xoa gio hang that bai";
       set({ error: message, isLoading: false });
       return { success: false, message };
     }
@@ -212,7 +195,7 @@ export const useCartStore = create((set, get) => ({
     if (!cart || !Array.isArray(cart.items)) return 0;
     return cart.items.reduce(
       (total, item) => total + (item.price || 0) * (item.quantity || 0),
-      0
+      0,
     );
   },
 
@@ -233,14 +216,11 @@ export const useCartStore = create((set, get) => ({
     });
   },
 
-  // === SET DANH SÁCH ĐÃ CHỌN – DÙNG ARRAY ===
   setSelectedForCheckout: (variantIds = []) => {
-    // Đảm bảo luôn là mảng
     const ids = Array.isArray(variantIds) ? variantIds : [];
     set({ selectedForCheckout: ids });
   },
 
-  // === LẤY TỔNG TIỀN CHỈ CÁC SẢN PHẨM ĐƯỢC CHỌN ===
   getSelectedTotal: () => {
     const { cart, selectedForCheckout } = get();
     if (!cart?.items || selectedForCheckout.length === 0) return 0;
@@ -250,24 +230,32 @@ export const useCartStore = create((set, get) => ({
       .reduce((sum, item) => sum + item.price * item.quantity, 0);
   },
 
-  // === LẤY DANH SÁCH SẢN PHẨM ĐƯỢC CHỌN ===
   getSelectedItems: () => {
     const { cart, selectedForCheckout } = get();
     if (!cart?.items || selectedForCheckout.length === 0) return [];
 
     return cart.items.filter((item) =>
-      selectedForCheckout.includes(item.variantId)
+      selectedForCheckout.includes(item.variantId),
     );
   },
 
   clearError: () => set({ error: null }),
 
-  // Thêm helper function kiểm tra thời gian
+  resetCartState: () =>
+    set({
+      cart: { items: [] },
+      cartCount: 0,
+      selectedForCheckout: [],
+      lastAddedItem: null,
+      isLoading: false,
+      error: null,
+    }),
+
   shouldAutoSelect: () => {
     const { lastAddedItem } = get();
     if (!lastAddedItem) return null;
 
-    const EIGHT_HOURS = 8 * 60 * 60 * 1000; // 8 giờ tính bằng milliseconds
+    const EIGHT_HOURS = 8 * 60 * 60 * 1000;
     const now = Date.now();
 
     if (now - lastAddedItem.timestamp <= EIGHT_HOURS) {

@@ -125,8 +125,10 @@ const PromotionsPage = () => {
           limit: pag.limit || 12,
         });
       } catch (err) {
-        setError("Không thể tải danh sách mã khuyến mãi");
-        toast.error("Lỗi tải dữ liệu");
+        console.error("fetchPromotions error:", err);
+        const msg = err.response?.data?.message || "Không thể tải danh sách mã khuyến mãi";
+        setError(msg);
+        toast.error(msg);
       } finally {
         setIsInitialLoading(false);
         setIsTableLoading(false);

@@ -41,9 +41,11 @@ export const getAllPromotions = async (req, res) => {
         filter.isActive = true;
         filter.startDate = { $lte: now };
         filter.endDate = { $gte: now };
+        // usedCount < usageLimit implicitly handled if needed, but let's keep it consistent
         filter.$expr = { $lt: ["$usedCount", "$usageLimit"] };
       } else if (status === "UPCOMING") {
         filter.startDate = { $gt: now };
+        filter.isActive = true; // Typically upcoming ones are active but just not started
       } else if (status === "EXPIRED") {
         filter.$or = [
           { endDate: { $lt: now } },
@@ -52,6 +54,8 @@ export const getAllPromotions = async (req, res) => {
         ];
       }
     }
+
+    console.log("getAllPromotions filter:", JSON.stringify(filter));
 
     // === QUERY ===
     const [total, promotions] = await Promise.all([

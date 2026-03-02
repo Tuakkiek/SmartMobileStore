@@ -82,8 +82,9 @@ const districts = ["Tất cả", "Ninh Kiều", "Cái Răng", "Bình Thủy", "�
 
 const MainLayout = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user, logout } = useAuthStore();
-  const { getItemCount } = useCartStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const cartItemCount = useCartStore((state) => state.cartCount);
+  const fetchCartCount = useCartStore((state) => state.fetchCartCount);
 
   // Mobile menus
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
@@ -98,7 +99,12 @@ const MainLayout = () => {
   // Store menu
   const [selectedDistrict, setSelectedDistrict] = useState(0);
 
-  const cartItemCount = getItemCount();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (String(user?.role || "").toUpperCase() !== "CUSTOMER") return;
+
+    fetchCartCount();
+  }, [isAuthenticated, user?.role, fetchCartCount]);
 
   // Prevent body scroll when any menu is open
   useEffect(() => {
@@ -111,11 +117,6 @@ const MainLayout = () => {
       document.body.style.overflow = "unset";
     };
   }, [storeMenuOpen, contactMenuOpen, desktopStoreMenuOpen]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
 
   const handleProfileNavigation = () => {
     const normalizedRole = String(user?.role || "").toUpperCase();

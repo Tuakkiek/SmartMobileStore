@@ -17,7 +17,7 @@ router.get("/active", getActivePromotions);           // GET /promotions/active
 router.post("/apply", protect, applyPromotion);        // POST /promotions/apply
 
 // ==================== ADMIN ONLY ====================
-router.use(protect, restrictTo("ADMIN")); // ← Từ đây trở xuống chỉ ADMIN
+router.use(protect, restrictTo("ADMIN", "GLOBAL_ADMIN")); // ← Từ đây trở xuống chỉ ADMIN & GLOBAL_ADMIN
 
 // Đổi từ "/" → "/admin" để rõ ràng hơn
 router.get("/admin", getAllPromotions);        // GET /promotions/admin
