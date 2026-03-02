@@ -1,36 +1,13 @@
 // ============================================
 // FILE: frontend/src/components/shared/CategoryDropdown.jsx
-// Dynamic category dropdown based on universal products
+// Dynamic category dropdown based on product-types API
 // ============================================
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Menu, Package, X, ChevronRight } from "lucide-react";
-import { universalProductAPI } from "@/lib/api";
+import { productTypeAPI, universalProductAPI } from "@/lib/api";
 
-const PRODUCT_TYPE_TO_CATEGORY_PATH = {
-  smartphone: "dien-thoai",
-  tablet: "may-tinh-bang",
-  laptop: "macbook",
-  smartwatch: "apple-watch",
-  headphone: "tai-nghe",
-  tv: "tivi",
-  monitor: "man-hinh",
-  keyboard: "ban-phim",
-  mouse: "chuot",
-  speaker: "loa",
-  camera: "may-anh",
-  "gaming-console": "may-choi-game",
-  accessories: "phu-kien",
-};
-
-const CATEGORY_FALLBACK_IMAGES = {
-  smartphone: "/iphone_17_pro_bac.png",
-  tablet: "/ipad_air_xanh.png",
-  laptop: "/mac.png",
-  headphone: "/airpods.png",
-  smartwatch: "/applewatch.png",
-  accessories: "/op_ip_17_pro.png",
-};
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 const normalizeText = (value = "") =>
   String(value)
@@ -39,14 +16,43 @@ const normalizeText = (value = "") =>
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
+// Thứ tự ưu tiên danh mục: thấp hơn = hiển thị trước
+const CATEGORY_PRIORITY = [
+  { order: 1,  keywords: ["dien thoai", "smartphone", "iphone", "mobile"] },
+  { order: 2,  keywords: ["tablet", "ipad", "may tinh bang"] },
+  { order: 3,  keywords: ["laptop", "macbook", "may tinh xach tay", "notebook", "mac"] },
+  { order: 4,  keywords: ["dong ho", "smartwatch", "watch", "apple watch"] },
+  { order: 5,  keywords: ["tai nghe", "headphone", "airpod", "earphone", "earbuds"] },
+  { order: 6,  keywords: ["phu kien", "accessor", "cable", "sac", "charger"] },
+];
+
+const getCategoryPriority = (type) => {
+  const key = normalizeText(`${type?.slug || ""} ${type?.name || ""}`);
+  const matched = CATEGORY_PRIORITY.find((p) =>
+    p.keywords.some((kw) => key.includes(kw))
+  );
+  return matched?.order ?? 99;
+};
+
+const sortByPriority = (types) => {
+  const sorted = [...types].sort((a, b) => getCategoryPriority(a) - getCategoryPriority(b));
+  console.log("[CategoryDropdown] Priority sort:", sorted.map((t) => ({
+    name: t.name, slug: t.slug, priority: getCategoryPriority(t),
+  })));
+  return sorted;
+};
+
 const slugify = (value = "") =>
   normalizeText(value)
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-");
 
-const getVariantStorageSuffix = (variantName = "") => {
-  const match = String(variantName).match(/^(\d+(?:GB|TB))/i);
-  return match ? `-${match[1].toLowerCase()}` : "";
+const isLikelyImageUrl = (value = "") => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
+  if (trimmed.startsWith("/")) return true;
+  return /\.(png|jpe?g|webp|svg|gif|avif)$/i.test(trimmed);
 };
 
 const pickBestVariant = (variants = []) => {
@@ -68,39 +74,62 @@ const getProductImage = (product) => {
   );
 };
 
-const getSeriesName = (product, categorySlug, categoryName) => {
+const getVariantStorageSuffix = (variantName = "") => {
+  const match = String(variantName).match(/^(\d+(?:GB|TB))/i);
+  return match ? `-${match[1].toLowerCase()}` : "";
+};
+
+const buildProductDetailUrl = (product) => {
+  if (!product) return "";
+  const baseSlug = product.baseSlug || product.slug;
+  if (!baseSlug) return "";
+
+  const variant = pickBestVariant(product.variants);
+  const typeSlug =
+    typeof product?.productType === "object"
+      ? product.productType?.slug || ""
+      : "";
+  const categoryPath = typeSlug || "products";
+  const storageSuffix = getVariantStorageSuffix(variant?.variantName || "");
+  const productSlug = `${baseSlug}${storageSuffix}`;
+
+  if (variant?.sku) {
+    if (categoryPath === "products") return `/products/${baseSlug}?sku=${variant.sku}`;
+    return `/${categoryPath}/${productSlug}?sku=${variant.sku}`;
+  }
+  if (categoryPath === "products") return `/products/${baseSlug}`;
+  return `/${categoryPath}/${productSlug}`;
+};
+
+// ─── Series helpers ─────────────────────────────────────────────────────────
+
+const getSeriesName = (product, categoryName) => {
   const sourceName = String(product?.name || product?.model || "").trim();
   if (!sourceName) return categoryName || "Sản phẩm";
 
   const normalized = normalizeText(sourceName);
-  const normalizedCategory = normalizeText(categoryName);
-  const normalizedSlug = normalizeText(categorySlug);
 
   if (normalized.includes("iphone")) {
     const match = sourceName.match(/iPhone\s+(\d+[A-Za-z]*)/i);
     if (match) return `iPhone ${match[1]} Series`;
   }
-
   if (normalized.includes("ipad")) {
     if (/pro/i.test(sourceName)) return "iPad Pro";
     if (/air/i.test(sourceName)) return "iPad Air";
     if (/mini/i.test(sourceName)) return "iPad Mini";
     return "iPad";
   }
-
   if (normalized.includes("macbook") || normalized.includes("mac ")) {
     if (/macbook\s+pro/i.test(sourceName)) return "MacBook Pro";
     if (/macbook\s+air/i.test(sourceName)) return "MacBook Air";
     if (/imac/i.test(sourceName)) return "iMac";
     return "Mac";
   }
-
   if (normalized.includes("airpods")) {
     if (/max/i.test(sourceName)) return "AirPods Max";
     if (/pro/i.test(sourceName)) return "AirPods Pro";
     return "AirPods";
   }
-
   if (normalized.includes("watch")) {
     if (/ultra/i.test(sourceName)) return "Apple Watch Ultra";
     if (/se/i.test(sourceName)) return "Apple Watch SE";
@@ -109,17 +138,13 @@ const getSeriesName = (product, categorySlug, categoryName) => {
     return "Apple Watch";
   }
 
-  if (normalizedSlug === "accessories" || normalizedCategory.includes("phu kien")) {
-    return "Phụ kiện";
-  }
-
   return String(product?.model || product?.name || categoryName || "Sản phẩm").trim();
 };
 
-const getSortedSeries = (products, categorySlug, categoryName) => {
+const getSortedSeries = (products, categoryName) => {
   const groups = {};
   products.forEach((product) => {
-    const seriesName = getSeriesName(product, categorySlug, categoryName);
+    const seriesName = getSeriesName(product, categoryName);
     if (!groups[seriesName]) {
       groups[seriesName] = { seriesName, products: [], image: "" };
     }
@@ -148,73 +173,14 @@ const calculateTopSellers = (products = []) => {
   const source = withSales.length > 0 ? withSales : products;
   return [...source]
     .sort((a, b) => {
-      if ((b?.salesCount || 0) !== (a?.salesCount || 0)) {
+      if ((b?.salesCount || 0) !== (a?.salesCount || 0))
         return (b?.salesCount || 0) - (a?.salesCount || 0);
-      }
       return new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0);
     })
     .slice(0, 4);
 };
 
-const buildDynamicCategories = (products = []) => {
-  const map = new Map();
-
-  products.forEach((product) => {
-    const typeObj = typeof product?.productType === "object" ? product.productType : null;
-    const typeId = String(typeObj?._id || product?.productType || "").trim();
-    const typeName = String(typeObj?.name || "Sản phẩm").trim();
-    const typeSlug = String(typeObj?.slug || slugify(typeName)).trim();
-    const key = typeId || typeSlug || typeName;
-
-    if (!map.has(key)) {
-      map.set(key, {
-        id: typeId || typeSlug,
-        name: typeName,
-        slug: typeSlug,
-        products: [],
-      });
-    }
-    map.get(key).products.push(product);
-  });
-
-  return Array.from(map.values())
-    .map((category) => {
-      const categoryImage =
-        CATEGORY_FALLBACK_IMAGES[category.slug] || getProductImage(category.products[0]);
-      return {
-        ...category,
-        image: categoryImage,
-        series: getSortedSeries(category.products, category.slug, category.name),
-        topSellers: calculateTopSellers(category.products),
-      };
-    })
-    .sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
-};
-
-const buildProductDetailUrl = (product) => {
-  if (!product) return "";
-  const baseSlug = product.baseSlug || product.slug;
-  if (!baseSlug) return "";
-
-  const variant = pickBestVariant(product.variants);
-  const categoryPath =
-    PRODUCT_TYPE_TO_CATEGORY_PATH[product?.productType?.slug] || "products";
-  const storageSuffix = getVariantStorageSuffix(variant?.variantName || "");
-  const productSlug = `${baseSlug}${storageSuffix}`;
-
-  if (variant?.sku) {
-    if (categoryPath === "products") {
-      return `/products/${baseSlug}?sku=${variant.sku}`;
-    }
-    return `/${categoryPath}/${productSlug}?sku=${variant.sku}`;
-  }
-
-  if (categoryPath === "products") {
-    return `/products/${baseSlug}`;
-  }
-
-  return `/${categoryPath}/${productSlug}`;
-};
+// ─── Main Component ─────────────────────────────────────────────────────────
 
 const CategoryDropdown = ({
   isMobileMenu = false,
@@ -223,10 +189,13 @@ const CategoryDropdown = ({
 }) => {
   const navigate = useNavigate();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(0);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [selectedCategoryIndex, setSelectedCategoryIndex] = useState(0);
+  const [productTypes, setProductTypes] = useState([]); // danh sách loại sản phẩm từ API
+  const [typesLoading, setTypesLoading] = useState(false);
+  const [typesLoaded, setTypesLoaded] = useState(false);
+  // Cache sản phẩm theo productTypeId
+  const [productsByType, setProductsByType] = useState({});
+  const [productsLoading, setProductsLoading] = useState(false);
   const dropdownRef = useRef(null);
 
   const isOpen = isMobileMenu ? Boolean(controlledIsOpen) : internalIsOpen;
@@ -239,79 +208,103 @@ const CategoryDropdown = ({
     setInternalIsOpen(false);
   }, [isMobileMenu, onClose]);
 
-  const fetchCategoryData = useCallback(async () => {
-    if (loading || loaded) return;
-    setLoading(true);
+  // ── Step 1: Fetch danh sách product types ────────────────────────────────
+  const fetchProductTypes = useCallback(async () => {
+    if (typesLoading || typesLoaded) return;
+    setTypesLoading(true);
+    try {
+      const response = await productTypeAPI.getPublic({ limit: 100, status: "ACTIVE" });
+      const items = response?.data?.data?.productTypes || [];
+      setProductTypes(sortByPriority(items));
+      setTypesLoaded(true);
+      setSelectedCategoryIndex(0);
+    } catch (error) {
+      console.error("Error loading product types:", error);
+      setProductTypes([]);
+    } finally {
+      setTypesLoading(false);
+    }
+  }, [typesLoading, typesLoaded]);
+
+  // ── Step 2: Fetch sản phẩm cho loại được chọn ────────────────────────────
+  const fetchProductsForType = useCallback(async (typeId) => {
+    if (!typeId || productsByType[typeId] !== undefined) return;
+    setProductsLoading(true);
     try {
       const response = await universalProductAPI.getAll({
         page: 1,
-        limit: 500,
+        limit: 100,
         status: "AVAILABLE",
+        productType: typeId,
       });
       const products = response?.data?.data?.products || [];
-      const dynamicCategories = buildDynamicCategories(products);
-      setCategories(dynamicCategories);
-      setSelectedCategory(0);
-      setLoaded(true);
+      setProductsByType((prev) => ({ ...prev, [typeId]: products }));
     } catch (error) {
-      console.error("Error loading dynamic categories:", error);
-      setCategories([]);
-      setLoaded(false);
+      console.error(`Error loading products for type ${typeId}:`, error);
+      setProductsByType((prev) => ({ ...prev, [typeId]: [] }));
     } finally {
-      setLoading(false);
+      setProductsLoading(false);
     }
-  }, [loading, loaded]);
+  }, [productsByType]);
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchCategoryData();
-  }, [isOpen, fetchCategoryData]);
+    fetchProductTypes();
+  }, [isOpen, fetchProductTypes]);
+
+  // Khi đổi danh mục, load sản phẩm nếu chưa có
+  useEffect(() => {
+    const currentType = productTypes[selectedCategoryIndex];
+    if (currentType?._id) {
+      fetchProductsForType(currentType._id);
+    }
+  }, [selectedCategoryIndex, productTypes, fetchProductsForType]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        if (!isMobileMenu) {
-          setInternalIsOpen(false);
-        }
+        if (!isMobileMenu) setInternalIsOpen(false);
       }
     };
-
     if (isOpen && !isMobileMenu) {
       document.addEventListener("mousedown", handleClickOutside);
     }
-
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen, isMobileMenu]);
 
-  const currentCategory = categories[selectedCategory];
-  const currentSeries = currentCategory?.series || [];
+  // ── Computed values ───────────────────────────────────────────────────────
+
+  const currentType = productTypes[selectedCategoryIndex];
+  const currentTypeId = currentType?._id;
+  const currentProducts = currentTypeId ? (productsByType[currentTypeId] || []) : [];
+
   const currentTopSellers = useMemo(
-    () => currentCategory?.topSellers || [],
-    [currentCategory]
+    () => calculateTopSellers(currentProducts),
+    [currentProducts]
   );
 
+  const currentSeries = useMemo(
+    () => getSortedSeries(currentProducts, currentType?.name || ""),
+    [currentProducts, currentType]
+  );
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
   const handleCategoryClick = (index) => {
-    setSelectedCategory(index);
+    setSelectedCategoryIndex(index);
   };
 
-  const navigateToCategory = (category, seriesName = "") => {
-    if (!category) return;
-
-    if (!category.id) {
-      const fallbackKeyword = seriesName || category.name || "";
-      navigate(`/tim-kiem?s=${encodeURIComponent(fallbackKeyword)}`);
-      closePanel();
-      return;
-    }
-
+  const navigateToCategory = (type, seriesName = "") => {
+    if (!type) return;
     const params = new URLSearchParams();
-    params.set("productType", category.id);
-    params.set("productTypeName", category.name || "Sản phẩm");
+    if (type._id) {
+      params.set("productType", type._id);
+      params.set("productTypeName", type.name || "Sản phẩm");
+    }
     if (seriesName) params.set("model", seriesName);
     params.set("page", "1");
-
     navigate(`/products?${params.toString()}`);
     closePanel();
   };
@@ -322,6 +315,8 @@ const CategoryDropdown = ({
     closePanel();
     window.location.href = targetUrl;
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -359,10 +354,7 @@ const CategoryDropdown = ({
                   <h2 className="text-lg font-semibold text-gray-900">
                     Danh mục sản phẩm
                   </h2>
-                  <button
-                    onClick={closePanel}
-                    className="text-gray-700 hover:text-black"
-                  >
+                  <button onClick={closePanel} className="text-gray-700 hover:text-black">
                     <X className="w-6 h-6" />
                   </button>
                 </div>
@@ -374,38 +366,58 @@ const CategoryDropdown = ({
                 isMobileMenu ? "flex-col" : "flex-col md:flex-row"
               }`}
             >
+              {/* ── Category sidebar ── */}
               <div
                 className={`w-full bg-gray-50 p-2 md:w-80 md:p-6 md:overflow-y-auto ${
                   isMobileMenu ? "flex-shrink-0" : ""
                 }`}
               >
-                <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden pb-2 md:pb-0 scrollbar-hide">
-                  {categories.map((category, index) => (
-                    <button
-                      key={category.id || `${category.slug}-${index}`}
-                      onClick={() => handleCategoryClick(index)}
-                      onMouseEnter={() => handleCategoryClick(index)}
-                      className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
-                        selectedCategory === index
-                          ? "bg-white text-black shadow-sm"
-                          : "text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      <img
-                        src={category.image || "/placeholder.png"}
-                        alt={category.name}
-                        className="w-14 h-14 md:w-10 md:h-10 object-contain"
-                      />
-                      <span className="text-center text-xs md:text-left md:text-base">
-                        {category.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {typesLoading ? (
+                  <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 pb-2 md:pb-0">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex-shrink-0 animate-pulse flex flex-col items-center gap-1 w-20 p-2 md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3">
+                        <div className="w-14 h-14 md:w-10 md:h-10 bg-gray-200 rounded-lg" />
+                        <div className="h-3 bg-gray-200 rounded w-14 md:w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 overflow-x-auto md:flex-col md:space-y-1 md:overflow-x-hidden pb-2 md:pb-0 scrollbar-hide">
+                    {productTypes.map((type, index) => (
+                      <button
+                        key={type._id}
+                        onClick={() => handleCategoryClick(index)}
+                        onMouseEnter={() => handleCategoryClick(index)}
+                        className={`flex-shrink-0 w-20 p-2 flex flex-col items-center gap-1 rounded-xl md:w-full md:flex-row md:items-center md:gap-3 md:px-4 md:py-3 md:text-left font-medium transition-all ${
+                          selectedCategoryIndex === index
+                            ? "bg-white text-black shadow-sm"
+                            : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {isLikelyImageUrl(type.icon) ? (
+                          <img
+                            src={type.icon}
+                            alt={type.name}
+                            className="w-14 h-14 md:w-10 md:h-10 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 md:w-10 md:h-10 flex items-center justify-center bg-gray-100 rounded-lg">
+                            <Package className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                        <span className="text-center text-xs md:text-left md:text-base">
+                          {type.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
+              {/* ── Content panel ── */}
               <div className="flex-1 p-4 overflow-y-auto md:p-8 bg-white md:bg-transparent pb-6">
-                {loading ? (
+                {typesLoading || productsLoading ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                       {[...Array(4)].map((_, index) => (
@@ -416,12 +428,13 @@ const CategoryDropdown = ({
                       ))}
                     </div>
                   </div>
-                ) : !currentCategory ? (
+                ) : !currentType ? (
                   <div className="flex items-center justify-center h-full text-gray-500">
                     <p>Không có dữ liệu danh mục</p>
                   </div>
                 ) : (
                   <>
+                    {/* Top sellers */}
                     <div className="mb-6 md:mb-10">
                       <h3 className="text-base md:text-lg font-bold mb-4 md:mb-5 flex items-center gap-2 text-gray-900">
                         <span className="inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg">
@@ -464,16 +477,15 @@ const CategoryDropdown = ({
                       )}
                     </div>
 
+                    {/* Series list */}
                     <h3 className="text-sm text-black font-semibold mb-3 md:mb-4 md:text-lg">
-                      Chọn theo dòng {currentCategory.name}
+                      Chọn theo dòng {currentType.name}
                     </h3>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
                       {currentSeries.map((series, index) => (
                         <button
                           key={`${series.seriesName}-${index}`}
-                          onClick={() =>
-                            navigateToCategory(currentCategory, series.seriesName)
-                          }
+                          onClick={() => navigateToCategory(currentType, series.seriesName)}
                           className="bg-white rounded-xl border border-gray-200 p-3 hover:shadow-lg transition-all text-left group md:p-4"
                         >
                           <div className="flex gap-3 items-start mb-3">
@@ -523,6 +535,18 @@ const CategoryDropdown = ({
                         </button>
                       ))}
                     </div>
+
+                    {/* Xem tất cả */}
+                    {currentType && (
+                      <div className="mt-6 text-center">
+                        <button
+                          onClick={() => navigateToCategory(currentType)}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                        >
+                          Xem tất cả {currentType.name} →
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

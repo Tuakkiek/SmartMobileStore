@@ -111,9 +111,9 @@ const SectionItem = ({ section, onEdit }) => {
               {section.title || label}
             </h3>
             {section.type === "category-section" &&
-              section.config?.categoryFilter && (
+              (section.config?.categoryName || section.config?.categoryFilter) && (
                 <Badge variant="outline" className="text-xs">
-                  {section.config.categoryFilter}
+                  {section.config?.categoryName || section.config?.categoryFilter}
                 </Badge>
               )}
             {section.type === "short-videos" && section.config?.videoType && (

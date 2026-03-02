@@ -23,7 +23,7 @@ const sectionConfigSchema = new mongoose.Schema(
     },
     categoryFilter: {
       type: String,
-      enum: ["iPhone", "iPad", "Mac", "AirPods", "AppleWatch", "Accessories"],
+      trim: true,
     },
 
     // For deals sections

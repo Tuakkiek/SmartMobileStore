@@ -194,21 +194,53 @@ const DynamicSection = ({
     // CATEGORY SECTION
     // ============================================
     case "category-section": {
+      const normalizedCategoryName = String(
+        config.categoryName || config.categoryFilter || ""
+      )
+        .trim()
+        .toLowerCase();
+      const selectedCategoryId = String(config.categoryId || "").trim();
+
       const categoryProducts = allProducts
-        .filter((p) => p.category === config.categoryFilter)
+        .filter((product) => {
+          const productTypeId = String(product?.productType?._id || "").trim();
+          if (selectedCategoryId && productTypeId) {
+            return productTypeId === selectedCategoryId;
+          }
+
+          const productCategoryName = String(
+            product?.productType?.name || product?.category || ""
+          )
+            .trim()
+            .toLowerCase();
+
+          if (normalizedCategoryName) {
+            return productCategoryName === normalizedCategoryName;
+          }
+
+          return true;
+        })
         .slice(0, config.limit || 10);
+
+      const resolvedCategoryName =
+        config.categoryName || config.categoryFilter || "Danh muc";
+      const viewAllLink = selectedCategoryId
+        ? `/products?productType=${encodeURIComponent(
+            selectedCategoryId
+          )}&productTypeName=${encodeURIComponent(resolvedCategoryName)}`
+        : `/products?category=${encodeURIComponent(resolvedCategoryName)}`;
 
       return (
         <ProductsSection
-          title={title || config.categoryFilter}
+          title={title || resolvedCategoryName}
           products={categoryProducts}
           showBadges={false}
           allProducts={allProducts}
-          category={config.categoryFilter}
+          category={resolvedCategoryName}
           isAdmin={isAdmin}
           onEdit={onEdit}
           onDelete={onDelete}
-          viewAllLink={`/products?category=${config.categoryFilter}`}
+          viewAllLink={viewAllLink}
         />
       );
     }

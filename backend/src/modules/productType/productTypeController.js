@@ -126,6 +126,43 @@ export const findAll = async (req, res) => {
   }
 };
 
+// GET ALL (PUBLIC)
+export const findAllPublic = async (req, res) => {
+  try {
+    const { search = "", limit = 100 } = req.query;
+    const parsedLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
+
+    const query = { status: "ACTIVE" };
+    const normalizedSearch = String(search || "").trim();
+    if (normalizedSearch) {
+      query.$or = [
+        { name: { $regex: normalizedSearch, $options: "i" } },
+        { slug: { $regex: normalizedSearch, $options: "i" } },
+      ];
+    }
+
+    const productTypes = await ProductType.find(query)
+      .select("name slug icon description status")
+      .sort({ name: 1 })
+      .limit(parsedLimit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        productTypes,
+        total: productTypes.length,
+      },
+    });
+  } catch (error) {
+    console.error("❌ GET PUBLIC PRODUCT TYPES ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Lỗi lấy danh sách loại sản phẩm",
+    });
+  }
+};
+
 // GET ONE
 export const findOne = async (req, res) => {
   try {
@@ -252,6 +289,7 @@ export const deleteProductType = async (req, res) => {
 export default {
   create,
   findAll,
+  findAllPublic,
   findOne,
   update,
   deleteProductType,

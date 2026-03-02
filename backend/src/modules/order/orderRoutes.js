@@ -76,10 +76,21 @@ const auditCarrierWebhook = orderAuditMiddleware({
 
 const resolveOrderStatusWriteAction = (req) => {
   const role = String(req?.user?.role || "").toUpperCase();
+  if (role === "SHIPPER") {
+    return AUTHZ_ACTIONS.TASK_UPDATE;
+  }
   if (role === "WAREHOUSE_MANAGER" || role === "WAREHOUSE_STAFF") {
     return AUTHZ_ACTIONS.WAREHOUSE_WRITE;
   }
   return AUTHZ_ACTIONS.ORDERS_WRITE;
+};
+
+const resolveOrderStatusScopeMode = (req) => {
+  const role = String(req?.user?.role || "").toUpperCase();
+  if (role === "SHIPPER") {
+    return "task";
+  }
+  return resolveOrderWriteScopeMode(req);
 };
 
 // Carrier webhooks are unauthenticated
@@ -118,7 +129,7 @@ router.post("/:id/cancel", auditCancelOrder, orderController.cancelOrder);
 router.patch(
   "/:id/status",
   authorize(resolveOrderStatusWriteAction, {
-    scopeMode: resolveOrderWriteScopeMode,
+    scopeMode: resolveOrderStatusScopeMode,
     requireActiveBranchFor: ["branch"],
     resourceType: "ORDER",
   }),
@@ -128,7 +139,7 @@ router.patch(
 router.put(
   "/:id/status",
   authorize(resolveOrderStatusWriteAction, {
-    scopeMode: resolveOrderWriteScopeMode,
+    scopeMode: resolveOrderStatusScopeMode,
     requireActiveBranchFor: ["branch"],
     resourceType: "ORDER",
   }),

@@ -22,6 +22,7 @@ import { useCartStore } from "@/store/cartStore";
 import SearchOverlay from "@/components/shared/SearchOverlay";
 import CategoryDropdown from "@/components/shared/CategoryDropdown";
 import Breadcrumb from "@/components/shared/Breadcrumb";
+import { productTypeAPI } from "@/lib/api";
 
 // Store data
 const stores = [
@@ -80,9 +81,26 @@ const stores = [
 
 const districts = ["Tất cả", "Ninh Kiều", "Cái Răng", "Bình Thủy", "Ô Môn"];
 
+const FOOTER_FALLBACK_CATEGORY_LINKS = [
+  {
+    id: "all-products",
+    name: "Tat ca san pham",
+    to: "/products?page=1",
+    icon: "",
+  },
+];
+
+const isLikelyImageUrl = (value = "") => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
+  if (trimmed.startsWith("/")) return true;
+  return /\.(png|jpe?g|webp|svg|gif|avif)$/i.test(trimmed);
+};
+
 const MainLayout = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const { getItemCount } = useCartStore();
 
   // Mobile menus
@@ -97,6 +115,7 @@ const MainLayout = () => {
 
   // Store menu
   const [selectedDistrict, setSelectedDistrict] = useState(0);
+  const [footerProductTypes, setFooterProductTypes] = useState([]);
 
   const cartItemCount = getItemCount();
 
@@ -112,10 +131,27 @@ const MainLayout = () => {
     };
   }, [storeMenuOpen, contactMenuOpen, desktopStoreMenuOpen]);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadFooterProductTypes = async () => {
+      try {
+        const response = await productTypeAPI.getPublic({ limit: 12 });
+        const items = response?.data?.data?.productTypes;
+        if (!isMounted) return;
+        setFooterProductTypes(Array.isArray(items) ? items : []);
+      } catch (error) {
+        console.error("MainLayout: failed to load footer product types", error);
+        if (isMounted) setFooterProductTypes([]);
+      }
+    };
+
+    loadFooterProductTypes();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleProfileNavigation = () => {
     const normalizedRole = String(user?.role || "").toUpperCase();
@@ -138,6 +174,30 @@ const MainLayout = () => {
       : stores.filter(
           (store) => store.district === districts[selectedDistrict]
         );
+
+  const footerCategoryLinks =
+    footerProductTypes.length > 0
+      ? footerProductTypes.slice(0, 6).map((item, index) => {
+          const typeId = String(item?._id || "").trim();
+          const typeName = String(item?.name || `Danh muc ${index + 1}`).trim();
+          const params = new URLSearchParams();
+
+          if (typeId) {
+            params.set("productType", typeId);
+            params.set("productTypeName", typeName);
+          } else {
+            params.set("search", typeName);
+          }
+          params.set("page", "1");
+
+          return {
+            id: typeId || String(item?.slug || `footer-type-${index}`),
+            name: typeName,
+            icon: isLikelyImageUrl(item?.icon) ? String(item.icon).trim() : "",
+            to: `/products?${params.toString()}`,
+          };
+        })
+      : FOOTER_FALLBACK_CATEGORY_LINKS;
 
   return (
     <div className="min-h-screen flex flex-col relative pb-16 md:pb-0">
@@ -852,46 +912,24 @@ const MainLayout = () => {
                     Cửa Hàng
                   </button>
                 </li>
-                <li>
-                  <Link
-                    to="/products?category=iPhone"
-                    className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300"
-                  >
-                    iPhone
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/products?category=iPad"
-                    className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300"
-                  >
-                    iPad
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/products?category=Mac"
-                    className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300"
-                  >
-                    Mac
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/products?category=AppleWatch"
-                    className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300"
-                  >
-                    Watch
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/products?category=AirPods"
-                    className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300"
-                  >
-                    AirPods
-                  </Link>
-                </li>
+                {footerCategoryLinks.map((link) => (
+                  <li key={link.id}>
+                    <Link
+                      to={link.to}
+                      className="text-sm md:text-base text-gray-400 hover:text-white transition-colors duration-300 flex items-center gap-2"
+                    >
+                      {link.icon ? (
+                        <img
+                          src={link.icon}
+                          alt={link.name}
+                          className="w-4 h-4 rounded object-cover flex-shrink-0"
+                          loading="lazy"
+                        />
+                      ) : null}
+                      <span className="truncate">{link.name}</span>
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
 

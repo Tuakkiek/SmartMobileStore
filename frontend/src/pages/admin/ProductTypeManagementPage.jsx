@@ -1,6 +1,6 @@
 // ============================================
 // FILE: frontend/src/pages/admin/ProductTypeManagementPage.jsx
-// ✅ Quản lý loại sản phẩm với specs động
+// ✅ Responsive UI - Quản lý loại sản phẩm với specs động
 // ============================================
 
 import React, { useState, useEffect } from "react";
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Edit, Trash2, Package, Settings } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Package, Settings, X, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { productTypeAPI } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { Loading } from "@/components/shared/Loading";
@@ -38,6 +38,7 @@ const ProductTypeManagementPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [currentMode, setCurrentMode] = useState(null);
   const [currentProductType, setCurrentProductType] = useState(null);
+  const [expandedFields, setExpandedFields] = useState({});
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -54,7 +55,6 @@ const ProductTypeManagementPage = () => {
     setIsLoading(true);
     try {
       const response = await productTypeAPI.getAll({ search: searchQuery });
-      console.log("✅ Product types loaded:", response.data.data.productTypes.length);
       setProductTypes(response.data.data.productTypes || []);
     } catch (error) {
       console.error("❌ Fetch product types error:", error);
@@ -83,6 +83,7 @@ const ProductTypeManagementPage = () => {
       ],
       status: "ACTIVE",
     });
+    setExpandedFields({});
     setShowModal(true);
   };
 
@@ -96,45 +97,33 @@ const ProductTypeManagementPage = () => {
       specFields: productType.specFields || [],
       status: productType.status || "ACTIVE",
     });
+    setExpandedFields({});
     setShowModal(true);
   };
 
   const handleDelete = async (productType) => {
-    const associatedProductsCount = Number(
-      productType?.associatedProductsCount || 0
-    );
-
+    const associatedProductsCount = Number(productType?.associatedProductsCount || 0);
     if (associatedProductsCount > 0) {
       toast.error(PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE);
       return;
     }
     if (!confirm("Bạn có chắc muốn xóa loại sản phẩm này?")) return;
-
     try {
       await productTypeAPI.delete(productType._id);
       toast.success("Xóa loại sản phẩm thành công");
       fetchProductTypes();
     } catch (error) {
-      console.error("❌ Delete product type error:", error);
       toast.error(error.response?.data?.message || "Xóa loại sản phẩm thất bại");
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.name?.trim()) {
       toast.error("Tên loại sản phẩm là bắt buộc");
       return;
     }
-
-    const payload = {
-      ...formData,
-      createdBy: user._id,
-    };
-
-    console.log("📤 Submitting product type:", payload);
-
+    const payload = { ...formData, createdBy: user._id };
     try {
       if (currentMode === "create") {
         await productTypeAPI.create(payload);
@@ -146,33 +135,32 @@ const ProductTypeManagementPage = () => {
       setShowModal(false);
       fetchProductTypes();
     } catch (error) {
-      console.error("❌ Submit product type error:", error);
       toast.error(error.response?.data?.message || "Lưu loại sản phẩm thất bại");
     }
   };
 
-  // SPEC FIELD HANDLERS
   const addSpecField = () => {
+    const newIndex = formData.specFields.length;
     setFormData({
       ...formData,
       specFields: [
         ...formData.specFields,
-        {
-          key: "",
-          label: "",
-          type: "text",
-          required: false,
-          options: [],
-          placeholder: "",
-        },
+        { key: "", label: "", type: "text", required: false, options: [], placeholder: "" },
       ],
     });
+    setExpandedFields((prev) => ({ ...prev, [newIndex]: true }));
   };
 
   const removeSpecField = (index) => {
-    setFormData({
-      ...formData,
-      specFields: formData.specFields.filter((_, i) => i !== index),
+    setFormData({ ...formData, specFields: formData.specFields.filter((_, i) => i !== index) });
+    setExpandedFields((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = parseInt(k);
+        if (ki < index) next[ki] = v;
+        else if (ki > index) next[ki - 1] = v;
+      });
+      return next;
     });
   };
 
@@ -184,352 +172,394 @@ const ProductTypeManagementPage = () => {
 
   const updateSpecOptions = (index, optionsString) => {
     const updated = [...formData.specFields];
-    updated[index].options = optionsString
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    updated[index].options = optionsString.split(",").map((s) => s.trim()).filter(Boolean);
     setFormData({ ...formData, specFields: updated });
   };
 
+  const toggleField = (index) => {
+    setExpandedFields((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
+      {/* ─── HEADER ─── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Quản lý loại sản phẩm</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Quản lý loại sản phẩm</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Định nghĩa loại sản phẩm và thông số kỹ thuật
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" /> Thêm loại sản phẩm
+        <Button onClick={handleCreate} className="w-full sm:w-auto shrink-0">
+          <Plus className="w-4 h-4 mr-2" />
+          <span>Thêm loại sản phẩm</span>
         </Button>
       </div>
 
-      {/* SEARCH */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      {/* ─── SEARCH ─── */}
+      <div className="relative w-full sm:max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         <Input
           placeholder="Tìm kiếm loại sản phẩm..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
+          className="pl-10 w-full"
         />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      {/* PRODUCT TYPES LIST */}
+      {/* ─── LIST ─── */}
       {isLoading ? (
         <Loading />
       ) : productTypes.length === 0 ? (
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
+        <div className="text-center py-16 border rounded-xl">
+          <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+          <p className="text-muted-foreground text-sm">
             {searchQuery ? "Không tìm thấy loại sản phẩm" : "Chưa có loại sản phẩm nào"}
           </p>
+          {!searchQuery && (
+            <Button variant="outline" size="sm" onClick={handleCreate} className="mt-4">
+              <Plus className="w-4 h-4 mr-2" /> Tạo đầu tiên
+            </Button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {productTypes.map((type) => {
-            const associatedProductsCount = Number(
-              type.associatedProductsCount || 0
-            );
-            const isDeleteBlocked = associatedProductsCount > 0;
-
+            const count = Number(type.associatedProductsCount || 0);
+            const blocked = count > 0;
             return (
-            <div
-              key={type._id}
-              className="border rounded-lg p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
+              <div
+                key={type._id}
+                className="border rounded-xl p-4 hover:shadow-md transition-shadow bg-card flex flex-col gap-3"
+              >
+                {/* Card Header */}
+                <div className="flex items-start gap-3">
                   {type.icon ? (
                     <img
                       src={type.icon}
                       alt={type.name}
-                      className="w-12 h-12 object-contain rounded"
+                      className="w-11 h-11 object-contain rounded-lg shrink-0 border"
                     />
                   ) : (
-                    <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-                      <Settings className="w-6 h-6 text-gray-400" />
+                    <div className="w-11 h-11 bg-muted rounded-lg flex items-center justify-center shrink-0">
+                      <Settings className="w-5 h-5 text-muted-foreground" />
                     </div>
                   )}
-                  <div>
-                    <h3 className="font-semibold">{type.name}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold truncate leading-tight">{type.name}</h3>
                     <span
-                      className={`text-xs px-2 py-1 rounded ${
+                      className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
                         type.status === "ACTIVE"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                          : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {type.status === "ACTIVE" ? "Hoạt động" : "Không hoạt động"}
                     </span>
                   </div>
                 </div>
-              </div>
 
-              {type.description && (
-                <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                  {type.description}
-                </p>
-              )}
+                {/* Description */}
+                {type.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2 leading-snug">
+                    {type.description}
+                  </p>
+                )}
 
-              <div className="mb-3">
-                <p className="text-xs font-medium text-muted-foreground mb-1">
-                  Thông số kỹ thuật ({type.specFields?.length || 0})
+                {/* Spec tags */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    Thông số ({type.specFields?.length || 0})
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {type.specFields?.slice(0, 4).map((field, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full"
+                      >
+                        {field.label}
+                      </span>
+                    ))}
+                    {(type.specFields?.length || 0) > 4 && (
+                      <span className="text-xs text-muted-foreground px-1 self-center">
+                        +{type.specFields.length - 4}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Usage info */}
+                <p className={`text-xs flex items-center gap-1 ${blocked ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  {blocked && <AlertCircle className="w-3 h-3 shrink-0" />}
+                  {blocked ? `Đang dùng bởi ${count} sản phẩm` : "Chưa có sản phẩm liên kết"}
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {type.specFields?.slice(0, 3).map((field, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded"
-                    >
-                      {field.label}
-                    </span>
-                  ))}
-                  {type.specFields?.length > 3 && (
-                    <span className="text-xs text-muted-foreground">
-                      +{type.specFields.length - 3} khác
-                    </span>
-                  )}
+
+                {/* Actions */}
+                <div className="flex gap-2 mt-auto pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(type)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    <Edit className="w-3.5 h-3.5 mr-1.5" /> Sửa
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(type)}
+                    disabled={blocked}
+                    title={blocked ? PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE : "Xóa loại sản phẩm"}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               </div>
-
-              <p
-                className={`text-xs mb-3 ${
-                  isDeleteBlocked ? "text-amber-700" : "text-muted-foreground"
-                }`}
-              >
-                {isDeleteBlocked
-                  ? `In use by ${associatedProductsCount} product(s)`
-                  : "No associated products"}
-              </p>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEdit(type)}
-                  className="flex-1"
-                >
-                  <Edit className="w-4 h-4 mr-1" /> Sửa
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleDelete(type)}
-                  disabled={isDeleteBlocked}
-                  title={
-                    isDeleteBlocked
-                      ? PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE
-                      : "Delete product type"
-                  }
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
             );
           })}
         </div>
       )}
 
-      {/* MODAL */}
+      {/* ─── MODAL ─── */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {currentMode === "create"
-                ? "Thêm loại sản phẩm mới"
-                : "Cập nhật loại sản phẩm"}
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl max-h-[92dvh] overflow-y-auto p-4 sm:p-6 rounded-xl">
+          <DialogHeader className="mb-1">
+            <DialogTitle className="text-lg sm:text-xl">
+              {currentMode === "create" ? "Thêm loại sản phẩm mới" : "Cập nhật loại sản phẩm"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Định nghĩa loại sản phẩm và các trường thông số kỹ thuật
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* BASIC INFO */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Basic info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm">
                   Tên loại sản phẩm <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="VD: Smartphone, Laptop, TV..."
                   required
+                  className="h-9"
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label>URL Icon</Label>
+              <div className="space-y-1.5">
+                <Label className="text-sm">URL Icon</Label>
                 <Input
                   value={formData.icon}
-                  onChange={(e) =>
-                    setFormData({ ...formData, icon: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                   placeholder="https://example.com/icon.png"
+                  className="h-9"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Mô tả</Label>
-              <textarea
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={2}
-                className="w-full px-3 py-2 border rounded-md"
-                placeholder="Mô tả ngắn về loại sản phẩm..."
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label className="text-sm">Mô tả</Label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Mô tả ngắn về loại sản phẩm..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Trạng thái</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Hoạt động</SelectItem>
+                    <SelectItem value="INACTIVE">Không hoạt động</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Trạng thái</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, status: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACTIVE">Hoạt động</SelectItem>
-                  <SelectItem value="INACTIVE">Không hoạt động</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* SPEC FIELDS */}
-            <div className="space-y-4 border-t pt-4">
+            {/* Spec Fields */}
+            <div className="space-y-3 border-t pt-4">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">
-                  Thông số kỹ thuật
-                </Label>
-                <Button type="button" variant="outline" size="sm" onClick={addSpecField}>
-                  <Plus className="w-4 h-4 mr-2" /> Thêm trường
+                <div>
+                  <Label className="text-sm font-semibold">Thông số kỹ thuật</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formData.specFields.length} trường đã định nghĩa
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addSpecField} className="h-8 text-xs">
+                  <Plus className="w-3.5 h-3.5 mr-1.5" /> Thêm trường
                 </Button>
               </div>
 
-              {formData.specFields.map((field, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 border rounded-lg bg-gray-50"
-                >
-                  <div className="md:col-span-3 space-y-2">
-                    <Label className="text-xs">Key (code)</Label>
-                    <Input
-                      value={field.key}
-                      onChange={(e) =>
-                        updateSpecField(index, "key", e.target.value)
-                      }
-                      placeholder="VD: screenSize"
-                      className="text-sm"
-                    />
-                  </div>
-
-                  <div className="md:col-span-3 space-y-2">
-                    <Label className="text-xs">Label (hiển thị)</Label>
-                    <Input
-                      value={field.label}
-                      onChange={(e) =>
-                        updateSpecField(index, "label", e.target.value)
-                      }
-                      placeholder="VD: Kích thước màn hình"
-                      className="text-sm"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 space-y-2">
-                    <Label className="text-xs">Kiểu</Label>
-                    <Select
-                      value={field.type}
-                      onValueChange={(value) =>
-                        updateSpecField(index, "type", value)
-                      }
-                    >
-                      <SelectTrigger className="text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">Text</SelectItem>
-                        <SelectItem value="number">Number</SelectItem>
-                        <SelectItem value="select">Select</SelectItem>
-                        <SelectItem value="textarea">Textarea</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="md:col-span-3 space-y-2">
-                    <Label className="text-xs">Placeholder</Label>
-                    <Input
-                      value={field.placeholder}
-                      onChange={(e) =>
-                        updateSpecField(index, "placeholder", e.target.value)
-                      }
-                      placeholder="VD: 6.7 inch"
-                      className="text-sm"
-                    />
-                  </div>
-
-                  <div className="md:col-span-1 flex items-center justify-center gap-2">
-                    <label className="flex items-center gap-1 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        onChange={(e) =>
-                          updateSpecField(index, "required", e.target.checked)
-                        }
-                      />
-                      Bắt buộc
-                    </label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeSpecField(index)}
-                      className="text-red-500 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  {field.type === "select" && (
-                    <div className="md:col-span-12 space-y-2">
-                      <Label className="text-xs">
-                        Options (phân cách bằng dấu phẩy)
-                      </Label>
-                      <Input
-                        value={field.options.join(", ")}
-                        onChange={(e) =>
-                          updateSpecOptions(index, e.target.value)
-                        }
-                        placeholder="VD: 128GB, 256GB, 512GB"
-                        className="text-sm"
-                      />
-                    </div>
-                  )}
+              {formData.specFields.length === 0 && (
+                <div className="text-center py-6 border-2 border-dashed rounded-lg text-muted-foreground text-sm">
+                  Chưa có thông số nào. Nhấn <strong>Thêm trường</strong> để bắt đầu.
                 </div>
-              ))}
+              )}
+
+              <div className="space-y-2">
+                {formData.specFields.map((field, index) => {
+                  const isExpanded = expandedFields[index] !== false;
+                  const hasKey = field.key || field.label;
+                  return (
+                    <div key={index} className="border rounded-lg overflow-hidden bg-muted/30">
+                      {/* Collapsed header */}
+                      <div
+                        className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                        onClick={() => toggleField(index)}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
+                            #{index + 1}
+                          </span>
+                          <span className="text-sm font-medium truncate">
+                            {field.label || field.key || (
+                              <span className="text-muted-foreground italic">Trường chưa đặt tên</span>
+                            )}
+                          </span>
+                          {field.key && (
+                            <span className="hidden sm:inline text-xs text-muted-foreground font-mono truncate">
+                              [{field.key}]
+                            </span>
+                          )}
+                          <span className="text-xs bg-background border px-1.5 py-0.5 rounded shrink-0">
+                            {field.type}
+                          </span>
+                          {field.required && (
+                            <span className="text-xs text-red-500 shrink-0">*</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); removeSpecField(index); }}
+                            className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          {isExpanded
+                            ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          }
+                        </div>
+                      </div>
+
+                      {/* Expanded body */}
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t bg-background/60">
+                          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                            {/* Key */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Key (code)</Label>
+                              <Input
+                                value={field.key}
+                                onChange={(e) => updateSpecField(index, "key", e.target.value)}
+                                placeholder="screenSize"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                            {/* Label */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Label</Label>
+                              <Input
+                                value={field.label}
+                                onChange={(e) => updateSpecField(index, "label", e.target.value)}
+                                placeholder="Kích thước màn hình"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            {/* Type */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Kiểu dữ liệu</Label>
+                              <Select
+                                value={field.type}
+                                onValueChange={(value) => updateSpecField(index, "type", value)}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="text">Text</SelectItem>
+                                  <SelectItem value="number">Number</SelectItem>
+                                  <SelectItem value="select">Select</SelectItem>
+                                  <SelectItem value="textarea">Textarea</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {/* Placeholder */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Placeholder</Label>
+                              <Input
+                                value={field.placeholder}
+                                onChange={(e) => updateSpecField(index, "placeholder", e.target.value)}
+                                placeholder="VD: 6.7 inch"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-3">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={field.required}
+                                onChange={(e) => updateSpecField(index, "required", e.target.checked)}
+                                className="rounded"
+                              />
+                              <span className="text-xs text-muted-foreground">Bắt buộc nhập</span>
+                            </label>
+
+                            {field.type === "select" && (
+                              <div className="flex-1 space-y-1">
+                                <Label className="text-xs text-muted-foreground">
+                                  Options (phân cách bằng dấu phẩy)
+                                </Label>
+                                <Input
+                                  value={field.options.join(", ")}
+                                  onChange={(e) => updateSpecOptions(index, e.target.value)}
+                                  placeholder="128GB, 256GB, 512GB"
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3">
+            {/* Footer actions */}
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setShowModal(false)}
+                className="w-full sm:w-auto"
               >
                 Hủy
               </Button>
-              <Button type="submit">
+              <Button type="submit" className="w-full sm:w-auto">
                 {currentMode === "create" ? "Tạo mới" : "Cập nhật"}
               </Button>
             </div>

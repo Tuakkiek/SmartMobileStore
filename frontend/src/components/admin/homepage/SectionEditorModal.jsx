@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import ImageUploader from "./ImageUploader";
 import { toast } from "sonner";
+import { productTypeAPI } from "@/lib/api";
 
 const SectionEditorModal = ({ section, open, onClose }) => {
   const { updateSectionConfig } = useHomeLayoutStore();
@@ -32,6 +33,15 @@ const SectionEditorModal = ({ section, open, onClose }) => {
     title: "",
     config: {},
   });
+  const [productTypes, setProductTypes] = useState([]);
+  const [loadingProductTypes, setLoadingProductTypes] = useState(false);
+
+  const normalizeText = (value = "") =>
+    String(value)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
 
   useEffect(() => {
     if (section) {
@@ -41,6 +51,61 @@ const SectionEditorModal = ({ section, open, onClose }) => {
       });
     }
   }, [section]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (section?.type !== "category-section") return;
+
+    const loadProductTypes = async () => {
+      try {
+        setLoadingProductTypes(true);
+        const response = await productTypeAPI.getAll({ status: "ACTIVE", limit: 100 });
+        const items = response?.data?.data?.productTypes;
+        setProductTypes(Array.isArray(items) ? items : []);
+      } catch (error) {
+        console.error("Failed to load product types for editor:", error);
+        setProductTypes([]);
+      } finally {
+        setLoadingProductTypes(false);
+      }
+    };
+
+    loadProductTypes();
+  }, [open, section?.type]);
+
+  useEffect(() => {
+    if (section?.type !== "category-section") return;
+    if (!productTypes.length) return;
+
+    setFormData((prev) => {
+      const currentId = String(prev?.config?.categoryId || "").trim();
+      if (currentId) return prev;
+
+      const currentName = String(
+        prev?.config?.categoryName || prev?.config?.categoryFilter || ""
+      ).trim();
+      if (!currentName) return prev;
+
+      const normalizedCurrentName = normalizeText(currentName);
+      const matchedType = productTypes.find((type) => {
+        const byName = normalizeText(type?.name || "") === normalizedCurrentName;
+        const bySlug = normalizeText(type?.slug || "") === normalizedCurrentName;
+        return byName || bySlug;
+      });
+
+      if (!matchedType?._id) return prev;
+
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          categoryId: matchedType._id,
+          categoryName: matchedType.name || currentName,
+          categoryFilter: matchedType.name || currentName,
+        },
+      };
+    });
+  }, [section?.type, productTypes]);
 
   const handleSave = () => {
     if (!section) return;
@@ -180,39 +245,6 @@ const SectionEditorModal = ({ section, open, onClose }) => {
             </div>
           </>
         );
-        return (
-          <>
-            <div className="space-y-4">
-              <div>
-                <Label>Magic Deals Images (9 ảnh)</Label>
-                <p className="text-xs text-gray-500 mb-2">
-                  1 banner chính + 8 ảnh danh mục (4+4)
-                </p>
-                <ImageUploader
-                  images={formData.config.images || []}
-                  onChange={(images) =>
-                    setFormData({
-                      ...formData,
-                      config: {
-                        ...formData.config,
-                        images,
-                      },
-                    })
-                  }
-                />
-              </div>
-
-              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-                <strong>Thứ tự ảnh:</strong>
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Ảnh 1: Banner chính (bên trái)</li>
-                  <li>Ảnh 2-5: Khối danh mục 1 (trên phải)</li>
-                  <li>Ảnh 6-9: Khối danh mục 2 (dưới phải)</li>
-                </ul>
-              </div>
-            </div>
-          </>
-        );
       case "products-new":
       case "products-topSeller":
         return (
@@ -242,24 +274,62 @@ const SectionEditorModal = ({ section, open, onClose }) => {
             <div>
               <Label>Category</Label>
               <Select
-                value={formData.config.categoryFilter || ""}
-                onValueChange={(value) =>
+                value={
+                  formData.config.categoryId ||
+                  (() => {
+                    const currentName = String(
+                      formData.config.categoryName ||
+                        formData.config.categoryFilter ||
+                        ""
+                    ).trim();
+                    if (!currentName) return "";
+                    const normalizedCurrentName = normalizeText(currentName);
+                    const matched = productTypes.find(
+                      (type) =>
+                        normalizeText(type?.name || "") === normalizedCurrentName ||
+                        normalizeText(type?.slug || "") === normalizedCurrentName
+                    );
+                    return matched?._id || "";
+                  })()
+                }
+                onValueChange={(value) => {
+                  const selectedType = productTypes.find(
+                    (type) => String(type?._id) === String(value)
+                  );
                   setFormData({
                     ...formData,
-                    config: { ...formData.config, categoryFilter: value },
-                  })
-                }
+                    config: {
+                      ...formData.config,
+                      categoryId: value,
+                      categoryName: selectedType?.name || formData.config.categoryName || "",
+                      // Keep field for backward compatibility with existing data.
+                      categoryFilter:
+                        selectedType?.name || formData.config.categoryFilter || "",
+                    },
+                  });
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue
+                    placeholder={
+                      loadingProductTypes
+                        ? "Dang tai danh muc..."
+                        : "Select category"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="iPhone">iPhone</SelectItem>
-                  <SelectItem value="iPad">iPad</SelectItem>
-                  <SelectItem value="Mac">Mac</SelectItem>
-                  <SelectItem value="AirPods">AirPods</SelectItem>
-                  <SelectItem value="AppleWatch">Apple Watch</SelectItem>
-                  <SelectItem value="Accessories">Accessories</SelectItem>
+                  {productTypes.length > 0 ? (
+                    productTypes.map((type) => (
+                      <SelectItem key={type._id} value={type._id}>
+                        {type.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="__no_type__" disabled>
+                      No product types found
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -302,7 +372,7 @@ const SectionEditorModal = ({ section, open, onClose }) => {
                     ...formData,
                     config: { ...formData.config, showcaseItems: items },
                   });
-                } catch (err) {
+                } catch {
                   // Invalid JSON, ignore
                 }
               }}

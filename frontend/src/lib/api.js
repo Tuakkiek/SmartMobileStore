@@ -540,6 +540,7 @@ export const brandAPI = {
 // PRODUCT TYPE API
 // ============================================
 export const productTypeAPI = {
+  getPublic: (params) => api.get("/product-types/public", { params }),
   getAll: (params) => api.get("/product-types", { params }),
   getOne: (id) => api.get(`/product-types/${id}`),
   create: (data) => api.post("/product-types", data),

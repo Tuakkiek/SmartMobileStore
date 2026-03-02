@@ -758,12 +758,17 @@ const buildFilter = (req) => {
     andClauses.push({ orderSource: "IN_STORE" });
   }
 
-  // Customer order history must not be scoped by active branch context.
-  // Customers should always see all of their own orders.
-  if (!req.authz?.isGlobalAdmin && req.user.role !== "CUSTOMER") {
+  // Customer and shipper order history must not be scoped by active branch context.
+  // Customers see their own orders, shippers see orders assigned to their shipperId.
+  const shouldApplyBranchScope =
+    !req.authz?.isGlobalAdmin &&
+    req.user.role !== "CUSTOMER" &&
+    req.user.role !== "SHIPPER";
+
+  if (shouldApplyBranchScope) {
     if (req.authz?.activeBranchId) {
       andClauses.push({ "assignedStore.storeId": req.authz.activeBranchId });
-    } else if (req.user.role !== "CUSTOMER") {
+    } else {
       andClauses.push({ "assignedStore.storeId": null });
     }
   }
