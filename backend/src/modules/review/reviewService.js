@@ -7,7 +7,8 @@ import UniversalProduct from "../product/UniversalProduct.js";
 import { validateReviewImages } from "./reviewMediaValidation.js";
 import { ReviewServiceError } from "./reviewErrors.js";
 
-const ORDER_STATUS_COMPLETED = "COMPLETED";
+const ORDER_STAGE_DELIVERED = "DELIVERED";
+const REVIEW_ELIGIBLE_STATUSES = ["DELIVERED", "PICKED_UP", "COMPLETED"];
 const REVIEW_EDIT_WINDOW_DAYS = 7;
 const REVIEW_EDIT_WINDOW_MS = REVIEW_EDIT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 const MAX_REVIEW_EDITS = 1;
@@ -82,20 +83,38 @@ const normalizeImages = (images) => {
   return imageValidation.images;
 };
 
-const ensureReviewableOrder = async ({ userId, productId, orderId }) => {
-  const order = await Order.findOne({
-    _id: orderId,
-    status: ORDER_STATUS_COMPLETED,
-    $or: [{ customerId: userId }, { userId }],
+const buildReviewEligibleOrderFilter = ({ userId, productId, orderId }) => {
+  const filter = {
+    $and: [
+      { $or: [{ customerId: userId }, { userId }] },
+      {
+        $or: [
+          { statusStage: ORDER_STAGE_DELIVERED },
+          { status: { $in: REVIEW_ELIGIBLE_STATUSES } },
+        ],
+      },
+    ],
     "items.productId": productId,
-  }).select("_id orderNumber status");
+  };
+
+  if (orderId) {
+    filter._id = orderId;
+  }
+
+  return filter;
+};
+
+const ensureReviewableOrder = async ({ userId, productId, orderId }) => {
+  const order = await Order.findOne(
+    buildReviewEligibleOrderFilter({ userId, productId, orderId })
+  ).select("_id orderNumber status statusStage");
 
   if (!order) {
     throw new ReviewServiceError({
       code: "REVIEW_ORDER_NOT_ELIGIBLE",
       status: 403,
       message:
-        "You can review only products you purchased in a COMPLETED order.",
+        "You can review only products from delivered/completed orders you purchased.",
     });
   }
 
@@ -226,11 +245,9 @@ export const getReviewEligibility = async ({ userId: userIdValue, productId: pro
   const userId = toObjectId(userIdValue, "userId");
   const productId = toObjectId(productIdValue, "productId");
 
-  const completedOrders = await Order.find({
-    status: ORDER_STATUS_COMPLETED,
-    $or: [{ customerId: userId }, { userId }],
-    "items.productId": productId,
-  })
+  const completedOrders = await Order.find(
+    buildReviewEligibleOrderFilter({ userId, productId })
+  )
     .select("_id orderNumber createdAt")
     .sort({ createdAt: -1 })
     .lean();
@@ -238,7 +255,7 @@ export const getReviewEligibility = async ({ userId: userIdValue, productId: pro
   if (completedOrders.length === 0) {
     return {
       canReview: false,
-      reason: "No COMPLETED order found for this product.",
+      reason: "No delivered/completed order found for this product.",
       eligibleOrders: [],
       existingReviews: [],
     };
@@ -263,7 +280,10 @@ export const getReviewEligibility = async ({ userId: userIdValue, productId: pro
 
   return {
     canReview: eligibleOrders.length > 0,
-    reason: eligibleOrders.length > 0 ? null : "All eligible orders already reviewed.",
+    reason:
+      eligibleOrders.length > 0
+        ? null
+        : "Bạn đã đánh giá tất cả đơn hàng đủ điều kiện.",
     eligibleOrders,
     existingReviews,
   };
@@ -425,7 +445,8 @@ export const updateReview = async ({
 };
 
 export default {
-  ORDER_STATUS_COMPLETED,
+  ORDER_STAGE_DELIVERED,
+  REVIEW_ELIGIBLE_STATUSES,
   REVIEW_EDIT_WINDOW_DAYS,
   MAX_REVIEW_EDITS,
   getReviewEligibility,

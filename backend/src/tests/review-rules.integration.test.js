@@ -62,7 +62,7 @@ const createProduct = async ({ ownerId }) => {
   });
 };
 
-const createOrder = async ({ userId, productId, status = "COMPLETED" }) => {
+const createOrder = async ({ userId, productId, status = "DELIVERED" }) => {
   return Order.create({
     orderNumber: nextOrderNumber(),
     orderSource: "ONLINE",
@@ -117,7 +117,7 @@ after(
   { timeout: 120000 }
 );
 
-test("creates verified review for completed purchase and updates product rating", async () => {
+test("creates verified review for delivered/completed purchase and updates product rating", async () => {
   const customer = await createCustomer();
   const product = await createProduct({ ownerId: customer._id });
   const order = await createOrder({ userId: customer._id, productId: product._id });
@@ -141,13 +141,13 @@ test("creates verified review for completed purchase and updates product rating"
   assert.equal(updatedProduct.totalReviews, 1);
 });
 
-test("rejects review when order is not COMPLETED", async () => {
+test("rejects review when order is not delivered/completed", async () => {
   const customer = await createCustomer();
   const product = await createProduct({ ownerId: customer._id });
-  const deliveredOrder = await createOrder({
+  const inTransitOrder = await createOrder({
     userId: customer._id,
     productId: product._id,
-    status: "DELIVERED",
+    status: "SHIPPING",
   });
 
   await assert.rejects(
@@ -155,7 +155,7 @@ test("rejects review when order is not COMPLETED", async () => {
       createReview({
         userId: customer._id,
         productId: product._id,
-        orderId: deliveredOrder._id,
+        orderId: inTransitOrder._id,
         rating: 4,
         comment: "Should fail",
       }),
