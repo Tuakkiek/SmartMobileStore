@@ -21,6 +21,8 @@ import {
   getStatusTransitionView,
   isInStoreOrder,
   normalizeRequestedOrderStatus,
+  isPaidOrder,
+  PAID_ORDER_SAFE_CANCEL_STATUSES,
 } from "./orderStateMachine.js";
 
 const ORDER_STATUSES = new Set([
@@ -43,6 +45,9 @@ const ORDER_STATUSES = new Set([
   "CANCELLED",
   "RETURN_REQUESTED",
   "RETURNED",
+  // Safe-cancel statuses for paid orders
+  "CANCEL_REFUND_PENDING",
+  "INCIDENT_REFUND_PROCESSING",
 ]);
 const ORDER_STATUS_STAGES_SET = new Set(ORDER_STATUS_STAGES);
 
@@ -1315,6 +1320,15 @@ export const updateOrderStatus = async (req, res) => {
 
     if (!transitionCheck.allowed) {
       await session.abortTransaction();
+      // ✅ PAID-ORDER GUARD: return 409 Conflict (business rule violation)
+      if (transitionCheck.code === "PAID_ORDER_CANCEL_BLOCKED") {
+        return res.status(409).json({
+          success: false,
+          code: transitionCheck.code,
+          message: transitionCheck.reason,
+          suggestedStatus: "CANCEL_REFUND_PENDING",
+        });
+      }
       return res.status(transitionCheck.reason?.startsWith("Role") ? 403 : 400).json({
         success: false,
         message: transitionCheck.reason || "Không thể chuyển trạng thái",
@@ -1352,7 +1366,7 @@ export const updateOrderStatus = async (req, res) => {
 
     if (
       req.user.role === "ORDER_MANAGER" &&
-      !["CONFIRMED", "PROCESSING", "SHIPPING", "CANCELLED"].includes(
+      !["CONFIRMED", "PROCESSING", "SHIPPING", "CANCELLED", "CANCEL_REFUND_PENDING", "INCIDENT_REFUND_PROCESSING"].includes(
         targetStatus
       )
     ) {
@@ -1360,7 +1374,7 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({
         success: false,
         message:
-          "ORDER_MANAGER chỉ được điều phối đơn sang trạng thái Xác nhận, Lấy hàng, Đang giao hoặc Hủy",
+          "ORDER_MANAGER chỉ được điều phối đơn sang trạng thái Xác nhận, Lấy hàng, Đang giao, Hủy hoặc Hủy-Cần hoàn tiền",
       });
     }
 
@@ -1611,6 +1625,21 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (targetStatus === "CANCELLED") {
+      // ✅ PAID-ORDER GUARD: block trực tiếp hủy đơn đã PAID
+      // Note: canTransitionOrderStatus đã chặn ở layer FSM,
+      // đây là lớp phòng thủ thứ 2 để fault-tolerant.
+      if (isPaidOrder(order)) {
+        await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          code: "PAID_ORDER_CANCEL_BLOCKED",
+          message:
+            "Đơn hàng đã được thanh toán. Không thể hủy trực tiếp. " +
+            "Dùng trạng thái CANCEL_REFUND_PENDING để đảm bảo hoàn tiền cho khách.",
+          suggestedStatus: "CANCEL_REFUND_PENDING",
+        });
+      }
+
       order.cancelledAt = new Date();
 
       if (order.assignedStore?.storeId) {
@@ -1621,6 +1650,38 @@ export const updateOrderStatus = async (req, res) => {
       }
 
       await restoreVariantStock(order.items, session);
+    }
+
+    // ✅ SAFE-CANCEL: khi admin dùng CANCEL_REFUND_PENDING – ghi snapshot + set rollback window
+    if (targetStatus === "CANCEL_REFUND_PENDING") {
+      if (!Array.isArray(order.snapshots)) {
+        order.snapshots = [];
+      }
+      order.snapshots.push({
+        status: currentStatus,
+        paymentStatus: order.paymentStatus,
+        snapshotAt: new Date(),
+        snapshotBy: req.user._id,
+        reason: note || "Admin đưa đơn vào luồng hủy-hoàn tiền",
+      });
+      // Cửa sổ rollback 2 giờ
+      order.revertableUntil = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      order.cancelledByAdmin = true;
+      order.refundStatus = "PENDING";
+
+      // Hoàn lại tồn kho bước này (có thể review trong quy trình hoàn tiền sau)
+      if (order.assignedStore?.storeId) {
+        await routingService.releaseInventory(order.assignedStore.storeId, order.items, {
+          session,
+        });
+        await decrementStoreCapacity(order.assignedStore.storeId, session);
+      }
+      await restoreVariantStock(order.items, session);
+    }
+
+    // INCIDENT_REFUND_PROCESSING: đợt tiến sang giai đoạn đang xử lý hoàn
+    if (targetStatus === "INCIDENT_REFUND_PROCESSING") {
+      order.refundStatus = "PROCESSING";
     }
 
     appendHistory(order, targetStatus, req.user._id, note || "Status updated");
@@ -2331,6 +2392,25 @@ export const getOrderStats = async (req, res) => {
 };
 
 export const cancelOrder = async (req, res) => {
+  // ✅ PAID-ORDER PREFLIGHT: check before opening a transaction (avoids IX lock contention)
+  const preflightOrder = await Order.findById(req.params.id).lean();
+  if (!preflightOrder) {
+    return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+  }
+  if (isPaidOrder(preflightOrder)) {
+    return res.status(409).json({
+      success: false,
+      code: "PAID_ORDER_CANCEL_BLOCKED",
+      message:
+        "Đơn hàng đã được thanh toán qua Sepay/VNPAY. Không thể hủy trực tiếp. " +
+        "Vui lòng chuyển sang trạng thái 'Hủy đơn – Cần hoàn tiền' (CANCEL_REFUND_PENDING) " +
+        "để đảm bảo quy trình hoàn tiền cho khách.",
+      suggestedStatus: "CANCEL_REFUND_PENDING",
+      paidAt: preflightOrder.paidAt,
+      totalAmount: preflightOrder.totalAmount,
+    });
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -2370,6 +2450,22 @@ export const cancelOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Không thể hủy đơn hàng ở trạng thái này",
+      });
+    }
+
+    // ✅ PAID-ORDER GUARD: Block trực tiếp hủy đơn đã thanh toán
+    if (isPaidOrder(order)) {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        code: "PAID_ORDER_CANCEL_BLOCKED",
+        message:
+          "Đơn hàng đã được thanh toán qua Sepay/VNPAY. Không thể hủy trực tiếp. " +
+          "Vui lòng chuyển sang trạng thái 'Hủy đơn – Cần hoàn tiền' (CANCEL_REFUND_PENDING) " +
+          "để đảm bảo quy trình hoàn tiền cho khách.",
+        suggestedStatus: "CANCEL_REFUND_PENDING",
+        paidAt: order.paidAt,
+        totalAmount: order.totalAmount,
       });
     }
 
@@ -2510,6 +2606,164 @@ export const assignStore = async (req, res) => {
   }
 };
 
+/**
+ * ✅ SAFE-CANCEL ROLLBACK
+ * Cho phép admin khôi phục trạng thái đơn hàng trong vòng 2 giờ sau khi thay đổi nhầm.
+ * Chỉ áp dụng nếu order.revertableUntil còn hạn và có snapshot trạng thái trước đó.
+ */
+export const revertOrderStatus = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const order = await Order.findById(req.params.id).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    const now = new Date();
+
+    // Kiểm tra cửa sổ rollback 2 giờ
+    if (!order.revertableUntil || now > order.revertableUntil) {
+      await session.abortTransaction();
+      return res.status(403).json({
+        success: false,
+        code: "REVERT_WINDOW_EXPIRED",
+        message:
+          "Cửa sổ khôi phục 2 giờ đã hết hạn. Không thể hoàn tác thay đổi này. " +
+          "Vui lòng liên hệ bộ phận quản lý để xử lý thủ công.",
+        revertableUntil: order.revertableUntil,
+      });
+    }
+
+    // Lấy snapshot trạng thái trước đó
+    const snapshots = Array.isArray(order.snapshots) ? order.snapshots : [];
+    const lastSnapshot = snapshots[snapshots.length - 1];
+
+    if (!lastSnapshot || !lastSnapshot.status) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        code: "NO_SNAPSHOT_FOUND",
+        message: "Không tìm thấy snapshot trạng thái trước đó để khôi phục.",
+      });
+    }
+
+    const previousStatus = lastSnapshot.status;
+    const previousPaymentStatus = lastSnapshot.paymentStatus;
+    const currentStatus = order.status;
+
+    omniLog.info("revertOrderStatus: rolling back", {
+      orderId: order._id,
+      from: currentStatus,
+      to: previousStatus,
+      previousPaymentStatus,
+      userId: req.user._id,
+      role: req.user.role,
+    });
+
+    // Khôi phục trạng thái
+    order.status = previousStatus;
+    if (previousPaymentStatus) {
+      order.paymentStatus = previousPaymentStatus;
+    }
+
+    // Xoá cửa sổ rollback (không cho revert thêm lần nữa)
+    order.revertableUntil = null;
+    order.cancelledByAdmin = false;
+    order.cancelledAt = null;
+
+    // Giữ lại refundStatus để ghi nhận lịch sử nhưng đánh dấu là không cần nữa
+    if (order.refundStatus === "PENDING") {
+      order.refundStatus = "NOT_REQUIRED";
+    }
+
+    appendHistory(
+      order,
+      previousStatus,
+      req.user._id,
+      `Khôi phục trạng thái từ ${currentStatus} về ${previousStatus} trong cửa sổ 2 giờ`
+    );
+
+    // Nếu khôi phục về trạng thái đang hoạt động, cần restore lại stock
+    const activeStatuses = new Set([
+      "PENDING", "CONFIRMED", "PROCESSING", "PREPARING",
+      "PREPARING_SHIPMENT", "SHIPPING", "OUT_FOR_DELIVERY",
+    ]);
+    if (activeStatuses.has(previousStatus)) {
+      // Restore variant stock (đã bị release khi vào CANCEL_REFUND_PENDING)
+      for (const item of order.items) {
+        const quantity = toNumber(item?.quantity, 0);
+        if (quantity <= 0) continue;
+
+        if (item?.variantId) {
+          const variant = await UniversalVariant.findById(item.variantId).session(session);
+          if (variant) {
+            variant.stock = toNumber(variant.stock, 0) + quantity;
+            variant.salesCount = Math.max(0, toNumber(variant.salesCount, 0) - quantity);
+            await variant.save({ session });
+          }
+        }
+      }
+
+      // Restore store capacity nếu có
+      if (order.assignedStore?.storeId) {
+        const store = await Store.findById(order.assignedStore.storeId).session(session);
+        if (store) {
+          store.capacity.currentOrders = toNumber(store.capacity?.currentOrders, 0) + 1;
+          await store.save({ session });
+        }
+      }
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    const normalizedOrder = enrichOrderImages(normalizeOrderForResponse(order));
+
+    omniLog.info("revertOrderStatus: success", {
+      orderId: order._id,
+      revivedStatus: previousStatus,
+      userId: req.user._id,
+    });
+
+    await sendOrderStageNotifications({
+      order: normalizedOrder,
+      previousStage: mapStatusToStage(currentStatus),
+      triggeredBy: req.user?._id,
+      source: "revert_order_status",
+    });
+
+    return res.json({
+      success: true,
+      message: `Đã khôi phục trạng thái đơn hàng từ ${currentStatus} về ${previousStatus}.`,
+      order: normalizedOrder,
+      data: { order: normalizedOrder },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+
+    omniLog.error("revertOrderStatus failed", {
+      orderId: req.params.id,
+      userId: req.user?._id,
+      error: error.message,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi khôi phục trạng thái đơn hàng",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -2521,4 +2775,5 @@ export default {
   getOrderStats,
   cancelOrder,
   assignStore,
+  revertOrderStatus,
 };

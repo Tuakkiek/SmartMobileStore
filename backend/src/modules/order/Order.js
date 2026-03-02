@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 export const ORDER_STATUSES = [
   "PENDING",
-  "PENDING_ORDER_MANAGEMENT", // ✅ NEW: POS Created, waiting for assignment
+  "PENDING_ORDER_MANAGEMENT", // ✅ POS Created, waiting for assignment
   "PENDING_PAYMENT",
   "PAYMENT_CONFIRMED",
   "PAYMENT_VERIFIED",
@@ -21,6 +21,9 @@ export const ORDER_STATUSES = [
   "CANCELLED",
   "RETURN_REQUESTED",
   "RETURNED",
+  // ✅ SAFE-CANCEL: Dùng cho đơn đã thanh toán online – bắt buộc hoàn tiền
+  "CANCEL_REFUND_PENDING",       // Hủy đơn – Cần hoàn tiền
+  "INCIDENT_REFUND_PROCESSING",  // Sự cố đơn hàng – Đang xử lý hoàn tiền
 ];
 
 export const ORDER_STATUS_STAGES = [
@@ -58,6 +61,9 @@ export const STATUS_TO_STAGE = Object.freeze({
   CANCELLED: "CANCELLED",
   RETURN_REQUESTED: "RETURNED",
   RETURNED: "RETURNED",
+  // Safe-cancel statuses map to CANCELLED stage (visible to customer as cancelled)
+  CANCEL_REFUND_PENDING: "CANCELLED",
+  INCIDENT_REFUND_PROCESSING: "CANCELLED",
 });
 
 export const mapStatusToStage = (status) => {
@@ -596,6 +602,36 @@ const orderSchema = new mongoose.Schema(
 
     trackingNumber: String,
     shippingProvider: String,
+
+    // ✅ SAFE-CANCEL: Fields for paid-order protection
+    refundStatus: {
+      type: String,
+      enum: ["NOT_REQUIRED", "PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+      default: "NOT_REQUIRED",
+    },
+
+    // Thời điểm hết hạn rollback (2 giờ sau khi admin thay đổi trạng thái)
+    revertableUntil: {
+      type: Date,
+      default: null,
+    },
+
+    // Snapshot trạng thái trước khi admin thay đổi (dùng cho rollback)
+    snapshots: [
+      {
+        status: { type: String },
+        paymentStatus: { type: String },
+        snapshotAt: { type: Date, default: Date.now },
+        snapshotBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        reason: { type: String },
+      },
+    ],
+
+    // Flag: đơn bị admin can thiệp thủ công (dùng cho audit)
+    cancelledByAdmin: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

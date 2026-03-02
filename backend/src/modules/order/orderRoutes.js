@@ -196,4 +196,15 @@ router.patch(
   orderController.assignStore
 );
 
+// ✅ SAFE-CANCEL ROLLBACK: Cho phép admin khôi phục trạng thái trong vòng 2 giờ
+router.post(
+  "/:id/revert",
+  authorize(AUTHZ_ACTIONS.ORDERS_WRITE, {
+    scopeMode: resolveOrderWriteScopeMode,
+    requireActiveBranchFor: ["branch"],
+    resourceType: "ORDER",
+  }),
+  orderController.revertOrderStatus
+);
+
 export default router;
