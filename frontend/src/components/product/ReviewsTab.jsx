@@ -55,14 +55,8 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
   const [canReview, setCanReview] = useState(false);
   const [availableOrders, setAvailableOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [reviewEligibilityReason, setReviewEligibilityReason] = useState("");
   const [checkingPurchase, setCheckingPurchase] = useState(false);
-  const [, setOrderReviewCounts] = useState([]);
-  const [reviewStats, setReviewStats] = useState({
-    totalOrders: 0,
-    totalReviews: 0,
-    maxPossibleReviews: 0,
-    availableSlots: 0,
-  });
 
   const isCustomer = user?.role === "CUSTOMER";
 
@@ -88,24 +82,30 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
       setCheckingPurchase(true);
       const response = await reviewAPI.canReview(productId);
       const data = response.data.data;
+      const normalizedOrders = Array.isArray(data.eligibleOrders)
+        ? data.eligibleOrders
+        : Array.isArray(data.orders)
+        ? data.orders
+        : [];
 
       setCanReview(data.canReview);
-      setAvailableOrders(data.orders || []);
-      setOrderReviewCounts(data.orderReviewCounts || []);
-      setReviewStats(
-        data.stats || {
-          totalOrders: 0,
-          totalReviews: 0,
-          maxPossibleReviews: 0,
-          availableSlots: 0,
-        }
-      );
+      setReviewEligibilityReason(data.reason || "");
+      setAvailableOrders(normalizedOrders);
 
-      if (data.orders && data.orders.length > 0) {
-        setSelectedOrderId(data.orders[0]._id);
+      if (normalizedOrders.length > 0) {
+        const preferredOrderId = String(normalizedOrders[0]._id || "");
+        setSelectedOrderId((prev) => {
+          const hasCurrentOrder = normalizedOrders.some(
+            (order) => String(order._id) === String(prev || "")
+          );
+          return hasCurrentOrder ? prev : preferredOrderId;
+        });
+      } else {
+        setSelectedOrderId("");
       }
     } catch (error) {
       console.error("Error checking review eligibility:", error);
+      setReviewEligibilityReason("");
     } finally {
       setCheckingPurchase(false);
     }
@@ -301,30 +301,6 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
                   </div>
                 ) : (
                   <>
-                    {/* Stats Badge */}
-                    {reviewStats.totalOrders > 0 && (
-                      <div className="text-center p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="text-left">
-                            <div className="text-gray-600">Đã đánh giá</div>
-                            <div className="text-lg font-bold text-blue-600">
-                              {reviewStats.totalReviews}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-gray-600">Còn lại</div>
-                            <div className="text-lg font-bold text-green-600">
-                              {reviewStats.availableSlots}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-blue-200 text-xs text-gray-600">
-                          Tối đa {reviewStats.maxPossibleReviews} đánh giá (
-                          {reviewStats.totalOrders} đơn × 20)
-                        </div>
-                      </div>
-                    )}
-
                     {/* Review Button */}
                     {canReview ? (
                       <Button
@@ -333,18 +309,15 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
                       >
                         {showReviewForm ? "Đóng form" : "Đánh giá sản phẩm"}
                       </Button>
-                    ) : reviewStats.totalOrders > 0 ? (
+                    ) : (
                       <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                         <MessageSquare className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                        <p className="text-sm text-blue-700 font-medium mb-1">
-                          Đã đánh giá tối đa
-                        </p>
                         <p className="text-xs text-blue-600">
-                          Bạn đã tạo {reviewStats.totalReviews} đánh giá cho sản
-                          phẩm này
+                          {reviewEligibilityReason ||
+                            "Bạn chưa có đơn hàng phù hợp để đánh giá sản phẩm này."}
                         </p>
                       </div>
-                    ) : null}
+                    )}
                   </>
                 )}
               </div>
@@ -421,38 +394,25 @@ export const ReviewsTab = ({ productId, product, onReviewStatsChange }) => {
                     <SelectContent>
                       {availableOrders.map((order) => (
                         <SelectItem key={order._id} value={order._id}>
-                          <div className="flex items-center justify-between gap-3 w-full">
-                            <div className="flex items-center gap-2">
-                              <ShoppingBag className="w-4 h-4" />
-                              <span>{order.orderNumber}</span>
-                            </div>
-                            <Badge variant="secondary" className="text-xs">
-                              {order.reviewCount}/20 đánh giá
-                            </Badge>
+                          <div className="flex items-center gap-2">
+                            <ShoppingBag className="w-4 h-4" />
+                            <span>{order.orderNumber}</span>
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Mỗi đơn hàng có thể đánh giá tối đa 20 lần
-                  </p>
                 </div>
               )}
 
               {/* Single Order Info */}
               {availableOrders.length === 1 && (
                 <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <ShoppingBag className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium">
-                        {availableOrders[0].orderNumber}
-                      </span>
-                    </div>
-                    <Badge variant="secondary" className="text-xs">
-                      {availableOrders[0].reviewCount}/20 đánh giá
-                    </Badge>
+                  <div className="flex items-center gap-2 text-sm">
+                    <ShoppingBag className="w-4 h-4 text-gray-600" />
+                    <span className="font-medium">
+                      {availableOrders[0].orderNumber}
+                    </span>
                   </div>
                 </div>
               )}
