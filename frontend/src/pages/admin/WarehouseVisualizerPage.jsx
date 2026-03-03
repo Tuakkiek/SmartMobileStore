@@ -236,6 +236,18 @@ const WarehouseVisualizerPage = () => {
   const navigate = useNavigate();
   const { user, authz, contextMode, simulatedBranchId } = useAuthStore();
 
+  const initialContextRef = React.useRef({ simulatedBranchId, contextMode });
+
+  useEffect(() => {
+    if (
+      simulatedBranchId !== initialContextRef.current.simulatedBranchId ||
+      contextMode !== initialContextRef.current.contextMode
+    ) {
+      toast.info("Chi nhánh thay đổi, đang tải lại danh sách kho...");
+      navigate("/admin/warehouse-config", { replace: true });
+    }
+  }, [simulatedBranchId, contextMode, navigate]);
+
   const isGlobalAdmin = Boolean(
     authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN",
   );

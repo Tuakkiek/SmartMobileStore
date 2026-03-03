@@ -36,6 +36,15 @@ const normalizeWarehouseCode = (value) =>
     .trim()
     .toUpperCase();
 
+const applyGlobalReadBypass = (query, req) => {
+  const isGlobalAdmin = Boolean(req?.authz?.isGlobalAdmin);
+  const contextMode = String(req?.authz?.contextMode || "STANDARD").toUpperCase();
+  if (isGlobalAdmin && contextMode !== "SIMULATED") {
+    return query.setOptions({ skipBranchIsolation: true });
+  }
+  return query;
+};
+
 const buildZoneEstimate = (zones = []) => {
   return zones.reduce((total, zone) => {
     const aisles = toPositiveInt(zone?.aisles, 0);
@@ -89,7 +98,10 @@ export const getAllWarehouses = async (req, res) => {
 
 export const getWarehouseById = async (req, res) => {
   try {
-    const warehouse = await WarehouseConfiguration.findById(req.params.id);
+    const warehouse = await applyGlobalReadBypass(
+      WarehouseConfiguration.findById(req.params.id),
+      req
+    );
     if (!warehouse) {
       return res.status(404).json({
         success: false,
@@ -359,7 +371,10 @@ export const generateLocationsFromConfig = async (req, res) => {
 
 export const getWarehouseStats = async (req, res) => {
   try {
-    const warehouse = await WarehouseConfiguration.findById(req.params.id);
+    const warehouse = await applyGlobalReadBypass(
+      WarehouseConfiguration.findById(req.params.id),
+      req
+    );
     if (!warehouse) {
       return res.status(404).json({
         success: false,
@@ -393,10 +408,13 @@ export const getWarehouseStats = async (req, res) => {
     };
 
     if (warehouse.locationsGenerated) {
-      const locations = await WarehouseLocation.find({
-        storeId: warehouse.storeId,
-        warehouse: warehouse.warehouseCode,
-      });
+      const locations = await applyGlobalReadBypass(
+        WarehouseLocation.find({
+          storeId: warehouse.storeId,
+          warehouse: warehouse.warehouseCode,
+        }),
+        req
+      );
 
       const locationsInUse = locations.filter(
         (location) => Number(location.currentLoad) > 0
@@ -433,8 +451,11 @@ export const getWarehouseLayout = async (req, res) => {
     const page = toPositiveInt(req.query?.page, 1);
     const limit = Math.min(toPositiveInt(req.query?.limit, 5), 50);
 
-    const warehouse = await WarehouseConfiguration.findById(id).select(
-      "_id storeId warehouseCode name zones"
+    const warehouse = await applyGlobalReadBypass(
+      WarehouseConfiguration.findById(id).select(
+        "_id storeId warehouseCode name zones"
+      ),
+      req
     );
 
     if (!warehouse) {
@@ -454,10 +475,13 @@ export const getWarehouseLayout = async (req, res) => {
     const sortOrder = { aisle: 1, shelf: 1, bin: 1 };
 
     if (zone && !aisle) {
-      const allAisles = await WarehouseLocation.distinct("aisle", {
-        ...locationFilter,
-        zone,
-      });
+      const allAisles = await applyGlobalReadBypass(
+        WarehouseLocation.find({
+          ...locationFilter,
+          zone,
+        }).distinct("aisle"),
+        req
+      );
       const sortedAisles = allAisles.sort(sortAlphaNumeric);
       const totalAisles = sortedAisles.length;
       const totalPages = totalAisles > 0 ? Math.ceil(totalAisles / limit) : 1;
@@ -467,14 +491,17 @@ export const getWarehouseLayout = async (req, res) => {
 
       const locations =
         aislesInPage.length > 0
-          ? await WarehouseLocation.find({
-              ...locationFilter,
-              zone,
-              aisle: { $in: aislesInPage },
-            })
-              .select(projection)
-              .sort(sortOrder)
-              .lean()
+          ? await applyGlobalReadBypass(
+              WarehouseLocation.find({
+                ...locationFilter,
+                zone,
+                aisle: { $in: aislesInPage },
+              })
+                .select(projection)
+                .sort(sortOrder)
+                .lean(),
+              req
+            )
           : [];
 
       return res.json({
@@ -505,10 +532,13 @@ export const getWarehouseLayout = async (req, res) => {
       locationFilter.aisle = aisle;
     }
 
-    const locations = await WarehouseLocation.find(locationFilter)
-      .select(projection)
-      .sort(sortOrder)
-      .lean();
+    const locations = await applyGlobalReadBypass(
+      WarehouseLocation.find(locationFilter)
+        .select(projection)
+        .sort(sortOrder)
+        .lean(),
+      req
+    );
 
     return res.json({
       success: true,
@@ -547,8 +577,9 @@ export const searchLocationByProduct = async (req, res) => {
       });
     }
 
-    const warehouse = await WarehouseConfiguration.findById(id).select(
-      "_id storeId warehouseCode"
+    const warehouse = await applyGlobalReadBypass(
+      WarehouseConfiguration.findById(id).select("_id storeId warehouseCode"),
+      req
     );
     if (!warehouse) {
       return res.status(404).json({
@@ -557,21 +588,24 @@ export const searchLocationByProduct = async (req, res) => {
       });
     }
 
-    const inventoryItems = await Inventory.find({
-      storeId: warehouse.storeId,
-      $or: [
-        { sku: { $regex: query, $options: "i" } },
-        { productName: { $regex: query, $options: "i" } },
-      ],
-      quantity: { $gt: 0 },
-    }).populate({
-      path: "locationId",
-      match: {
+    const inventoryItems = await applyGlobalReadBypass(
+      Inventory.find({
         storeId: warehouse.storeId,
-        warehouse: warehouse.warehouseCode,
-      },
-      select: "locationCode zone zoneName aisle shelf bin",
-    });
+        $or: [
+          { sku: { $regex: query, $options: "i" } },
+          { productName: { $regex: query, $options: "i" } },
+        ],
+        quantity: { $gt: 0 },
+      }).populate({
+        path: "locationId",
+        match: {
+          storeId: warehouse.storeId,
+          warehouse: warehouse.warehouseCode,
+        },
+        select: "locationCode zone zoneName aisle shelf bin",
+      }),
+      req
+    );
 
     const validItems = inventoryItems.filter((item) => item.locationId);
     const results = validItems.map((item) => ({
