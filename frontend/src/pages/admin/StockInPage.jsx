@@ -366,6 +366,7 @@ const StockInPage = () => {
       setSearchResults([]);
       return;
     }
+    const normalizedQuery = query.trim().toLowerCase();
     setSearching(true);
     try {
       const res = await api.get("/universal-products", {
@@ -376,18 +377,61 @@ const StockInPage = () => {
       for (const product of products) {
         const variants = product.variants || [];
         for (const variant of variants) {
+          const sku = String(variant.sku || "");
+          const isSkuMatch = sku.toLowerCase().includes(normalizedQuery);
+          const isProductMatch = `${String(product.name || "")} ${String(product.model || "")}`
+            .toLowerCase()
+            .includes(normalizedQuery);
+          if (!isSkuMatch && !isProductMatch) continue;
+
           flattened.push({
             productId: product._id,
             productName: product.name,
             productImage: variant.images?.[0] || product.featuredImages?.[0] || "",
-            sku: variant.sku,
+            sku,
             variantName: `${variant.color} - ${variant.variantName}`,
             currentStock: variant.stock || 0,
             lifecycleStage: product.lifecycleStage || "ACTIVE",
           });
         }
       }
-      setSearchResults(flattened);
+      const skus = Array.from(
+        new Set(
+          flattened
+            .map((item) => String(item.sku || "").trim())
+            .filter(Boolean)
+        )
+      );
+
+      if (skus.length === 0) {
+        setSearchResults(flattened);
+        return;
+      }
+
+      try {
+        const stockRes = await api.get("/warehouse/inventory/by-skus", {
+          params: { skus: skus.join(",") },
+        });
+
+        const totals = stockRes.data?.totals || {};
+        const normalizedTotals = {};
+        for (const [sku, qty] of Object.entries(totals)) {
+          normalizedTotals[String(sku || "").trim()] = Number(qty) || 0;
+        }
+
+        setSearchResults(
+          flattened.map((item) => ({
+            ...item,
+            currentStock:
+              Object.prototype.hasOwnProperty.call(normalizedTotals, item.sku)
+                ? normalizedTotals[item.sku]
+                : item.currentStock,
+          }))
+        );
+      } catch (stockErr) {
+        console.error("Error fetching inventory totals by skus:", stockErr);
+        setSearchResults(flattened);
+      }
     } catch (err) {
       console.error("Error searching products:", err);
       toast.error("Lỗi khi tìm kiếm sản phẩm");

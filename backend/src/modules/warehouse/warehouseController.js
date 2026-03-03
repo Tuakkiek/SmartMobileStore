@@ -233,6 +233,61 @@ export const searchInventory = async (req, res) => {
   }
 };
 
+export const getInventoryTotalsBySkus = async (req, res) => {
+  try {
+    const rawSkus = String(req.query?.skus || "").trim();
+    if (!rawSkus) {
+      return res.status(400).json({
+        success: false,
+        message: "skus query is required",
+      });
+    }
+
+    const skuList = Array.from(
+      new Set(
+        rawSkus
+          .split(",")
+          .map((sku) => String(sku || "").trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 200);
+
+    if (skuList.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid sku in skus query",
+      });
+    }
+
+    const totals = Object.fromEntries(skuList.map((sku) => [sku, 0]));
+
+    const inventoryRows = await Inventory.find({
+      sku: { $in: skuList },
+      quantity: { $gt: 0 },
+    })
+      .select("sku quantity")
+      .lean();
+
+    for (const row of inventoryRows) {
+      const sku = String(row?.sku || "").trim();
+      if (!sku || !Object.prototype.hasOwnProperty.call(totals, sku)) continue;
+      totals[sku] += Number(row?.quantity) || 0;
+    }
+
+    return res.json({
+      success: true,
+      totals,
+    });
+  } catch (error) {
+    console.error("Error getting inventory totals by skus:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get inventory totals by skus",
+      error: error.message,
+    });
+  }
+};
+
 export const suggestLocation = async (req, res) => {
   try {
     const { sku, category, quantity } = req.body;
@@ -536,6 +591,7 @@ export default {
   getAllLocations,
   getLocationDetail,
   searchInventory,
+  getInventoryTotalsBySkus,
   suggestLocation,
   createPurchaseOrder,
   getPurchaseOrders,

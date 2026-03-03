@@ -522,7 +522,7 @@ const WarehouseVisualizerPage = () => {
           </div>
         </div>
 
-        {isGlobalAdmin ? (
+        {/* {isGlobalAdmin ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             Context mode:{" "}
             <strong>
@@ -531,7 +531,7 @@ const WarehouseVisualizerPage = () => {
                 : "ALL"}
             </strong>
           </div>
-        ) : null}
+        ) : null} */}
 
         <div className="flex items-center gap-4 mb-4 overflow-x-auto pb-2 shrink-0">
           {Object.entries(STATUS_CONFIG).map(([key, config]) => {

@@ -229,6 +229,34 @@ const DashboardLayout = () => {
 
   const navigationItems = getNavigationItems();
 
+  const normalizePath = (path) => {
+    if (!path) return "/";
+    const trimmed = path.replace(/\/+$/, "");
+    return trimmed || "/";
+  };
+
+  const getActiveMenuPath = (pathname, items) => {
+    const currentPath = normalizePath(String(pathname || "").toLowerCase());
+
+    const matchedItems = items.filter((item) => {
+      const itemPath = normalizePath(String(item.path || "").toLowerCase());
+      return (
+        currentPath === itemPath ||
+        (itemPath !== "/" && currentPath.startsWith(`${itemPath}/`))
+      );
+    });
+
+    if (!matchedItems.length) return null;
+
+    return matchedItems.reduce((bestMatch, currentItem) => {
+      const bestPath = normalizePath(String(bestMatch.path || ""));
+      const currentItemPath = normalizePath(String(currentItem.path || ""));
+      return currentItemPath.length > bestPath.length ? currentItem : bestMatch;
+    }).path;
+  };
+
+  const activeMenuPath = getActiveMenuPath(location.pathname, navigationItems);
+
   // ============================================
   // HIỂN THỊ TÊN VAI TRÒ TIẾNG VIỆT
   // ============================================
@@ -286,7 +314,7 @@ const DashboardLayout = () => {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigationItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname.startsWith(item.path);
+            const isActive = activeMenuPath === item.path;
 
             return (
               <Link

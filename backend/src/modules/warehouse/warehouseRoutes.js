@@ -68,6 +68,12 @@ router.get(
   warehouseController.searchInventory
 );
 
+router.get(
+  "/inventory/by-skus",
+  requireWarehouseRead,
+  warehouseController.getInventoryTotalsBySkus
+);
+
 router.post(
   "/purchase-orders",
   requireGlobalSimulationForWarehouseWrite,
