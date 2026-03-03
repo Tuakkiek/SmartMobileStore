@@ -1,21 +1,20 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/GoodsReceipt.js
-// Quản lý phiếu nhập kho (GRN - Goods Receipt Note)
-// ============================================
-
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const goodsReceiptSchema = new mongoose.Schema(
   {
-    // Mã phiếu: GRN-2025-015
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+
     grnNumber: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
-    // Tham chiếu PO
     purchaseOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PurchaseOrder",
@@ -28,7 +27,6 @@ const goodsReceiptSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Nhà cung cấp
     supplier: {
       name: {
         type: String,
@@ -39,7 +37,6 @@ const goodsReceiptSchema = new mongoose.Schema(
       },
     },
 
-    // Danh sách sản phẩm nhận
     items: [
       {
         sku: {
@@ -93,7 +90,6 @@ const goodsReceiptSchema = new mongoose.Schema(
       },
     ],
 
-    // Tổng số lượng
     totalQuantity: {
       type: Number,
       required: true,
@@ -104,7 +100,6 @@ const goodsReceiptSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // Người nhận hàng
     receivedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -116,26 +111,22 @@ const goodsReceiptSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Ngày nhận
     receivedDate: {
       type: Date,
       required: true,
       default: Date.now,
     },
 
-    // Chữ ký người giao
     deliverySignature: {
-      type: String, // Base64 image
+      type: String,
     },
 
-    // Trạng thái
     status: {
       type: String,
       enum: ["COMPLETED", "CANCELLED"],
       default: "COMPLETED",
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
@@ -146,11 +137,14 @@ const goodsReceiptSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-goodsReceiptSchema.index({ grnNumber: 1 });
-goodsReceiptSchema.index({ purchaseOrderId: 1 });
-goodsReceiptSchema.index({ receivedBy: 1 });
-goodsReceiptSchema.index({ receivedDate: -1 });
-goodsReceiptSchema.index({ createdAt: -1 });
+goodsReceiptSchema.index({ storeId: 1, grnNumber: 1 }, { unique: true });
+goodsReceiptSchema.index({ storeId: 1, purchaseOrderId: 1 });
+goodsReceiptSchema.index({ storeId: 1, receivedBy: 1 });
+goodsReceiptSchema.index({ storeId: 1, receivedDate: -1 });
+goodsReceiptSchema.index({ storeId: 1, createdAt: -1 });
 
-export default mongoose.model("GoodsReceipt", goodsReceiptSchema);
+goodsReceiptSchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
+
+export default
+  mongoose.models.GoodsReceipt ||
+  mongoose.model("GoodsReceipt", goodsReceiptSchema);

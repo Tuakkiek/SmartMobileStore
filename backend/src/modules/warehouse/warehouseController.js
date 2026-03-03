@@ -1,46 +1,97 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/warehouseController.js
-// Controllers cho quản lý kho
-// ============================================
-
 import WarehouseLocation from "./WarehouseLocation.js";
 import Inventory from "./Inventory.js";
-import StockMovement from "./StockMovement.js";
 import PurchaseOrder from "./PurchaseOrder.js";
-import GoodsReceipt from "./GoodsReceipt.js";
-import CycleCount from "./CycleCount.js";
 import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 import QRCode from "qrcode";
 import { normalizeWarehouseCategory } from "../../lib/productClassification.js";
+import {
+  ensureWarehouseWriteBranchId,
+  resolveWarehouseStore,
+} from "./warehouseContext.js";
 
 const getActorName = (user) =>
   user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
 
-// ============================================
-// PHẦN 1: QUẢN LÝ CẤU TRÚC KHO
-// ============================================
+const toInt = (value, fallback = 0) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.floor(parsed);
+};
 
-/**
- * Tạo cấu trúc kho tự động
- * POST /api/warehouse/locations/generate
- */
+const generatePoNumber = async (storeCode) => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `PO-${storeCode}-${year}${month}-`;
+
+  const countInPrefix = await PurchaseOrder.countDocuments({
+    poNumber: { $regex: `^${prefix}` },
+  });
+
+  let sequence = countInPrefix + 1;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = `${prefix}${String(sequence).padStart(4, "0")}`;
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await PurchaseOrder.findOne({ poNumber: candidate }).select("_id");
+    if (!existing) {
+      return candidate;
+    }
+    sequence += 1;
+  }
+
+  return `${prefix}${Date.now()}`;
+};
+
 export const generateWarehouseStructure = async (req, res) => {
   try {
+    const storeId = ensureWarehouseWriteBranchId(req);
+    const store = await resolveWarehouseStore(req, { branchId: storeId });
     const { warehouse, zones } = req.body;
+
+    if (!Array.isArray(zones) || zones.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Zones must be a non-empty array",
+      });
+    }
+
+    const warehouseCode = String(warehouse || store.code || "").trim().toUpperCase();
+    if (!warehouseCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Warehouse code is required",
+      });
+    }
 
     const locations = [];
 
     for (const zone of zones) {
-      const { code, name, area, aisles, shelvesPerAisle, binsPerShelf, capacity, categories } = zone;
+      const code = String(zone?.code || "").trim().toUpperCase();
+      const name = String(zone?.name || "").trim();
+      const aisles = Math.max(1, toInt(zone?.aisles, 1));
+      const shelvesPerAisle = Math.max(1, toInt(zone?.shelvesPerAisle, 1));
+      const binsPerShelf = Math.max(1, toInt(zone?.binsPerShelf, 1));
+      const capacity = Math.max(1, toInt(zone?.capacity, 100));
+      const categories = Array.isArray(zone?.categories) ? zone.categories : [];
 
-      for (let aisleNum = 1; aisleNum <= aisles; aisleNum++) {
-        for (let shelfNum = 1; shelfNum <= shelvesPerAisle; shelfNum++) {
-          for (let binNum = 1; binNum <= binsPerShelf; binNum++) {
-            const locationCode = `${warehouse}-${code}-${String(aisleNum).padStart(2, "0")}-${String(shelfNum).padStart(2, "0")}-${String(binNum).padStart(2, "0")}`;
+      if (!code || !name) {
+        return res.status(400).json({
+          success: false,
+          message: "Each zone must include code and name",
+        });
+      }
+
+      for (let aisleNum = 1; aisleNum <= aisles; aisleNum += 1) {
+        for (let shelfNum = 1; shelfNum <= shelvesPerAisle; shelfNum += 1) {
+          for (let binNum = 1; binNum <= binsPerShelf; binNum += 1) {
+            const locationCode = `${warehouseCode}-${code}-${String(aisleNum).padStart(2, "0")}-${String(
+              shelfNum
+            ).padStart(2, "0")}-${String(binNum).padStart(2, "0")}`;
 
             const qrData = JSON.stringify({
+              storeId,
               locationCode,
-              warehouse,
+              warehouse: warehouseCode,
               zone: code,
               zoneName: name,
               aisle: String(aisleNum).padStart(2, "0"),
@@ -49,22 +100,22 @@ export const generateWarehouseStructure = async (req, res) => {
               capacity,
             });
 
+            // eslint-disable-next-line no-await-in-loop
             const qrCode = await QRCode.toDataURL(qrData);
 
-            const location = new WarehouseLocation({
+            locations.push({
+              storeId,
               locationCode,
-              warehouse,
+              warehouse: warehouseCode,
               zone: code,
               zoneName: name,
               aisle: String(aisleNum).padStart(2, "0"),
               shelf: String(shelfNum).padStart(2, "0"),
               bin: String(binNum).padStart(2, "0"),
               capacity,
-              productCategories: categories || [],
+              productCategories: categories,
               qrCode,
             });
-
-            locations.push(location);
           }
         }
       }
@@ -72,25 +123,21 @@ export const generateWarehouseStructure = async (req, res) => {
 
     await WarehouseLocation.insertMany(locations);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: `Đã tạo ${locations.length} vị trí kho`,
+      message: `Created ${locations.length} warehouse locations`,
       count: locations.length,
     });
   } catch (error) {
     console.error("Error generating warehouse structure:", error);
-    res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: "Lỗi khi tạo cấu trúc kho",
-      error: error.message,
+      code: error.code,
+      message: error.message || "Failed to generate warehouse structure",
     });
   }
 };
 
-/**
- * Lấy danh sách tất cả vị trí kho
- * GET /api/warehouse/locations
- */
 export const getAllLocations = async (req, res) => {
   try {
     const { zone, aisle, status, search } = req.query;
@@ -105,25 +152,21 @@ export const getAllLocations = async (req, res) => {
 
     const locations = await WarehouseLocation.find(filter).sort({ locationCode: 1 });
 
-    res.json({
+    return res.json({
       success: true,
       locations,
       count: locations.length,
     });
   } catch (error) {
     console.error("Error getting locations:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi lấy danh sách vị trí",
+      message: "Failed to get warehouse locations",
       error: error.message,
     });
   }
 };
 
-/**
- * Lấy chi tiết 1 vị trí kho
- * GET /api/warehouse/locations/:locationCode
- */
 export const getLocationDetail = async (req, res) => {
   try {
     const { locationCode } = req.params;
@@ -132,36 +175,30 @@ export const getLocationDetail = async (req, res) => {
     if (!location) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy vị trí kho",
+        message: "Warehouse location not found",
       });
     }
 
-    // Lấy danh sách sản phẩm đang lưu tại vị trí này
-    const inventory = await Inventory.find({ locationId: location._id }).populate("productId", "name images");
+    const inventory = await Inventory.find({ locationId: location._id }).populate(
+      "productId",
+      "name images"
+    );
 
-    res.json({
+    return res.json({
       success: true,
       location,
       inventory,
     });
   } catch (error) {
     console.error("Error getting location detail:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi lấy chi tiết vị trí",
+      message: "Failed to get warehouse location detail",
       error: error.message,
     });
   }
 };
 
-// ============================================
-// PHẦN 2: QUẢN LÝ TỒN KHO
-// ============================================
-
-/**
- * Tìm kiếm sản phẩm trong kho
- * GET /api/warehouse/inventory/search
- */
 export const searchInventory = async (req, res) => {
   try {
     const { sku, productName } = req.query;
@@ -174,10 +211,9 @@ export const searchInventory = async (req, res) => {
       .populate("locationId", "locationCode zoneName")
       .populate("productId", "name images");
 
-    // Tổng hợp theo SKU
-    const totalStock = inventory.reduce((sum, item) => sum + item.quantity, 0);
+    const totalStock = inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
-    res.json({
+    return res.json({
       success: true,
       inventory,
       totalStock,
@@ -189,44 +225,38 @@ export const searchInventory = async (req, res) => {
     });
   } catch (error) {
     console.error("Error searching inventory:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi tìm kiếm tồn kho",
+      message: "Failed to search inventory",
       error: error.message,
     });
   }
 };
 
-/**
- * Đề xuất vị trí lưu kho cho sản phẩm
- * POST /api/warehouse/locations/suggest
- */
 export const suggestLocation = async (req, res) => {
   try {
     const { sku, category, quantity } = req.body;
     const requiredQuantity = Math.max(1, Number(quantity) || 1);
     const normalizedCategory = normalizeWarehouseCategory(category);
 
-    // Lấy toàn bộ vị trí còn sức chứa, sau đó lọc category theo normalized slug để tránh mismatch dữ liệu.
     const availableLocations = await WarehouseLocation.find({
       status: "ACTIVE",
       $expr: { $lt: ["$currentLoad", "$capacity"] },
     }).sort({
-      currentLoad: -1, // Ưu tiên ô gần đầy
-      aisle: 1, // Ưu tiên dãy gần cửa
+      currentLoad: -1,
+      aisle: 1,
     });
 
     let suggestions = availableLocations;
 
     if (normalizedCategory) {
-      const categoryMatched = availableLocations.filter((loc) => {
-        const normalizedLocCategories = (loc.productCategories || [])
+      const categoryMatched = availableLocations.filter((location) => {
+        const normalizedLocationCategories = (location.productCategories || [])
           .map((item) => normalizeWarehouseCategory(item))
           .filter(Boolean);
 
-        // Nếu location chưa gắn category thì vẫn cho dùng như fallback.
-        if (normalizedLocCategories.length === 0) return true;
-        return normalizedLocCategories.includes(normalizedCategory);
+        if (normalizedLocationCategories.length === 0) return true;
+        return normalizedLocationCategories.includes(normalizedCategory);
       });
 
       if (categoryMatched.length > 0) {
@@ -236,71 +266,63 @@ export const suggestLocation = async (req, res) => {
 
     suggestions = suggestions.slice(0, 5);
 
-    // Check xem có vị trí nào đang chứa cùng SKU không
-    const locationsWithSameSKU = await Inventory.find({ sku })
-      .populate("locationId")
-      .limit(3);
+    const locationsWithSameSku = await Inventory.find({ sku }).populate("locationId").limit(3);
 
     const recommended = [];
 
-    // Ưu tiên vị trí đang có cùng SKU
-    for (const inv of locationsWithSameSKU) {
-      if (inv.locationId && inv.locationId.canAccommodate(requiredQuantity)) {
+    for (const inventory of locationsWithSameSku) {
+      if (inventory.locationId && inventory.locationId.canAccommodate(requiredQuantity)) {
         recommended.push({
-          ...inv.locationId.toObject(),
+          ...inventory.locationId.toObject(),
           priority: "HIGH",
-          reason: `Đang có ${inv.quantity} chiếc cùng SKU`,
+          reason: `Already has ${inventory.quantity} units with the same SKU`,
           currentSKU: sku,
         });
       }
     }
 
-    // Thêm các vị trí khác
-    for (const loc of suggestions) {
-      if (!recommended.find((r) => r.locationCode === loc.locationCode)) {
-        if (loc.canAccommodate(requiredQuantity)) {
+    for (const location of suggestions) {
+      if (!recommended.find((item) => item.locationCode === location.locationCode)) {
+        if (location.canAccommodate(requiredQuantity)) {
           recommended.push({
-            ...loc.toObject(),
+            ...location.toObject(),
             priority: "MEDIUM",
-            reason: `Trống ${loc.capacity - loc.currentLoad}/${loc.capacity}`,
+            reason: `Remaining capacity ${location.capacity - location.currentLoad}/${location.capacity}`,
           });
         }
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       suggestions: recommended.slice(0, 3),
     });
   } catch (error) {
     console.error("Error suggesting location:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi đề xuất vị trí",
+      message: "Failed to suggest location",
       error: error.message,
     });
   }
 };
 
-// ============================================
-// PHẦN 3: QUẢN LÝ PURCHASE ORDER
-// ============================================
-
-/**
- * Tạo Purchase Order mới
- * POST /api/warehouse/purchase-orders
- */
 export const createPurchaseOrder = async (req, res) => {
   try {
+    const storeId = ensureWarehouseWriteBranchId(req);
+    const store = await resolveWarehouseStore(req, { branchId: storeId });
+
     const { supplier, items, expectedDeliveryDate, paymentTerm, notes } = req.body;
 
-    // Generate PO Number
-    const count = await PurchaseOrder.countDocuments();
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, "0");
-    const poNumber = `PO-${year}${month}-${String(count + 1).padStart(3, "0")}`;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "PO items are required",
+      });
+    }
 
-    // Calculate totals
+    const poNumber = await generatePoNumber(store.code || "BRANCH");
+
     let subtotal = 0;
     const processedItems = [];
 
@@ -311,25 +333,27 @@ export const createPurchaseOrder = async (req, res) => {
       if (!Number.isFinite(orderedQuantity) || orderedQuantity <= 0) {
         return res.status(400).json({
           success: false,
-          message: `Số lượng đặt không hợp lệ cho SKU: ${item.sku || "N/A"}`,
+          message: `Invalid ordered quantity for SKU: ${item.sku || "N/A"}`,
         });
       }
 
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         return res.status(400).json({
           success: false,
-          message: `Đơn giá không hợp lệ cho SKU: ${item.sku || "N/A"}`,
+          message: `Invalid unit price for SKU: ${item.sku || "N/A"}`,
         });
       }
 
+      // eslint-disable-next-line no-await-in-loop
       const product = await UniversalProduct.findById(item.productId);
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy sản phẩm ID: ${item.productId}`,
+          message: `Product not found: ${item.productId}`,
         });
       }
 
+      // eslint-disable-next-line no-await-in-loop
       const variant = await UniversalVariant.findOne({
         sku: item.sku,
         productId: product._id,
@@ -337,7 +361,7 @@ export const createPurchaseOrder = async (req, res) => {
       if (!variant) {
         return res.status(404).json({
           success: false,
-          message: `Không tìm thấy SKU ${item.sku} cho sản phẩm ${product.name}`,
+          message: `SKU ${item.sku} not found in product ${product.name}`,
         });
       }
 
@@ -354,17 +378,17 @@ export const createPurchaseOrder = async (req, res) => {
       });
     }
 
-    const vat = subtotal * 0.1; // 10% VAT
-    const shippingFee = req.body.shippingFee || 0;
+    const vat = subtotal * 0.1;
+    const shippingFee = Number(req.body.shippingFee) || 0;
     const total = subtotal + vat + shippingFee;
 
-    // Calculate payment due date based on payment term
     const paymentDueDate = new Date(expectedDeliveryDate);
     if (paymentTerm === "NET7") paymentDueDate.setDate(paymentDueDate.getDate() + 7);
     else if (paymentTerm === "NET30") paymentDueDate.setDate(paymentDueDate.getDate() + 30);
     else if (paymentTerm === "NET60") paymentDueDate.setDate(paymentDueDate.getDate() + 60);
 
     const po = new PurchaseOrder({
+      storeId,
       poNumber,
       supplier,
       items: processedItems,
@@ -378,30 +402,26 @@ export const createPurchaseOrder = async (req, res) => {
       createdBy: req.user._id,
       createdByName: getActorName(req.user),
       notes,
-      status: "PENDING", // Chờ duyệt
+      status: "PENDING",
     });
 
     await po.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Đã tạo đơn đặt hàng",
+      message: "Purchase order created",
       purchaseOrder: po,
     });
   } catch (error) {
     console.error("Error creating purchase order:", error);
-    res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: "Lỗi khi tạo đơn đặt hàng",
-      error: error.message,
+      code: error.code,
+      message: error.message || "Failed to create purchase order",
     });
   }
 };
 
-/**
- * Lấy danh sách Purchase Orders
- * GET /api/warehouse/purchase-orders
- */
 export const getPurchaseOrders = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
@@ -415,37 +435,35 @@ export const getPurchaseOrders = async (req, res) => {
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 20);
+    const skip = (pageNum - 1) * limitNum;
 
     const [purchaseOrders, total] = await Promise.all([
-      PurchaseOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      PurchaseOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       PurchaseOrder.countDocuments(filter),
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       purchaseOrders,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / limitNum),
       },
     });
   } catch (error) {
     console.error("Error getting purchase orders:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi lấy danh sách đơn đặt hàng",
+      message: "Failed to get purchase orders",
       error: error.message,
     });
   }
 };
 
-/**
- * Lấy chi tiết Purchase Order
- * GET /api/warehouse/purchase-orders/:id
- */
 export const getPurchaseOrderDetail = async (req, res) => {
   try {
     const po = await PurchaseOrder.findById(req.params.id);
@@ -453,43 +471,41 @@ export const getPurchaseOrderDetail = async (req, res) => {
     if (!po) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đơn đặt hàng",
+        message: "Purchase order not found",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       purchaseOrder: po,
     });
   } catch (error) {
     console.error("Error getting purchase order detail:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Lỗi khi lấy chi tiết đơn đặt hàng",
+      message: "Failed to get purchase order detail",
       error: error.message,
     });
   }
 };
 
-/**
- * Duyệt Purchase Order (Admin/Manager)
- * PUT /api/warehouse/purchase-orders/:id/approve
- */
 export const approvePurchaseOrder = async (req, res) => {
   try {
+    ensureWarehouseWriteBranchId(req);
+
     const po = await PurchaseOrder.findById(req.params.id);
 
     if (!po) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy đơn đặt hàng",
+        message: "Purchase order not found",
       });
     }
 
     if (po.status !== "PENDING") {
       return res.status(400).json({
         success: false,
-        message: "Đơn hàng không ở trạng thái chờ duyệt",
+        message: "Purchase order is not in pending state",
       });
     }
 
@@ -500,24 +516,21 @@ export const approvePurchaseOrder = async (req, res) => {
 
     await po.save();
 
-    // TODO: Gửi email cho nhà cung cấp
-
-    res.json({
+    return res.json({
       success: true,
-      message: "Đã duyệt đơn đặt hàng",
+      message: "Purchase order approved",
       purchaseOrder: po,
     });
   } catch (error) {
     console.error("Error approving purchase order:", error);
-    res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: "Lỗi khi duyệt đơn đặt hàng",
-      error: error.message,
+      code: error.code,
+      message: error.message || "Failed to approve purchase order",
     });
   }
 };
 
-// Export tất cả functions
 export default {
   generateWarehouseStructure,
   getAllLocations,

@@ -21,7 +21,7 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/login", login);
 router.post("/logout", logout);
-router.get("/me", protect, getCurrentUser);
+router.get("/me", protect, resolveAccessContext, getCurrentUser);
 router.get("/context/permissions", protect, resolveAccessContext, getEffectivePermissions);
 router.put("/context/active-branch", protect, resolveAccessContext, setActiveBranchContext);
 router.put("/context/simulate-branch", protect, resolveAccessContext, setSimulatedBranchContext);

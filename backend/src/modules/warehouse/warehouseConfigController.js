@@ -1,13 +1,12 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/warehouseConfigController.js
-// Controller quản lý cấu hình kho
-// ============================================
-
+import mongoose from "mongoose";
+import QRCode from "qrcode";
 import WarehouseConfiguration from "./WarehouseConfiguration.js";
 import WarehouseLocation from "./WarehouseLocation.js";
-import Inventory from "./Inventory.js"; // Import Inventory model
-import QRCode from "qrcode";
-import mongoose from "mongoose";
+import Inventory from "./Inventory.js";
+import {
+  ensureWarehouseWriteBranchId,
+  resolveWarehouseStore,
+} from "./warehouseContext.js";
 
 const toPositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -24,15 +23,40 @@ const sortAlphaNumeric = (left, right) => {
   });
 };
 
-// ============================================
-// GET ALL WAREHOUSE CONFIGURATIONS
-// ============================================
+const sendError = (res, error, fallbackMessage) => {
+  return res.status(error?.statusCode || 500).json({
+    success: false,
+    code: error?.code,
+    message: error?.message || fallbackMessage,
+  });
+};
+
+const normalizeWarehouseCode = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const buildZoneEstimate = (zones = []) => {
+  return zones.reduce((total, zone) => {
+    const aisles = toPositiveInt(zone?.aisles, 0);
+    const shelvesPerAisle = toPositiveInt(zone?.shelvesPerAisle, 0);
+    const binsPerShelf = toPositiveInt(zone?.binsPerShelf, 0);
+    return total + aisles * shelvesPerAisle * binsPerShelf;
+  }, 0);
+};
+
 export const getAllWarehouses = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, Number(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     const filter = {};
-    if (status) filter.status = status;
+    if (status) {
+      filter.status = String(status).trim().toUpperCase();
+    }
+
     if (search) {
       filter.$or = [
         { warehouseCode: { $regex: search, $options: "i" } },
@@ -40,69 +64,53 @@ export const getAllWarehouses = async (req, res) => {
       ];
     }
 
-    const skip = (page - 1) * limit;
-
     const [warehouses, total] = await Promise.all([
       WarehouseConfiguration.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum),
       WarehouseConfiguration.countDocuments(filter),
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       warehouses,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / limitNum),
       },
     });
   } catch (error) {
-    console.error("Error getting warehouses:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi lấy danh sách kho",
-      error: error.message,
-    });
+    return sendError(res, error, "Failed to get warehouse configurations");
   }
 };
 
-// ============================================
-// GET WAREHOUSE BY ID
-// ============================================
 export const getWarehouseById = async (req, res) => {
   try {
     const warehouse = await WarehouseConfiguration.findById(req.params.id);
-
     if (!warehouse) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy kho",
+        message: "Warehouse configuration not found",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       warehouse,
     });
   } catch (error) {
-    console.error("Error getting warehouse:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi lấy thông tin kho",
-      error: error.message,
-    });
+    return sendError(res, error, "Failed to get warehouse configuration");
   }
 };
 
-// ============================================
-// CREATE WAREHOUSE CONFIGURATION
-// ============================================
 export const createWarehouse = async (req, res) => {
   try {
+    const storeId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: storeId });
+
     const {
       warehouseCode,
       name,
@@ -110,181 +118,159 @@ export const createWarehouse = async (req, res) => {
       totalArea,
       zones,
       status,
-    } = req.body;
+    } = req.body || {};
 
-    // Validate warehouse code format
-    if (!/^WH-[A-Z]{2,10}$/.test(warehouseCode)) {
+    const normalizedWarehouseCode = normalizeWarehouseCode(warehouseCode);
+    if (!/^WH-[A-Z0-9]{2,12}$/.test(normalizedWarehouseCode)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Mã kho không hợp lệ. Định dạng: WH-XXX (VD: WH-HCM, WH-HN)",
+        message: "Invalid warehouseCode format. Expected WH-XXX",
       });
     }
 
-    // Check if warehouse code already exists
+    if (!String(name || "").trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Warehouse name is required",
+      });
+    }
+
+    if (!Array.isArray(zones) || zones.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Warehouse must have at least one zone",
+      });
+    }
+
     const existingWarehouse = await WarehouseConfiguration.findOne({
-      warehouseCode,
+      storeId,
+      warehouseCode: normalizedWarehouseCode,
     });
 
     if (existingWarehouse) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: `Mã kho ${warehouseCode} đã tồn tại`,
+        message: `Warehouse code ${normalizedWarehouseCode} already exists in this branch`,
       });
     }
 
-    // Validate zones
-    if (!zones || zones.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Kho phải có ít nhất 1 khu",
-      });
-    }
-
-    // Calculate estimated locations
-    let estimatedLocations = 0;
-    for (const zone of zones) {
-      estimatedLocations +=
-        zone.aisles * zone.shelvesPerAisle * zone.binsPerShelf;
-    }
+    const estimatedLocations = buildZoneEstimate(zones);
 
     const warehouse = new WarehouseConfiguration({
-      warehouseCode: warehouseCode.toUpperCase(),
-      name,
-      address,
-      totalArea,
+      storeId,
+      warehouseCode: normalizedWarehouseCode,
+      name: String(name || "").trim(),
+      address: String(address || "").trim(),
+      totalArea: Number(totalArea) || 0,
       zones,
       status: status || "PLANNING",
-      totalLocations: 0,
       locationsGenerated: false,
+      totalLocations: 0,
       createdBy: req.user._id,
-      createdByName: req.user.fullName,
+      createdByName: req.user.fullName || req.user.name || req.user.email || "Unknown",
     });
 
     await warehouse.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: `Đã tạo kho ${warehouseCode} với ${estimatedLocations} vị trí dự kiến`,
+      message: `Created warehouse ${normalizedWarehouseCode}`,
       warehouse,
       estimatedLocations,
     });
   } catch (error) {
-    console.error("Error creating warehouse:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Lỗi khi tạo kho",
-    });
+    return sendError(res, error, "Failed to create warehouse configuration");
   }
 };
 
-// ============================================
-// UPDATE WAREHOUSE CONFIGURATION
-// ============================================
 export const updateWarehouse = async (req, res) => {
   try {
-    const warehouse = await WarehouseConfiguration.findById(req.params.id);
+    ensureWarehouseWriteBranchId(req);
 
+    const warehouse = await WarehouseConfiguration.findById(req.params.id);
     if (!warehouse) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy kho",
+        message: "Warehouse configuration not found",
       });
     }
 
-    // Nếu đã generate locations, không cho sửa cấu trúc
-    if (warehouse.locationsGenerated) {
+    const { name, address, totalArea, zones, status } = req.body || {};
+
+    if (warehouse.locationsGenerated && zones) {
       return res.status(400).json({
         success: false,
         message:
-          "Không thể sửa cấu trúc kho đã tạo vị trí. Vui lòng tạo kho mới hoặc xóa vị trí cũ trước.",
+          "Cannot modify zone structure after locations have been generated",
       });
     }
 
-    const { name, address, totalArea, zones, status } = req.body;
-
-    // Update fields
-    if (name) warehouse.name = name;
-    if (address) warehouse.address = address;
-    if (totalArea) warehouse.totalArea = totalArea;
-    if (zones) warehouse.zones = zones;
-    if (status) warehouse.status = status;
+    if (name !== undefined) warehouse.name = String(name || "").trim();
+    if (address !== undefined) warehouse.address = String(address || "").trim();
+    if (totalArea !== undefined) warehouse.totalArea = Number(totalArea) || 0;
+    if (zones !== undefined) warehouse.zones = zones;
+    if (status !== undefined) warehouse.status = String(status).trim().toUpperCase();
 
     warehouse.updatedBy = req.user._id;
-    warehouse.updatedByName = req.user.fullName;
+    warehouse.updatedByName = req.user.fullName || req.user.name || req.user.email || "Unknown";
 
     await warehouse.save();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Đã cập nhật cấu hình kho",
+      message: "Warehouse configuration updated",
       warehouse,
     });
   } catch (error) {
-    console.error("Error updating warehouse:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Lỗi khi cập nhật kho",
-    });
+    return sendError(res, error, "Failed to update warehouse configuration");
   }
 };
 
-// ============================================
-// DELETE WAREHOUSE CONFIGURATION
-// ============================================
 export const deleteWarehouse = async (req, res) => {
   try {
-    const warehouse = await WarehouseConfiguration.findById(req.params.id);
+    ensureWarehouseWriteBranchId(req);
 
+    const warehouse = await WarehouseConfiguration.findById(req.params.id);
     if (!warehouse) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy kho",
+        message: "Warehouse configuration not found",
       });
     }
 
-    // Nếu đã generate locations, cảnh báo
     if (warehouse.locationsGenerated) {
       return res.status(400).json({
         success: false,
         message:
-          "Không thể xóa kho đã tạo vị trí. Vui lòng xóa tất cả vị trí trước.",
+          "Cannot delete a warehouse that already generated locations",
       });
     }
 
     await warehouse.deleteOne();
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Đã xóa cấu hình kho",
+      message: "Warehouse configuration deleted",
     });
   } catch (error) {
-    console.error("Error deleting warehouse:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi xóa kho",
-      error: error.message,
-    });
+    return sendError(res, error, "Failed to delete warehouse configuration");
   }
 };
 
-// ============================================
-// GENERATE LOCATIONS FROM CONFIGURATION
-// ============================================
 export const generateLocationsFromConfig = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const warehouse = await WarehouseConfiguration.findById(
-      req.params.id
-    ).session(session);
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
 
+    const warehouse = await WarehouseConfiguration.findById(req.params.id).session(session);
     if (!warehouse) {
       await session.abortTransaction();
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy kho",
+        message: "Warehouse configuration not found",
       });
     }
 
@@ -292,26 +278,24 @@ export const generateLocationsFromConfig = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Kho này đã tạo vị trí. Không thể tạo lại.",
+        message: "Locations already generated for this warehouse",
       });
     }
 
     const locations = [];
     let totalGenerated = 0;
 
-    // Generate locations for each zone
     for (const zone of warehouse.zones) {
-      for (let aisleNum = 1; aisleNum <= zone.aisles; aisleNum++) {
-        for (let shelfNum = 1; shelfNum <= zone.shelvesPerAisle; shelfNum++) {
-          for (let binNum = 1; binNum <= zone.binsPerShelf; binNum++) {
-            const locationCode = `${warehouse.warehouseCode}-${
-              zone.code
-            }-${String(aisleNum).padStart(2, "0")}-${String(shelfNum).padStart(
+      for (let aisleNum = 1; aisleNum <= zone.aisles; aisleNum += 1) {
+        for (let shelfNum = 1; shelfNum <= zone.shelvesPerAisle; shelfNum += 1) {
+          for (let binNum = 1; binNum <= zone.binsPerShelf; binNum += 1) {
+            const locationCode = `${warehouse.warehouseCode}-${zone.code}-${String(aisleNum).padStart(
               2,
               "0"
-            )}-${String(binNum).padStart(2, "0")}`;
+            )}-${String(shelfNum).padStart(2, "0")}-${String(binNum).padStart(2, "0")}`;
 
             const qrData = JSON.stringify({
+              storeId: activeStoreId,
               locationCode,
               warehouse: warehouse.warehouseCode,
               zone: zone.code,
@@ -322,9 +306,11 @@ export const generateLocationsFromConfig = async (req, res) => {
               capacity: zone.capacityPerBin,
             });
 
+            // eslint-disable-next-line no-await-in-loop
             const qrCode = await QRCode.toDataURL(qrData);
 
-            const location = new WarehouseLocation({
+            locations.push({
+              storeId: activeStoreId,
               locationCode,
               warehouse: warehouse.warehouseCode,
               zone: zone.code,
@@ -333,63 +319,54 @@ export const generateLocationsFromConfig = async (req, res) => {
               shelf: String(shelfNum).padStart(2, "0"),
               bin: String(binNum).padStart(2, "0"),
               capacity: zone.capacityPerBin,
-              productCategories: zone.productCategories || [],
+              productCategories: Array.isArray(zone.productCategories)
+                ? zone.productCategories
+                : [],
               qrCode,
-              status: zone.status,
+              status: zone.status || "ACTIVE",
             });
 
-            locations.push(location);
-            totalGenerated++;
+            totalGenerated += 1;
           }
         }
       }
     }
 
-    // Insert all locations
     await WarehouseLocation.insertMany(locations, { session });
 
-    // Update warehouse config
     warehouse.locationsGenerated = true;
     warehouse.totalLocations = totalGenerated;
     warehouse.status = "ACTIVE";
+    warehouse.updatedBy = req.user._id;
+    warehouse.updatedByName = req.user.fullName || req.user.name || req.user.email || "Unknown";
     await warehouse.save({ session });
 
     await session.commitTransaction();
 
-    res.json({
+    return res.json({
       success: true,
-      message: `Đã tạo ${totalGenerated} vị trí kho thành công`,
+      message: `Generated ${totalGenerated} warehouse locations`,
       warehouse,
       totalLocations: totalGenerated,
     });
   } catch (error) {
     await session.abortTransaction();
-    console.error("Error generating locations:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi tạo vị trí kho",
-      error: error.message,
-    });
+    return sendError(res, error, "Failed to generate warehouse locations");
   } finally {
     session.endSession();
   }
 };
 
-// ============================================
-// GET WAREHOUSE STATISTICS
-// ============================================
 export const getWarehouseStats = async (req, res) => {
   try {
     const warehouse = await WarehouseConfiguration.findById(req.params.id);
-
     if (!warehouse) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy kho",
+        message: "Warehouse configuration not found",
       });
     }
 
-    // Calculate stats
     const stats = {
       totalZones: warehouse.zones.length,
       totalEstimatedLocations: warehouse.estimatedLocations,
@@ -415,36 +392,38 @@ export const getWarehouseStats = async (req, res) => {
       })),
     };
 
-    // If locations generated, get usage stats
     if (warehouse.locationsGenerated) {
       const locations = await WarehouseLocation.find({
+        storeId: warehouse.storeId,
         warehouse: warehouse.warehouseCode,
       });
 
-      stats.locationsInUse = locations.filter((l) => l.currentLoad > 0).length;
-      stats.emptyLocations = locations.filter((l) => l.currentLoad === 0).length;
-      stats.averageFillRate =
-        locations.reduce((sum, l) => sum + (l.currentLoad / l.capacity) * 100, 0) /
-        locations.length;
+      const locationsInUse = locations.filter(
+        (location) => Number(location.currentLoad) > 0
+      ).length;
+      const emptyLocations = locations.length - locationsInUse;
+      const averageFillRate =
+        locations.length > 0
+          ? locations.reduce((sum, location) => {
+              const capacity = Number(location.capacity) || 0;
+              const currentLoad = Number(location.currentLoad) || 0;
+              return sum + (capacity > 0 ? (currentLoad / capacity) * 100 : 0);
+            }, 0) / locations.length
+          : 0;
+
+      stats.locationsInUse = locationsInUse;
+      stats.emptyLocations = emptyLocations;
+      stats.averageFillRate = averageFillRate;
     }
 
-    res.json({
+    return res.json({
       success: true,
       stats,
     });
   } catch (error) {
-    console.error("Error getting warehouse stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi lấy thống kê kho",
-      error: error.message,
-    });
+    return sendError(res, error, "Failed to get warehouse statistics");
   }
 };
-
-// ============================================
-// WAREHOUSE VISUALIZATION & SEARCH
-// ============================================
 
 export const getWarehouseLayout = async (req, res) => {
   try {
@@ -454,10 +433,21 @@ export const getWarehouseLayout = async (req, res) => {
     const page = toPositiveInt(req.query?.page, 1);
     const limit = Math.min(toPositiveInt(req.query?.limit, 5), 50);
 
-    const warehouse = await WarehouseConfiguration.findById(id).select("warehouseCode name zones");
+    const warehouse = await WarehouseConfiguration.findById(id).select(
+      "_id storeId warehouseCode name zones"
+    );
+
     if (!warehouse) {
-      return res.status(404).json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y kho" });
+      return res.status(404).json({
+        success: false,
+        message: "Warehouse configuration not found",
+      });
     }
+
+    const locationFilter = {
+      storeId: warehouse.storeId,
+      warehouse: warehouse.warehouseCode,
+    };
 
     const projection =
       "locationCode zone zoneName aisle shelf bin capacity currentLoad status productCategories";
@@ -465,7 +455,7 @@ export const getWarehouseLayout = async (req, res) => {
 
     if (zone && !aisle) {
       const allAisles = await WarehouseLocation.distinct("aisle", {
-        warehouse: warehouse.warehouseCode,
+        ...locationFilter,
         zone,
       });
       const sortedAisles = allAisles.sort(sortAlphaNumeric);
@@ -475,17 +465,17 @@ export const getWarehouseLayout = async (req, res) => {
       const start = (safePage - 1) * limit;
       const aislesInPage = sortedAisles.slice(start, start + limit);
 
-      let locations = [];
-      if (aislesInPage.length > 0) {
-        locations = await WarehouseLocation.find({
-          warehouse: warehouse.warehouseCode,
-          zone,
-          aisle: { $in: aislesInPage },
-        })
-          .select(projection)
-          .sort(sortOrder)
-          .lean();
-      }
+      const locations =
+        aislesInPage.length > 0
+          ? await WarehouseLocation.find({
+              ...locationFilter,
+              zone,
+              aisle: { $in: aislesInPage },
+            })
+              .select(projection)
+              .sort(sortOrder)
+              .lean()
+          : [];
 
       return res.json({
         success: true,
@@ -508,7 +498,6 @@ export const getWarehouseLayout = async (req, res) => {
       });
     }
 
-    const locationFilter = { warehouse: warehouse.warehouseCode };
     if (zone) {
       locationFilter.zone = zone;
     }
@@ -542,68 +531,64 @@ export const getWarehouseLayout = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error getting warehouse layout:", error);
-    res.status(500).json({ success: false, message: "Lá»—i khi láº¥y layout kho", error: error.message });
+    return sendError(res, error, "Failed to get warehouse layout");
   }
 };
-
-
 
 export const searchLocationByProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { query } = req.query;
+    const query = String(req.query?.query || "").trim();
 
     if (!query) {
-      return res.status(400).json({ success: false, message: "Vui lòng nhập từ khóa tìm kiếm" });
+      return res.status(400).json({
+        success: false,
+        message: "Search query is required",
+      });
     }
 
-    const warehouse = await WarehouseConfiguration.findById(id).select("warehouseCode");
+    const warehouse = await WarehouseConfiguration.findById(id).select(
+      "_id storeId warehouseCode"
+    );
     if (!warehouse) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy kho" });
+      return res.status(404).json({
+        success: false,
+        message: "Warehouse configuration not found",
+      });
     }
 
-    // Find inventory items matching SKU or Product Name
-    // Note: Inventory stores 'locationCode' directly.
-    // We need to filter by warehouse as well. 
-    // Since Inventory has locationCode, and locationCode starts with warehouseCode, we can use regex or lookup.
-    // However, a safer way is to find locations in this warehouse first, then find inventory in those locations.
-    // OR simpler: Inventory -> Location (via locationId) -> check warehouse.
-    
     const inventoryItems = await Inventory.find({
+      storeId: warehouse.storeId,
       $or: [
         { sku: { $regex: query, $options: "i" } },
-        { productName: { $regex: query, $options: "i" } }
+        { productName: { $regex: query, $options: "i" } },
       ],
-      quantity: { $gt: 0 } // Only find items in stock
+      quantity: { $gt: 0 },
     }).populate({
       path: "locationId",
-      match: { warehouse: warehouse.warehouseCode },
-      select: "locationCode zone aisle shelf bin"
+      match: {
+        storeId: warehouse.storeId,
+        warehouse: warehouse.warehouseCode,
+      },
+      select: "locationCode zone zoneName aisle shelf bin",
     });
 
-    // Filter out items where location mismatch (populate returns null if match fails)
-    const validItems = inventoryItems.filter(item => item.locationId);
-
-    // Group by location
-    const results = validItems.map(item => ({
+    const validItems = inventoryItems.filter((item) => item.locationId);
+    const results = validItems.map((item) => ({
       sku: item.sku,
       productName: item.productName,
       quantity: item.quantity,
-      location: item.locationId
+      location: item.locationId,
     }));
 
-    res.json({
+    return res.json({
       success: true,
-      results
+      results,
     });
-
   } catch (error) {
-    console.error("Error searching product location:", error);
-    res.status(500).json({ success: false, message: "Lỗi khi tìm kiếm sản phẩm", error: error.message });
+    return sendError(res, error, "Failed to search product location");
   }
 };
-
 
 export default {
   getAllWarehouses,
@@ -614,6 +599,5 @@ export default {
   generateLocationsFromConfig,
   getWarehouseStats,
   getWarehouseLayout,
-  searchLocationByProduct
+  searchLocationByProduct,
 };
-

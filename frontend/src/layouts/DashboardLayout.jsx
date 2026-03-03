@@ -39,6 +39,7 @@ import { Layout } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
+import BranchSwitcher from "@/components/shared/BranchSwitcher";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -275,6 +276,12 @@ const DashboardLayout = () => {
             <X className="h-5 w-5" />
           </Button>
         </div>
+
+        {isGlobalAdmin ? (
+          <div className="px-4 py-3 border-b ">
+            <BranchSwitcher className="w-full" />
+          </div>
+        ) : null}
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigationItems.map((item) => {

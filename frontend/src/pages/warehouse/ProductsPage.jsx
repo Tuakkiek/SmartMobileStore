@@ -71,6 +71,14 @@ const ProductsPage = () => {
     );
   };
 
+  const isLikelyImageUrl = (value = "") => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
+    if (trimmed.startsWith("/")) return true;
+    return /\.(png|jpe?g|webp|svg|gif|avif)$/i.test(trimmed);
+  };
+
   // Product Types State
   const [productTypes, setProductTypes] = useState([]);
   const [activeTab, setActiveTab] = useState("");
@@ -388,7 +396,20 @@ const ProductsPage = () => {
                       value={type._id}
                       className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md border border-slate-200 data-[state=active]:border-blue-600 rounded-xl px-4 py-2.5 transition-all duration-300 hover:border-blue-400 hover:bg-blue-50"
                     >
-                      <span className="text-lg mr-2">{type.icon}</span>
+                      {isLikelyImageUrl(type.icon) ? (
+                        <img
+                          src={type.icon}
+                          alt={type.name}
+                          className="w-5 h-5 mr-2 object-contain"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "/placeholder.png";
+                          }}
+                        />
+                      ) : (
+                        <Package className="w-5 h-5 mr-2 text-slate-500" />
+                      )}
                       <span className="font-medium">{type.name}</span>
                       {activeTab === type._id && (
                         <Badge className="ml-2 bg-white/20 text-white border-0 hover:bg-white/30">
@@ -407,7 +428,20 @@ const ProductsPage = () => {
               {activeProductType && (
                 <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
                   <div className="p-2 bg-white rounded-lg shadow-sm">
-                    <span className="text-2xl">{activeProductType.icon}</span>
+                    {isLikelyImageUrl(activeProductType.icon) ? (
+                      <img
+                        src={activeProductType.icon}
+                        alt={activeProductType.name}
+                        className="w-8 h-8 object-contain"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/placeholder.png";
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-8 h-8 text-slate-500" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-slate-900 truncate">{activeProductType.name}</h3>

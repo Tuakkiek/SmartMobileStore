@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
-import { authAPI, storeAPI } from "@/lib/api";
+import { storeAPI } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -11,54 +12,90 @@ import {
 import { Loader2, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 
-const BranchSwitcher = ({ className }) => {
-  const { user, authz, activeBranchId, setActiveBranch } = useAuthStore();
+const ALL_VALUE = "ALL";
+
+const BranchSwitcher = ({ className = "" }) => {
+  const {
+    user,
+    authz,
+    simulatedBranchId,
+    contextMode,
+    setBranchSimulation,
+    clearBranchSimulation,
+  } = useAuthStore();
+
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const isGlobalAdmin = Boolean(
     authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN",
   );
 
+  const mode = String(contextMode || authz?.contextMode || "STANDARD").toUpperCase();
+  const currentValue =
+    isGlobalAdmin && mode === "SIMULATED" && simulatedBranchId
+      ? String(simulatedBranchId)
+      : ALL_VALUE;
+
   useEffect(() => {
-    const fetchBranches = async () => {
-      if (!user || !isGlobalAdmin) {
+    const loadBranches = async () => {
+      if (!isGlobalAdmin || !user) {
         setBranches([]);
         return;
       }
 
       setLoading(true);
       try {
-        const res = await storeAPI.getAll({ limit: 100 });
-        const payload = res.data?.data;
-        const allStores = Array.isArray(payload) ? payload : payload?.stores || [];
-        setBranches(Array.isArray(allStores) ? allStores : []);
+        const response = await storeAPI.getAll({ limit: 200, status: "ACTIVE" });
+        const data = response.data;
+        // API returns { success: true, stores: [...], pagination: {...} }
+        const stores = data?.stores || data?.data?.stores || data?.data || [];
+        setBranches(Array.isArray(stores) ? stores : []);
       } catch (error) {
-        console.error("Failed to fetch branches:", error);
+        console.error("Failed to load branch options:", error);
         setBranches([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchBranches();
-  }, [user, isGlobalAdmin]);
+    loadBranches();
+  }, [isGlobalAdmin, user]);
 
-  const handleSwitch = async (branchId) => {
-    if (!isGlobalAdmin || branchId === activeBranchId) {
+  const labelById = useMemo(() => {
+    const map = new Map();
+    for (const branch of branches) {
+      map.set(String(branch._id), `${branch.code || ""} - ${branch.name || ""}`.trim());
+    }
+    return map;
+  }, [branches]);
+
+  const onChange = async (value) => {
+    if (!isGlobalAdmin || switching || value === currentValue) {
       return;
     }
 
+    setSwitching(true);
     try {
-      const res = await authAPI.setActiveBranchContext({ branchId });
-      if (res.data?.success) {
-        setActiveBranch(branchId);
-        toast.success("Da chuyen doi chi nhanh");
-        window.location.reload();
+      if (value === ALL_VALUE) {
+        const result = await clearBranchSimulation();
+        if (!result?.success) {
+          throw new Error(result?.message || "Failed to switch to ALL mode");
+        }
+        toast.success("Switched to ALL mode");
+      } else {
+        const result = await setBranchSimulation(value);
+        if (!result?.success) {
+          throw new Error(result?.message || "Failed to simulate selected branch");
+        }
+        toast.success(`Simulating branch: ${labelById.get(value) || value}`);
       }
     } catch (error) {
-      console.error("Failed to switch branch:", error);
-      toast.error(error.response?.data?.message || "Khong the chuyen doi chi nhanh");
+      console.error("Failed to switch branch mode:", error);
+      toast.error(error?.message || "Failed to switch branch mode");
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -68,23 +105,24 @@ const BranchSwitcher = ({ className }) => {
 
   return (
     <div className={className}>
-      <Select value={activeBranchId || ""} onValueChange={handleSwitch}>
-        <SelectTrigger className="h-9 w-[180px] lg:w-[240px] bg-background border-muted-foreground/20">
-          <div className="flex items-center gap-2 truncate">
-            {loading ? (
+      <Select value={currentValue} onValueChange={onChange} disabled={switching}>
+        <SelectTrigger className={cn("h-9 w-full bg-background border-muted-foreground/20", className)}>
+          <div className="flex items-center gap-2 truncate text-left overflow-hidden w-full">
+            {loading || switching ? (
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
             ) : (
               <Warehouse className="h-4 w-4 shrink-0 text-primary" />
             )}
-            <SelectValue placeholder="Chon chi nhanh" />
+            <SelectValue placeholder="Select branch scope" />
           </div>
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value={ALL_VALUE}>ALL (Read scope)</SelectItem>
           {branches.map((branch) => (
-            <SelectItem key={branch._id} value={branch._id}>
+            <SelectItem key={branch._id} value={String(branch._id)}>
               <div className="flex flex-col">
                 <span className="font-medium text-sm">{branch.code || branch.storeCode}</span>
-                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                <span className="text-xs text-muted-foreground truncate max-w-[220px]">
                   {branch.name || branch.storeName}
                 </span>
               </div>

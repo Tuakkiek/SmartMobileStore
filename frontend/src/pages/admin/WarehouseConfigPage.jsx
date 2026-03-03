@@ -40,9 +40,11 @@ import {
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 const WarehouseConfigPage = () => {
   const navigate = useNavigate();
+  const { user, authz, contextMode, simulatedBranchId } = useAuthStore();
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -73,9 +75,23 @@ const WarehouseConfigPage = () => {
     status: "ACTIVE",
   });
 
+  const isGlobalAdmin = Boolean(
+    authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN",
+  );
+  const normalizedMode = String(contextMode || authz?.contextMode || "STANDARD").toUpperCase();
+  const isGlobalAllMode = isGlobalAdmin && normalizedMode !== "SIMULATED";
+
   useEffect(() => {
     fetchWarehouses();
-  }, []);
+  }, [normalizedMode, simulatedBranchId]);
+
+  const ensureWriteMode = () => {
+    if (!isGlobalAllMode) {
+      return true;
+    }
+    toast.error("Global admin must switch to SIMULATE mode before warehouse write actions");
+    return false;
+  };
 
   const fetchWarehouses = async () => {
     try {
@@ -91,6 +107,8 @@ const WarehouseConfigPage = () => {
   };
 
   const handleCreate = () => {
+    if (!ensureWriteMode()) return;
+
     setEditMode(false);
     setCurrentWarehouse(null);
     setFormData({
@@ -105,6 +123,8 @@ const WarehouseConfigPage = () => {
   };
 
   const handleEdit = (warehouse) => {
+    if (!ensureWriteMode()) return;
+
     setEditMode(true);
     setCurrentWarehouse(warehouse);
     setFormData({
@@ -159,6 +179,8 @@ const WarehouseConfigPage = () => {
   };
 
   const handleSubmit = async () => {
+    if (!ensureWriteMode()) return;
+
     if (!formData.warehouseCode || !formData.name) {
       toast.error("Vui lòng nhập mã kho và tên kho");
       return;
@@ -191,6 +213,7 @@ const WarehouseConfigPage = () => {
   };
 
   const handleDelete = async (id) => {
+    if (!ensureWriteMode()) return;
     if (!confirm("Bạn có chắc muốn xóa kho này?")) return;
 
     try {
@@ -203,6 +226,7 @@ const WarehouseConfigPage = () => {
   };
 
   const handleGenerateLocations = async (id) => {
+    if (!ensureWriteMode()) return;
     if (
       !confirm(
         "Tạo vị trí kho sẽ tạo tất cả các vị trí theo cấu hình. Bạn có chắc chắn?"
@@ -255,11 +279,27 @@ const WarehouseConfigPage = () => {
             Tạo và quản lý cấu trúc kho của bạn
           </p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} disabled={isGlobalAllMode} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
           Tạo Kho Mới
         </Button>
       </div>
+
+      {isGlobalAdmin ? (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm text-amber-900 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <span className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              Chế độ hiện tại:
+            </span>
+            <strong>
+              {normalizedMode === "SIMULATED"
+                ? ` CHI NHÁNH MÔ PHỎNG (${simulatedBranchId || "chi nhánh không xác định"})`
+                : " TẤT CẢ (tính năng thêm sửa kho bị khóa)"}
+            </strong>
+          </p>
+        </div>
+      ) : null}
 
       {/* Warehouse List */}
       {loading && warehouses.length === 0 ? (
@@ -275,7 +315,7 @@ const WarehouseConfigPage = () => {
             <p className="text-gray-600 mb-6">
               Tạo kho đầu tiên để bắt đầu quản lý hàng hóa
             </p>
-            <Button onClick={handleCreate}>
+            <Button onClick={handleCreate} disabled={isGlobalAllMode}>
               <Plus className="w-4 h-4 mr-2" />
               Tạo Kho Đầu Tiên
             </Button>
@@ -363,6 +403,7 @@ const WarehouseConfigPage = () => {
                           variant="outline"
                           onClick={() => handleEdit(warehouse)}
                           className="flex-1"
+                          disabled={isGlobalAllMode}
                         >
                           <Edit className="w-4 h-4 mr-1" />
                           Sửa
@@ -371,6 +412,7 @@ const WarehouseConfigPage = () => {
                           size="sm"
                           onClick={() => handleGenerateLocations(warehouse._id)}
                           className="flex-1"
+                          disabled={isGlobalAllMode}
                         >
                           <Grid className="w-4 h-4 mr-1" />
                           Tạo Vị Trí
@@ -391,6 +433,7 @@ const WarehouseConfigPage = () => {
                       size="sm"
                       variant="destructive"
                       onClick={() => handleDelete(warehouse._id)}
+                      disabled={isGlobalAllMode}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -413,7 +456,7 @@ const WarehouseConfigPage = () => {
 
       {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {editMode ? "Sửa Cấu Hình Kho" : "Tạo Kho Mới"}
@@ -427,8 +470,8 @@ const WarehouseConfigPage = () => {
             </TabsList>
 
             {/* Basic Info Tab */}
-            <TabsContent value="basic" className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <TabsContent value="basic" className="space-y-4 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label>Mã Kho *</Label>
                   <Input
@@ -546,7 +589,7 @@ const WarehouseConfigPage = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
                       <Label>Số Dãy *</Label>
                       <Input
@@ -608,7 +651,7 @@ const WarehouseConfigPage = () => {
                     </div>
                   </div>
 
-                  <div className="bg-blue-50 p-3 rounded">
+                  <div className="bg-blue-50 p-3 rounded mt-4">
                     <p className="text-sm text-blue-900">
                       <strong>Dự kiến:</strong>{" "}
                       {currentZone.aisles *
@@ -686,12 +729,12 @@ const WarehouseConfigPage = () => {
             </TabsContent>
           </Tabs>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowModal(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 mt-6">
+            <Button variant="outline" onClick={() => setShowModal(false)} className="w-full sm:w-auto">
               <X className="w-4 h-4 mr-2" />
               Hủy
             </Button>
-            <Button onClick={handleSubmit} disabled={loading}>
+            <Button onClick={handleSubmit} disabled={loading || isGlobalAllMode} className="w-full sm:w-auto">
               <Save className="w-4 h-4 mr-2" />
               {editMode ? "Cập Nhật" : "Tạo Kho"}
             </Button>
@@ -705,3 +748,7 @@ const WarehouseConfigPage = () => {
 };
 
 export default WarehouseConfigPage;
+
+
+
+

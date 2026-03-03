@@ -90,10 +90,24 @@ api.interceptors.request.use(
         const allowedBranchIds = toAllowedBranchIds(state?.authz);
         const fixedBranchId = deriveFixedBranchIdFromState(state);
         const mutableBranchId = normalizeBranchId(state?.activeBranchId);
+        const contextMode = String(
+          state?.contextMode || state?.authz?.contextMode || "STANDARD",
+        )
+          .trim()
+          .toUpperCase();
+        const simulatedBranchId = normalizeBranchId(
+          state?.simulatedBranchId || state?.authz?.simulatedBranchId,
+        );
 
         let activeBranchId = "";
         if (isBranchScopedStaffState(state)) {
           activeBranchId = fixedBranchId;
+        } else if (
+          isGlobalAdminState(state) &&
+          contextMode === "SIMULATED" &&
+          simulatedBranchId
+        ) {
+          activeBranchId = simulatedBranchId;
         } else if (mutableBranchId) {
           activeBranchId = mutableBranchId;
         } else {
@@ -111,6 +125,16 @@ api.interceptors.request.use(
 
         if (activeBranchId) {
           config.headers["X-Active-Branch-Id"] = activeBranchId;
+        }
+
+        if (
+          isGlobalAdminState(state) &&
+          contextMode === "SIMULATED" &&
+          simulatedBranchId
+        ) {
+          config.headers["X-Simulate-Branch-Id"] = simulatedBranchId;
+        } else if (config.headers["X-Simulate-Branch-Id"]) {
+          delete config.headers["X-Simulate-Branch-Id"];
         }
       } catch (error) {
         console.error("Error parsing auth-storage:", error);

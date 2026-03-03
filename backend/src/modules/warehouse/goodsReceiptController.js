@@ -12,6 +12,10 @@ import StockMovement from "./StockMovement.js";
 import { UniversalVariant } from "../product/UniversalProduct.js";
 import StoreInventory from "../inventory/StoreInventory.js";
 import Store from "../store/Store.js";
+import {
+  ensureWarehouseWriteBranchId,
+  resolveWarehouseStore,
+} from "./warehouseContext.js";
 
 const RECEIVABLE_PO_STATUSES = new Set(["CONFIRMED", "PARTIAL"]);
 const DEFAULT_STORE_MIN_STOCK = 5;
@@ -217,9 +221,10 @@ const syncStoreInventory = async ({
   return distribution;
 };
 
-const generateGrnNumber = async (session) => {
+const generateGrnNumber = async ({ session, storeCode }) => {
   const year = new Date().getFullYear();
-  const prefix = `GRN-${year}-`;
+  const normalizedStoreCode = String(storeCode || "BRANCH").trim().toUpperCase();
+  const prefix = `GRN-${normalizedStoreCode}-${year}-`;
   const countInYear = await GoodsReceipt.countDocuments({
     grnNumber: { $regex: `^${prefix}` },
   }).session(session);
@@ -227,7 +232,7 @@ const generateGrnNumber = async (session) => {
   let sequence = countInYear + 1;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = `${prefix}${String(sequence).padStart(3, "0")}`;
+    const candidate = `${prefix}${String(sequence).padStart(4, "0")}`;
     // eslint-disable-next-line no-await-in-loop
     const existing = await GoodsReceipt.findOne({ grnNumber: candidate })
       .select("_id")
@@ -314,6 +319,9 @@ export const receiveItem = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
+
     const {
       poId,
       sku,
@@ -405,6 +413,7 @@ export const receiveItem = async (req, res) => {
       normalizedQualityStatus === "GOOD" ? sellableQuantity : receiveQty;
 
     const location = await WarehouseLocation.findOne({
+      storeId: activeStoreId,
       locationCode: normalizedLocationCode,
       status: "ACTIVE",
     }).session(session);
@@ -428,6 +437,7 @@ export const receiveItem = async (req, res) => {
     }
 
     let inventory = await Inventory.findOne({
+      storeId: activeStoreId,
       sku: normalizedSku,
       locationId: location._id,
     }).session(session);
@@ -442,6 +452,7 @@ export const receiveItem = async (req, res) => {
       await inventory.save({ session });
     } else {
       inventory = new Inventory({
+        storeId: activeStoreId,
         sku: normalizedSku,
         productId: poItem.productId,
         productName: poItem.productName,
@@ -459,6 +470,7 @@ export const receiveItem = async (req, res) => {
     await location.save({ session });
 
     const movement = new StockMovement({
+      storeId: activeStoreId,
       type: "INBOUND",
       sku: normalizedSku,
       productId: poItem.productId,
@@ -555,6 +567,12 @@ export const completeGoodsReceipt = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    const activeStore = await resolveWarehouseStore(req, {
+      branchId: activeStoreId,
+      session,
+    });
+
     const { poId, deliverySignature, notes } = req.body;
 
     if (!poId) {
@@ -602,7 +620,10 @@ export const completeGoodsReceipt = async (req, res) => {
       });
     }
 
-    const grnNumber = await generateGrnNumber(session);
+    const grnNumber = await generateGrnNumber({
+      session,
+      storeCode: activeStore.code,
+    });
     const receivedItems = [];
     let totalQuantity = 0;
     let totalDamaged = 0;
@@ -612,6 +633,7 @@ export const completeGoodsReceipt = async (req, res) => {
       // Luồng hiện tại nhận mỗi SKU theo một location trong 1 lần xử lý.
       // eslint-disable-next-line no-await-in-loop
       const inventorySnapshot = await Inventory.findOne({
+        storeId: activeStoreId,
         sku: poItem.sku,
       })
         .sort({ updatedAt: -1 })
@@ -645,6 +667,7 @@ export const completeGoodsReceipt = async (req, res) => {
     }
 
     const grn = new GoodsReceipt({
+      storeId: activeStoreId,
       grnNumber,
       purchaseOrderId: po._id,
       poNumber: po.poNumber,

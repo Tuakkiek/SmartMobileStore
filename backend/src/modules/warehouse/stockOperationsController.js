@@ -9,6 +9,10 @@ import StockMovement from "./StockMovement.js";
 import CycleCount from "./CycleCount.js";
 import Order from "../order/Order.js";
 import mongoose from "mongoose";
+import {
+  ensureWarehouseWriteBranchId,
+  resolveWarehouseStore,
+} from "./warehouseContext.js";
 
 const getActorName = (user) =>
   user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
@@ -117,6 +121,9 @@ export const pickItem = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
+
     const { orderId, sku, locationCode, quantity } = req.body;
     const pickQty = toPositiveInteger(quantity);
     const actorName = getActorName(req.user);
@@ -162,13 +169,17 @@ export const pickItem = async (req, res) => {
     }
 
     // Tìm inventory
-    const location = await WarehouseLocation.findOne({ locationCode }).session(session);
+    const location = await WarehouseLocation.findOne({
+      storeId: activeStoreId,
+      locationCode,
+    }).session(session);
     if (!location) {
       await session.abortTransaction();
       return res.status(404).json({ success: false, message: "Không tìm thấy vị trí" });
     }
 
     const inventory = await Inventory.findOne({
+      storeId: activeStoreId,
       sku,
       locationId: location._id,
     }).session(session);
@@ -194,6 +205,7 @@ export const pickItem = async (req, res) => {
 
     // Ghi log
     const movement = new StockMovement({
+      storeId: activeStoreId,
       type: "OUTBOUND",
       sku,
       productId: inventory.productId,
@@ -237,6 +249,9 @@ export const transferStock = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
+
     const { sku, fromLocationCode, toLocationCode, quantity, reason, notes } = req.body;
     const transferQty = toPositiveInteger(quantity);
     const actorName = getActorName(req.user);
@@ -251,8 +266,14 @@ export const transferStock = async (req, res) => {
     }
 
     // Validate locations
-    const fromLocation = await WarehouseLocation.findOne({ locationCode: fromLocationCode }).session(session);
-    const toLocation = await WarehouseLocation.findOne({ locationCode: toLocationCode }).session(session);
+    const fromLocation = await WarehouseLocation.findOne({
+      storeId: activeStoreId,
+      locationCode: fromLocationCode,
+    }).session(session);
+    const toLocation = await WarehouseLocation.findOne({
+      storeId: activeStoreId,
+      locationCode: toLocationCode,
+    }).session(session);
 
     if (!fromLocation || !toLocation) {
       await session.abortTransaction();
@@ -260,7 +281,11 @@ export const transferStock = async (req, res) => {
     }
 
     // Check source inventory
-    const fromInventory = await Inventory.findOne({ sku, locationId: fromLocation._id }).session(session);
+    const fromInventory = await Inventory.findOne({
+      storeId: activeStoreId,
+      sku,
+      locationId: fromLocation._id,
+    }).session(session);
     const sourceAvailableQty = Number.isFinite(fromInventory?.quantity) ? fromInventory.quantity : 0;
     if (!fromInventory || sourceAvailableQty < transferQty) {
       await session.abortTransaction();
@@ -284,13 +309,18 @@ export const transferStock = async (req, res) => {
     await fromLocation.save({ session });
 
     // Cộng destination
-    let toInventory = await Inventory.findOne({ sku, locationId: toLocation._id }).session(session);
+    let toInventory = await Inventory.findOne({
+      storeId: activeStoreId,
+      sku,
+      locationId: toLocation._id,
+    }).session(session);
     if (toInventory) {
       const destinationQty = Number.isFinite(toInventory.quantity) ? toInventory.quantity : 0;
       toInventory.quantity = destinationQty + transferQty;
       await toInventory.save({ session });
     } else {
       toInventory = new Inventory({
+        storeId: activeStoreId,
         sku,
         productId: fromInventory.productId,
         productName: fromInventory.productName,
@@ -307,6 +337,7 @@ export const transferStock = async (req, res) => {
 
     // Ghi log
     const movement = new StockMovement({
+      storeId: activeStoreId,
       type: "TRANSFER",
       sku,
       productId: fromInventory.productId,
@@ -349,10 +380,14 @@ export const transferStock = async (req, res) => {
  */
 export const createCycleCount = async (req, res) => {
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    const activeStore = await resolveWarehouseStore(req, { branchId: activeStoreId });
     const { scope, zones, aisles, notes } = req.body;
 
     const count = await CycleCount.countDocuments();
-    const ccNumber = `CC-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+    const countNumber = `CC-${activeStore.code}-${new Date().getFullYear()}-${String(
+      count + 1
+    ).padStart(4, "0")}`;
 
     // Lấy danh sách items cần kiểm
     const filter = { status: "ACTIVE" };
@@ -380,13 +415,31 @@ export const createCycleCount = async (req, res) => {
     }
 
     const cycleCount = new CycleCount({
-      ccNumber,
-      scope: scope || "PARTIAL",
-      assignedTo: req.user._id,
-      assignedToName: getActorName(req.user),
+      storeId: activeStoreId,
+      countNumber,
+      scope:
+        typeof scope === "object" && scope
+          ? {
+              warehouse: scope.warehouse || activeStore.code,
+              zone: scope.zone || null,
+              aisle: scope.aisle || null,
+            }
+          : {
+              warehouse: activeStore.code,
+              zone: zones?.[0] || null,
+              aisle: aisles?.[0] || null,
+            },
+      countDate: new Date(),
+      assignedTo: [
+        {
+          userId: req.user._id,
+          userName: getActorName(req.user),
+        },
+      ],
       items,
       status: "IN_PROGRESS",
-      startedAt: new Date(),
+      createdBy: req.user._id,
+      createdByName: getActorName(req.user),
       notes,
     });
 
@@ -394,7 +447,7 @@ export const createCycleCount = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `Đã tạo phiếu kiểm kê ${ccNumber} với ${items.length} mục`,
+      message: `Đã tạo phiếu kiểm kê ${countNumber} với ${items.length} mục`,
       cycleCount,
     });
   } catch (error) {
@@ -476,12 +529,22 @@ export const completeCycleCount = async (req, res) => {
     }
 
     // Tính summary
-    const totalItems = cycleCount.items.length;
-    const counted = cycleCount.items.filter((i) => i.countedQuantity !== null).length;
-    const matched = cycleCount.items.filter((i) => i.variance === 0).length;
-    const variances = cycleCount.items.filter((i) => i.variance !== 0 && i.countedQuantity !== null).length;
+    const totalLocations = cycleCount.items.length;
+    const matchedLocations = cycleCount.items.filter((item) => item.variance === 0).length;
+    const varianceLocations = cycleCount.items.filter(
+      (item) => item.variance !== 0 && item.countedQuantity !== null
+    ).length;
+    const totalVariance = cycleCount.items.reduce(
+      (sum, item) => sum + (Number(item.variance) || 0),
+      0
+    );
 
-    cycleCount.summary = { totalItems, counted, matched, variances };
+    cycleCount.summary = {
+      totalLocations,
+      matchedLocations,
+      varianceLocations,
+      totalVariance,
+    };
     cycleCount.status = "COMPLETED";
     cycleCount.completedAt = new Date();
 
@@ -503,6 +566,9 @@ export const approveCycleCount = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
+
     const cycleCount = await CycleCount.findById(req.params.id).session(session);
     if (!cycleCount) {
       await session.abortTransaction();
@@ -518,6 +584,7 @@ export const approveCycleCount = async (req, res) => {
     for (const item of cycleCount.items) {
       if (item.variance && item.variance !== 0) {
         const inventory = await Inventory.findOne({
+          storeId: activeStoreId,
           sku: item.sku,
           locationId: item.locationId,
         }).session(session);
@@ -528,6 +595,7 @@ export const approveCycleCount = async (req, res) => {
 
           // Ghi log adjustment
           const movement = new StockMovement({
+            storeId: activeStoreId,
             type: "ADJUSTMENT",
             sku: item.sku,
             productId: item.productId,
@@ -536,7 +604,7 @@ export const approveCycleCount = async (req, res) => {
             toLocationCode: item.locationCode,
             quantity: Math.abs(item.variance),
             referenceType: "CYCLE_COUNT",
-            referenceId: cycleCount.ccNumber,
+            referenceId: cycleCount.countNumber,
             performedBy: req.user._id,
             performedByName: getActorName(req.user),
             notes: `Điều chỉnh kiểm kê: ${item.variance > 0 ? "+" : ""}${item.variance}`,

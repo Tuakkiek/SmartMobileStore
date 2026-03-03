@@ -18,6 +18,7 @@
     "migrate:instore-order-branch": "node src/scripts/migrate-instore-order-branch.js",
     "migrate:legacy-employee-hcm": "node src/scripts/backfill-hcm-branch-for-legacy-employees.js",
     "migrate:product-warehouse-sync": "node src/scripts/migrate-product-warehouse-sync.js",
+    "migrate:warehouse-store-ids": "node src/scripts/migrate-warehouse-store-ids.js",
     "migrate:regenerate-skus": "node src/scripts/regenerate-all-product-skus.js",
     "check:authz-boundary": "node src/scripts/check-authz-boundary.js",
     "sync:legacy-backup": "node src/scripts/sync-legacy-backup-data.js",

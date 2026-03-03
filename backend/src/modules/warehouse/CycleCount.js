@@ -1,21 +1,20 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/CycleCount.js
-// Quản lý phiếu kiểm kê định kỳ
-// ============================================
-
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const cycleCountSchema = new mongoose.Schema(
   {
-    // Mã phiếu kiểm kê: KK-2025-001
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+
     countNumber: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
-    // Phạm vi kiểm kê
     scope: {
       warehouse: {
         type: String,
@@ -30,16 +29,13 @@ const cycleCountSchema = new mongoose.Schema(
         type: String,
         trim: true,
       },
-      // Nếu zone và aisle null => kiểm kê toàn kho
     },
 
-    // Ngày kiểm kê
     countDate: {
       type: Date,
       required: true,
     },
 
-    // Nhân viên thực hiện
     assignedTo: [
       {
         userId: {
@@ -54,7 +50,6 @@ const cycleCountSchema = new mongoose.Schema(
       },
     ],
 
-    // Chi tiết kiểm kê
     items: [
       {
         locationId: {
@@ -81,15 +76,15 @@ const cycleCountSchema = new mongoose.Schema(
         },
         systemQuantity: {
           type: Number,
-          required: true, // Số lượng theo sổ sách
+          required: true,
         },
         countedQuantity: {
           type: Number,
-          required: true, // Số lượng thực tế đếm được
+          default: null,
         },
         variance: {
           type: Number,
-          required: true, // Chênh lệch
+          default: null,
         },
         notes: {
           type: String,
@@ -97,13 +92,12 @@ const cycleCountSchema = new mongoose.Schema(
         },
         status: {
           type: String,
-          enum: ["MATCHED", "VARIANCE", "INVESTIGATING"],
-          default: "MATCHED",
+          enum: ["PENDING", "MATCHED", "VARIANCE", "INVESTIGATING"],
+          default: "PENDING",
         },
       },
     ],
 
-    // Tổng kết
     summary: {
       totalLocations: {
         type: Number,
@@ -123,14 +117,12 @@ const cycleCountSchema = new mongoose.Schema(
       },
     },
 
-    // Trạng thái
     status: {
       type: String,
       enum: ["DRAFT", "IN_PROGRESS", "COMPLETED", "APPROVED", "REJECTED"],
       default: "DRAFT",
     },
 
-    // Người tạo
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -142,7 +134,6 @@ const cycleCountSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Người duyệt
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -156,7 +147,6 @@ const cycleCountSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
@@ -167,11 +157,12 @@ const cycleCountSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-cycleCountSchema.index({ countNumber: 1 });
-cycleCountSchema.index({ status: 1 });
-cycleCountSchema.index({ countDate: -1 });
-cycleCountSchema.index({ createdBy: 1 });
-cycleCountSchema.index({ "scope.zone": 1, "scope.aisle": 1 });
+cycleCountSchema.index({ storeId: 1, countNumber: 1 }, { unique: true });
+cycleCountSchema.index({ storeId: 1, status: 1 });
+cycleCountSchema.index({ storeId: 1, countDate: -1 });
+cycleCountSchema.index({ storeId: 1, createdBy: 1 });
+cycleCountSchema.index({ storeId: 1, "scope.zone": 1, "scope.aisle": 1 });
 
-export default mongoose.model("CycleCount", cycleCountSchema);
+cycleCountSchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
+
+export default mongoose.models.CycleCount || mongoose.model("CycleCount", cycleCountSchema);

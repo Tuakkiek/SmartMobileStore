@@ -32,6 +32,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 const AISLES_PER_PAGE = 3;
 
@@ -233,6 +234,12 @@ const BinCard = memo(function BinCard({ bin, isHighlighted, onSelect }) {
 const WarehouseVisualizerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, authz, contextMode, simulatedBranchId } = useAuthStore();
+
+  const isGlobalAdmin = Boolean(
+    authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN",
+  );
+  const normalizedMode = String(contextMode || authz?.contextMode || "STANDARD").toUpperCase();
 
   const [loadingWarehouse, setLoadingWarehouse] = useState(true);
   const [loadingZone, setLoadingZone] = useState(false);
@@ -514,6 +521,17 @@ const WarehouseVisualizerPage = () => {
             <Button onClick={handleSearch}>Tìm</Button>
           </div>
         </div>
+
+        {isGlobalAdmin ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Context mode:{" "}
+            <strong>
+              {normalizedMode === "SIMULATED"
+                ? `SIMULATED (${simulatedBranchId || "unknown branch"})`
+                : "ALL"}
+            </strong>
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-4 mb-4 overflow-x-auto pb-2 shrink-0">
           {Object.entries(STATUS_CONFIG).map(([key, config]) => {

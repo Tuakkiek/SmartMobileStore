@@ -58,18 +58,33 @@ const deriveFixedBranchId = (user, authz) => {
 
 const resolveActiveBranchId = ({ user, authz, currentActiveBranchId = "" }) => {
   const fixedBranchId = deriveFixedBranchId(user, authz);
+  const simulatedBranchId = normalizeBranchId(authz?.simulatedBranchId);
+  const contextMode = String(authz?.contextMode || "STANDARD").toUpperCase();
 
   if (isBranchScopedStaff(user, authz)) {
     return fixedBranchId || null;
   }
 
   if (isGlobalAdminContext(user, authz)) {
+    if (contextMode === "SIMULATED" && simulatedBranchId) {
+      return simulatedBranchId;
+    }
     const current = normalizeBranchId(currentActiveBranchId);
     return current || fixedBranchId || null;
   }
 
   const current = normalizeBranchId(currentActiveBranchId);
   return current || fixedBranchId || null;
+};
+
+const resolveContextMode = (authz) => {
+  const mode = String(authz?.contextMode || "STANDARD").trim().toUpperCase();
+  return mode || "STANDARD";
+};
+
+const resolveSimulatedBranchId = (authz) => {
+  const normalized = normalizeBranchId(authz?.simulatedBranchId);
+  return normalized || null;
 };
 
 export const useAuthStore = create(
@@ -82,6 +97,8 @@ export const useAuthStore = create(
       error: null,
       activeBranchId: null,
       authz: null,
+      contextMode: "STANDARD",
+      simulatedBranchId: null,
 
       login: async (credentials) => {
         set({ isLoading: true, error: null });
@@ -102,6 +119,8 @@ export const useAuthStore = create(
             isLoading: false,
             activeBranchId,
             authz: authz || null,
+            contextMode: resolveContextMode(authz),
+            simulatedBranchId: resolveSimulatedBranchId(authz),
           });
 
           const cartStore = useCartStore.getState();
@@ -149,6 +168,8 @@ export const useAuthStore = create(
             error: null,
             activeBranchId: null,
             authz: null,
+            contextMode: "STANDARD",
+            simulatedBranchId: null,
           });
           useCartStore.getState().resetCartState();
         }
@@ -176,6 +197,8 @@ export const useAuthStore = create(
             isAuthenticated: true,
             activeBranchId,
             authz: authz || get().authz,
+            contextMode: resolveContextMode(authz || get().authz),
+            simulatedBranchId: resolveSimulatedBranchId(authz || get().authz),
           });
 
           const cartStore = useCartStore.getState();
@@ -193,6 +216,8 @@ export const useAuthStore = create(
             isAuthenticated: false,
             activeBranchId: null,
             authz: null,
+            contextMode: "STANDARD",
+            simulatedBranchId: null,
           });
           useCartStore.getState().resetCartState();
           return { success: false };
@@ -206,6 +231,70 @@ export const useAuthStore = create(
         }
 
         set({ activeBranchId: normalizeBranchId(branchId) || null });
+      },
+
+      setBranchSimulation: async (branchId) => {
+        const { user, authz } = get();
+        if (!isGlobalAdminContext(user, authz)) {
+          return { success: false, message: "Only global admin can simulate branch" };
+        }
+
+        const normalized = normalizeBranchId(branchId);
+        if (!normalized) {
+          return { success: false, message: "branchId is required" };
+        }
+
+        try {
+          const response = await authAPI.setSimulatedBranchContext({ branchId: normalized });
+          const nextAuthz = response.data?.data?.authz || authz;
+          const nextActiveBranchId =
+            normalizeBranchId(nextAuthz?.activeBranchId) || normalized || null;
+
+          set({
+            authz: nextAuthz || null,
+            activeBranchId: nextActiveBranchId,
+            contextMode: resolveContextMode(nextAuthz),
+            simulatedBranchId: resolveSimulatedBranchId(nextAuthz) || normalized,
+          });
+
+          return { success: true };
+        } catch (error) {
+          return {
+            success: false,
+            message: error.response?.data?.message || "Failed to simulate branch",
+          };
+        }
+      },
+
+      clearBranchSimulation: async () => {
+        const { user, authz } = get();
+        if (!isGlobalAdminContext(user, authz)) {
+          return { success: false, message: "Only global admin can clear simulation" };
+        }
+
+        try {
+          const response = await authAPI.clearSimulatedBranchContext();
+          const nextAuthz = response.data?.data?.authz || authz;
+          const nextActiveBranchId = resolveActiveBranchId({
+            user,
+            authz: nextAuthz,
+            currentActiveBranchId: get().activeBranchId,
+          });
+
+          set({
+            authz: nextAuthz || null,
+            activeBranchId: nextActiveBranchId,
+            contextMode: resolveContextMode(nextAuthz),
+            simulatedBranchId: resolveSimulatedBranchId(nextAuthz),
+          });
+
+          return { success: true };
+        } catch (error) {
+          return {
+            success: false,
+            message: error.response?.data?.message || "Failed to clear simulation",
+          };
+        }
       },
 
       changePassword: async (data) => {
@@ -231,6 +320,8 @@ export const useAuthStore = create(
         isAuthenticated: state.isAuthenticated,
         activeBranchId: state.activeBranchId,
         authz: state.authz,
+        contextMode: state.contextMode,
+        simulatedBranchId: state.simulatedBranchId,
       }),
     },
   ),
