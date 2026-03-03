@@ -1882,6 +1882,13 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
+    if (targetStatus === "RETURNED" && note) {
+      order.shipperInfo = {
+        ...order.shipperInfo,
+        deliveryNote: note,
+      };
+    }
+
     if (targetStatus === "CANCELLED") {
       // ✅ PAID-ORDER GUARD: block trực tiếp hủy đơn đã PAID
       // Note: canTransitionOrderStatus đã chặn ở layer FSM,

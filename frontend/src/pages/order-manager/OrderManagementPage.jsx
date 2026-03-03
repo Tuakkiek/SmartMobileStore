@@ -308,9 +308,19 @@ const OrderManagementPage = () => {
     }).format(safeAmount);
   };
 
-  const openOrderDetail = (order) => {
+  const openOrderDetail = async (order) => {
     setSelectedOrder(order);
     setIsDetailOpen(true);
+
+    try {
+      const response = await orderAPI.getById(order._id);
+      const latestOrder = response?.data?.order || response?.data?.data?.order;
+      if (latestOrder) {
+        setSelectedOrder(latestOrder);
+      }
+    } catch (error) {
+      console.error("Error fetching order details:", error);
+    }
   };
 
   const formatDate = (dateString) => {

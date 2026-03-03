@@ -3,11 +3,46 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatPrice, formatDate, getStatusColor, getStatusStage, getStatusText } from "@/lib/utils";
-import { MapPin, User, Phone, Truck, Clock } from "lucide-react";
+import { MapPin, User, Phone, Truck, Clock, Package } from "lucide-react";
+
+const toTrimmedString = (value) => String(value || "").trim();
+
+const getReturnReasonFromStatusHistory = (statusHistory) => {
+  if (!Array.isArray(statusHistory)) return "";
+
+  for (let i = statusHistory.length - 1; i >= 0; i -= 1) {
+    const entry = statusHistory[i];
+    const status = toTrimmedString(entry?.status).toUpperCase();
+    const note = toTrimmedString(entry?.note);
+
+    if (!note) continue;
+    if (status === "RETURNED") return note;
+  }
+
+  return "";
+};
 
 const OrderDetailDialog = ({ order, open, onClose }) => {
   if (!order) return null;
   const stage = order.statusStage || getStatusStage(order.status);
+  const isReturnedOrder = toTrimmedString(order?.status).toUpperCase() === "RETURNED";
+  const returnReasonFromHistory = getReturnReasonFromStatusHistory(order?.statusHistory);
+  const shipperDeliveryNoteDisplay =
+    toTrimmedString(order?.shipperInfo?.deliveryNote) ||
+    returnReasonFromHistory ||
+    (isReturnedOrder ? toTrimmedString(order?.note || order?.notes) : "");
+  const shippedByDisplayName =
+    order?.shippedByInfo?.shippedByName || order?.pickerInfo?.pickerName || "";
+  const shippedAtDisplay =
+    order?.shippedByInfo?.shippedAt || order?.pickerInfo?.pickedAt || null;
+  const shippedNoteDisplay =
+    order?.shippedByInfo?.shippedNote || order?.pickerInfo?.note || "";
+  const shippedItems = Array.isArray(order?.shippedByInfo?.items)
+    ? order.shippedByInfo.items
+    : [];
+  const hasShippedByInfo = Boolean(
+    shippedByDisplayName || shippedAtDisplay || shippedNoteDisplay || shippedItems.length > 0
+  );
 
   const getImageUrl = (path) => {
     if (!path) return "https://via.placeholder.com/100?text=No+Image";
@@ -31,7 +66,7 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
             </Badge>
             {order.status && stage !== order.status && (
               <Badge variant="outline">
-                Chi tiết: {getStatusText(order.status)}
+                Trạng thái chi tiết: {getStatusText(order.status)}
               </Badge>
             )}
             {order.paymentMethod === "VNPAY" && order.paymentInfo?.vnpayVerified && (
@@ -154,11 +189,69 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
                     <span><strong>Giao hàng:</strong> {formatDate(order.shipperInfo.deliveredAt)}</span>
                   </div>
                 )}
-                {order.shipperInfo.deliveryNote && (
+                {shipperDeliveryNoteDisplay && (
                   <p className="mt-2 p-2 bg-white rounded border">
-                    <strong>Ghi chú:</strong> {order.shipperInfo.deliveryNote}
+                    <strong>Ghi chú:</strong> {shipperDeliveryNoteDisplay}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ✅ NEW: Warehouse Picker Info */}
+          {hasShippedByInfo && (
+            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <h3 className="font-semibold mb-2 flex items-center gap-2 text-amber-800">
+                <Package className="w-4 h-4" />
+                Thông tin người xuất kho
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span>
+                    <strong>Người xuất kho:</strong>{" "}
+                    {shippedByDisplayName || "N/A"}
+                  </span>
+                </div>
+                {shippedAtDisplay && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span>
+                      <strong>Thời gian xuất:</strong>{" "}
+                      {formatDate(shippedAtDisplay)}
+                    </span>
+                  </div>
+                )}
+                {shippedNoteDisplay && (
+                  <p className="mt-2 p-2 bg-white rounded border">
+                    <strong>Ghi chú xuất kho:</strong> {shippedNoteDisplay}
+                  </p>
+                )}
+                {shippedItems.length > 0 && (
+                    <div className="mt-3">
+                      <p className="font-medium text-amber-900 mb-2">
+                        Danh sách sản phẩm đã xuất
+                      </p>
+                      <div className="space-y-1">
+                        {shippedItems.map((item, idx) => (
+                          <div
+                            key={`${item?.sku || "sku"}-${item?.locationCode || "loc"}-${idx}`}
+                            className="grid grid-cols-12 gap-2 p-2 bg-white rounded border text-xs sm:text-sm"
+                          >
+                            <span className="col-span-5 truncate">
+                              <strong>SKU:</strong> {item?.sku || "N/A"}
+                            </span>
+                            <span className="col-span-3">
+                              <strong>SL:</strong> {item?.quantity || 0}
+                            </span>
+                            <span className="col-span-4 truncate">
+                              <strong>Vị trí:</strong> {item?.locationCode || "N/A"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -185,7 +278,7 @@ const OrderDetailDialog = ({ order, open, onClose }) => {
               <span>{formatPrice(order.subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Phí ship:</span>
+              <span>Phí vận chuyển:</span>
               <span>{formatPrice(order.shippingFee)}</span>
             </div>
             {order.promotionDiscount > 0 && (
