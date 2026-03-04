@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
+import { getInterFontStylesheetTag, getPrimaryFontStack } from "@/lib/typography";
 import { useAuthStore } from "@/store/authStore";
 import { posAPI } from "@/lib/api";
 
@@ -144,16 +145,19 @@ const VATInvoicesPage = () => {
     };
 
     const printWindow = window.open("", "", "width=800,height=1000");
+    const primaryFontStack = getPrimaryFontStack();
 
     const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Hóa đơn - ${editableData.orderNumber}</title>
+        ${getInterFontStylesheetTag()}
         <style>
           @page { size: A4; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
+          :root { --font-primary: ${primaryFontStack}; }
+          body { font-family: var(--font-primary); width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
           .flex { display: flex; }
           .justify-between { justify-content: space-between; }
           .items-start { align-items: flex-start; }

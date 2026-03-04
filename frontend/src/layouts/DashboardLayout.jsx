@@ -62,6 +62,11 @@ const DashboardLayout = () => {
     authz?.isGlobalAdmin ||
       String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN"
   );
+  const permissionSet = new Set(Array.isArray(authz?.permissions) ? authz.permissions : []);
+  const canManageUsers =
+    permissionSet.has("*") ||
+    permissionSet.has("users.manage.branch") ||
+    permissionSet.has("users.manage.global");
 
   const handleLogout = async () => {
     await logout();
@@ -222,6 +227,10 @@ const DashboardLayout = () => {
           label: "Hóa đơn",
         }
       );
+    }
+
+    if (canManageUsers && !items.some((item) => item.path === "/admin/employees")) {
+      items.push({ path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" });
     }
 
     return items;

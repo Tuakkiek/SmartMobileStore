@@ -33,6 +33,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils";
+import { getInterFontStylesheetTag, getPrimaryFontStack } from "@/lib/typography";
 import EditInvoiceDialog from "@/components/pos/EditInvoiceDialog";
 
 const CASHIERDashboard = () => {
@@ -156,15 +157,18 @@ const CASHIERDashboard = () => {
 
   const handlePrintInvoice = async (editableData) => {
     try {
+      const primaryFontStack = getPrimaryFontStack();
       const invoiceHTML = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Hóa đơn - ${editableData.orderNumber}</title>
+        ${getInterFontStylesheetTag()}
         <style>
           @page { size: A4; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
+          :root { --font-primary: ${primaryFontStack}; }
+          body { font-family: var(--font-primary); width: 210mm; margin: 0 auto; padding: 15mm 15mm; font-size: 11px; line-height: 1.3; }
           .flex { display: flex; } .justify-between { justify-content: space-between; }
           .items-start { align-items: flex-start; } .mb-3 { margin-bottom: 0.75rem; }
           .flex-1 { flex: 1; } .text-lg { font-size: 1.125rem; } .font-bold { font-weight: bold; }

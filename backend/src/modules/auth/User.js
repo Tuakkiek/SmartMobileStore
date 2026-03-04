@@ -130,6 +130,13 @@ const userSchema = new mongoose.Schema(
       min: 1,
     },
 
+    permissionMode: {
+      type: String,
+      enum: ["ROLE_FALLBACK", "EXPLICIT"],
+      default: "ROLE_FALLBACK",
+      index: true,
+    },
+
     preferences: {
       defaultBranchId: {
         type: mongoose.Schema.Types.ObjectId,

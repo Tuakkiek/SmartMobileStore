@@ -4,224 +4,361 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loading } from "@/components/shared/Loading";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
-import {
-  UserPlus,
-  Search,
-  Users,
-  X,
-  Pencil,
-  Lock,
-  Unlock,
-  Trash2,
-} from "lucide-react";
 import { userAPI, storeAPI } from "@/lib/api";
 import { getStatusText, getNameInitials } from "@/lib/utils";
 import { provinces } from "@/province";
-import { MapPin } from "lucide-react";
-
+import { useAuthStore } from "@/store/authStore";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuthStore } from "@/store/authStore"; // ✅ Import auth store
-// ... imports
-
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UserPlus, Search, Users, X, Pencil, Lock, Unlock, Trash2, MapPin, AlertTriangle } from "lucide-react";
 
 const EMPLOYEE_TABS = [
-  { value: "ALL", label: "Tất cả nhân viên" },
-  { value: "ADMIN", label: "Quản trị viên" },
-  { value: "WAREHOUSE_MANAGER", label: "Quản lý kho" },
-  { value: "PRODUCT_MANAGER", label: "Quản lý sản phẩm" },
-  { value: "ORDER_MANAGER", label: "Quản lý đơn hàng" },
-  { value: "SHIPPER", label: "Shipper" },
-  { value: "POS_STAFF", label: "Nhân viên bán hàng" },
+  { value: "ALL", label: "Tất cả" },
+  { value: "ADMIN", label: "Quản trị" },
+  { value: "WAREHOUSE_MANAGER", label: "QL kho" },
+  { value: "PRODUCT_MANAGER", label: "QL sản phẩm" },
+  { value: "ORDER_MANAGER", label: "QL đơn hàng" },
+  { value: "SHIPPER", label: "Giao hàng" },
+  { value: "POS_STAFF", label: "Nhân viên POS" },
   { value: "CASHIER", label: "Thu ngân" },
 ];
 
-const EmployeesPage = () => {
-  const [activeTab, setActiveTab] = useState("ALL");
-  const [allEmployees, setAllEmployees] = useState([]);
-  const [stores, setStores] = useState([]); // ✅ Added stores state
-  const [isLoading, setIsLoading] = useState(true);
-  const { user } = useAuthStore(); // ✅ Get current user
+const STEPS = [
+  { id: 1, label: "Thông tin cơ bản" },
+  { id: 2, label: "Chi nhánh" },
+  { id: 3, label: "Phân quyền" },
+];
 
-  // Bộ lọc
+const BRANCH_ROLES = new Set([
+  "ADMIN",
+  "BRANCH_ADMIN",
+  "WAREHOUSE_MANAGER",
+  "WAREHOUSE_STAFF",
+  "PRODUCT_MANAGER",
+  "ORDER_MANAGER",
+  "POS_STAFF",
+  "CASHIER",
+  "SHIPPER",
+]);
+
+const normalize = (value) => String(value || "").trim();
+const unique = (items = []) => Array.from(new Set(items.map((item) => normalize(item)).filter(Boolean)));
+
+const isGranularFeatureEnabled = (user) => {
+  const enabled =
+    String(import.meta.env.VITE_FEATURE_PERMISSION_USER_MANAGEMENT || "false").toLowerCase() ===
+    "true";
+  if (!enabled) return false;
+  const pilotRaw = String(import.meta.env.VITE_FEATURE_PERMISSION_USER_MANAGEMENT_PILOT || "").trim();
+  if (!pilotRaw) return true;
+  const pilot = new Set(pilotRaw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
+  return pilot.has(normalize(user?._id).toLowerCase()) || pilot.has(normalize(user?.email).toLowerCase());
+};
+
+const emptyForm = () => ({
+  fullName: "",
+  phoneNumber: "",
+  email: "",
+  province: "",
+  password: "",
+  role: "SHIPPER",
+  avatar: "",
+  storeLocation: "",
+});
+
+const EmployeesPage = () => {
+  const { user, authz } = useAuthStore();
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [employees, setEmployees] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [provinceFilter, setProvinceFilter] = useState("ALL");
-  const [storeFilter, setStoreFilter] = useState("ALL"); // ✅ Store filter state
-
-  // Dialog
+  const [storeFilter, setStoreFilter] = useState("ALL");
+  const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, total: 0 });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState(emptyForm());
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    phoneNumber: "",
-    email: "",
-    province: "",
-    password: "",
-    role: "SHIPPER",
-    avatar: "",
-    storeLocation: "", // ✅ Added storeLocation
+  const [step, setStep] = useState(1);
+  const [catalog, setCatalog] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [permissionKeys, setPermissionKeys] = useState([]);
+  const [templateKeys, setTemplateKeys] = useState([]);
+  const [branchIds, setBranchIds] = useState([]);
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const granularEnabled = useMemo(() => isGranularFeatureEnabled(user), [user]);
+  const isGlobalAdmin = useMemo(
+    () => Boolean(authz?.isGlobalAdmin || String(user?.role || "").toUpperCase() === "GLOBAL_ADMIN"),
+    [authz?.isGlobalAdmin, user?.role]
+  );
+  const roleNeedsBranch = BRANCH_ROLES.has(String(formData.role || "").toUpperCase());
+
+  const catalogByKey = useMemo(() => {
+    const map = new Map();
+    for (const item of catalog) map.set(normalize(item.key), item);
+    return map;
+  }, [catalog]);
+
+  const groupedCatalog = useMemo(() => {
+    const grouped = {};
+    for (const item of catalog) {
+      const moduleKey = normalize(item.module) || "general";
+      if (!grouped[moduleKey]) grouped[moduleKey] = [];
+      grouped[moduleKey].push(item);
+    }
+    return grouped;
+  }, [catalog]);
+
+  const templateByKey = useMemo(() => {
+    const map = new Map();
+    for (const item of templates) map.set(normalize(item.key), item);
+    return map;
+  }, [templates]);
+
+  const hasBranchScopedPermission = permissionKeys.some((key) => {
+    const p = catalogByKey.get(normalize(key));
+    return String(p?.scopeType || "").toUpperCase() === "BRANCH";
   });
 
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    total: 0,
-  });
+  const sensitivePermissions = permissionKeys.filter((key) => catalogByKey.get(normalize(key))?.isSensitive);
+
+  const filteredEmployees = useMemo(
+    () =>
+      employees.filter((item) => {
+        if (statusFilter !== "ALL" && item.status !== statusFilter) return false;
+        if (provinceFilter !== "ALL" && item.province !== provinceFilter) return false;
+        return true;
+      }),
+    [employees, statusFilter, provinceFilter]
+  );
+
+  const branchStoreOptions = useMemo(() => {
+    if (isGlobalAdmin) return stores;
+    const allowed = unique(authz?.allowedBranchIds || []);
+    if (!allowed.length) return stores;
+    return stores.filter((store) => allowed.includes(normalize(store._id)));
+  }, [stores, isGlobalAdmin, authz?.allowedBranchIds]);
 
   useEffect(() => {
     fetchEmployees(1);
-    fetchStores(); // ✅ Fetch stores on mount
-  }, [activeTab, searchQuery, storeFilter]); // ✅ Trigger on storeFilter change
+    fetchStores();
+  }, [activeTab, searchQuery, storeFilter]);
+
+  useEffect(() => {
+    if (granularEnabled) fetchMetadata();
+  }, [granularEnabled]);
+
+  useEffect(() => {
+    if (!granularEnabled) return;
+    if (step !== 3) return;
+    if (!showCreateDialog && !editingEmployee) return;
+    refreshPreview(editingEmployee?._id || "new-user-preview");
+  }, [
+    granularEnabled,
+    step,
+    showCreateDialog,
+    editingEmployee?._id,
+    permissionKeys.join("|"),
+    branchIds.join("|"),
+    templateKeys.join("|"),
+  ]);
 
   const fetchStores = async () => {
-      try {
-          const res = await storeAPI.getAll({ limit: 100 });
-          setStores(res.data.stores || []);
-      } catch (err) {
-          console.error("Failed to fetch stores", err);
-      }
+    try {
+      const res = await storeAPI.getAll({ limit: 200 });
+      setStores(res.data.stores || []);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const fetchEmployees = async (page = 1) => {
     try {
       setIsLoading(true);
-      const params = {
+      const res = await userAPI.getAllEmployees({
         page,
         limit: 12,
-        search: searchQuery.trim() || undefined,
+        search: searchQuery || undefined,
         role: activeTab !== "ALL" ? activeTab : undefined,
-        storeLocation: storeFilter !== "ALL" ? storeFilter : undefined, // ✅ Pass store filter
+        storeLocation: storeFilter !== "ALL" ? storeFilter : undefined,
         sortBy: "createdAt",
         sortOrder: "desc",
-      };
-
-      const res = await userAPI.getAllEmployees(params);
-
-      const { employees = [], pagination: pag = {} } = res.data.data;
-
-      setAllEmployees(employees);
-      setPagination({
-        currentPage: pag.currentPage || 1,
-        totalPages: pag.totalPages || 1,
-        total: pag.total || 0,
       });
-    } catch (err) {
+      const data = res.data?.data || {};
+      setEmployees(data.employees || []);
+      setPagination({
+        currentPage: data.pagination?.currentPage || 1,
+        totalPages: data.pagination?.totalPages || 1,
+        total: data.pagination?.total || 0,
+      });
+    } catch (e) {
       setError("Không thể tải danh sách nhân viên");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const displayedEmployees = allEmployees;
-
-  const handleTabChange = (val) => {
-    setActiveTab(val);
-    setSearchQuery("");
-    setStatusFilter("ALL");
-    setProvinceFilter("ALL");
-    setStoreFilter("ALL"); // ✅ Reset store filter
-  };
-
-  const handleChange = (e) => {
-    setError("");
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-  // Hàm xử lý thay đổi trang
-  const handlePageChange = (newPage) => {
-    if (
-      newPage >= 1 &&
-      newPage <= pagination.totalPages &&
-      newPage !== pagination.currentPage
-    ) {
-      fetchEmployees(newPage);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  const fetchMetadata = async () => {
+    try {
+      const res = await userAPI.getPermissionCatalog();
+      setCatalog(res.data?.data?.catalog || []);
+      setTemplates(res.data?.data?.templates || []);
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể tải metadata phân quyền");
     }
   };
 
-  const handleProvinceChange = (value) => {
-    setFormData((prev) => ({ ...prev, province: value }));
+  const applyTemplate = (templateKey) => {
+    const normalizedKey = normalize(templateKey).toUpperCase();
+    setTemplateKeys(normalizedKey ? [normalizedKey] : []);
+    const template = templateByKey.get(normalizedKey);
+    if (!template) {
+      setPermissionKeys([]);
+      return;
+    }
+    setPermissionKeys(unique((template.permissions || []).map((item) => item.key)));
   };
 
-  const handleRoleChange = (value) => {
-    setFormData((prev) => ({ ...prev, role: value }));
+  const buildPermissionPayload = (targetUserId = "new-user-preview") => ({
+    enableGranularPermissions: true,
+    templateKeys,
+    branchIds,
+    targetUserId,
+    permissions: permissionKeys
+      .map((key) => {
+        const item = catalogByKey.get(normalize(key));
+        if (!item) return null;
+        const scopeType = String(item.scopeType || "").toUpperCase();
+        if (scopeType === "BRANCH") return { key: item.key, scopeType: "BRANCH", branchIds };
+        if (scopeType === "SELF") return { key: item.key, scopeType: "SELF", scopeId: targetUserId };
+        return { key: item.key, scopeType: "GLOBAL" };
+      })
+      .filter(Boolean),
+  });
+
+  const refreshPreview = async (targetUserId = "new-user-preview") => {
+    if (!granularEnabled) return;
+    try {
+      setPreviewLoading(true);
+      const res = await userAPI.previewPermissionAssignments({
+        ...buildPermissionPayload(targetUserId),
+        role: formData.role,
+        storeLocation: branchIds[0] || formData.storeLocation,
+      });
+      setPreview(res.data?.data || null);
+      if (res.data?.success === false) {
+        setError(res.data?.message || "Xem trước phân quyền bị từ chối");
+      }
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể xem trước phân quyền");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const resetWizard = (role = "SHIPPER") => {
+    setStep(1);
+    setPreview(null);
+    setBranchIds([]);
+    setPermissionKeys([]);
+    setTemplateKeys([]);
+    if (granularEnabled && templateByKey.has(role)) applyTemplate(role);
   };
 
   const openCreateDialog = () => {
     const role = activeTab !== "ALL" ? activeTab : "SHIPPER";
-    setFormData({
-      ...formData,
-      role,
-      province: "",
-      password: "",
-      fullName: "",
-      phoneNumber: "",
-      email: "",
-      avatar: "",
-      storeLocation: "",
-    });
+    setFormData({ ...emptyForm(), role });
+    resetWizard(role);
     setShowCreateDialog(true);
   };
 
-  const openEdit = (emp) => {
-    setEditingEmployee(emp);
+  const openEditDialog = async (employee) => {
+    setEditingEmployee(employee);
     setFormData({
-      fullName: emp.fullName || "",
-      phoneNumber: emp.phoneNumber || "",
-      email: emp.email || "",
-      province: emp.province || "",
+      fullName: employee.fullName || "",
+      phoneNumber: employee.phoneNumber || "",
+      email: employee.email || "",
+      province: employee.province || "",
       password: "",
-      role: emp.role,
-      avatar: emp.avatar || "",
-      storeLocation: emp.storeLocation || "",
+      role: employee.role || "SHIPPER",
+      avatar: employee.avatar || "",
+      storeLocation: employee.storeLocation || "",
     });
+    setStep(1);
+    setBranchIds(unique([employee.storeLocation]));
+    setPermissionKeys([]);
+    setTemplateKeys([]);
+    setPreview(null);
+    if (granularEnabled) {
+      try {
+        const res = await userAPI.getUserEffectivePermissions(employee._id);
+        const data = res.data?.data || {};
+        setPermissionKeys(unique((data.permissionGrants || []).map((item) => item.key)));
+        setBranchIds(
+          unique([
+            ...(data.allowedBranchIds || []),
+            ...(data.permissionGrants || [])
+              .filter((item) => String(item.scopeType || "").toUpperCase() === "BRANCH")
+              .map((item) => item.scopeId),
+          ])
+        );
+      } catch (e) {
+        setError(e.response?.data?.message || "Không thể tải quyền hiện tại");
+      }
+    }
   };
 
   const closeDialog = () => {
     setShowCreateDialog(false);
     setEditingEmployee(null);
-    setFormData({
-      fullName: "",
-      phoneNumber: "",
-      email: "",
-      province: "",
-      password: "",
-      role: "SHIPPER",
-      avatar: "",
-      storeLocation: "",
-    });
+    setFormData(emptyForm());
+    setStep(1);
+    setBranchIds([]);
+    setPermissionKeys([]);
+    setTemplateKeys([]);
+    setPreview(null);
     setError("");
   };
+
+  const basePayload = () => ({
+    fullName: formData.fullName,
+    phoneNumber: formData.phoneNumber,
+    email: formData.email,
+    province: formData.province,
+    password: formData.password,
+    role: formData.role,
+    avatar: formData.avatar,
+    storeLocation: branchIds[0] || formData.storeLocation,
+    branchIds,
+  });
 
   const handleCreate = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError("");
     try {
-      await userAPI.createEmployee(formData);
+      const payload = basePayload();
+      if (granularEnabled) {
+        Object.assign(payload, buildPermissionPayload("new-user-preview"));
+        await userAPI.createUser(payload);
+      } else {
+        await userAPI.createEmployee(payload);
+      }
       await fetchEmployees();
-      setShowCreateDialog(false);
       closeDialog();
-    } catch (err) {
-      setError(err.response?.data?.message || "Tạo nhân viên thất bại");
+    } catch (e) {
+      setError(e.response?.data?.message || "Tạo nhân viên thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -229,526 +366,164 @@ const EmployeesPage = () => {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!editingEmployee) return;
     setIsSubmitting(true);
+    setError("");
     try {
-      const payload = { ...formData };
-      if (!payload.password?.trim()) delete payload.password;
+      const payload = basePayload();
+      if (!normalize(payload.password)) delete payload.password;
       await userAPI.updateEmployee(editingEmployee._id, payload);
+      if (granularEnabled) {
+        await userAPI.updateUserPermissions(editingEmployee._id, buildPermissionPayload(editingEmployee._id));
+      }
       await fetchEmployees();
-      setEditingEmployee(null);
       closeDialog();
-    } catch (err) {
-      setError(err.response?.data?.message || "Cập nhật thất bại");
+    } catch (e) {
+      setError(e.response?.data?.message || "Cập nhật thất bại");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleToggleStatus = async (id) => {
+  const toggleStatus = async (id) => {
     try {
       await userAPI.toggleEmployeeStatus(id);
       await fetchEmployees();
-    } catch (err) {
-      alert("Thao tác thất bại");
+    } catch {
+      setError("Thao tác thất bại");
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Xóa nhân viên này? Không thể hoàn tác!")) return;
+  const removeEmployee = async (id) => {
+    if (!window.confirm("Xóa nhân viên này?")) return;
     try {
       await userAPI.deleteEmployee(id);
       await fetchEmployees();
-    } catch (err) {
-      alert("Xóa thất bại");
+    } catch {
+      setError("Xóa thất bại");
     }
   };
 
-  const resetFilters = () => {
-    setSearchQuery("");
-    setStatusFilter("ALL");
-    setProvinceFilter("ALL");
-    setStoreFilter("ALL"); // ✅ Reset store filter
-  };
+  const renderWizard = () => (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {STEPS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`rounded-full px-3 py-1 text-xs ${
+              step === item.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+            }`}
+            onClick={() => setStep(item.id)}
+          >
+            {item.id}. {item.label}
+          </button>
+        ))}
+      </div>
 
-  const hasFilter =
-    searchQuery || statusFilter !== "ALL" || provinceFilter !== "ALL" || storeFilter !== "ALL";
+      {step === 1 ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div><Label>Họ và tên *</Label><Input name="fullName" value={formData.fullName} onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))} required /></div>
+          <div><Label>Số điện thoại *</Label><Input name="phoneNumber" value={formData.phoneNumber} onChange={(e) => setFormData((prev) => ({ ...prev, phoneNumber: e.target.value }))} required /></div>
+          <div><Label>Email</Label><Input type="email" value={formData.email} onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))} /></div>
+          <div><Label>Tỉnh/Thành</Label><Select value={formData.province} onValueChange={(value) => setFormData((prev) => ({ ...prev, province: value }))}><SelectTrigger><SelectValue placeholder="Chọn tỉnh/thành" /></SelectTrigger><SelectContent className="max-h-96">{provinces.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Mật khẩu {editingEmployee ? "(mới)" : "*"}</Label><Input type="password" value={formData.password} onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))} required={!editingEmployee} /></div>
+          <div><Label>Vai trò *</Label><Select value={formData.role} onValueChange={(value) => { setFormData((prev) => ({ ...prev, role: value })); if (granularEnabled && templateByKey.has(value)) applyTemplate(value); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EMPLOYEE_TABS.filter((t) => t.value !== "ALL").map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+          <div className="col-span-2"><Label>Ảnh đại diện (URL)</Label><Input value={formData.avatar} onChange={(e) => setFormData((prev) => ({ ...prev, avatar: e.target.value }))} /></div>
+        </div>
+      ) : null}
+
+      {step === 2 ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="text-sm font-medium">Phạm vi chi nhánh</div>
+          {branchStoreOptions.map((store) => (
+            <label key={store._id} className="flex items-center gap-2 rounded border p-2 text-sm">
+              <Checkbox checked={branchIds.includes(normalize(store._id))} onCheckedChange={(checked) => setBranchIds((prev) => checked ? unique([...prev, store._id]) : prev.filter((id) => normalize(id) !== normalize(store._id)))} />
+              <span>{store.name} ({store.code})</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+
+      {step === 3 ? (
+        <div className="space-y-3">
+          {granularEnabled ? (
+            <>
+              <div className="rounded border p-3">
+                <Label className="mb-2 block">Chọn mẫu phân quyền</Label>
+                <Select value={templateKeys[0] || ""} onValueChange={(value) => applyTemplate(value)}>
+                  <SelectTrigger><SelectValue placeholder="Chọn mẫu" /></SelectTrigger>
+                  <SelectContent>{templates.map((t) => <SelectItem key={t._id || t.key} value={t.key}>{t.name || t.key}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="max-h-72 space-y-3 overflow-y-auto rounded border p-3">
+                {Object.entries(groupedCatalog).map(([moduleKey, modulePermissions]) => (
+                  <div key={moduleKey} className="space-y-2">
+                    <div className="text-xs font-semibold uppercase text-muted-foreground">{moduleKey}</div>
+                    {modulePermissions.map((item) => (
+                      <label key={item._id || item.key} className="flex items-start justify-between gap-2 rounded border p-2 text-sm">
+                        <span className="flex items-start gap-2">
+                          <Checkbox checked={permissionKeys.includes(normalize(item.key))} onCheckedChange={(checked) => setPermissionKeys((prev) => checked ? unique([...prev, item.key]) : prev.filter((k) => normalize(k) !== normalize(item.key)))} />
+                          <span>
+                            <span className="block font-medium">{item.key}</span>
+                            <span className="text-xs text-muted-foreground">{item.description || `${item.module}.${item.action}`}</span>
+                          </span>
+                        </span>
+                        <span className="flex gap-1">
+                          <Badge variant="outline" className="text-[10px]">{item.scopeType}</Badge>
+                          {item.isSensitive ? <Badge variant="destructive" className="text-[10px]">Nhạy cảm</Badge> : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between rounded border p-3 text-sm">
+                <span>Đã chọn: {permissionKeys.length}</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => refreshPreview(editingEmployee?._id || "new-user-preview")}>{previewLoading ? "Đang tải bản xem trước..." : "Tải lại bản xem trước"}</Button>
+              </div>
+              {sensitivePermissions.length ? (
+                <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="mb-1 flex items-center gap-1 font-semibold"><AlertTriangle className="h-4 w-4" /> Quyền nhạy cảm</div>
+                  <div>{sensitivePermissions.join(", ")}</div>
+                </div>
+              ) : null}
+              {preview ? <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">Quyền hiệu lực: {preview.assignments?.length || 0}</div> : null}
+            </>
+          ) : (
+            <div className="rounded border p-3 text-sm text-muted-foreground">Tính năng phân quyền chi tiết đã bị vô hiệu hóa.</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const hasFilter = searchQuery || statusFilter !== "ALL" || provinceFilter !== "ALL" || storeFilter !== "ALL";
+  const canContinue =
+    step === 1
+      ? normalize(formData.fullName) && normalize(formData.phoneNumber) && (editingEmployee || normalize(formData.password))
+      : step === 2
+        ? !(roleNeedsBranch || hasBranchScopedPermission) || branchIds.length > 0
+        : true;
 
   return (
     <div className="space-y-6 p-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Quản lý nhân viên</h1>
-        </div>
-        <Button onClick={openCreateDialog}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Thêm nhân viên
-        </Button>
-      </div>
+      <div className="flex items-center justify-between"><h1 className="text-3xl font-bold">Quản lý nhân viên</h1><Button onClick={openCreateDialog}><UserPlus className="mr-2 h-4 w-4" />Thêm nhân viên</Button></div>
+      <Tabs value={activeTab} onValueChange={(value) => { setActiveTab(value); setSearchQuery(""); setStatusFilter("ALL"); setProvinceFilter("ALL"); setStoreFilter("ALL"); }}><TabsList className="grid w-full grid-cols-3 md:grid-cols-4 lg:grid-cols-9">{EMPLOYEE_TABS.map((tab) => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}</TabsList></Tabs>
+      <div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-10" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Tìm tên, email, số điện thoại..." /></div><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-48"><SelectValue placeholder="Trạng thái" /></SelectTrigger><SelectContent><SelectItem value="ALL">Tất cả</SelectItem><SelectItem value="ACTIVE">ACTIVE</SelectItem><SelectItem value="LOCKED">LOCKED</SelectItem></SelectContent></Select><Select value={provinceFilter} onValueChange={setProvinceFilter}><SelectTrigger className="w-56"><SelectValue placeholder="Tỉnh/Thành" /></SelectTrigger><SelectContent className="max-h-96"><SelectItem value="ALL">Tất cả tỉnh/thành</SelectItem>{provinces.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select>{isGlobalAdmin ? <Select value={storeFilter} onValueChange={setStoreFilter}><SelectTrigger className="w-56"><SelectValue placeholder="Chi nhánh" /></SelectTrigger><SelectContent><SelectItem value="ALL">Tất cả chi nhánh</SelectItem>{stores.map((s) => <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>)}</SelectContent></Select> : null}{hasFilter ? <Button variant="outline" onClick={() => { setSearchQuery(""); setStatusFilter("ALL"); setProvinceFilter("ALL"); setStoreFilter("ALL"); }}><X className="mr-2 h-4 w-4" />Xóa bộ lọc</Button> : null}</div>
+      {error ? <ErrorMessage message={error} /> : null}
+      {isLoading ? <Loading /> : filteredEmployees.length === 0 ? <div className="py-16 text-center"><Users className="mx-auto mb-4 h-16 w-16 text-muted-foreground opacity-50" /><p className="text-muted-foreground">{hasFilter ? "Không tìm thấy nhân viên" : "Chưa có nhân viên nào"}</p></div> : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{filteredEmployees.map((emp) => <Card key={emp._id}><CardContent className="p-5"><div className="mb-4 flex items-start justify-between"><Avatar className="h-12 w-12">{emp.avatar ? <AvatarImage src={emp.avatar} alt={emp.fullName} /> : <AvatarFallback>{getNameInitials(emp.fullName)}</AvatarFallback>}</Avatar><Badge className={emp.status === "ACTIVE" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}>{getStatusText(emp.status)}</Badge></div><h3 className="font-semibold">{emp.fullName}</h3><p className="text-sm text-muted-foreground">{emp.phoneNumber}</p>{emp.email ? <p className="text-xs text-muted-foreground">{emp.email}</p> : null}{emp.storeLocation ? <Badge variant="secondary" className="mt-2 text-xs"><MapPin className="mr-1 h-3 w-3" />{stores.find((s) => normalize(s._id) === normalize(emp.storeLocation))?.name || "Chi nhánh"}</Badge> : null}<div className="mt-4 flex gap-2"><Button size="sm" variant="outline" onClick={() => openEditDialog(emp)}><Pencil className="h-3.5 w-3.5" /></Button><Button size="sm" variant="outline" onClick={() => toggleStatus(emp._id)}>{emp.status === "ACTIVE" ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}</Button><Button size="sm" variant="outline" onClick={() => removeEmployee(emp._id)}><Trash2 className="h-3.5 w-3.5" /></Button></div></CardContent></Card>)}</div>}
+      {pagination.totalPages > 1 ? <div className="mt-8 flex items-center justify-center gap-6"><Button variant="outline" size="sm" disabled={pagination.currentPage === 1} onClick={() => fetchEmployees(pagination.currentPage - 1)}>Trước</Button><span className="text-sm">Trang {pagination.currentPage}/{pagination.totalPages}</span><Button variant="outline" size="sm" disabled={pagination.currentPage === pagination.totalPages} onClick={() => fetchEmployees(pagination.currentPage + 1)}>Sau</Button></div> : null}
 
-      {/* TABS + FILTER + LIST + DIALOGS - GIỮ NGUYÊN NHƯ BÊN DƯỚI */}
-      {/* (Mình giữ nguyên phần JSX của bạn vì nó đã đúng 100%) */}
-
-      {/* TABS */}
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-9 w-full">
-          {EMPLOYEE_TABS.map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="text-xs md:text-sm"
-            >
-              {tab.value === "ALL"}
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {/* FILTER BAR */}
-      <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Tìm tên, số điện thoại, email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Trạng thái" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
-            <SelectItem value="ACTIVE">Đang hoạt động</SelectItem>
-            <SelectItem value="LOCKED">Đã khóa</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={provinceFilter} onValueChange={setProvinceFilter}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Tỉnh/Thành phố" />
-          </SelectTrigger>
-          <SelectContent className="max-h-96">
-            <SelectItem value="ALL">Tất cả tỉnh/thành</SelectItem>
-            {provinces.map((p) => (
-              <SelectItem key={p} value={p}>
-                {p}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* ✅ Store Filter for Global Admin */}
-        {user?.role === "GLOBAL_ADMIN" && (
-          <Select value={storeFilter} onValueChange={setStoreFilter}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Chi nhánh" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Tất cả chi nhánh</SelectItem>
-              {stores.map((s) => (
-                <SelectItem key={s._id} value={s._id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {hasFilter && (
-          <Button variant="outline" size="sm" onClick={resetFilters}>
-            <X className="w-4 h-4 mr-2" />
-            Xóa bộ lọc
-          </Button>
-        )}
-      </div>
-
-      {/* DANH SÁCH NHÂN VIÊN */}
-      {isLoading ? (
-        <Loading />
-      ) : displayedEmployees.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-16 h-16 mx-auto text-muted-foreground mb-4 opacity-50" />
-          <p className="text-lg text-muted-foreground">
-            {hasFilter
-              ? "Không tìm thấy nhân viên nào"
-              : "Chưa có nhân viên nào"}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {displayedEmployees.map((emp) => (
-            <Card key={emp._id} className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <Avatar className="w-12 h-12">
-                    {emp.avatar ? (
-                      <AvatarImage src={emp.avatar} alt={emp.fullName} />
-                    ) : (
-                      <AvatarFallback className="bg-primary/10">
-                        {getNameInitials(emp.fullName)}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <Badge
-                    className={`
-                        ${
-                          emp.status === "ACTIVE"
-                            ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                            : "bg-red-500 hover:bg-red-600 text-white"
-                        } 
-                        font-medium
-                      `}
-                  >
-                    {getStatusText(emp.status)}
-                  </Badge>
-                </div>
-
-                <h3 className="font-semibold text-lg">{emp.fullName}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {emp.phoneNumber}
-                </p>
-                {emp.email && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {emp.email}
-                  </p>
-                )}
-                {emp.province && (
-                  <Badge variant="outline" className="mt-2 text-xs">
-                    {emp.province}
-                  </Badge>
-                )}
-                
-                {/* Store Location Badge */}
-                {emp.storeLocation && (
-                    <Badge variant="secondary" className="mt-2 ml-2 text-xs">
-                        <MapPin className="w-3 h-3 mr-1" />
-                        {stores.find(s => s._id === emp.storeLocation)?.name || "Chi nhánh khác"}
-                    </Badge>
-                )}
-
-                <div className="flex gap-2 mt-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openEdit(emp)}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleToggleStatus(emp._id)}
-                  >
-                    {emp.status === "ACTIVE" ? (
-                      <Lock className="w-3.5 h-3.5" />
-                    ) : (
-                      <Unlock className="w-3.5 h-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDelete(emp._id)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-      {/* PHÂN TRANG ĐẸP - GIỐNG CASHIER */}
-      {pagination.totalPages > 1 && (
-        <div className="flex justify-center items-center gap-8 mt-12">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pagination.currentPage === 1 || isLoading}
-            onClick={() => handlePageChange(pagination.currentPage - 1)}
-          >
-            Trước
-          </Button>
-
-          <div className="text-sm font-medium min-w-[140px] text-center">
-            Trang {pagination.currentPage} / {pagination.totalPages}
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={
-              pagination.currentPage === pagination.totalPages || isLoading
-            }
-            onClick={() => handlePageChange(pagination.currentPage + 1)}
-          >
-            Sau
-          </Button>
-        </div>
-      )}
-
-      {/* DIALOG TẠO & SỬA - giữ nguyên, chỉ thêm handleRoleChange */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Thêm nhân viên mới</DialogTitle>
-            {/* Visually hidden description for accessibility */}
-            <div className="sr-only" aria-describedby="dialog-description">
-              Điền thông tin để tạo nhân viên mới
-            </div>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
-            {error && <ErrorMessage message={error} />}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Họ và tên *</Label>
-                <Input
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div>
-                <Label>Số điện thoại *</Label>
-                <Input
-                  name="phoneNumber"
-                  value={formData.phoneNumber}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <Label>Tỉnh/Thành phố</Label>
-                <Select
-                  value={formData.province}
-                  onValueChange={handleProvinceChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn tỉnh/thành phố" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-96">
-                    {provinces.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Mật khẩu *</Label>
-                <Input
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div>
-                <Label>Vai trò *</Label>
-                <Select value={formData.role} onValueChange={handleRoleChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EMPLOYEE_TABS.slice(1).map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-               {/* BRANCH SELECTION */}
-               <div>
-                  <Label>Chi nhánh / Cửa hàng</Label>
-                   <Select
-                    value={formData.storeLocation}
-                    onValueChange={(val) => setFormData(prev => ({...prev, storeLocation: val}))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn chi nhánh" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store._id} value={store._id}>
-                          {store.name} ({store.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-              <div className="col-span-2">
-                <Label>URL ảnh đại diện</Label>
-                <Input
-                  name="avatar"
-                  type="url"
-                  value={formData.avatar}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeDialog}>
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Đang tạo..." : "Tạo nhân viên"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => (open ? setShowCreateDialog(true) : closeDialog())}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Thêm nhân viên mới</DialogTitle></DialogHeader><form onSubmit={handleCreate} className="space-y-4">{renderWizard()}<DialogFooter><Button type="button" variant="outline" onClick={closeDialog}>Hủy</Button>{step > 1 ? <Button type="button" variant="outline" onClick={() => setStep((prev) => prev - 1)}>Quay lại</Button> : null}{step < 3 ? <Button type="button" disabled={!canContinue} onClick={() => setStep((prev) => prev + 1)}>Tiếp tục</Button> : <Button type="submit" disabled={isSubmitting || ((roleNeedsBranch || hasBranchScopedPermission) && branchIds.length === 0)}>{isSubmitting ? "Đang tạo..." : "Tạo nhân viên"}</Button>}</DialogFooter></form></DialogContent>
       </Dialog>
 
-      {editingEmployee && (
-        <Dialog
-          open={!!editingEmployee}
-          onOpenChange={() => setEditingEmployee(null)}
-        >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Chỉnh sửa nhân viên</DialogTitle>
-               {/* Visually hidden description for accessibility */}
-              <div className="sr-only" aria-describedby="dialog-description">
-                Cập nhật thông tin nhân viên
-              </div>
-            </DialogHeader>
-            <form onSubmit={handleUpdate} className="space-y-4">
-              {error && <ErrorMessage message={error} />}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Họ và tên *</Label>
-                  <Input
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Số điện thoại *</Label>
-                  <Input
-                    name="phoneNumber"
-                    value={formData.phoneNumber}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div>
-                  <Label>Tỉnh/Thành phố</Label>
-                  <Select
-                    value={formData.province}
-                    onValueChange={handleProvinceChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn tỉnh/thành phố" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-96">
-                      {provinces.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Mật khẩu mới (để trống nếu không đổi)</Label>
-                  <Input
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div>
-                  <Label>Vai trò *</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={handleRoleChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EMPLOYEE_TABS.slice(1).map((r) => (
-                        <SelectItem key={r.value} value={r.value}>
-                          {r.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* BRANCH SELECTION */}
-                <div>
-                  <Label>Chi nhánh / Cửa hàng</Label>
-                   <Select
-                    value={formData.storeLocation}
-                    onValueChange={(val) => setFormData(prev => ({...prev, storeLocation: val}))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn chi nhánh" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store._id} value={store._id}>
-                          {store.name} ({store.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-2">
-                  <Label>URL ảnh đại diện</Label>
-                  <Input
-                    name="avatar"
-                    type="url"
-                    value={formData.avatar}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={closeDialog}>
-                  Hủy
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  Cập nhật
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
+      {editingEmployee ? (
+        <Dialog open={Boolean(editingEmployee)} onOpenChange={(open) => (!open ? closeDialog() : null)}>
+          <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Chỉnh sửa nhân viên</DialogTitle></DialogHeader><form onSubmit={handleUpdate} className="space-y-4">{renderWizard()}<DialogFooter><Button type="button" variant="outline" onClick={closeDialog}>Hủy</Button>{step > 1 ? <Button type="button" variant="outline" onClick={() => setStep((prev) => prev - 1)}>Quay lại</Button> : null}{step < 3 ? <Button type="button" disabled={!canContinue} onClick={() => setStep((prev) => prev + 1)}>Tiếp tục</Button> : <Button type="submit" disabled={isSubmitting || ((roleNeedsBranch || hasBranchScopedPermission) && branchIds.length === 0)}>{isSubmitting ? "Đang cập nhật..." : "Cập nhật"}</Button>}</DialogFooter></form></DialogContent>
         </Dialog>
-      )}
+      ) : null}
     </div>
   );
 };

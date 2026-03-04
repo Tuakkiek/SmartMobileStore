@@ -79,7 +79,6 @@ const ProductDetailPage = () => {
   const [variants, setVariants] = useState([]);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [userSelectedKey, _setUserSelectedKey] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddToCartModal, setShowAddToCartModal] = useState(false);
@@ -293,28 +292,33 @@ const ProductDetailPage = () => {
     return grouped;
   };
 
+  const getVariantDisplayName = (variant) => {
+    if (!variant) return "";
+
+    const variantName = String(variant.variantName || "").trim();
+    const cpuGpuAttr = String(variant?.attributes?.cpuGpu || "").trim();
+    const isLegacyMacVariant =
+      Boolean(cpuGpuAttr) && /^\d+\s*(GB|TB)\b/i.test(variantName);
+
+    if (isLegacyMacVariant) {
+      return cpuGpuAttr;
+    }
+
+    if (variantName) {
+      return variantName;
+    }
+
+    return String(variant?.attributes?.storage || "").trim() || "Mac dinh";
+  };
+
   const getVariantKeyOptions = () => {
     if (!product || !selectedVariant) return [];
     
     // ✅ UPDATED: Support both universal and legacy products
     let keyField = "storage";
     if (productSource === "universal") {
-      // Universal products: extract storage from variantName (e.g., "256GB - Natural Titanium" -> "256GB")
-      const extractStorage = (variantName) => {
-        const match = variantName?.match(/^([\d]+(?:GB|TB))/);
-        return match ? match[1] : variantName;
-      };
-      
       const filtered = variants.filter((v) => v.color === selectedVariant.color);
-      const storageOptions = [...new Set(filtered.map((v) => extractStorage(v.variantName)))];
-      return storageOptions.sort((a, b) => {
-        const parseStorage = (str) => {
-          const num = parseInt(str);
-          if (str?.includes("TB")) return num * 1000;
-          return num || 0;
-        };
-        return parseStorage(a) - parseStorage(b);
-      });
+      return [...new Set(filtered.map((v) => getVariantDisplayName(v)).filter(Boolean))];
     } else {
       // Legacy products: use VARIANT_KEY_FIELD mapping
       keyField = VARIANT_KEY_FIELD[product.category] || "storage";
@@ -377,7 +381,7 @@ const ProductDetailPage = () => {
   const discount = getDiscountPercent();
   const groupedVariants = getGroupedVariants();
   const variantKeyOptions = getVariantKeyOptions();
-  const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
+  const selectedVariantName = getVariantDisplayName(selectedVariant);
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
@@ -669,41 +673,27 @@ const ProductDetailPage = () => {
                 </div>
               </div>
 
-              {/* Storage Selection */}
+              {/* Variant Name Selection */}
               <div className="mb-4">
-                <h3 className="text-sm font-semibold mb-3">
-                  {/* Show "Dung lượng" ONLY if keys look like storage, otherwise "Phiên bản" */}
-                  {(productSource === "universal" && variantKeyOptions.some(opt => opt.match(/^[\d]+(?:GB|TB)$/i))) || keyField === "storage" 
-                    ? "Dung lượng" 
-                    : "Phiên bản"}
-                </h3>
+                <h3 className="text-sm font-semibold mb-3">Biến thể</h3>
                 <div className="flex flex-wrap gap-2">
                   {variantKeyOptions.map((option) => {
                     // ✅ UPDATED: Find variant differently for universal vs legacy
-                    let variant, isSelected;
-                    
-                    if (productSource === "universal") {
-                      // Universal: match by extracting storage from variantName
-                      variant = variants.find(
-                        (v) => v.color === selectedVariant.color && v.variantName?.startsWith(option)
-                      );
-                      isSelected = selectedVariant.variantName?.startsWith(option);
-                    } else {
-                      // Legacy: use keyField
-                      const keyField = VARIANT_KEY_FIELD[product.category] || "storage";
-                      variant = variants.find(
-                        (v) => v.color === selectedVariant.color && v[keyField] === option
-                      );
-                      isSelected = selectedVariant[keyField] === option;
-                    }
-                    
+                    const candidates = variants.filter(
+                      (v) =>
+                        v.color === selectedVariant.color &&
+                        getVariantDisplayName(v) === option
+                    );
+                    const variant =
+                      candidates.find((v) => v.stock > 0) || candidates[0];
+                    const isSelected = selectedVariantName === option;
                     const hasStock = variant?.stock > 0;
 
                     return (
                       <button
                         key={option}
                         onClick={() =>
-                          hasStock && handleVariantSelect(variant, false)
+                          hasStock && handleVariantSelect(variant)
                         }
                         disabled={!hasStock}
                         className={`relative px-6 py-3 border-2 rounded-lg font-medium transition-all ${
@@ -747,23 +737,11 @@ const ProductDetailPage = () => {
                     );
                     
                     // ✅ UPDATED: Preserve storage preference for both universal and legacy
-                    let preferredVariant;
-                    
-                    if (productSource === "universal") {
-                      // Universal: Extract current storage from selected variant
-                      const currentStorage = selectedVariant?.variantName?.match(/^([\d]+(?:GB|TB))/)?.[1];
-                      
-                      // Find variant with same storage in new color
-                      preferredVariant = groupedVariants[color].find((v) => {
-                        const vStorage = v.variantName?.match(/^([\d]+(?:GB|TB))/)?.[1];
-                        return vStorage === currentStorage && v.stock > 0;
-                      });
-                    } else {
-                      // Legacy: Use keyField matching
-                      preferredVariant = groupedVariants[color].find(
-                        (v) => v[keyField] === userSelectedKey && v.stock > 0
-                      );
-                    }
+                    const preferredVariant = groupedVariants[color].find(
+                      (v) =>
+                        getVariantDisplayName(v) === selectedVariantName &&
+                        v.stock > 0
+                    );
                     
                     const availableVariant =
                       preferredVariant ||
@@ -777,7 +755,7 @@ const ProductDetailPage = () => {
                         key={color}
                         onClick={() =>
                           hasStock &&
-                          handleVariantSelect(availableVariant, true)
+                          handleVariantSelect(availableVariant)
                         }
                         disabled={!hasStock}
                         className={`relative flex items-center gap-3 p-3 border-2 rounded-lg transition-all ${
@@ -1011,7 +989,3 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
-
-
-
-

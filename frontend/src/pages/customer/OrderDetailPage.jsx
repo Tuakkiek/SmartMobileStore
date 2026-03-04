@@ -42,6 +42,7 @@ import {
   getStatusColor,
   getStatusText,
 } from "@/lib/utils";
+import { getInterFontStylesheetTag, getPrimaryFontStack } from "@/lib/typography";
 import { toast } from "sonner";
 import InvoiceTemplate from "@/components/pos/InvoiceTemplate";
 
@@ -255,10 +256,12 @@ const OrderDetailPage = () => {
 
   const handlePrint = () => {
     const printContent = invoiceRef.current;
+    const primaryFontStack = getPrimaryFontStack();
     const win = window.open("", "", "width=900,height=650");
-    win.document.write("<html><head><title>Hóa đơn</title>");
+    win.document.write("<html><head><title>Invoice</title>");
+    win.document.write(getInterFontStylesheetTag());
     win.document.write(
-      "<style>body{font-family:system-ui,Arial,sans-serif; padding:20px;}</style>"
+      `<style>:root{--font-primary:${primaryFontStack};}body{font-family:var(--font-primary); padding:20px;}</style>`
     );
     win.document.write("</head><body>");
     win.document.write(print.innerHTML);

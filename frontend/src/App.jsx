@@ -75,7 +75,7 @@ const ScrollToTop = () => {
 // ============================================
 // PROTECTED ROUTE
 // ============================================
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, allowedPermissions }) => {
   const { isAuthenticated, user, authz, rehydrating } = useAuthStore();
 
   if (rehydrating) return <Loading />;
@@ -85,6 +85,15 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   // ✅ GLOBAL_ADMIN bypass (role-based or authz system-role based)
   if (user?.role === "GLOBAL_ADMIN" || authz?.isGlobalAdmin) {
     return children;
+  }
+
+  if (allowedPermissions && allowedPermissions.length > 0) {
+    const permissionSet = new Set(Array.isArray(authz?.permissions) ? authz.permissions : []);
+    const hasAnyPermission =
+      permissionSet.has("*") || allowedPermissions.some((permission) => permissionSet.has(permission));
+    if (!hasAnyPermission) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -218,7 +227,6 @@ function App() {
           }
         >
           <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/employees" element={<EmployeesPage />} />
           <Route path="/admin/promotions" element={<PromotionsPage />} />
           <Route path="/admin/homepage-editor" element={<HomePageEditor />} />
           <Route path="/admin/short-videos" element={<ShortVideoAdminPage />} />
@@ -228,6 +236,18 @@ function App() {
           <Route path="/admin/inventory-dashboard" element={<InventoryDashboard />} />
           <Route path="/admin/stock-in" element={<StockInPage />} />
           <Route path="/admin/audit-logs" element={<AuditLogPage />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute
+              allowedPermissions={["users.manage.branch", "users.manage.global"]}
+            >
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/admin/employees" element={<EmployeesPage />} />
         </Route>
 
         <Route

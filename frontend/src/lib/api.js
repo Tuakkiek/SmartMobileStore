@@ -335,6 +335,13 @@ export const userAPI = {
     api.put(`/users/addresses/${addressId}`, data),
   deleteAddress: (addressId) => api.delete(`/users/addresses/${addressId}`),
   getAllEmployees: (params = {}) => api.get("/users/employees", { params }),
+  getPermissionCatalog: () => api.get("/users/permissions/catalog"),
+  getPermissionTemplates: () => api.get("/users/permissions/templates"),
+  previewPermissionAssignments: (data) => api.post("/users/permissions/preview", data),
+  createUser: (data) => api.post("/users", data),
+  updateUserPermissions: (id, data) => api.put(`/users/${id}/permissions`, data),
+  getUserEffectivePermissions: (id, params = {}) =>
+    api.get(`/users/${id}/effective-permissions`, { params }),
   createEmployee: (data) => api.post("/users/employees", data),
   toggleEmployeeStatus: (id) =>
     api.patch(`/users/employees/${id}/toggle-status`),

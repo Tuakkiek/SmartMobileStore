@@ -56,7 +56,20 @@ const authHeader = (role) => ({
   Authorization: `Bearer ${fixture.tokens[role]}`,
 });
 
-const createUserByRole = async (role) => {
+const mapRoleToAssignmentRole = (role) => {
+  const normalized = String(role || "").toUpperCase();
+  if (normalized === "ADMIN") return "BRANCH_ADMIN";
+  return normalized;
+};
+
+const createUserByRole = async ({ role, assignedStoreIds = [] }) => {
+  const roleAssignments = assignedStoreIds.map((storeId, index) => ({
+    storeId,
+    roles: [mapRoleToAssignmentRole(role)],
+    status: "ACTIVE",
+    isPrimary: index === 0,
+  }));
+
   const user = await User.create({
     role,
     fullName: `${role} User`,
@@ -64,9 +77,25 @@ const createUserByRole = async (role) => {
     email: `${role.toLowerCase()}@test.local`,
     password: "Strong@1234",
     status: "ACTIVE",
+    storeLocation: assignedStoreIds[0] ? String(assignedStoreIds[0]) : "",
+    authzVersion: 2,
+    branchAssignments: roleAssignments,
   });
 
   return user;
+};
+
+const createGlobalAdmin = async () => {
+  return User.create({
+    role: "GLOBAL_ADMIN",
+    systemRoles: ["GLOBAL_ADMIN"],
+    fullName: "GLOBAL_ADMIN User",
+    phoneNumber: nextPhone(),
+    email: "global_admin@test.local",
+    password: "Strong@1234",
+    status: "ACTIVE",
+    authzVersion: 2,
+  });
 };
 
 const createStore = async ({ name, code }) =>
@@ -87,11 +116,6 @@ const createStore = async ({ name, code }) =>
   });
 
 const seedFixture = async () => {
-  const users = {};
-  for (const role of ROLES) {
-    users[role] = await createUserByRole(role);
-  }
-
   const sourceStore = await createStore({
     name: "Source Store",
     code: nextStoreCode("SRC"),
@@ -104,6 +128,15 @@ const seedFixture = async () => {
     name: "Extra Store",
     code: nextStoreCode("EXT"),
   });
+
+  const users = {};
+  for (const role of ROLES) {
+    users[role] = await createUserByRole({
+      role,
+      assignedStoreIds: [targetStore._id, sourceStore._id],
+    });
+  }
+  users.GLOBAL_ADMIN = await createGlobalAdmin();
 
   const product = await UniversalProduct.create({
     name: "Integration Test Phone",
@@ -197,7 +230,7 @@ const seedFixture = async () => {
     product,
     variant,
     tokens: Object.fromEntries(
-      ROLES.map((role) => [
+      [...ROLES, "GLOBAL_ADMIN"].map((role) => [
         role,
         jwt.sign({ id: String(users[role]._id) }, JWT_SECRET, { expiresIn: "1h" }),
       ])
@@ -264,13 +297,13 @@ test("role permissions matrix for targeted dashboard + transfer endpoints", asyn
       name: "GET /dashboard/replenishment",
       method: "get",
       path: "/api/inventory/dashboard/replenishment",
-      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"],
+      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"],
     },
     {
       name: "POST /dashboard/replenishment/run-snapshot",
       method: "post",
       path: "/api/inventory/dashboard/replenishment/run-snapshot",
-      allowed: ["ADMIN", "WAREHOUSE_MANAGER"],
+      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"],
       expectAllowedStatus: 200,
       body: {},
     },
@@ -278,13 +311,13 @@ test("role permissions matrix for targeted dashboard + transfer endpoints", asyn
       name: "GET /dashboard/predictions",
       method: "get",
       path: "/api/inventory/dashboard/predictions",
-      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"],
+      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"],
     },
     {
       name: "POST /transfers/request",
       method: "post",
       path: "/api/inventory/transfers/request",
-      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF", "ORDER_MANAGER"],
+      allowed: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"],
       body: {},
     },
     {
@@ -395,7 +428,7 @@ test("POST /dashboard/replenishment/run-snapshot and GET /dashboard/replenishmen
 
   const readResponse = await request(app)
     .get("/api/inventory/dashboard/replenishment")
-    .set(authHeader("ORDER_MANAGER"));
+    .set(authHeader("WAREHOUSE_MANAGER"));
 
   assert.equal(readResponse.status, 200);
   assert.equal(readResponse.body.success, true);
@@ -452,7 +485,7 @@ test("transfer lifecycle: request -> approve -> ship -> receive -> complete", as
 
   const requestResponse = await request(app)
     .post("/api/inventory/transfers/request")
-    .set(authHeader("ORDER_MANAGER"))
+    .set(authHeader("WAREHOUSE_STAFF"))
     .send({
       fromStoreId: fixture.stores.sourceStore._id,
       toStoreId: fixture.stores.targetStore._id,
@@ -496,7 +529,9 @@ test("transfer lifecycle: request -> approve -> ship -> receive -> complete", as
     storeId: fixture.stores.sourceStore._id,
     productId: fixture.product._id,
     variantSku: fixture.variant.sku,
-  }).lean();
+  })
+    .setOptions({ skipBranchIsolation: true })
+    .lean();
   assert.equal(reservedSourceAfterApprove.reserved, approvedQuantity);
 
   const shipResponse = await request(app)
@@ -515,7 +550,9 @@ test("transfer lifecycle: request -> approve -> ship -> receive -> complete", as
     storeId: fixture.stores.sourceStore._id,
     productId: fixture.product._id,
     variantSku: fixture.variant.sku,
-  }).lean();
+  })
+    .setOptions({ skipBranchIsolation: true })
+    .lean();
   assert.equal(sourceAfterShip.quantity, 60 - approvedQuantity);
   assert.equal(sourceAfterShip.reserved, 0);
 
@@ -542,7 +579,9 @@ test("transfer lifecycle: request -> approve -> ship -> receive -> complete", as
     storeId: fixture.stores.targetStore._id,
     productId: fixture.product._id,
     variantSku: fixture.variant.sku,
-  }).lean();
+  })
+    .setOptions({ skipBranchIsolation: true })
+    .lean();
   assert.equal(destinationAfterReceive.quantity, receivedQuantity);
   assert.equal(destinationAfterReceive.available, receivedQuantity);
 
@@ -608,7 +647,7 @@ test("transfer lifecycle supports reject and cancel with reserved rollback", asy
 
   const cancelRequestResponse = await request(app)
     .post("/api/inventory/transfers/request")
-    .set(authHeader("ORDER_MANAGER"))
+    .set(authHeader("WAREHOUSE_STAFF"))
     .send({
       fromStoreId: fixture.stores.sourceStore._id,
       toStoreId: fixture.stores.targetStore._id,
@@ -647,7 +686,9 @@ test("transfer lifecycle supports reject and cancel with reserved rollback", asy
     storeId: fixture.stores.sourceStore._id,
     productId: fixture.product._id,
     variantSku: fixture.variant.sku,
-  }).lean();
+  })
+    .setOptions({ skipBranchIsolation: true })
+    .lean();
   assert.equal(sourceBeforeCancel.reserved, 2);
 
   const cancelResponse = await request(app)
@@ -664,23 +705,25 @@ test("transfer lifecycle supports reject and cancel with reserved rollback", asy
     storeId: fixture.stores.sourceStore._id,
     productId: fixture.product._id,
     variantSku: fixture.variant.sku,
-  }).lean();
+  })
+    .setOptions({ skipBranchIsolation: true })
+    .lean();
   assert.equal(sourceAfterCancel.reserved, 0);
 });
 
 test("integration checks: consolidated/store-comparison/alerts/movements respond successfully", async () => {
   const healthChecks = [
-    "/api/inventory/dashboard/consolidated",
-    "/api/inventory/dashboard/store-comparison",
-    "/api/inventory/dashboard/alerts",
-    "/api/inventory/dashboard/movements",
-    "/api/inventory/transfers",
+    { path: "/api/inventory/dashboard/consolidated", role: "ADMIN" },
+    { path: "/api/inventory/dashboard/store-comparison", role: "GLOBAL_ADMIN" },
+    { path: "/api/inventory/dashboard/alerts", role: "ADMIN" },
+    { path: "/api/inventory/dashboard/movements", role: "ADMIN" },
+    { path: "/api/inventory/transfers", role: "ADMIN" },
   ];
 
-  for (const path of healthChecks) {
-    const response = await request(app).get(path).set(authHeader("ADMIN"));
-    assert.equal(response.status, 200, `${path} should return 200`);
-    assert.equal(response.body.success, true, `${path} should return success=true`);
+  for (const check of healthChecks) {
+    const response = await request(app).get(check.path).set(authHeader(check.role));
+    assert.equal(response.status, 200, `${check.path} should return 200`);
+    assert.equal(response.body.success, true, `${check.path} should return success=true`);
   }
 });
 

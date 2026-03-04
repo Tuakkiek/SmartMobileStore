@@ -2,7 +2,7 @@
 import User from "./User.js";
 import { signToken } from "../../middleware/authMiddleware.js";
 import { normalizeUserAccess } from "../../authz/userAccessResolver.js";
-import { buildPermissionSet } from "../../authz/policyEngine.js";
+import { resolveEffectiveAccessContext } from "../../authz/authorizationService.js";
 
 // ============================================
 // VALIDATION HELPERS
@@ -49,23 +49,45 @@ const branchFromBody = (body = {}) => {
   return "";
 };
 
-const buildEffectivePermissionsPayload = (user, resolvedContext = null) => {
+const buildEffectivePermissionsPayload = async (user, resolvedContext = null) => {
   const normalized = resolvedContext || normalizeUserAccess(user);
-  const permissions = buildPermissionSet(normalized);
+  const alreadyResolved =
+    resolvedContext &&
+    resolvedContext.permissions instanceof Set &&
+    Array.isArray(resolvedContext.permissionGrants);
+
+  const effective = alreadyResolved
+    ? resolvedContext
+    : await resolveEffectiveAccessContext({
+        user,
+        normalizedAccess: normalized,
+        activeBranchId: normalized.activeBranchId || normalized.defaultBranchId || "",
+      });
+  const permissions = effective.permissions instanceof Set ? effective.permissions : new Set();
+
   return {
-    authzVersion: normalized.authzVersion,
-    authzState: normalized.authzState,
-    role: normalized.role,
-    systemRoles: normalized.systemRoles,
-    taskRoles: normalized.taskRoles,
-    branchAssignments: normalized.branchAssignments,
-    allowedBranchIds: normalized.allowedBranchIds,
-    activeBranchId: normalized.activeBranchId || normalized.defaultBranchId || "",
-    simulatedBranchId: normalized.simulatedBranchId || "",
-    contextMode: normalized.contextMode || "STANDARD",
-    noBranchAssigned: Boolean(normalized.noBranchAssigned),
-    requiresBranchAssignment: Boolean(normalized.requiresBranchAssignment),
-    isGlobalAdmin: Boolean(normalized.isGlobalAdmin),
+    authzVersion: effective.authzVersion,
+    authzState: effective.authzState,
+    role: effective.role,
+    systemRoles: effective.systemRoles,
+    taskRoles: effective.taskRoles,
+    branchAssignments: effective.branchAssignments,
+    allowedBranchIds: effective.allowedBranchIds,
+    activeBranchId: effective.activeBranchId || effective.defaultBranchId || "",
+    simulatedBranchId: effective.simulatedBranchId || "",
+    contextMode: effective.contextMode || "STANDARD",
+    noBranchAssigned: Boolean(effective.noBranchAssigned),
+    requiresBranchAssignment: Boolean(effective.requiresBranchAssignment),
+    isGlobalAdmin: Boolean(effective.isGlobalAdmin),
+    permissionMode: String(effective.permissionMode || "ROLE_FALLBACK"),
+    permissionGrants: Array.isArray(effective.permissionGrants)
+      ? effective.permissionGrants.map((grant) => ({
+          key: grant.key,
+          scopeType: grant.scopeType,
+          scopeId: grant.scopeId || "",
+          source: grant.source || "",
+        }))
+      : [],
     permissions: Array.from(permissions).sort(),
   };
 };
@@ -216,7 +238,7 @@ export const login = async (req, res) => {
           province: user.province,
           avatar: user.avatar,
         },
-        authz: buildEffectivePermissionsPayload(user),
+        authz: await buildEffectivePermissionsPayload(user),
         token,
       },
     });
@@ -266,7 +288,7 @@ export const getCurrentUser = async (req, res) => {
       success: true,
       data: {
         user,
-        authz: buildEffectivePermissionsPayload(user, req.authz || null),
+        authz: await buildEffectivePermissionsPayload(user, req.authz || null),
       },
     });
   } catch (error) {
@@ -494,7 +516,7 @@ export const getEffectivePermissions = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        authz: buildEffectivePermissionsPayload(user, resolved),
+        authz: await buildEffectivePermissionsPayload(user, resolved),
       },
     });
   } catch (error) {
@@ -563,7 +585,7 @@ export const setActiveBranchContext = async (req, res) => {
       success: true,
       message: "Active branch updated",
       data: {
-        authz: buildEffectivePermissionsPayload(updatedUser, resolved),
+        authz: await buildEffectivePermissionsPayload(updatedUser, resolved),
       },
     });
   } catch (error) {
@@ -607,7 +629,7 @@ export const setSimulatedBranchContext = async (req, res) => {
       success: true,
       message: "Simulation branch updated",
       data: {
-        authz: buildEffectivePermissionsPayload(user, resolved),
+        authz: await buildEffectivePermissionsPayload(user, resolved),
       },
     });
   } catch (error) {
@@ -636,7 +658,7 @@ export const clearSimulatedBranchContext = async (req, res) => {
       success: true,
       message: "Simulation branch cleared",
       data: {
-        authz: buildEffectivePermissionsPayload(user, resolved),
+        authz: await buildEffectivePermissionsPayload(user, resolved),
       },
     });
   } catch (error) {

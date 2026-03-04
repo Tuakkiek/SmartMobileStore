@@ -10,56 +10,253 @@ const ALLOW = () => ({ allowed: true, code: "AUTHZ_ALLOWED" });
 
 const rolePermissions = (role) => ROLE_PERMISSIONS[role] || [];
 
-export const buildPermissionSet = (authz) => {
-  const permissions = new Set();
+const normalizePermissionKey = (value) => String(value || "").trim().toLowerCase();
+const normalizeScopeType = (value) => String(value || "").trim().toUpperCase();
+const normalizeScopeId = (value) => String(value || "").trim();
 
-  // System roles are global (e.g. GLOBAL_ADMIN → "*")
-  for (const role of (authz?.systemRoles || [])) {
+const inferScopeTypeFromPermission = (permission) => {
+  const key = normalizePermissionKey(permission);
+  if (key === "*") return "GLOBAL";
+  if (key.endsWith(".global")) return "GLOBAL";
+  if (key.endsWith(".personal")) return "SELF";
+  if (key.startsWith("task.")) return "SELF";
+  return "BRANCH";
+};
+
+const createGrant = ({
+  key,
+  scopeType,
+  scopeId = "",
+  sourceType = "ROLE",
+  source = "",
+  isSensitive = false,
+} = {}) => {
+  const normalizedKey = normalizePermissionKey(key);
+  if (!normalizedKey) return null;
+
+  const normalizedScopeType = normalizeScopeType(scopeType || inferScopeTypeFromPermission(normalizedKey));
+  const normalizedScopeId = normalizeScopeId(scopeId);
+
+  return {
+    key: normalizedKey,
+    scopeType: normalizedScopeType,
+    scopeId: normalizedScopeType === "GLOBAL" ? "" : normalizedScopeId,
+    sourceType,
+    source,
+    isSensitive: Boolean(isSensitive),
+  };
+};
+
+const dedupeGrants = (grants = []) => {
+  const byKey = new Map();
+  for (const grant of grants) {
+    const normalized = createGrant(grant);
+    if (!normalized?.key) continue;
+    const dedupeKey = `${normalized.key}|${normalized.scopeType}|${normalized.scopeId}`;
+    byKey.set(dedupeKey, normalized);
+  }
+  return Array.from(byKey.values());
+};
+
+export const buildPermissionGrantMap = (grants = []) => {
+  const map = new Map();
+  for (const grant of dedupeGrants(grants)) {
+    if (!map.has(grant.key)) {
+      map.set(grant.key, []);
+    }
+    map.get(grant.key).push(grant);
+  }
+  return map;
+};
+
+export const buildRolePermissionGrants = (authz = {}) => {
+  const grants = [];
+  const activeBranchId = normalizeScopeId(authz?.activeBranchId);
+  const userId = normalizeScopeId(authz?.userId);
+
+  for (const role of authz?.systemRoles || []) {
     for (const permission of rolePermissions(role)) {
-      permissions.add(permission);
+      grants.push(
+        createGrant({
+          key: permission,
+          scopeType: permission === "*" ? "GLOBAL" : inferScopeTypeFromPermission(permission),
+          sourceType: "SYSTEM",
+          source: role,
+        })
+      );
     }
   }
 
-  // Task roles are global (e.g. SHIPPER)
-  for (const role of (authz?.taskRoles || [])) {
+  for (const role of authz?.taskRoles || []) {
     for (const permission of rolePermissions(role)) {
-      permissions.add(permission);
+      const inferredScopeType = inferScopeTypeFromPermission(permission);
+      grants.push(
+        createGrant({
+          key: permission,
+          scopeType: inferredScopeType,
+          scopeId: inferredScopeType === "SELF" ? userId : "",
+          sourceType: "TASK",
+          source: role,
+        })
+      );
     }
   }
 
-  // ── KILL-SWITCH FIX: Only unpack roles from the ACTIVE branch ──
-  // A role in Branch A must NOT grant permissions in Branch B.
-  const activeBranchId = authz?.activeBranchId ? String(authz.activeBranchId) : "";
   if (activeBranchId) {
     const activeAssignment = (authz?.branchAssignments || []).find(
-      (a) => String(a.storeId) === activeBranchId
+      (assignment) => normalizeScopeId(assignment?.storeId) === activeBranchId
     );
     if (activeAssignment) {
-      for (const role of (activeAssignment.roles || [])) {
+      for (const role of activeAssignment.roles || []) {
         for (const permission of rolePermissions(role)) {
-          permissions.add(permission);
+          const inferredScopeType = inferScopeTypeFromPermission(permission);
+          grants.push(
+            createGrant({
+              key: permission,
+              scopeType: inferredScopeType,
+              scopeId:
+                inferredScopeType === "BRANCH"
+                  ? activeBranchId
+                  : inferredScopeType === "SELF"
+                    ? userId
+                    : "",
+              sourceType: "BRANCH_ROLE",
+              source: role,
+            })
+          );
         }
       }
     }
   }
 
-  // Legacy fallback: if authz.role is set and user has no V2 data,
-  // still grant permissions for the legacy role (for backward compat during migration)
-  if (authz?.role && !authz?.systemRoles?.length && !authz?.branchAssignments?.length) {
+  const hasV2Data =
+    (authz?.systemRoles || []).length > 0 ||
+    (authz?.taskRoles || []).length > 0 ||
+    (authz?.branchAssignments || []).length > 0;
+  const hasExplicitPermissionMode = String(authz?.permissionMode || "").toUpperCase() === "EXPLICIT";
+
+  if (authz?.role && !hasV2Data && !hasExplicitPermissionMode) {
     for (const permission of rolePermissions(authz.role)) {
-      permissions.add(permission);
+      const inferredScopeType = inferScopeTypeFromPermission(permission);
+      grants.push(
+        createGrant({
+          key: permission,
+          scopeType: inferredScopeType,
+          scopeId: inferredScopeType === "SELF" ? userId : "",
+          sourceType: "LEGACY_ROLE",
+          source: authz.role,
+        })
+      );
+    }
+  }
+
+  return dedupeGrants(grants);
+};
+
+export const buildPermissionSet = (authz) => {
+  const permissions = new Set();
+  const activeBranchId = normalizeScopeId(authz?.activeBranchId);
+  const userId = normalizeScopeId(authz?.userId);
+  const explicitMode = String(authz?.permissionMode || "").trim().toUpperCase() === "EXPLICIT";
+
+  const grants =
+    Array.isArray(authz?.permissionGrants)
+      ? explicitMode || authz.permissionGrants.length > 0
+        ? dedupeGrants(authz.permissionGrants)
+        : buildRolePermissionGrants(authz)
+      : buildRolePermissionGrants(authz);
+
+  for (const grant of grants) {
+    if (!grant) continue;
+    if (grant.key === "*") {
+      permissions.add("*");
+      continue;
+    }
+
+    if (grant.scopeType === "GLOBAL") {
+      permissions.add(grant.key);
+      continue;
+    }
+
+    if (grant.scopeType === "BRANCH") {
+      if (!grant.scopeId || (activeBranchId && grant.scopeId === activeBranchId)) {
+        permissions.add(grant.key);
+      }
+      continue;
+    }
+
+    if (grant.scopeType === "SELF") {
+      if (!grant.scopeId || (userId && grant.scopeId === userId)) {
+        permissions.add(grant.key);
+      }
     }
   }
 
   return permissions;
 };
 
-export const hasPermission = (authz, action) => {
+export const hasPermission = (authz, action, { mode = "branch", resource = null } = {}) => {
   if (!action) return false;
-  if (!authz?.permissions || !(authz.permissions instanceof Set)) {
+  const normalizedAction = normalizePermissionKey(action);
+  const permissions = authz?.permissions;
+
+  if (!(permissions instanceof Set)) {
     return false;
   }
-  return authz.permissions.has("*") || authz.permissions.has(action);
+
+  if (!permissions.has("*") && !permissions.has(normalizedAction)) {
+    return false;
+  }
+
+  const permissionGrantMap =
+    authz?.permissionGrantMap instanceof Map
+      ? authz.permissionGrantMap
+      : Array.isArray(authz?.permissionGrants)
+        ? buildPermissionGrantMap(authz.permissionGrants)
+        : null;
+
+  if (!permissionGrantMap) {
+    return true;
+  }
+
+  const grants = permissionGrantMap.get(normalizedAction) || [];
+  if (!grants.length) {
+    return true;
+  }
+
+  const targetBranchId = normalizeScopeId(resource?.branchId || authz?.activeBranchId);
+  const targetAssigneeId = normalizeScopeId(
+    resource?.assigneeId || resource?.userId || authz?.userId
+  );
+
+  for (const rawGrant of grants) {
+    const grant = createGrant(rawGrant);
+    if (!grant) continue;
+
+    if (grant.key === "*") {
+      return true;
+    }
+
+    if (grant.scopeType === "GLOBAL") {
+      return true;
+    }
+
+    if (grant.scopeType === "BRANCH") {
+      if (!grant.scopeId) return true;
+      if (targetBranchId && grant.scopeId === targetBranchId) return true;
+    }
+
+    if (grant.scopeType === "SELF") {
+      if (!grant.scopeId) return true;
+      if (targetAssigneeId && grant.scopeId === targetAssigneeId) return true;
+    }
+  }
+
+  if (mode === "global") {
+    return false;
+  }
+
+  return false;
 };
 
 export const evaluatePolicy = ({
@@ -77,7 +274,7 @@ export const evaluatePolicy = ({
     return DENY("AUTHZ_ACTION_MISSING", "Action is required");
   }
 
-  if (!hasPermission(authz, action)) {
+  if (!hasPermission(authz, action, { mode, resource })) {
     return DENY("AUTHZ_ACTION_DENIED", "Action is not granted");
   }
 
@@ -91,7 +288,6 @@ export const evaluatePolicy = ({
     return DENY("AUTHZ_GLOBAL_SCOPE_DENIED", "Global scope is not allowed");
   }
 
-  // GLOBAL_ADMIN bypasses the active-branch requirement — they can operate across all branches
   if (requireActiveBranch && mode === "branch" && !activeBranchId && !isGlobalAdmin) {
     return DENY("AUTHZ_ACTIVE_BRANCH_REQUIRED", "Active branch context is required");
   }

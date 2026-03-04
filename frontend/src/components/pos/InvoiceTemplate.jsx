@@ -28,7 +28,6 @@ const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
     <div
       className="bg-white mx-auto"
       style={{
-        fontFamily: "Arial, sans-serif",
         width: "210mm",
         minHeight: "297mm",
         maxHeight: "297mm",

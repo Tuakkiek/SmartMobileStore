@@ -1,5 +1,5 @@
 import { normalizeUserAccess } from "../../authz/userAccessResolver.js";
-import { buildPermissionSet } from "../../authz/policyEngine.js";
+import { resolveEffectiveAccessContext } from "../../authz/authorizationService.js";
 import { runWithBranchContext } from "../../authz/branchContext.js";
 
 const deny = (res, code, message, status = 403) =>
@@ -26,7 +26,15 @@ export const resolveAccessContext = async (req, res, next) => {
   const isGlobalAdmin = normalized.isGlobalAdmin;
   const isCustomer = req.user.role === "CUSTOMER";
   const isShipper = req.user.role === "SHIPPER";
-  const allowedBranchIds = normalized.allowedBranchIds || [];
+  const bootstrapContext = await resolveEffectiveAccessContext({
+    user: req.user,
+    normalizedAccess: normalized,
+    activeBranchId: "",
+  });
+  const allowedBranchIds = bootstrapContext.allowedBranchIds || [];
+  const requiresBranchAssignment = Boolean(
+    normalized.requiresBranchAssignment || allowedBranchIds.length > 0
+  );
 
   const headerActiveBranch = req.headers?.["x-active-branch-id"]
     ? String(req.headers["x-active-branch-id"]).trim()
@@ -39,23 +47,23 @@ export const resolveAccessContext = async (req, res, next) => {
     !isGlobalAdmin &&
     !isCustomer &&
     !isShipper &&
-    normalized.requiresBranchAssignment;
+    requiresBranchAssignment;
 
-  if (isBranchScopedStaff && allowedBranchIds.length !== 1) {
+  if (isBranchScopedStaff && allowedBranchIds.length === 0) {
     return deny(
       res,
-      "AUTHZ_INVALID_BRANCH_ASSIGNMENT",
-      "Staff account must have exactly one active branch assignment",
+      "AUTHZ_NO_BRANCH_ASSIGNED",
+      "Staff account must have at least one active branch assignment",
     );
   }
 
-  const fixedBranchId = isBranchScopedStaff ? String(allowedBranchIds[0] || "") : "";
+  const defaultBranchId = isBranchScopedStaff ? String(allowedBranchIds[0] || "") : "";
 
-  if (isBranchScopedStaff && headerActiveBranch && headerActiveBranch !== fixedBranchId) {
+  if (isBranchScopedStaff && headerActiveBranch && !allowedBranchIds.includes(headerActiveBranch)) {
     return deny(
       res,
-      "AUTHZ_BRANCH_SWITCH_FORBIDDEN",
-      "Branch context is fixed for this account",
+      "AUTHZ_BRANCH_FORBIDDEN",
+      "Requested branch is not assigned to current user",
     );
   }
 
@@ -76,7 +84,7 @@ export const resolveAccessContext = async (req, res, next) => {
     simulatedBranchId = headerSimulatedBranch;
     activeBranchId = headerSimulatedBranch;
   } else if (isBranchScopedStaff) {
-    activeBranchId = fixedBranchId;
+    activeBranchId = headerActiveBranch || defaultBranchId;
   } else if (headerActiveBranch) {
     activeBranchId = headerActiveBranch;
   }
@@ -95,7 +103,7 @@ export const resolveAccessContext = async (req, res, next) => {
     !isGlobalAdmin &&
     !isCustomer &&
     !isShipper &&
-    normalized.requiresBranchAssignment &&
+    requiresBranchAssignment &&
     allowedBranchIds.length === 0;
 
   let scopeMode = "branch";
@@ -103,8 +111,18 @@ export const resolveAccessContext = async (req, res, next) => {
     scopeMode = "global";
   }
 
+  const resolvedAccess = await resolveEffectiveAccessContext({
+    user: req.user,
+    normalizedAccess: {
+      ...normalized,
+      allowedBranchIds,
+      requiresBranchAssignment,
+    },
+    activeBranchId: activeBranchId || "",
+  });
+
   const authzContext = {
-    ...normalized,
+    ...resolvedAccess,
     isGlobalAdmin,
     isCustomer,
     allowedBranchIds,
@@ -113,8 +131,8 @@ export const resolveAccessContext = async (req, res, next) => {
     contextMode,
     noBranchAssigned,
     scopeMode,
+    requiresBranchAssignment,
   };
-  authzContext.permissions = buildPermissionSet(authzContext);
 
   req.authz = authzContext;
 

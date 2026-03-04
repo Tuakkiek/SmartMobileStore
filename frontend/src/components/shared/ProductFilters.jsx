@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { SlidersHorizontal, ChevronDown, X, Check } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Check } from "lucide-react";
 
 // ============================================
 // CONSTANTS & CONFIG
@@ -94,6 +94,19 @@ const ProductFilters = ({
       max: preset.max === Infinity ? "" : preset.max.toString(),
     });
   };
+
+  useEffect(() => {
+    const normalizedMin = String(priceRange?.min || "");
+    const normalizedMax = String(priceRange?.max || "");
+
+    const matchedPreset = PRICE_RANGES.find((preset) => {
+      const presetMin = preset.min === 0 ? "" : String(preset.min);
+      const presetMax = preset.max === Infinity ? "" : String(preset.max);
+      return presetMin === normalizedMin && presetMax === normalizedMax;
+    });
+
+    setSelectedPricePreset(matchedPreset ? matchedPreset.label : null);
+  }, [priceRange?.min, priceRange?.max]);
 
   const formatPrice = (price) => new Intl.NumberFormat("vi-VN").format(price);
 

@@ -1,7 +1,18 @@
-import User from "./User.js";
+﻿import User from "./User.js";
 import { deriveAuthzWriteFromLegacyInput } from "../../authz/userAccessResolver.js";
 import mongoose from "mongoose";
 import Store from "../store/Store.js";
+import { ensurePermissionCatalogSeeded, getPermissionCatalog } from "../../authz/permissionCatalog.js";
+import {
+  ensurePermissionTemplatesSeeded,
+  getPermissionTemplates,
+} from "../../authz/permissionTemplateService.js";
+import {
+  applyUserPermissionAssignments,
+  normalizeRequestedPermissionAssignments,
+  validateGrantAntiEscalation,
+} from "../../authz/userPermissionService.js";
+import { resolveEffectiveAccessContext } from "../../authz/authorizationService.js";
 
 const BRANCH_REQUIRED_EMPLOYEE_ROLES = new Set([
   "ADMIN",
@@ -16,6 +27,173 @@ const BRANCH_REQUIRED_EMPLOYEE_ROLES = new Set([
 ]);
 
 const normalizeText = (value) => String(value || "").trim();
+const toUniqueStrings = (items = []) =>
+  Array.from(new Set(items.map((item) => normalizeText(item)).filter(Boolean)));
+
+const toAppError = (status, code, message, details = null) => {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  if (details) {
+    error.details = details;
+  }
+  return error;
+};
+
+const collectBranchIds = (payload = {}) => {
+  const directBranchIds = Array.isArray(payload.branchIds) ? payload.branchIds : [];
+  const scopedBranchIds = Array.isArray(payload?.branchScope?.branchIds)
+    ? payload.branchScope.branchIds
+    : [];
+
+  const fallbackBranchId =
+    normalizeText(payload?.branchScope?.primaryBranchId) || normalizeText(payload.storeLocation);
+
+  return toUniqueStrings([...directBranchIds, ...scopedBranchIds, fallbackBranchId]);
+};
+
+const collectTemplateKeys = (payload = {}) => {
+  const singleTemplate = normalizeText(payload.templateKey);
+  const bulkTemplates = Array.isArray(payload.templateKeys) ? payload.templateKeys : [];
+  return toUniqueStrings([singleTemplate, ...bulkTemplates]).map((item) => item.toUpperCase());
+};
+
+const hasGranularPermissionPayload = (payload = {}) => {
+  return (
+    payload?.enableGranularPermissions === true ||
+    (Array.isArray(payload?.permissions) && payload.permissions.length > 0) ||
+    !!normalizeText(payload?.templateKey) ||
+    (Array.isArray(payload?.templateKeys) && payload.templateKeys.length > 0)
+  );
+};
+
+const assertActorBranchScope = (req, branchIds = []) => {
+  if (req?.authz?.isGlobalAdmin || !branchIds.length) {
+    return;
+  }
+
+  const allowedBranches = Array.isArray(req?.authz?.allowedBranchIds)
+    ? req.authz.allowedBranchIds.map((item) => normalizeText(item))
+    : [];
+  const forbidden = branchIds.filter((branchId) => !allowedBranches.includes(normalizeText(branchId)));
+
+  if (forbidden.length) {
+    throw toAppError(
+      403,
+      "AUTHZ_BRANCH_FORBIDDEN",
+      "Cannot assign user to branch outside actor scope",
+      { forbiddenBranchIds: forbidden }
+    );
+  }
+};
+
+const extractUserBranchIds = (user = {}) => {
+  const assignmentBranchIds = Array.isArray(user?.branchAssignments)
+    ? user.branchAssignments.map((item) => item?.storeId)
+    : [];
+  return toUniqueStrings([user?.storeLocation, ...assignmentBranchIds]);
+};
+
+const assertActorCanManageTargetUser = (req, user = {}) => {
+  if (req?.authz?.isGlobalAdmin) {
+    return;
+  }
+
+  const actorAllowedBranches = Array.isArray(req?.authz?.allowedBranchIds)
+    ? req.authz.allowedBranchIds.map((item) => normalizeText(item))
+    : [];
+  const targetBranches = extractUserBranchIds(user);
+
+  if (!targetBranches.length) {
+    return;
+  }
+
+  const forbidden = targetBranches.filter(
+    (branchId) => !actorAllowedBranches.includes(normalizeText(branchId))
+  );
+  if (forbidden.length) {
+    throw toAppError(
+      403,
+      "AUTHZ_BRANCH_FORBIDDEN",
+      "Cannot manage user outside actor branch scope",
+      { forbiddenBranchIds: forbidden }
+    );
+  }
+};
+
+const assertActorCanAssignRole = (req, role) => {
+  if (req?.authz?.isGlobalAdmin) {
+    return;
+  }
+
+  const normalizedRole = normalizeText(role).toUpperCase();
+  if (normalizedRole === "GLOBAL_ADMIN") {
+    throw toAppError(
+      403,
+      "AUTHZ_ROLE_FORBIDDEN",
+      "Only global admin can assign GLOBAL_ADMIN role"
+    );
+  }
+};
+
+const syncExplicitPermissionsForUser = async ({ req, user, payload, reason = "" }) => {
+  const templateKeys = collectTemplateKeys(payload);
+  const branchIds = collectBranchIds(payload);
+
+  const { assignments, errors } = await normalizeRequestedPermissionAssignments({
+    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+    templateKeys,
+    branchIds,
+    targetUserId: String(user._id),
+  });
+
+  if (errors.length) {
+    throw toAppError(400, "AUTHZ_PERMISSION_PAYLOAD_INVALID", "Permission payload is invalid", {
+      errors,
+    });
+  }
+
+  const antiEscalation = validateGrantAntiEscalation({
+    actorAuthz: req.authz,
+    assignments,
+    targetUserId: String(user._id),
+  });
+
+  if (!antiEscalation.allowed) {
+    throw toAppError(
+      403,
+      "AUTHZ_PERMISSION_ESCALATION_BLOCKED",
+      "Permission grant violates anti-escalation rules",
+      { violations: antiEscalation.violations }
+    );
+  }
+
+  const result = await applyUserPermissionAssignments({
+    targetUserId: String(user._id),
+    assignments,
+    actorUserId: req.user?._id || null,
+    req,
+    reason: reason || "user_permission_sync",
+  });
+
+  const previousPermissionMode = String(user.permissionMode || "ROLE_FALLBACK").toUpperCase();
+  const modeChanged = previousPermissionMode !== "EXPLICIT";
+  if (modeChanged) {
+    user.permissionMode = "EXPLICIT";
+  }
+
+  if (result.grantedCount > 0 || result.revokedCount > 0 || modeChanged) {
+    user.permissionsVersion = Number(user.permissionsVersion || 1) + 1;
+    await user.save();
+  }
+
+  return {
+    ...result,
+    assignments,
+    templateKeys,
+    branchIds,
+  };
+};
 
 const roleRequiresStoreLocation = (role) =>
   BRANCH_REQUIRED_EMPLOYEE_ROLES.has(String(role || "").trim().toUpperCase());
@@ -59,7 +237,7 @@ const resolveEmployeeStoreLocation = async ({ role, storeLocation }) => {
   return hoChiMinhStoreId;
 };
 
-// Cập nhật thông tin người dùng
+// Cáº­p nháº­t thÃ´ng tin ngÆ°á»i dÃ¹ng
 export const updateProfile = async (req, res) => {
   try {
     const { fullName, email, province } = req.body;
@@ -71,7 +249,7 @@ export const updateProfile = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Cập nhật thông tin thành công",
+      message: "Cáº­p nháº­t thÃ´ng tin thÃ nh cÃ´ng",
       data: { user },
     });
   } catch (error) {
@@ -79,12 +257,12 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-// Thêm địa chỉ mới cho người dùng
+// ThÃªm Ä‘á»‹a chá»‰ má»›i cho ngÆ°á»i dÃ¹ng
 export const addAddress = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    // Nếu địa chỉ mới được chọn là mặc định, set tất cả các địa chỉ khác là không mặc định
+    // Náº¿u Ä‘á»‹a chá»‰ má»›i Ä‘Æ°á»£c chá»n lÃ  máº·c Ä‘á»‹nh, set táº¥t cáº£ cÃ¡c Ä‘á»‹a chá»‰ khÃ¡c lÃ  khÃ´ng máº·c Ä‘á»‹nh
     if (req.body.isDefault) {
       user.addresses.forEach((addr) => (addr.isDefault = false));
     }
@@ -94,7 +272,7 @@ export const addAddress = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Thêm địa chỉ thành công",
+      message: "ThÃªm Ä‘á»‹a chá»‰ thÃ nh cÃ´ng",
       data: { user },
     });
   } catch (error) {
@@ -102,7 +280,7 @@ export const addAddress = async (req, res) => {
   }
 };
 
-// Cập nhật địa chỉ cho người dùng
+// Cáº­p nháº­t Ä‘á»‹a chá»‰ cho ngÆ°á»i dÃ¹ng
 export const updateAddress = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -111,21 +289,21 @@ export const updateAddress = async (req, res) => {
     if (!address) {
       return res
         .status(404)
-        .json({ success: false, message: "Không tìm thấy địa chỉ" });
+        .json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y Ä‘á»‹a chá»‰" });
     }
 
-    // Nếu địa chỉ mới được chọn là mặc định, set tất cả các địa chỉ khác là không mặc định
+    // Náº¿u Ä‘á»‹a chá»‰ má»›i Ä‘Æ°á»£c chá»n lÃ  máº·c Ä‘á»‹nh, set táº¥t cáº£ cÃ¡c Ä‘á»‹a chá»‰ khÃ¡c lÃ  khÃ´ng máº·c Ä‘á»‹nh
     if (req.body.isDefault) {
       user.addresses.forEach((addr) => (addr.isDefault = false));
     }
 
-    // Cập nhật địa chỉ
+    // Cáº­p nháº­t Ä‘á»‹a chá»‰
     Object.assign(address, req.body);
     await user.save();
 
     res.json({
       success: true,
-      message: "Cập nhật địa chỉ thành công",
+      message: "Cáº­p nháº­t Ä‘á»‹a chá»‰ thÃ nh cÃ´ng",
       data: { user },
     });
   } catch (error) {
@@ -133,7 +311,7 @@ export const updateAddress = async (req, res) => {
   }
 };
 
-// Xóa địa chỉ của người dùng
+// XÃ³a Ä‘á»‹a chá»‰ cá»§a ngÆ°á»i dÃ¹ng
 export const deleteAddress = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -142,7 +320,7 @@ export const deleteAddress = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Xóa địa chỉ thành công",
+      message: "XÃ³a Ä‘á»‹a chá»‰ thÃ nh cÃ´ng",
       data: { user },
     });
   } catch (error) {
@@ -150,8 +328,8 @@ export const deleteAddress = async (req, res) => {
   }
 };
 
-// Lấy tất cả nhân viên
-// GET /api/users/employees - Lấy danh sách nhân viên (có phân trang + tìm kiếm + sắp xếp)
+// Láº¥y táº¥t cáº£ nhÃ¢n viÃªn
+// GET /api/users/employees - Láº¥y danh sÃ¡ch nhÃ¢n viÃªn (cÃ³ phÃ¢n trang + tÃ¬m kiáº¿m + sáº¯p xáº¿p)
 export const getAllEmployees = async (req, res) => {
   try {
     const {
@@ -159,15 +337,15 @@ export const getAllEmployees = async (req, res) => {
       limit = 20,
       search = "",
       role = "",
-      storeLocation = "", // ✅ Filter by store
+      storeLocation = "", // âœ… Filter by store
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // giới hạn tối đa 100
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // giá»›i háº¡n tá»‘i Ä‘a 100
 
-    // Điều kiện lọc
+    // Äiá»u kiá»‡n lá»c
     const filter = {
       role: {
         $in: [
@@ -176,13 +354,14 @@ export const getAllEmployees = async (req, res) => {
           "ORDER_MANAGER",
           "SHIPPER",
           "ADMIN",
+          "BRANCH_ADMIN",
           "POS_STAFF",
           "CASHIER",
         ],
       },
     };
 
-    // Tìm kiếm theo tên hoặc email hoặc số điện thoại
+    // TÃ¬m kiáº¿m theo tÃªn hoáº·c email hoáº·c sá»‘ Ä‘iá»‡n thoáº¡i
     if (search.trim()) {
       filter.$or = [
         { fullName: { $regex: search.trim(), $options: "i" } },
@@ -191,16 +370,16 @@ export const getAllEmployees = async (req, res) => {
       ];
     }
 
-    // Lọc theo role cụ thể (nếu có truyền)
+    // Lá»c theo role cá»¥ thá»ƒ (náº¿u cÃ³ truyá»n)
     if (role && role !== "ALL") {
-      if (role.includes(',')) {
-        filter.role = { $in: role.split(',') };
+      if (role.includes(",")) {
+        filter.role = { $in: role.split(",") };
       } else {
         filter.role = role;
       }
     }
 
-    // ── KILL-SWITCH: Use req.authz.activeBranchId ──
+    // â”€â”€ KILL-SWITCH: Use req.authz.activeBranchId â”€â”€
     if (!req.authz?.isGlobalAdmin) {
       if (req.authz?.activeBranchId) {
         filter.storeLocation = req.authz.activeBranchId;
@@ -217,11 +396,11 @@ export const getAllEmployees = async (req, res) => {
       }
     }
 
-    // Sắp xếp
+    // Sáº¯p xáº¿p
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
-    // Query với phân trang
+    // Query vá»›i phÃ¢n trang
     const employees = await User.find(filter)
       .select("-password -__v")
       .sort(sort)
@@ -229,7 +408,7 @@ export const getAllEmployees = async (req, res) => {
       .skip((pageNum - 1) * limitNum)
       .lean();
 
-    // Đếm tổng số để trả về phân trang
+    // Äáº¿m tá»•ng sá»‘ Ä‘á»ƒ tráº£ vá» phÃ¢n trang
     const total = await User.countDocuments(filter);
 
     res.json({
@@ -245,25 +424,43 @@ export const getAllEmployees = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Lỗi lấy danh sách nhân viên:", error);
-    res.status(500).json({ success: false, message: "Lỗi server" });
+    console.error("Lá»—i láº¥y danh sÃ¡ch nhÃ¢n viÃªn:", error);
+    res.status(500).json({ success: false, message: "Lá»—i server" });
   }
 };
-// Tạo nhân viên mới
+// Táº¡o nhÃ¢n viÃªn má»›i
 export const createEmployee = async (req, res) => {
   try {
     const { fullName, phoneNumber, email, province, password, role, avatar, storeLocation } =
       req.body;
-    const legacyRole = String(role || "").trim().toUpperCase();
+    const legacyRole = String(role || "USER").trim().toUpperCase();
+    assertActorCanAssignRole(req, legacyRole);
+    const requestedBranchIds = collectBranchIds(req.body);
+    assertActorBranchScope(req, requestedBranchIds);
+    const granularRequested = hasGranularPermissionPayload(req.body);
+
+    const primaryBranchId = normalizeText(storeLocation) || requestedBranchIds[0] || "";
     const effectiveStoreLocation = await resolveEmployeeStoreLocation({
       role: legacyRole,
-      storeLocation,
+      storeLocation: primaryBranchId,
     });
     const authzWrite = deriveAuthzWriteFromLegacyInput({
       role: legacyRole,
       storeLocation: effectiveStoreLocation,
       assignedBy: req.user?._id,
     });
+
+    let branchAssignments = authzWrite.branchAssignments;
+    if (branchAssignments.length === 1 && requestedBranchIds.length > 0) {
+      const assignmentRoles = branchAssignments[0].roles || [];
+      branchAssignments = requestedBranchIds.map((branchId, index) => ({
+        storeId: branchId,
+        roles: assignmentRoles,
+        status: "ACTIVE",
+        isPrimary: index === 0,
+        assignedBy: req.user?._id || undefined,
+      }));
+    }
 
     const user = await User.create({
       fullName,
@@ -275,86 +472,134 @@ export const createEmployee = async (req, res) => {
       avatar: avatar || "",
       systemRoles: authzWrite.systemRoles,
       taskRoles: authzWrite.taskRoles,
-      branchAssignments: authzWrite.branchAssignments,
+      branchAssignments,
       authzState: authzWrite.authzState,
       authzVersion: 2,
       permissionsVersion: 1,
+      permissionMode: granularRequested ? "EXPLICIT" : "ROLE_FALLBACK",
       storeLocation: effectiveStoreLocation,
     });
+
+    let permissionSync = null;
+    if (granularRequested) {
+      try {
+        permissionSync = await syncExplicitPermissionsForUser({
+          req,
+          user,
+          payload: req.body,
+          reason: "user_create",
+        });
+      } catch (error) {
+        await User.findByIdAndDelete(user._id);
+        throw error;
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: "Tạo nhân viên thành công",
-      data: { user },
+      message: "Tao nhan vien thanh cong",
+      data: {
+        user,
+        permissionSync: permissionSync
+          ? {
+              grantedCount: permissionSync.grantedCount,
+              revokedCount: permissionSync.revokedCount,
+              templateKeys: permissionSync.templateKeys,
+            }
+          : null,
+      },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_CREATE_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 };
-
-// Thay đổi trạng thái nhân viên (kích hoạt hoặc khóa)
+// Thay Ä‘á»•i tráº¡ng thÃ¡i nhÃ¢n viÃªn (kÃ­ch hoáº¡t hoáº·c khÃ³a)
 export const toggleEmployeeStatus = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, message: "Không tìm thấy nhân viên" });
+        .json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn" });
     }
 
-    // Chuyển đổi trạng thái giữa ACTIVE và LOCKED
+    assertActorCanManageTargetUser(req, user);
+    // Chuyá»ƒn Ä‘á»•i tráº¡ng thÃ¡i giá»¯a ACTIVE vÃ  LOCKED
     user.status = user.status === "ACTIVE" ? "LOCKED" : "ACTIVE";
     await user.save();
 
     res.json({
       success: true,
       message: `${
-        user.status === "LOCKED" ? "Khóa" : "Mở khóa"
-      } nhân viên thành công`,
+        user.status === "LOCKED" ? "KhÃ³a" : "Má»Ÿ khÃ³a"
+      } nhÃ¢n viÃªn thÃ nh cÃ´ng`,
       data: { user },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_TOGGLE_STATUS_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 };
 
-// Xóa nhân viên
+// XÃ³a nhÃ¢n viÃªn
 export const deleteEmployee = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, message: "Không tìm thấy nhân viên" });
+        .json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn" });
     }
 
-    res.json({ success: true, message: "Xóa nhân viên thành công" });
+    assertActorCanManageTargetUser(req, user);
+    await User.deleteOne({ _id: user._id });
+    res.json({ success: true, message: "XÃ³a nhÃ¢n viÃªn thÃ nh cÃ´ng" });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_DELETE_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 };
 
 export const updateEmployeeAvatar = async (req, res) => {
   try {
     const { avatar } = req.body;
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { avatar },
-      { new: true }
-    );
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res
         .status(404)
-        .json({ success: false, message: "Không tìm thấy nhân viên" });
+        .json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn" });
     }
+
+    assertActorCanManageTargetUser(req, user);
+    user.avatar = avatar;
+    await user.save();
 
     res.json({
       success: true,
-      message: "Cập nhật ảnh đại diện thành công",
+      message: "Cáº­p nháº­t áº£nh Ä‘áº¡i diá»‡n thÃ nh cÃ´ng",
       data: { user },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_AVATAR_UPDATE_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 };
 
@@ -365,29 +610,51 @@ export const updateEmployee = async (req, res) => {
 
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy nhân viên" });
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "Khong tim thay nhan vien",
+      });
     }
 
+    assertActorCanManageTargetUser(req, user);
+    const requestedBranchIds = collectBranchIds(req.body);
+    assertActorBranchScope(req, requestedBranchIds);
+
     const nextRole = role ? String(role).trim().toUpperCase() : user.role;
+    assertActorCanAssignRole(req, nextRole);
     const requestedStoreLocation =
       storeLocation !== undefined ? storeLocation : user.storeLocation;
+    const primaryBranchId = normalizeText(requestedStoreLocation) || requestedBranchIds[0] || "";
+
     const nextStoreLocation = await resolveEmployeeStoreLocation({
       role: nextRole,
-      storeLocation: requestedStoreLocation,
+      storeLocation: primaryBranchId,
     });
+
     const authzWrite = deriveAuthzWriteFromLegacyInput({
       role: nextRole,
       storeLocation: nextStoreLocation,
       assignedBy: req.user?._id,
     });
 
+    let nextBranchAssignments = authzWrite.branchAssignments;
+    if (nextBranchAssignments.length === 1 && requestedBranchIds.length > 0) {
+      const assignmentRoles = nextBranchAssignments[0].roles || [];
+      nextBranchAssignments = requestedBranchIds.map((branchId, index) => ({
+        storeId: branchId,
+        roles: assignmentRoles,
+        status: "ACTIVE",
+        isPrimary: index === 0,
+        assignedBy: req.user?._id || undefined,
+      }));
+    }
+
     const roleOrScopeChanged =
       String(user.role || "") !== String(nextRole || "") ||
-      String(user.storeLocation || "") !== String(nextStoreLocation || "");
+      String(user.storeLocation || "") !== String(nextStoreLocation || "") ||
+      JSON.stringify(user.branchAssignments || []) !== JSON.stringify(nextBranchAssignments || []);
 
-    // Cap nhat thong tin
     user.fullName = fullName || user.fullName;
     user.phoneNumber = phoneNumber || user.phoneNumber;
     user.email = email || user.email;
@@ -397,7 +664,7 @@ export const updateEmployee = async (req, res) => {
     user.storeLocation = nextStoreLocation;
     user.systemRoles = authzWrite.systemRoles;
     user.taskRoles = authzWrite.taskRoles;
-    user.branchAssignments = authzWrite.branchAssignments;
+    user.branchAssignments = nextBranchAssignments;
     user.authzState = authzWrite.authzState;
     user.authzVersion = 2;
 
@@ -405,23 +672,45 @@ export const updateEmployee = async (req, res) => {
       user.permissionsVersion = Number(user.permissionsVersion || 1) + 1;
     }
 
-    // Chỉ cập nhật password nếu được cung cấp
     if (password && password.trim()) {
       user.password = password;
     }
 
     await user.save();
 
-    res.json({
+    let permissionSync = null;
+    if (hasGranularPermissionPayload(req.body)) {
+      permissionSync = await syncExplicitPermissionsForUser({
+        req,
+        user,
+        payload: req.body,
+        reason: "user_update",
+      });
+    }
+
+    return res.json({
       success: true,
-      message: "Cập nhật nhân viên thành công",
-      data: { user },
+      message: "Cap nhat nhan vien thanh cong",
+      data: {
+        user,
+        permissionSync: permissionSync
+          ? {
+              grantedCount: permissionSync.grantedCount,
+              revokedCount: permissionSync.revokedCount,
+              templateKeys: permissionSync.templateKeys,
+            }
+          : null,
+      },
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_UPDATE_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
   }
 };
-
 export const getAllShippers = async (req, res) => {
   try {
     const filter = {
@@ -467,10 +756,243 @@ export const getAllShippers = async (req, res) => {
     console.error("Get all shippers error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || "Lỗi server",
+      message: error.message || "Lá»—i server",
     });
   }
 };
 
+export const createUserWithPermissions = async (req, res) => createEmployee(req, res);
 
+export const getPermissionsCatalogController = async (req, res) => {
+  try {
+    await ensurePermissionCatalogSeeded();
+    await ensurePermissionTemplatesSeeded();
 
+    const [catalog, templates] = await Promise.all([
+      getPermissionCatalog(),
+      getPermissionTemplates(),
+    ]);
+
+    const groupedByModule = catalog.reduce((acc, permission) => {
+      const moduleKey = normalizeText(permission.module) || "general";
+      if (!acc[moduleKey]) {
+        acc[moduleKey] = [];
+      }
+      acc[moduleKey].push(permission);
+      return acc;
+    }, {});
+
+    return res.json({
+      success: true,
+      data: {
+        catalog,
+        groupedByModule,
+        templates,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      code: "PERMISSION_CATALOG_LOAD_FAILED",
+      message: error.message,
+    });
+  }
+};
+
+export const getPermissionTemplatesController = async (req, res) => {
+  try {
+    await ensurePermissionTemplatesSeeded();
+    const templates = await getPermissionTemplates();
+    return res.json({
+      success: true,
+      data: { templates },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      code: "PERMISSION_TEMPLATE_LOAD_FAILED",
+      message: error.message,
+    });
+  }
+};
+
+export const getEffectivePermissionsForUser = async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    assertActorCanManageTargetUser(req, targetUser);
+
+    const queryBranchId = normalizeText(req.query?.activeBranchId);
+    const effective = await resolveEffectiveAccessContext({
+      user: targetUser,
+      activeBranchId: queryBranchId || targetUser.storeLocation || "",
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        userId: String(targetUser._id),
+        permissionMode: effective.permissionMode || "ROLE_FALLBACK",
+        activeBranchId: effective.activeBranchId || "",
+        allowedBranchIds: effective.allowedBranchIds || [],
+        permissions: Array.from(effective.permissions || []).sort(),
+        permissionGrants: Array.isArray(effective.permissionGrants)
+          ? effective.permissionGrants
+          : [],
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_EFFECTIVE_PERMISSION_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
+
+export const updateUserPermissions = async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    assertActorCanManageTargetUser(req, targetUser);
+
+    const requestedBranchIds = collectBranchIds(req.body);
+    assertActorBranchScope(req, requestedBranchIds);
+
+    let branchScopeChanged = false;
+    if (requestedBranchIds.length > 0) {
+      const roleBasedAuthz = deriveAuthzWriteFromLegacyInput({
+        role: targetUser.role,
+        storeLocation: requestedBranchIds[0],
+        assignedBy: req.user?._id,
+      });
+
+      if (roleBasedAuthz.branchAssignments.length === 1) {
+        const assignmentRoles = roleBasedAuthz.branchAssignments[0].roles || [];
+        targetUser.branchAssignments = requestedBranchIds.map((branchId, index) => ({
+          storeId: branchId,
+          roles: assignmentRoles,
+          status: "ACTIVE",
+          isPrimary: index === 0,
+          assignedBy: req.user?._id || undefined,
+        }));
+        targetUser.storeLocation = requestedBranchIds[0];
+        branchScopeChanged = true;
+      } else if (targetUser.storeLocation !== requestedBranchIds[0]) {
+        targetUser.storeLocation = requestedBranchIds[0];
+        branchScopeChanged = true;
+      }
+    }
+
+    if (branchScopeChanged) {
+      targetUser.permissionsVersion = Number(targetUser.permissionsVersion || 1) + 1;
+      await targetUser.save();
+    }
+
+    const permissionSync = await syncExplicitPermissionsForUser({
+      req,
+      user: targetUser,
+      payload: req.body,
+      reason: "user_permission_update",
+    });
+
+    return res.json({
+      success: true,
+      message: "Permissions updated",
+      data: {
+        user: targetUser,
+        permissionSync: {
+          grantedCount: permissionSync.grantedCount,
+          revokedCount: permissionSync.revokedCount,
+          templateKeys: permissionSync.templateKeys,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_PERMISSION_UPDATE_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
+
+export const previewPermissionAssignments = async (req, res) => {
+  try {
+    const targetUserId = normalizeText(req.body?.targetUserId || req.params?.id || req.user?._id);
+    const branchIds = collectBranchIds(req.body);
+
+    assertActorBranchScope(req, branchIds);
+
+    const { assignments, errors } = await normalizeRequestedPermissionAssignments({
+      permissions: Array.isArray(req.body?.permissions) ? req.body.permissions : [],
+      templateKeys: collectTemplateKeys(req.body),
+      branchIds,
+      targetUserId,
+    });
+
+    if (errors.length) {
+      return res.status(400).json({
+        success: false,
+        code: "AUTHZ_PERMISSION_PAYLOAD_INVALID",
+        message: "Permission payload is invalid",
+        details: { errors },
+      });
+    }
+
+    const antiEscalation = validateGrantAntiEscalation({
+      actorAuthz: req.authz,
+      assignments,
+      targetUserId,
+    });
+
+    const sensitiveAssignments = assignments.filter((item) => item.isSensitive);
+    const byModule = assignments.reduce((acc, assignment) => {
+      const moduleKey = normalizeText(assignment.module) || "general";
+      if (!acc[moduleKey]) {
+        acc[moduleKey] = [];
+      }
+      acc[moduleKey].push(assignment);
+      return acc;
+    }, {});
+
+    return res.json({
+      success: antiEscalation.allowed,
+      data: {
+        assignments,
+        groupedByModule: byModule,
+        sensitiveAssignments,
+        antiEscalation,
+      },
+      ...(antiEscalation.allowed
+        ? {}
+        : {
+            code: "AUTHZ_PERMISSION_ESCALATION_BLOCKED",
+            message: "Permission grant violates anti-escalation rules",
+          }),
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_PERMISSION_PREVIEW_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
