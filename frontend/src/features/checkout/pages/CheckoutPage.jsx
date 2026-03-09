@@ -185,12 +185,17 @@ const CheckoutPage = () => {
   );
 
   // Phí vận chuyển
+  // Tạm thời comment lại phần dười 5tr là có 50k tiền ship
+  /*
   const shippingFee =
     effectiveFulfillmentType === "CLICK_AND_COLLECT"
       ? 0
       : subtotal >= 5000000
       ? 0
       : 50000;
+  */
+  const shippingFee = 0;
+
 
   // Tổng cuối cùng
   const finalTotal =
