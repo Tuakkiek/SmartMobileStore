@@ -150,6 +150,39 @@ const orderItemSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    serialNumber: {
+      type: String,
+      trim: true,
+    },
+    deviceAssignments: [
+      {
+        deviceId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Device",
+        },
+        imei: {
+          type: String,
+          trim: true,
+        },
+        serialNumber: {
+          type: String,
+          trim: true,
+        },
+        assignedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        assignedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        mode: {
+          type: String,
+          enum: ["MANUAL", "AUTO"],
+          default: "AUTO",
+        },
+      },
+    ],
   },
   { _id: true }
 );

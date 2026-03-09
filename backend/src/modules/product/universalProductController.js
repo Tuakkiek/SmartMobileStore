@@ -6,6 +6,7 @@
 import mongoose from "mongoose";
 import UniversalProduct, { UniversalVariant } from "./UniversalProduct.js";
 import { getNextSku } from "../../lib/generateSKU.js";
+import { normalizeAfterSalesInput } from "../device/afterSalesConfig.js";
 
 // Helper: Táº¡o slug chuáº©n SEO
 const createSlug = (str) =>
@@ -175,6 +176,7 @@ export const create = async (req, res) => {
       brand: productData.brand,
       productType: productData.productType,
       specifications: productData.specifications || {},
+      afterSalesConfig: normalizeAfterSalesInput(productData.afterSalesConfig || {}),
       condition: productData.condition || "NEW",
       lifecycleStage: "SKELETON",
       status: "OUT_OF_STOCK",
@@ -352,6 +354,9 @@ export const update = async (req, res) => {
     if (data.featuredImages !== undefined) product.featuredImages = data.featuredImages;
     if (data.videoUrl !== undefined) product.videoUrl = data.videoUrl?.trim() || "";
     if (data.specifications !== undefined) product.specifications = data.specifications;
+    if (data.afterSalesConfig !== undefined) {
+      product.afterSalesConfig = normalizeAfterSalesInput(data.afterSalesConfig || {});
+    }
 
     // Cáº­p nháº­t slug náº¿u model thay Ä‘á»•i
     let newSlug = product.slug || product.baseSlug;
@@ -546,7 +551,7 @@ export const findAll = async (req, res) => {
       UniversalProduct.find(uniQuery)
         .populate("variants")
         .populate("brand", "name logo")
-        .populate("productType", "name slug")
+        .populate("productType", "name slug afterSalesDefaults")
         .populate("createdBy", "fullName")
         .sort(sortQuery)
         .skip(skipNum)
@@ -603,7 +608,7 @@ export const findOne = async (req, res) => {
     const product = await UniversalProduct.findById(req.params.id)
       .populate("variants")
       .populate("brand", "name logo website")
-      .populate("productType", "name specFields")
+      .populate("productType", "name specFields afterSalesDefaults")
       .populate("createdBy", "fullName email");
 
     if (!product) {
@@ -638,7 +643,7 @@ export const getProductDetail = async (req, res) => {
       product = await UniversalProduct.findById(variant.productId)
         .populate("variants")
         .populate("brand", "name logo website")
-        .populate("productType", "name specFields")
+        .populate("productType", "name specFields afterSalesDefaults")
         .populate("createdBy", "fullName email");
 
       if (!product) {
@@ -661,7 +666,7 @@ export const getProductDetail = async (req, res) => {
       })
         .populate("variants")
         .populate("brand", "name logo website")
-        .populate("productType", "name specFields")
+        .populate("productType", "name specFields afterSalesDefaults")
         .populate("createdBy", "fullName email");
 
       if (!product) {

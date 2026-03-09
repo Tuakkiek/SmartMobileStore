@@ -3,6 +3,7 @@ import { Route } from "react-router-dom";
 import DashboardLayout from "@/app/layouts/dashboard/DashboardLayout";
 import ProtectedRoute from "@/app/router/guards/ProtectedRoute";
 import { AdminDashboard } from "@/features/analytics";
+import { DeviceManagementPage } from "@/features/afterSales";
 import { AuditLogPage } from "@/features/audit";
 import { EmployeesPage } from "@/features/employees";
 import { InventoryDashboard, StockInPage } from "@/features/inventory";
@@ -33,6 +34,7 @@ const adminRoutes = (
       <Route path="/admin/stores" element={<StoreManagementPage />} />
       <Route path="/admin/inventory-dashboard" element={<InventoryDashboard />} />
       <Route path="/admin/stock-in" element={<StockInPage />} />
+      <Route path="/admin/devices" element={<DeviceManagementPage />} />
       <Route path="/admin/audit-logs" element={<AuditLogPage />} />
     </Route>
 

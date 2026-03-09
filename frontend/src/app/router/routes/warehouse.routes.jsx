@@ -2,6 +2,7 @@ import React from "react";
 import { Route } from "react-router-dom";
 import DashboardLayout from "@/app/layouts/dashboard/DashboardLayout";
 import ProtectedRoute from "@/app/router/guards/ProtectedRoute";
+import { DeviceManagementPage } from "@/features/afterSales";
 import {
   WarehouseProductsPage,
   ProductDetailPage,
@@ -50,6 +51,7 @@ const warehouseRoutes = (
       <Route path="/warehouse-staff/receive-goods" element={<ReceiveGoodsPage />} />
       <Route path="/warehouse-staff/pick-orders" element={<PickOrdersPage />} />
       <Route path="/warehouse-staff/transfer" element={<TransferStockPage />} />
+      <Route path="/warehouse-staff/devices" element={<DeviceManagementPage />} />
     </Route>
   </>
 );

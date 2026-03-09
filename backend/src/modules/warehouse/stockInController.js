@@ -16,6 +16,11 @@ import {
   resolveWarehouseScopeMode,
   resolveWarehouseStore,
 } from "./warehouseContext.js";
+import {
+  isSerializedConfig,
+  resolveAfterSalesConfigByProductId,
+} from "../device/afterSalesConfig.js";
+import { registerSerializedUnits } from "../device/deviceService.js";
 
 const DEFAULT_STORE_MIN_STOCK = 5;
 
@@ -184,7 +189,7 @@ export const directStockIn = async (req, res) => {
     const activatedProducts = new Set();
 
     for (const item of items) {
-      const { sku, quantity, locationCode, notes } = item;
+      const { sku, quantity, locationCode, notes, serializedUnits = [] } = item;
 
       const normalizedSku = String(sku || "").trim();
       const normalizedLocationCode = String(locationCode || "").trim();
@@ -236,6 +241,22 @@ export const directStockIn = async (req, res) => {
         throw new Error(`Không tìm thấy sản phẩm cho SKU: ${normalizedSku}`);
       }
       console.log(`✅ [STOCK-IN] Product: ${product.name}, lifecycle=${product.lifecycleStage}, status=${product.status}`);
+
+      const afterSalesContext = await resolveAfterSalesConfigByProductId({
+        productId: product._id,
+        session,
+      });
+      const serializedTrackingEnabled = Boolean(
+        afterSalesContext && isSerializedConfig(afterSalesContext.config)
+      );
+
+      if (serializedTrackingEnabled) {
+        if (!Array.isArray(serializedUnits) || serializedUnits.length !== qty) {
+          throw new Error(
+            `SKU ${normalizedSku} requires ${qty} serialized unit(s) with IMEI/serial information`
+          );
+        }
+      }
 
       if (inventory) {
         inventory.quantity = (Number(inventory.quantity) || 0) + qty;
@@ -308,6 +329,23 @@ export const directStockIn = async (req, res) => {
       });
       console.log(`✅ [STOCK-IN] Distributed to ${distributedToStores.length} stores`);
 
+      const createdDevices = serializedTrackingEnabled
+        ? await registerSerializedUnits({
+            storeId: activeStoreId,
+            warehouseLocationId: location._id,
+            warehouseLocationCode: location.locationCode,
+            productId: product._id,
+            variantId: variant._id,
+            variantSku: normalizedSku,
+            productName: product.name,
+            variantName: variant.variantName || "",
+            serializedUnits,
+            notes,
+            actor: req.user,
+            session,
+          })
+        : [];
+
       results.push({
         sku: normalizedSku,
         productName: product.name,
@@ -316,6 +354,8 @@ export const directStockIn = async (req, res) => {
         variantStockAfter: variant.stock,
         inventoryQuantity: inventory.quantity,
         distributedToStores,
+        serializedTrackingEnabled,
+        registeredDevices: createdDevices.length,
         productActivated: activatedProducts.has(String(product._id)),
       });
     }

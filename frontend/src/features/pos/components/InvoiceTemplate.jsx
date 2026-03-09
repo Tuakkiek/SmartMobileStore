@@ -1,6 +1,17 @@
 import React from "react";
 import { formatPrice, formatDate } from "@/shared/lib/utils";
 
+const getDeviceIdentifierText = (item = {}) => {
+  const assignments = Array.isArray(item.deviceAssignments) ? item.deviceAssignments : [];
+  const assignmentIdentifiers = assignments
+    .map((entry) => entry?.imei || entry?.serialNumber || "")
+    .filter(Boolean);
+  if (assignmentIdentifiers.length > 0) {
+    return assignmentIdentifiers.join(" / ");
+  }
+  return item.imei || item.serialNumber || "N/A";
+};
+
 const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
   const {
     storeName = "Ninh Kiều iSTORE",
@@ -94,7 +105,7 @@ const InvoiceTemplate = ({ order, editableData, storeInfo }) => {
                 </div>
               </td>
               <td className="border-r border-black p-1.5 text-center">
-                {item.imei || "N/A"}
+                {getDeviceIdentifierText(item)}
               </td>
               <td className="p-1.5 text-right font-semibold">
                 {formatPrice(item.price * item.quantity)}

@@ -24,6 +24,14 @@ import {
   isPaidOrder,
   PAID_ORDER_SAFE_CANCEL_STATUSES,
 } from "./orderStateMachine.js";
+import {
+  activateWarrantyForOrder,
+  releaseOrderDevices,
+} from "../device/deviceService.js";
+import {
+  INVENTORY_STATES,
+  SERVICE_STATES,
+} from "../device/afterSalesConfig.js";
 
 const ORDER_STATUSES = new Set([
   "PENDING",
@@ -1825,6 +1833,15 @@ export const updateOrderStatus = async (req, res) => {
         reason: exchangeReason,
       });
 
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "DEVICE_RELEASED_FOR_EXCHANGE",
+        note: exchangeReason,
+      });
+
       if (!Array.isArray(order.exchangeHistory)) {
         order.exchangeHistory = [];
       }
@@ -1884,6 +1901,13 @@ export const updateOrderStatus = async (req, res) => {
       if (order.assignedStore?.storeId) {
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+
+      await activateWarrantyForOrder({
+        order,
+        soldAt: order.deliveredAt,
+        actor: req.user,
+        session,
+      });
     }
 
     if (targetStatus === "RETURNED" && note) {
@@ -1891,6 +1915,18 @@ export const updateOrderStatus = async (req, res) => {
         ...order.shipperInfo,
         deliveryNote: note,
       };
+    }
+
+    if (targetStatus === "RETURNED") {
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.RETURNED,
+        toServiceState: SERVICE_STATES.UNDER_WARRANTY,
+        eventType: "ORDER_RETURNED",
+        note: note || "Order returned",
+      });
     }
 
     if (targetStatus === "CANCELLED") {
@@ -1917,6 +1953,15 @@ export const updateOrderStatus = async (req, res) => {
         });
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "ORDER_CANCELLED",
+        note: note || "Order cancelled",
+      });
 
       await restoreVariantStock(order.items, session);
     }
@@ -1945,6 +1990,14 @@ export const updateOrderStatus = async (req, res) => {
         });
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "ORDER_CANCELLED_REFUND_PENDING",
+        note: note || "Order cancelled pending refund",
+      });
       await restoreVariantStock(order.items, session);
     }
 
@@ -2378,6 +2431,27 @@ export const handleCarrierWebhook = async (req, res) => {
         session,
         reason: webhookNote,
       });
+      await releaseOrderDevices({
+        order,
+        actor: {
+          _id:
+            order?.shipperInfo?.shipperId ||
+            order?.carrierAssignment?.assignedBy ||
+            order?.createdByInfo?.userId ||
+            order?.customerId ||
+            order?.userId,
+          fullName:
+            order?.shipperInfo?.shipperName ||
+            normalizedCarrierName ||
+            order?.createdByInfo?.userName ||
+            "Carrier webhook",
+        },
+        session,
+        toInventoryState: INVENTORY_STATES.RETURNED,
+        toServiceState: SERVICE_STATES.UNDER_WARRANTY,
+        eventType: "ORDER_RETURNED",
+        note: webhookNote,
+      });
     }
 
     if (proof && typeof proof === "object") {
@@ -2436,6 +2510,27 @@ export const handleCarrierWebhook = async (req, res) => {
         metadata: metadata || undefined,
       },
     });
+
+    if (targetStatus === "DELIVERED") {
+      await activateWarrantyForOrder({
+        order,
+        soldAt: order.deliveredAt || eventTime,
+        actor: {
+          _id:
+            order?.shipperInfo?.shipperId ||
+            order?.carrierAssignment?.assignedBy ||
+            order?.createdByInfo?.userId ||
+            order?.customerId ||
+            order?.userId,
+          fullName:
+            order?.shipperInfo?.shipperName ||
+            normalizedCarrierName ||
+            order?.createdByInfo?.userName ||
+            "Carrier webhook",
+        },
+        session,
+      });
+    }
 
     await order.save({ session });
     await session.commitTransaction();
@@ -2766,6 +2861,15 @@ export const cancelOrder = async (req, res) => {
       });
       await decrementStoreCapacity(order.assignedStore.storeId, session);
     }
+
+    await releaseOrderDevices({
+      order,
+      actor: req.user,
+      session,
+      toInventoryState: INVENTORY_STATES.IN_STOCK,
+      eventType: "ORDER_CANCELLED",
+      note: req.body?.cancelReason || req.body?.reason || "Cancelled by user",
+    });
 
     await restoreVariantStock(order.items, session);
 

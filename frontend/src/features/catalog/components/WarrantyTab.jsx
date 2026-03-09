@@ -1,214 +1,154 @@
 import React from "react";
-import { Shield, RefreshCw, Check, Truck, Gift, Clock } from "lucide-react";
+import {
+  Check,
+  Clock,
+  Gift,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  Smartphone,
+  Truck,
+} from "lucide-react";
+import {
+  formatIdentifierPolicy,
+  formatWarrantyDuration,
+  isSerializedProduct,
+  resolveAfterSalesConfig,
+} from "@/features/afterSales/utils/afterSales";
 
-export const WarrantyTab = () => {
+export const WarrantyTab = ({ product }) => {
+  const config = resolveAfterSalesConfig(product);
+  const serializedTracking = isSerializedProduct(product);
+  const warrantyDuration = formatWarrantyDuration(config.warrantyMonths);
+  const identifierPolicy = formatIdentifierPolicy(config.identifierPolicy);
+  const warrantyTerms =
+    config.warrantyTerms ||
+    "Áp dụng cho lỗi phần cứng theo điều kiện bảo hành của cửa hàng và nhà sản xuất.";
+
   return (
     <div className="space-y-6">
-      {/* Promotion Banner */}
-      <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-xl p-6 text-white shadow-lg">
-        <div className="flex items-center gap-3 mb-4">
-          <Gift className="w-8 h-8" />
-          <h3 className="text-xl font-bold">Ưu đãi đặc biệt</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex items-start gap-2">
-            <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="text-sm">Trả góp 0% - Không lãi suất</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="text-sm">Miễn phí vận chuyển toàn quốc</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="text-sm">AirPods giảm đến 500.000đ khi mua kèm</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Check className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <span className="text-sm">Thu cũ đổi mới - Trợ giá cao</span>
+      <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white shadow-lg">
+        <div className="flex items-center gap-3">
+          <Gift className="h-8 w-8" />
+          <div>
+            <h3 className="text-xl font-bold">Dịch vụ sau bán hàng</h3>
+            <p className="mt-1 text-sm text-orange-50">
+              Thiết bị được quản lý hậu mãi theo mã định danh riêng, tương tự quy
+              trình check coverage chuyên nghiệp.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Main Warranty Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-6 text-center hover:shadow-lg transition-all">
-          <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-white" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white">
+            <Shield className="h-6 w-6" />
           </div>
-          <h3 className="font-bold text-lg mb-2 text-blue-900">
-            Bảo hành 12 tháng
-          </h3>
-          <p className="text-sm text-gray-700">
-            Chính hãng Apple tại các trung tâm ủy quyền toàn quốc
-          </p>
+          <p className="text-lg font-bold text-blue-900">{warrantyDuration}</p>
+          <p className="mt-1 text-sm text-slate-700">Thời hạn bảo hành áp dụng cho sản phẩm này.</p>
         </div>
 
-        <div className="bg-green-50 border-2 border-green-300 rounded-xl p-6 text-center hover:shadow-lg transition-all">
-          <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Truck className="w-8 h-8 text-white" />
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+            <Smartphone className="h-6 w-6" />
           </div>
-          <h3 className="font-bold text-lg mb-2 text-green-900">
-            Giao hàng miễn phí
-          </h3>
-          <p className="text-sm text-gray-700">
-            Giao hàng tận nơi toàn quốc, kiểm tra trước khi thanh toán
-          </p>
+          <p className="text-lg font-bold text-emerald-900">{identifierPolicy}</p>
+          <p className="mt-1 text-sm text-slate-700">Mã định danh dùng để kích hoạt và tra cứu bảo hành.</p>
         </div>
 
-        <div className="bg-purple-50 border-2 border-purple-300 rounded-xl p-6 text-center hover:shadow-lg transition-all">
-          <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <RefreshCw className="w-8 h-8 text-white" />
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 text-white">
+            <RefreshCw className="h-6 w-6" />
           </div>
-          <h3 className="font-bold text-lg mb-2 text-purple-900">
-            Đổi trả 30 ngày
-          </h3>
-          <p className="text-sm text-gray-700">
-            1 đổi 1 nếu lỗi phần cứng do nhà sản xuất trong 30 ngày đầu
+          <p className="text-lg font-bold text-orange-900">
+            {serializedTracking ? "Có theo dõi từng máy" : "Theo dõi theo sản phẩm"}
           </p>
+          <p className="mt-1 text-sm text-slate-700">Thiết bị sau bán được quản lý theo vòng đời phù hợp.</p>
         </div>
       </div>
 
-      {/* Warranty Details */}
-      <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b-2 border-blue-200">
-          <h3 className="font-bold text-lg text-blue-900 flex items-center gap-2">
-            <Shield className="w-5 h-5" />
+      <div className="rounded-2xl border bg-white">
+        <div className="border-b bg-slate-50 px-6 py-4">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <ShieldCheck className="h-5 w-5 text-blue-600" />
             Chính sách bảo hành
           </h3>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Check className="w-4 h-4 text-blue-600" />
+        <div className="space-y-4 p-6">
+          <div className="flex gap-3">
+            <div className="mt-1 rounded-full bg-blue-100 p-2 text-blue-600">
+              <Clock className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900 mb-1">
-                Thời gian bảo hành: 12 tháng
-              </p>
-              <p className="text-sm text-gray-600">
-                Tính từ ngày mua hàng trên hóa đơn. Bảo hành tại các trung tâm
-                Apple ủy quyền trên toàn quốc.
+              <p className="font-semibold text-slate-900">Thời hạn coverage</p>
+              <p className="text-sm text-slate-600">
+                Bảo hành được tính từ ngày bàn giao thiết bị và kéo dài trong {warrantyDuration.toLowerCase()}.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Check className="w-4 h-4 text-blue-600" />
+          <div className="flex gap-3">
+            <div className="mt-1 rounded-full bg-emerald-100 p-2 text-emerald-600">
+              <Smartphone className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900 mb-1">
-                Điều kiện bảo hành
-              </p>
-              <p className="text-sm text-gray-600">
-                Sản phẩm 100% chính hãng, nguyên seal. Lỗi do nhà sản xuất sẽ
-                được xử lý theo chính sách Apple.
+              <p className="font-semibold text-slate-900">Tra cứu theo mã định danh</p>
+              <p className="text-sm text-slate-600">
+                Khách hàng có thể kiểm tra trạng thái bảo hành bằng {identifierPolicy.toLowerCase()} trên trang tra cứu công khai.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-red-600 font-bold text-sm">✕</span>
+          <div className="flex gap-3">
+            <div className="mt-1 rounded-full bg-amber-100 p-2 text-amber-600">
+              <Shield className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900 mb-1">
-                Không bảo hành
-              </p>
-              <p className="text-sm text-gray-600">
-                Rơi vỡ, va đập, ngấm nước, cháy nổ, can thiệp phần mềm trái
-                phép, hoặc tự ý sửa chữa.
-              </p>
+              <p className="font-semibold text-slate-900">Điều khoản áp dụng</p>
+              <p className="text-sm text-slate-600">{warrantyTerms}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Return Policy */}
-      <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-orange-50 to-orange-100 px-6 py-4 border-b-2 border-orange-200">
-          <h3 className="font-bold text-lg text-orange-900 flex items-center gap-2">
-            <RefreshCw className="w-5 h-5" />
-            Chính sách đổi trả
+      <div className="rounded-2xl border bg-white">
+        <div className="border-b bg-orange-50 px-6 py-4">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-orange-900">
+            <RefreshCw className="h-5 w-5" />
+            Chính sách đổi trả & hỗ trợ
           </h3>
         </div>
-        <div className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <Clock className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900 mb-1">
-                  Đổi trả trong 30 ngày
-                </p>
-                <p className="text-sm text-gray-600">
-                  1 đổi 1 nếu phát hiện lỗi phần cứng do nhà sản xuất trong
-                  vòng 30 ngày đầu sử dụng.
-                </p>
-              </div>
+        <div className="grid gap-5 p-6 md:grid-cols-2">
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Check className="mt-0.5 h-4 w-4 text-emerald-600" />
+              <span>Hỗ trợ kiểm tra bảo hành nhanh theo mã định danh sau khi bán.</span>
             </div>
-
-            <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
-              <p className="font-semibold text-sm text-orange-900 mb-2">
-                Điều kiện đổi trả:
-              </p>
-              <ul className="space-y-1 text-sm text-gray-700">
-                <li className="flex items-start gap-2">
-                  <span className="text-orange-600 mt-1">•</span>
-                  <span>Sản phẩm giữ nguyên hình thức, không trầy xước</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-orange-600 mt-1">•</span>
-                  <span>Đầy đủ hộp, phụ kiện đi kèm</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-orange-600 mt-1">•</span>
-                  <span>Còn hóa đơn mua hàng</span>
-                </li>
-              </ul>
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Check className="mt-0.5 h-4 w-4 text-emerald-600" />
+              <span>Thiết bị serialized được lưu lịch sử trạng thái từ nhập kho đến sau bán.</span>
+            </div>
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Check className="mt-0.5 h-4 w-4 text-emerald-600" />
+              <span>Đổi trả và xử lý sửa chữa được theo dõi xuyên suốt trên cùng hồ sơ thiết bị.</span>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Additional Services */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-6">
-          <h3 className="font-bold text-lg mb-3 text-green-900 flex items-center gap-2">
-            <Gift className="w-5 h-5" />
-            Thu cũ đổi mới
-          </h3>
-          <ul className="space-y-2 text-sm text-gray-700">
-            <li className="flex items-start gap-2">
-              <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-              <span>Thu cũ trợ giá lên đến 100% giá trị máy</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-              <span>Định giá nhanh, thanh toán ngay</span>
-            </li>
-          </ul>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6">
-          <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2">
-            <Truck className="w-5 h-5" />
-            Dịch vụ giao hàng
-          </h3>
-          <ul className="space-y-2 text-sm text-gray-700">
-            <li className="flex items-start gap-2">
-              <Check className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-              <span>Giao hàng miễn phí toàn quốc</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Check className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-              <span>Kiểm tra sản phẩm trước khi thanh toán</span>
-            </li>
-          </ul>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Truck className="mt-0.5 h-4 w-4 text-blue-600" />
+              <span>Miễn phí giao hàng toàn quốc, kiểm tra máy trước khi nhận.</span>
+            </div>
+            <div className="flex items-start gap-2 text-sm text-slate-700">
+              <Gift className="mt-0.5 h-4 w-4 text-orange-600" />
+              <span>Khuyến mãi và chính sách hậu mãi có thể thay đổi theo từng dòng sản phẩm.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default WarrantyTab;

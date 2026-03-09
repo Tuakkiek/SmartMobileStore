@@ -4,6 +4,10 @@
 // ============================================
 
 import mongoose from "mongoose";
+import {
+  IDENTIFIER_POLICIES,
+  TRACKING_MODES,
+} from "../device/afterSalesConfig.js";
 
 const specFieldSchema = new mongoose.Schema({
   key: {
@@ -55,6 +59,28 @@ const productTypeSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+    },
+    afterSalesDefaults: {
+      trackingMode: {
+        type: String,
+        enum: Object.values(TRACKING_MODES),
+        default: TRACKING_MODES.NONE,
+      },
+      identifierPolicy: {
+        type: String,
+        enum: Object.values(IDENTIFIER_POLICIES),
+        default: IDENTIFIER_POLICIES.SERIAL,
+      },
+      warrantyMonths: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+      warrantyTerms: {
+        type: String,
+        trim: true,
+        default: "",
+      },
     },
     specFields: [specFieldSchema],
     status: {

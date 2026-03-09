@@ -36,6 +36,17 @@ import { formatPrice, formatDate } from "@/shared/lib/utils";
 import { getInterFontStylesheetTag, getPrimaryFontStack } from "@/shared/lib/typography";
 import { EditInvoiceDialog } from "@/features/pos";
 
+const getDeviceIdentifierText = (item = {}) => {
+  const assignments = Array.isArray(item.deviceAssignments) ? item.deviceAssignments : [];
+  const assignmentIdentifiers = assignments
+    .map((entry) => entry?.imei || entry?.serialNumber || "")
+    .filter(Boolean);
+  if (assignmentIdentifiers.length > 0) {
+    return assignmentIdentifiers.join(" / ");
+  }
+  return item.imei || item.serialNumber || "N/A";
+};
+
 const CASHIERDashboard = () => {
   const [pendingOrders, setPendingOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +126,10 @@ const CASHIERDashboard = () => {
       items: selectedOrder.items.map((item) => ({
         ...item,
         imei: item.imei || "",
+        serialNumber: item.serialNumber || "",
+        deviceAssignments: Array.isArray(item.deviceAssignments)
+          ? item.deviceAssignments
+          : [],
       })),
     };
     setOrderToPrint(orderWithPaymentInfo);
@@ -224,7 +239,7 @@ const CASHIERDashboard = () => {
                     <div>${item.productName}</div>
                     <div class="text-gray-600">${item.variantColor}${item.variantStorage ? ` - ${item.variantStorage}` : ""}</div>
                   </td>
-                  <td class="border-r border-black p-1.5 text-center">${item.imei || "N/A"}</td>
+                  <td class="border-r border-black p-1.5 text-center">${getDeviceIdentifierText(item)}</td>
                   <td class="p-1.5 text-right font-semibold">${formatPrice(item.price * item.quantity)}</td>
                 </tr>
               `,
@@ -553,9 +568,9 @@ const CASHIERDashboard = () => {
                                     .filter(Boolean)
                                     .join(" · ")}
                                 </p>
-                                {item.imei && (
+                                {getDeviceIdentifierText(item) !== "N/A" && (
                                   <p className="text-xs text-blue-600 font-mono mt-0.5">
-                                    IMEI: {item.imei}
+                                    ID: {getDeviceIdentifierText(item)}
                                   </p>
                                 )}
                               </div>

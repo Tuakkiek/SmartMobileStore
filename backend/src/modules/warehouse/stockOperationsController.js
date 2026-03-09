@@ -13,6 +13,10 @@ import {
   ensureWarehouseWriteBranchId,
   resolveWarehouseStore,
 } from "./warehouseContext.js";
+import {
+  assignDevicesToOrderItem,
+  resolveSerializedItemFlags,
+} from "../device/deviceService.js";
 
 const getActorName = (user) =>
   user?.fullName?.trim() || user?.name?.trim() || user?.email?.trim() || "Unknown";
@@ -114,10 +118,14 @@ export const getPickList = async (req, res) => {
     }
 
     const pickList = [];
+    const serializedFlags = await resolveSerializedItemFlags({
+      items: order.items,
+    });
 
     for (const item of order.items) {
       const sku = item.sku || item.variantSku;
       if (!sku) continue;
+      const itemFlag = serializedFlags.get(String(item.productId || "")) || {};
 
       // Tìm các vị trí có hàng
       const inventoryItems = await Inventory.find({
@@ -158,6 +166,10 @@ export const getPickList = async (req, res) => {
         sku,
         productName: item.name || item.productName,
         requiredQty: item.quantity,
+        serializedTrackingEnabled: Boolean(itemFlag.isSerialized),
+        assignedDevicesCount: Array.isArray(item.deviceAssignments)
+          ? item.deviceAssignments.length
+          : 0,
         locations,
         fulfilled: remainingQty <= 0,
       });
@@ -194,7 +206,7 @@ export const pickItem = async (req, res) => {
     const activeStoreId = ensureWarehouseWriteBranchId(req);
     await resolveWarehouseStore(req, { branchId: activeStoreId, session });
 
-    const { orderId, sku, locationCode, quantity } = req.body;
+    const { orderId, sku, locationCode, quantity, deviceIds = [] } = req.body;
     const pickQty = toPositiveInteger(quantity);
     const actorName = getActorName(req.user);
     const normalizedSku = normalizeSku(sku);
@@ -214,6 +226,17 @@ export const pickItem = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    const orderItem = order.items.find(
+      (item) => normalizeSku(item?.sku || item?.variantSku) === normalizedSku
+    );
+    if (!orderItem) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: `KhÃ´ng tÃ¬m tháº¥y SKU ${normalizedSku} trong Ä‘Æ¡n hÃ ng`,
       });
     }
 
@@ -292,6 +315,35 @@ export const pickItem = async (req, res) => {
     });
     await movement.save({ session });
 
+    const serializedFlags = await resolveSerializedItemFlags({
+      items: [orderItem],
+      session,
+    });
+    const serializedTrackingEnabled =
+      serializedFlags.get(String(orderItem.productId || ""))?.isSerialized || false;
+
+    if (serializedTrackingEnabled) {
+      if (Array.isArray(deviceIds) && deviceIds.length > 0 && deviceIds.length !== pickQty) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Sá»‘ lÆ°á»£ng deviceIds pháº£i báº±ng ${pickQty} cho SKU serialized`,
+        });
+      }
+
+      await assignDevicesToOrderItem({
+        storeId: activeStoreId,
+        order,
+        orderItem,
+        requestedDeviceIds: Array.isArray(deviceIds) ? deviceIds : [],
+        requestedQuantity: pickQty,
+        actor: req.user,
+        session,
+        locationId: location._id,
+        mode: Array.isArray(deviceIds) && deviceIds.length > 0 ? "MANUAL" : "AUTO",
+      });
+    }
+
     const shippedNote = `Xuat kho ${pickQty} ${normalizedSku} tai ${normalizedLocationCode}`;
     const pickedItems = upsertPickedItems(order?.shippedByInfo?.items, {
       sku: normalizedSku,
@@ -336,6 +388,10 @@ export const pickItem = async (req, res) => {
       success: true,
       message: `Đã lấy ${pickQty} ${inventory.productName}`,
       remaining: inventory.quantity,
+      serializedTrackingEnabled,
+      assignedDevicesCount: Array.isArray(orderItem.deviceAssignments)
+        ? orderItem.deviceAssignments.length
+        : 0,
     });
   } catch (error) {
     await session.abortTransaction();

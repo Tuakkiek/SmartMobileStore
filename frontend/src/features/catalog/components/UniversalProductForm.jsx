@@ -33,6 +33,14 @@ const INSTALLMENT_BADGE_OPTIONS = [
   { value: "Trả góp 0%, trả trước 0đ", label: "Trả góp 0%, trả trước 0đ" },
 ];
 
+const TRACKING_MODE_OPTIONS = ["NONE", "SERIALIZED"];
+const IDENTIFIER_POLICY_OPTIONS = [
+  "IMEI",
+  "SERIAL",
+  "IMEI_OR_SERIAL",
+  "IMEI_AND_SERIAL",
+];
+
 const UniversalProductForm = ({
   open,
   onOpenChange,
@@ -63,6 +71,12 @@ const UniversalProductForm = ({
     description: "",
     featuredImages: [""],
     videoUrl: "",
+    afterSalesConfig: {
+      trackingMode: "NONE",
+      identifierPolicy: "IMEI_OR_SERIAL",
+      warrantyMonths: "",
+      warrantyTerms: "",
+    },
     specifications: {},
     variants: [
       {
@@ -159,6 +173,12 @@ const UniversalProductForm = ({
           ? product.featuredImages
           : [""],
         videoUrl: product.videoUrl || "",
+        afterSalesConfig: {
+          trackingMode: product.afterSalesConfig?.trackingMode || "",
+          identifierPolicy: product.afterSalesConfig?.identifierPolicy || "",
+          warrantyMonths: product.afterSalesConfig?.warrantyMonths ?? "",
+          warrantyTerms: product.afterSalesConfig?.warrantyTerms || "",
+        },
         specifications: product.specifications || {},
         variants: populatedVariants,
       });
@@ -180,6 +200,12 @@ const UniversalProductForm = ({
         description: "",
         featuredImages: [""],
         videoUrl: "",
+        afterSalesConfig: {
+          trackingMode: "NONE",
+          identifierPolicy: "IMEI_OR_SERIAL",
+          warrantyMonths: "",
+          warrantyTerms: "",
+        },
         specifications: {},
         variants: [
           {
@@ -426,6 +452,15 @@ const UniversalProductForm = ({
         description: formData.description?.trim() || "",
         featuredImages: formData.featuredImages.filter((url) => url?.trim()),
         videoUrl: formData.videoUrl?.trim() || "",
+        afterSalesConfig: {
+          trackingMode: formData.afterSalesConfig?.trackingMode || null,
+          identifierPolicy: formData.afterSalesConfig?.identifierPolicy || null,
+          warrantyMonths:
+            formData.afterSalesConfig?.warrantyMonths === ""
+              ? null
+              : Number(formData.afterSalesConfig?.warrantyMonths) || 0,
+          warrantyTerms: formData.afterSalesConfig?.warrantyTerms?.trim() || "",
+        },
         specifications: formData.specifications,
         variants: formData.variants.map((v) => ({
           color: v.color.trim(),
@@ -627,6 +662,100 @@ const UniversalProductForm = ({
                     className="w-full px-3 py-2 border rounded-md"
                     placeholder="Nhập mô tả sản phẩm..."
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 border rounded-lg p-4 bg-slate-50/70">
+                  <div className="space-y-2">
+                    <Label>Tracking mode</Label>
+                    <Select
+                      value={formData.afterSalesConfig?.trackingMode || "NONE"}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          afterSalesConfig: {
+                            ...formData.afterSalesConfig,
+                            trackingMode: value,
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TRACKING_MODE_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Identifier policy</Label>
+                    <Select
+                      value={formData.afterSalesConfig?.identifierPolicy || "IMEI_OR_SERIAL"}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          afterSalesConfig: {
+                            ...formData.afterSalesConfig,
+                            identifierPolicy: value,
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {IDENTIFIER_POLICY_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Số tháng bảo hành</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.afterSalesConfig?.warrantyMonths ?? ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          afterSalesConfig: {
+                            ...formData.afterSalesConfig,
+                            warrantyMonths: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Ví dụ: 12"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2 xl:col-span-1">
+                    <Label>Điều khoản bảo hành</Label>
+                    <textarea
+                      value={formData.afterSalesConfig?.warrantyTerms || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          afterSalesConfig: {
+                            ...formData.afterSalesConfig,
+                            warrantyTerms: e.target.value,
+                          },
+                        })
+                      }
+                      rows={3}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="Điều khoản bảo hành riêng cho sản phẩm..."
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
