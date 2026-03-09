@@ -37,7 +37,14 @@ const HomePage = () => {
       const layoutData = response.data?.data?.layout;
       setLayout(layoutData);
     } catch (error) {
-      console.error("Error fetching layout:", error);
+      console.error("❌ [API ERROR] Error fetching layout:", {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url,
+        isAxiosError: error.isAxiosError,
+        raw: error
+      });
       toast.error("Không thể tải cấu hình trang chủ");
     }
   }, []);
@@ -85,7 +92,14 @@ const HomePage = () => {
 
       setAllProducts(normalizedProducts);
     } catch (err) {
-      console.error("Error loading products:", err);
+      console.error("❌ [API ERROR] Error loading products:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+        url: err.config?.url,
+        isAxiosError: err.isAxiosError,
+        raw: err
+      });
       toast.error("Không thể tải dữ liệu sản phẩm");
     }
   }, []);
