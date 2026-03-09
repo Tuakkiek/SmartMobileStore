@@ -190,6 +190,32 @@ test("POST /api/payment/sepay/create-qr creates qr payload for owner order and w
   assert.equal(logs[0].actor?.source, "SEPAY_API");
 });
 
+test("POST /api/payment/sepay/create-qr rejects incomplete SePay QR configuration", async () => {
+  const user = await createCustomer();
+  const token = buildAuthToken(user);
+  const { order } = await createBankTransferOrder({ ownerId: user._id, amount: 840000 });
+  const originalBankId = process.env.SEPAY_BANK_ID;
+
+  process.env.SEPAY_BANK_ID = "";
+
+  try {
+    const response = await request(app)
+      .post("/api/payment/sepay/create-qr")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ orderId: String(order._id) });
+
+    assert.equal(response.status, 500);
+    assert.equal(response.body.success, false);
+    assert.match(String(response.body.message || ""), /SEPAY_BANK_ID/);
+
+    const reloadedOrder = await Order.findById(order._id).lean();
+    assert.equal(reloadedOrder.paymentInfo?.sepayQrUrl, undefined);
+    assert.equal(reloadedOrder.paymentInfo?.sepayBankId, undefined);
+  } finally {
+    process.env.SEPAY_BANK_ID = originalBankId;
+  }
+});
+
 test("POST /api/sepay/webhook confirms payment, issues invoice, clears cart item, and writes audit log", async () => {
   const user = await createCustomer();
   const { order, variantId, productId, sku } = await createBankTransferOrder({
