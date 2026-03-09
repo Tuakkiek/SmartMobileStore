@@ -1295,6 +1295,8 @@ export const createOrder = async (req, res) => {
 
     let finalShippingFee = toNumber(shippingFee, 0);
 
+    // Tạm thời set phí ship = 0 cho tất cả
+    /*
     if (effectiveFulfillment !== "HOME_DELIVERY") {
       finalShippingFee = 0;
     } else if (!shippingFee) {
@@ -1311,6 +1313,8 @@ export const createOrder = async (req, res) => {
         finalShippingFee = subtotal >= 5000000 ? 0 : 50000;
       }
     }
+    */
+    finalShippingFee = 0;
 
     const computedTotal = Math.max(0, subtotal + finalShippingFee - totalDiscount);
     const finalTotal = Number.isFinite(Number(total)) ? Number(total) : computedTotal;
