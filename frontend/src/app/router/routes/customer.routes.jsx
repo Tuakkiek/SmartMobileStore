@@ -1,0 +1,47 @@
+import React from "react";
+import { Route } from "react-router-dom";
+import PublicLayout from "@/app/layouts/public/PublicLayout";
+import ProtectedRoute from "@/app/router/guards/ProtectedRoute";
+import { CartPage } from "@/features/cart";
+import { ProfilePage } from "@/features/account";
+import { CheckoutPage } from "@/features/checkout";
+import { OrderDetailPage } from "@/features/orders";
+
+const customerRoutes = (
+  <Route element={<PublicLayout />}>
+    <Route
+      path="/cart"
+      element={
+        <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+          <CartPage />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/cart/checkout"
+      element={
+        <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+          <CheckoutPage />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/orders/:id"
+      element={
+        <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+          <OrderDetailPage />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/profile"
+      element={
+        <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+          <ProfilePage />
+        </ProtectedRoute>
+      }
+    />
+  </Route>
+);
+
+export default customerRoutes;

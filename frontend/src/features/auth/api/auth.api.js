@@ -1,0 +1,17 @@
+import { api } from "@/shared/lib/http/httpClient";
+
+export const authAPI = {
+  register: (data) => api.post("/auth/register", data),
+  login: (data) => api.post("/auth/login", data),
+  logout: () => api.post("/auth/logout"),
+  getCurrentUser: () => api.get("/auth/me"),
+  getEffectivePermissions: () => api.get("/auth/context/permissions"),
+  setActiveBranchContext: (data) => api.put("/auth/context/active-branch", data),
+  setSimulatedBranchContext: (data) => api.put("/auth/context/simulate-branch", data),
+  clearSimulatedBranchContext: () => api.delete("/auth/context/simulate-branch"),
+  changePassword: (data) => api.put("/auth/change-password", data),
+  updateAvatar: (avatar) => api.put("/auth/avatar", { avatar }),
+  checkCustomer: (phoneNumber) =>
+    api.get(`/auth/check-customer?phoneNumber=${phoneNumber}`),
+  quickRegister: (data) => api.post("/auth/quick-register", data),
+};
