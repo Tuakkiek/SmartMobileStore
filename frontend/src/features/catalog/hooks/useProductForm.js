@@ -14,15 +14,7 @@ import { getEmptyFormData, emptyVariant } from "@/shared/constants/productConsta
 export const useProductForm = (open, isEdit, effectiveCategory, product) => {
   const [formData, setFormData] = useState(null);
 
-  // LOG để debug
-  useEffect(() => {
-    console.log("🔍 useProductForm mounted:", {
-      open,
-      isEdit,
-      effectiveCategory,
-      productName: product?.name,
-    });
-  }, [open, isEdit, effectiveCategory, product]);
+  // Tracking log removed to clean up production console
 
   // Khởi tạo/Tải dữ liệu form
   useEffect(() => {

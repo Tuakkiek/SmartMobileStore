@@ -1,6 +1,14 @@
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
+console.info("🚀 [HTTP Setup] Kích hoạt API Client với cấu hình:", {
+  env_VITE_API_URL: import.meta.env.VITE_API_URL,
+  mode: import.meta.env.MODE,
+  isProd: import.meta.env.PROD,
+  finalBaseUrl: BASE_URL,
+});
+
 const BRANCH_SCOPED_ROLES = new Set([
   "ADMIN",
   "BRANCH_ADMIN",
@@ -134,6 +142,20 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 🔍 Thêm log chi tiết cho Production Debug
+    console.error("🚨 [HTTP interceptor] Lỗi gọi API:", {
+      message: error?.message,
+      code: error?.code,               // Mã lỗi (VD: ERR_NETWORK, ECONNREFUSED)
+      name: error?.name,               // Tên nhóm lỗi (VD: AxiosError)
+      url: error?.config?.url,
+      method: error?.config?.method,
+      baseURL: error?.config?.baseURL, // Kiểm tra lại chính xác URL ghép vào là gì
+      status: error?.response?.status,
+      data: error?.response?.data,
+      isAxiosError: error?.isAxiosError,
+      isBrowserOnline: typeof navigator !== 'undefined' ? navigator.onLine : 'unknown'
+    });
+
     if (
       error.response?.status === 401 &&
       !String(error.config?.url || "").includes("/auth/login")
