@@ -343,6 +343,8 @@ const restoreInventoryForReturn = async ({
   session,
   reason = "",
 } = {}) => {
+  const fallbackStoreId = normalizeBranchId(order?.assignedStore?.storeId);
+
   const movements = await StockMovement.find({
     referenceType: "ORDER",
     referenceId: String(order?._id),
@@ -364,6 +366,7 @@ const restoreInventoryForReturn = async ({
     const key = `${movement.sku}::${locationId || locationCode}`;
     const existing = grouped.get(key) || {
       sku: movement.sku,
+      storeId: movement.storeId || fallbackStoreId || null,
       locationId: movement.fromLocationId || movement.toLocationId || null,
       locationCode,
       productId: movement.productId,
@@ -414,12 +417,22 @@ const restoreInventoryForReturn = async ({
 
     let location = null;
     if (batch.locationId) {
-      location = await WarehouseLocation.findById(batch.locationId).session(session);
+      location = await WarehouseLocation.findById(batch.locationId)
+        .setOptions({ skipBranchIsolation: true })
+        .session(session);
     }
     if (!location && batch.locationCode) {
-      location = await WarehouseLocation.findOne({
+      const locationQuery = {
         locationCode: batch.locationCode,
-      }).session(session);
+      };
+      if (batch.storeId || fallbackStoreId) {
+        locationQuery.storeId = batch.storeId || fallbackStoreId;
+      }
+      location = await WarehouseLocation.findOne({
+        ...locationQuery,
+      })
+        .setOptions({ skipBranchIsolation: true })
+        .session(session);
     }
     if (!location) {
       omniLog.warn("restoreInventoryForReturn: location not found", {
@@ -433,11 +446,23 @@ const restoreInventoryForReturn = async ({
     const skuMeta = skuMetaMap.get(batch.sku) || {};
     let productId = batch.productId || skuMeta.productId || null;
     let productName = batch.productName || skuMeta.productName || batch.sku;
+    const batchStoreId = normalizeBranchId(batch.storeId || location?.storeId || fallbackStoreId);
+    if (!batchStoreId) {
+      omniLog.warn("restoreInventoryForReturn: missing storeId", {
+        orderId: order?._id,
+        sku: batch.sku,
+        locationCode: location.locationCode,
+      });
+      continue;
+    }
 
     const inventory = await Inventory.findOne({
+      storeId: batchStoreId,
       sku: batch.sku,
       locationId: location._id,
-    }).session(session);
+    })
+      .setOptions({ skipBranchIsolation: true })
+      .session(session);
 
     if (inventory) {
       inventory.quantity = (Number(inventory.quantity) || 0) + toRestore;
@@ -457,6 +482,7 @@ const restoreInventoryForReturn = async ({
       await Inventory.create(
         [
           {
+            storeId: batchStoreId,
             sku: batch.sku,
             productId,
             productName,
@@ -485,6 +511,7 @@ const restoreInventoryForReturn = async ({
     await StockMovement.create(
       [
         {
+          storeId: batchStoreId,
           type: "INBOUND",
           sku: batch.sku,
           productId,
@@ -518,6 +545,8 @@ const restorePickedInventoryForExchange = async ({
   session,
   reason = "",
 } = {}) => {
+  const fallbackStoreId = normalizeBranchId(order?.assignedStore?.storeId);
+
   const movements = await StockMovement.find({
     referenceType: "ORDER",
     referenceId: String(order?._id),
@@ -538,6 +567,7 @@ const restorePickedInventoryForExchange = async ({
     const key = `${movement.sku}::${locationId}`;
     const existing = grouped.get(key) || {
       sku: movement.sku,
+      storeId: movement.storeId || fallbackStoreId || null,
       locationId:
         movement.fromLocationId || movement.toLocationId || null,
       locationCode:
@@ -573,21 +603,39 @@ const restorePickedInventoryForExchange = async ({
 
     let location = null;
     if (batch.locationId) {
-      location = await WarehouseLocation.findById(batch.locationId).session(session);
+      location = await WarehouseLocation.findById(batch.locationId)
+        .setOptions({ skipBranchIsolation: true })
+        .session(session);
     }
     if (!location && batch.locationCode) {
-      location = await WarehouseLocation.findOne({
+      const locationQuery = {
         locationCode: batch.locationCode,
-      }).session(session);
+      };
+      if (batch.storeId || fallbackStoreId) {
+        locationQuery.storeId = batch.storeId || fallbackStoreId;
+      }
+      location = await WarehouseLocation.findOne({
+        ...locationQuery,
+      })
+        .setOptions({ skipBranchIsolation: true })
+        .session(session);
     }
     if (!location) {
       continue;
     }
 
+    const batchStoreId = normalizeBranchId(batch.storeId || location?.storeId || fallbackStoreId);
+    if (!batchStoreId) {
+      continue;
+    }
+
     let inventory = await Inventory.findOne({
+      storeId: batchStoreId,
       sku: batch.sku,
       locationId: location._id,
-    }).session(session);
+    })
+      .setOptions({ skipBranchIsolation: true })
+      .session(session);
 
     if (inventory) {
       inventory.quantity = (Number(inventory.quantity) || 0) + toRestore;
@@ -596,6 +644,7 @@ const restorePickedInventoryForExchange = async ({
       await Inventory.create(
         [
           {
+            storeId: batchStoreId,
             sku: batch.sku,
             productId: batch.productId,
             productName: batch.productName || batch.sku,
@@ -615,6 +664,7 @@ const restorePickedInventoryForExchange = async ({
     await StockMovement.create(
       [
         {
+          storeId: batchStoreId,
           type: "INBOUND",
           sku: batch.sku,
           productId: batch.productId,

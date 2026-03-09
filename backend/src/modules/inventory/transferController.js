@@ -479,6 +479,7 @@ export const shipTransfer = async (req, res) => {
           let remainingQtyToPick = approvedQty;
 
           const query = {
+              storeId: transfer.fromStore.storeId,
               sku: item.variantSku,
               locationCode: { $regex: new RegExp("^" + transfer.fromStore.storeCode + "-") },
               quantity: { $gt: 0 }
@@ -518,6 +519,7 @@ export const shipTransfer = async (req, res) => {
       await StockMovement.create(
         [
           {
+            storeId: transfer.fromStore.storeId,
             type: "TRANSFER",
             sku: item.variantSku,
             productId: item.productId,
@@ -664,6 +666,7 @@ export const receiveTransfer = async (req, res) => {
           // For simplicity/fallback, we find the FIRST available location for this store zone.
           
           let targetLocation = await WarehouseLocation.findOne({
+               storeId: transfer.toStore.storeId,
                locationCode: { $regex: `^${transfer.toStore.storeCode}-` },
                status: "ACTIVE"
           }).session(session);
@@ -675,6 +678,7 @@ export const receiveTransfer = async (req, res) => {
           if (targetLocation) {
               // Check if inventory record exists for this SKU at this location
               let physInv = await Inventory.findOne({
+                  storeId: transfer.toStore.storeId,
                   sku: item.variantSku,
                   locationId: targetLocation._id,
               }).session(session);
@@ -685,6 +689,7 @@ export const receiveTransfer = async (req, res) => {
                   await physInv.save({ session });
               } else {
                   physInv = new Inventory({
+                      storeId: transfer.toStore.storeId,
                       sku: item.variantSku,
                       productId: item.productId,
                       productName: item.name || item.variantSku,
@@ -714,6 +719,7 @@ export const receiveTransfer = async (req, res) => {
       await StockMovement.create(
         [
           {
+            storeId: transfer.toStore.storeId,
             type: "TRANSFER",
             sku: item.variantSku,
             productId: item.productId,

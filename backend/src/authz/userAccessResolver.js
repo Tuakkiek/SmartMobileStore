@@ -150,6 +150,10 @@ export const normalizeUserAccess = (user) => {
     role === "CASHIER";
 
   const isGlobalAdmin = systemRoles.includes("GLOBAL_ADMIN") || role === "GLOBAL_ADMIN";
+  const permissionMode =
+    String(safeUser.permissionMode || "").trim().toUpperCase() === "EXPLICIT"
+      ? "EXPLICIT"
+      : "ROLE_FALLBACK";
 
   return {
     userId: toStringId(safeUser._id),
@@ -164,5 +168,6 @@ export const normalizeUserAccess = (user) => {
     defaultBranchId: defaultBranchId || primaryBranchId || "",
     isGlobalAdmin,
     requiresBranchAssignment,
+    permissionMode,
   };
 };

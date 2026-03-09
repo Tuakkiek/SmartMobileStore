@@ -1,226 +1,182 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/warehouseRoutes.js
-// Routes cho module warehouse
-// ============================================
-
 import express from "express";
-import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import { protect } from "../../middleware/authMiddleware.js";
+import { resolveAccessContext } from "../../middleware/authz/resolveAccessContext.js";
+import { authorize } from "../../middleware/authz/authorize.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 import * as warehouseController from "./warehouseController.js";
 import * as goodsReceiptController from "./goodsReceiptController.js";
 import * as stockOperationsController from "./stockOperationsController.js";
 import * as stockInController from "./stockInController.js";
+import {
+  requireGlobalSimulationForWarehouseWrite,
+  resolveWarehouseScopeMode,
+} from "./warehouseContext.js";
 
 const router = express.Router();
 
-// ============================================
-// DIRECT STOCK-IN (Global Admin)
-// ============================================
+const requireWarehouseRead = authorize(AUTHZ_ACTIONS.WAREHOUSE_READ, {
+  scopeMode: resolveWarehouseScopeMode,
+  requireActiveBranchFor: ["branch"],
+  resourceType: "WAREHOUSE",
+});
 
-// Nhập kho trực tiếp (không cần PO)
+const requireWarehouseWrite = authorize(AUTHZ_ACTIONS.WAREHOUSE_WRITE, {
+  scopeMode: "branch",
+  requireActiveBranch: true,
+  resourceType: "WAREHOUSE",
+});
+
+router.use(protect, resolveAccessContext);
+
 router.post(
   "/stock-in",
-  protect,
-  restrictTo("ADMIN"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockInController.directStockIn
 );
 
-// Lịch sử nhập kho
 router.get(
   "/stock-in/history",
-  protect,
-  restrictTo("ADMIN"),
+  requireWarehouseRead,
   stockInController.getStockInHistory
 );
 
-// ============================================
-// WAREHOUSE LOCATIONS
-// ============================================
-
-// Tạo cấu trúc kho (Admin only)
 router.post(
   "/locations/generate",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   warehouseController.generateWarehouseStructure
 );
 
-// Lấy danh sách vị trí
-router.get(
-  "/locations",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
-  warehouseController.getAllLocations
-);
+router.get("/locations", requireWarehouseRead, warehouseController.getAllLocations);
 
-// Lấy chi tiết vị trí
 router.get(
   "/locations/:locationCode",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   warehouseController.getLocationDetail
 );
 
-// Đề xuất vị trí lưu kho
 router.post(
   "/locations/suggest",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   warehouseController.suggestLocation
 );
 
-// ============================================
-// INVENTORY
-// ============================================
-
-// Tìm kiếm tồn kho
 router.get(
   "/inventory/search",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   warehouseController.searchInventory
 );
 
-// ============================================
-// PURCHASE ORDERS
-// ============================================
+router.get(
+  "/inventory/by-skus",
+  requireWarehouseRead,
+  warehouseController.getInventoryTotalsBySkus
+);
 
-// Tạo PO
 router.post(
   "/purchase-orders",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   warehouseController.createPurchaseOrder
 );
 
-// Lấy danh sách PO
 router.get(
   "/purchase-orders",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   warehouseController.getPurchaseOrders
 );
 
-// Lấy chi tiết PO
 router.get(
   "/purchase-orders/:id",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   warehouseController.getPurchaseOrderDetail
 );
 
-// Duyệt PO
 router.put(
   "/purchase-orders/:id/approve",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   warehouseController.approvePurchaseOrder
 );
 
-// ============================================
-// GOODS RECEIPT (Nhận hàng)
-// ============================================
-
-// Bắt đầu nhận hàng
 router.post(
   "/goods-receipt/start",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   goodsReceiptController.startGoodsReceipt
 );
 
-// Nhận từng SKU
 router.post(
   "/goods-receipt/receive-item",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   goodsReceiptController.receiveItem
 );
 
-// Hoàn tất nhận hàng
 router.post(
   "/goods-receipt/complete",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   goodsReceiptController.completeGoodsReceipt
 );
 
-// Lấy danh sách GRN
 router.get(
   "/goods-receipt",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   goodsReceiptController.getGoodsReceipts
 );
 
-// ============================================
-// STOCK OPERATIONS (Xuất/Chuyển kho)
-// ============================================
-
-// Lấy pick list cho đơn hàng
 router.get(
   "/pick-list/:orderId",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   stockOperationsController.getPickList
 );
 
-// Xác nhận lấy hàng
 router.post(
   "/pick",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.pickItem
 );
 
-// Chuyển kho nội bộ
 router.post(
   "/transfer",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.transferStock
 );
 
-// ============================================
-// CYCLE COUNT (Kiểm kê)
-// ============================================
-
-// Tạo phiếu kiểm kê
 router.post(
   "/cycle-count",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.createCycleCount
 );
 
-// Lấy danh sách phiếu kiểm kê
 router.get(
   "/cycle-count",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseRead,
   stockOperationsController.getCycleCounts
 );
 
-// Cập nhật kết quả kiểm kê
 router.put(
   "/cycle-count/:id/update-item",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.updateCycleCountItem
 );
 
-// Hoàn thành kiểm kê
 router.put(
   "/cycle-count/:id/complete",
-  protect,
-  restrictTo("WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.completeCycleCount
 );
 
-// Duyệt kiểm kê
 router.put(
   "/cycle-count/:id/approve",
-  protect,
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseWrite,
   stockOperationsController.approveCycleCount
 );
 

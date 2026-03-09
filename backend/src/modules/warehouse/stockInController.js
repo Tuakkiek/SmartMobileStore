@@ -10,6 +10,12 @@ import StockMovement from "./StockMovement.js";
 import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.js";
 import StoreInventory from "../inventory/StoreInventory.js";
 import Store from "../store/Store.js";
+import {
+  ensureWarehouseWriteBranchId,
+  getActiveWarehouseBranchId,
+  resolveWarehouseScopeMode,
+  resolveWarehouseStore,
+} from "./warehouseContext.js";
 
 const DEFAULT_STORE_MIN_STOCK = 5;
 
@@ -157,6 +163,9 @@ export const directStockIn = async (req, res) => {
   session.startTransaction();
 
   try {
+    const activeStoreId = ensureWarehouseWriteBranchId(req);
+    await resolveWarehouseStore(req, { branchId: activeStoreId, session });
+
     const { items } = req.body;
     const actorName = getActorName(req.user);
 
@@ -197,6 +206,7 @@ export const directStockIn = async (req, res) => {
 
       // 2. Validate location
       const location = await WarehouseLocation.findOne({
+        storeId: activeStoreId,
         locationCode: normalizedLocationCode,
         status: "ACTIVE",
       }).session(session);
@@ -216,6 +226,7 @@ export const directStockIn = async (req, res) => {
 
       // 4. Update/create Inventory
       let inventory = await Inventory.findOne({
+        storeId: activeStoreId,
         sku: normalizedSku,
         locationId: location._id,
       }).session(session);
@@ -233,6 +244,7 @@ export const directStockIn = async (req, res) => {
         await inventory.save({ session });
       } else {
         inventory = new Inventory({
+          storeId: activeStoreId,
           sku: normalizedSku,
           productId: product._id,
           productName: product.name,
@@ -256,6 +268,7 @@ export const directStockIn = async (req, res) => {
 
       // 7. Create stock movement log
       const movement = new StockMovement({
+        storeId: activeStoreId,
         type: "INBOUND",
         sku: normalizedSku,
         productId: product._id,
@@ -346,6 +359,12 @@ export const getStockInHistory = async (req, res) => {
       type: "INBOUND",
       referenceType: "MANUAL",
     };
+
+    const scopeMode = resolveWarehouseScopeMode(req);
+    const activeBranchId = getActiveWarehouseBranchId(req);
+    if (scopeMode === "branch") {
+      filter.storeId = activeBranchId;
+    }
 
     if (search) {
       filter.$or = [

@@ -1,20 +1,19 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/StockMovement.js
-// Ghi log mọi hoạt động nhập/xuất/chuyển kho
-// ============================================
-
 import mongoose from "mongoose";
 
 const stockMovementSchema = new mongoose.Schema(
   {
-    // Loại giao dịch
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: false,
+    },
+
     type: {
       type: String,
       enum: ["INBOUND", "OUTBOUND", "TRANSFER", "ADJUSTMENT"],
       required: true,
     },
 
-    // SKU sản phẩm
     sku: {
       type: String,
       required: true,
@@ -32,7 +31,6 @@ const stockMovementSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Vị trí nguồn (null nếu là INBOUND)
     fromLocationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WarehouseLocation",
@@ -43,7 +41,6 @@ const stockMovementSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Vị trí đích (null nếu là OUTBOUND)
     toLocationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WarehouseLocation",
@@ -54,14 +51,12 @@ const stockMovementSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Số lượng
     quantity: {
       type: Number,
       required: true,
       min: 0,
     },
 
-    // Tham chiếu đơn hàng
     referenceType: {
       type: String,
       enum: ["PO", "ORDER", "TRANSFER", "CYCLE_COUNT", "MANUAL"],
@@ -72,7 +67,6 @@ const stockMovementSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Người thực hiện
     performedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -84,22 +78,19 @@ const stockMovementSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Trạng thái chất lượng
     qualityStatus: {
       type: String,
       enum: ["GOOD", "DAMAGED", "EXPIRED"],
       default: "GOOD",
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
     },
 
-    // Chữ ký (cho nhận hàng từ NCC)
     signature: {
-      type: String, // Base64 image
+      type: String,
       trim: true,
     },
   },
@@ -108,11 +99,13 @@ const stockMovementSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
+stockMovementSchema.index({ storeId: 1, createdAt: -1 });
 stockMovementSchema.index({ type: 1 });
 stockMovementSchema.index({ sku: 1 });
 stockMovementSchema.index({ referenceId: 1 });
 stockMovementSchema.index({ performedBy: 1 });
 stockMovementSchema.index({ createdAt: -1 });
 
-export default mongoose.model("StockMovement", stockMovementSchema);
+export default
+  mongoose.models.StockMovement ||
+  mongoose.model("StockMovement", stockMovementSchema);

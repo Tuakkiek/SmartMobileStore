@@ -624,6 +624,7 @@ export const cancelPendingOrder = async (req, res) => {
     }
 
     assertOrderInActiveBranch(req, order);
+    const orderBranchId = String(order?.assignedStore?.storeId || "").trim();
 
     const currentStage = resolveOrderStage(order);
     if (currentStage !== "PENDING_PAYMENT") {
@@ -651,6 +652,7 @@ export const cancelPendingOrder = async (req, res) => {
       }
 
       restoreBatches.set(key, {
+        storeId: movement.storeId || orderBranchId || null,
         sku: movement.sku,
         locationId: movement.fromLocationId,
         locationCode: movement.fromLocationCode,
@@ -665,7 +667,14 @@ export const cancelPendingOrder = async (req, res) => {
         continue;
       }
 
+      const location = await WarehouseLocation.findById(batch.locationId).session(session);
+      const batchStoreId = String(batch.storeId || location?.storeId || orderBranchId || "").trim();
+      if (!batchStoreId) {
+        continue;
+      }
+
       const inventory = await Inventory.findOne({
+        storeId: batchStoreId,
         sku: batch.sku,
         locationId: batch.locationId,
       }).session(session);
@@ -677,6 +686,7 @@ export const cancelPendingOrder = async (req, res) => {
         await Inventory.create(
           [
             {
+              storeId: batchStoreId,
               sku: batch.sku,
               productId: batch.productId,
               productName: batch.productName,
@@ -690,7 +700,6 @@ export const cancelPendingOrder = async (req, res) => {
         );
       }
 
-      const location = await WarehouseLocation.findById(batch.locationId).session(session);
       if (location) {
         location.currentLoad += batch.quantity;
         await location.save({ session });
@@ -699,6 +708,7 @@ export const cancelPendingOrder = async (req, res) => {
       await StockMovement.create(
         [
           {
+            storeId: batchStoreId,
             type: "INBOUND",
             sku: batch.sku,
             productId: batch.productId,

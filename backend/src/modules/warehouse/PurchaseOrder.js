@@ -1,21 +1,20 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/PurchaseOrder.js
-// Quản lý đơn đặt hàng từ nhà cung cấp
-// ============================================
-
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const purchaseOrderSchema = new mongoose.Schema(
   {
-    // Mã PO: PO-202502-001
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+
     poNumber: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
-    // Nhà cung cấp
     supplier: {
       name: {
         type: String,
@@ -36,7 +35,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       },
     },
 
-    // Danh sách sản phẩm
     items: [
       {
         sku: {
@@ -81,7 +79,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       },
     ],
 
-    // Tổng tiền
     subtotal: {
       type: Number,
       required: true,
@@ -106,37 +103,31 @@ const purchaseOrderSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // Điều khoản thanh toán
     paymentTerm: {
       type: String,
       enum: ["COD", "NET7", "NET30", "NET60"],
       default: "NET30",
     },
 
-    // Ngày dự kiến giao hàng
     expectedDeliveryDate: {
       type: Date,
       required: true,
     },
 
-    // Ngày nhận hàng thực tế
     actualDeliveryDate: {
       type: Date,
     },
 
-    // Hạn thanh toán
     paymentDueDate: {
       type: Date,
     },
 
-    // Trạng thái
     status: {
       type: String,
       enum: ["DRAFT", "PENDING", "CONFIRMED", "PARTIAL", "COMPLETED", "CANCELLED"],
       default: "DRAFT",
     },
 
-    // Người tạo
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -148,7 +139,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Người duyệt
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -162,7 +152,6 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
@@ -173,34 +162,35 @@ const purchaseOrderSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-purchaseOrderSchema.index({ poNumber: 1 });
-purchaseOrderSchema.index({ status: 1 });
-purchaseOrderSchema.index({ createdBy: 1 });
-purchaseOrderSchema.index({ expectedDeliveryDate: 1 });
-purchaseOrderSchema.index({ createdAt: -1 });
+purchaseOrderSchema.index({ storeId: 1, poNumber: 1 }, { unique: true });
+purchaseOrderSchema.index({ storeId: 1, status: 1 });
+purchaseOrderSchema.index({ storeId: 1, createdBy: 1 });
+purchaseOrderSchema.index({ storeId: 1, expectedDeliveryDate: 1 });
+purchaseOrderSchema.index({ storeId: 1, createdAt: -1 });
 
-// Methods
-purchaseOrderSchema.methods.updateReceivedQuantity = async function (sku, quantity) {
-  const item = this.items.find((item) => item.sku === sku);
+purchaseOrderSchema.methods.updateReceivedQuantity = async function updateReceivedQuantity(sku, quantity) {
+  const item = this.items.find((nextItem) => nextItem.sku === sku);
   if (item) {
     item.receivedQuantity += quantity;
-    
-    // Check if all items are received
+
     const allReceived = this.items.every(
-      (item) => item.receivedQuantity >= item.orderedQuantity
+      (nextItem) => nextItem.receivedQuantity >= nextItem.orderedQuantity
     );
-    
-    const someReceived = this.items.some((item) => item.receivedQuantity > 0);
-    
+
+    const someReceived = this.items.some((nextItem) => nextItem.receivedQuantity > 0);
+
     if (allReceived) {
       this.status = "COMPLETED";
     } else if (someReceived) {
       this.status = "PARTIAL";
     }
-    
+
     await this.save();
   }
 };
 
-export default mongoose.model("PurchaseOrder", purchaseOrderSchema);
+purchaseOrderSchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
+
+export default
+  mongoose.models.PurchaseOrder ||
+  mongoose.model("PurchaseOrder", purchaseOrderSchema);

@@ -1,85 +1,69 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/warehouseConfigRoutes.js
-// Routes cho quản lý cấu hình kho
-// ============================================
-
 import express from "express";
-import { protect, restrictTo } from "../../middleware/authMiddleware.js";
+import { protect } from "../../middleware/authMiddleware.js";
+import { resolveAccessContext } from "../../middleware/authz/resolveAccessContext.js";
+import { authorize } from "../../middleware/authz/authorize.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
 import * as configController from "./warehouseConfigController.js";
+import {
+  requireGlobalSimulationForWarehouseWrite,
+  resolveWarehouseScopeMode,
+} from "./warehouseContext.js";
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(protect);
+const requireWarehouseConfigRead = authorize(AUTHZ_ACTIONS.WAREHOUSE_READ, {
+  scopeMode: resolveWarehouseScopeMode,
+  requireActiveBranchFor: ["branch"],
+  resourceType: "WAREHOUSE_CONFIG",
+});
 
-// ============================================
-// WAREHOUSE CONFIGURATION CRUD
-// ============================================
+const requireWarehouseConfigWrite = authorize(AUTHZ_ACTIONS.WAREHOUSE_WRITE, {
+  scopeMode: "branch",
+  requireActiveBranch: true,
+  resourceType: "WAREHOUSE_CONFIG",
+});
 
-// Get all warehouses
-router.get(
-  "/",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
-  configController.getAllWarehouses
-);
+router.use(protect, resolveAccessContext);
 
-// Get warehouse by ID
-router.get(
-  "/:id",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
-  configController.getWarehouseById
-);
+router.get("/", requireWarehouseConfigRead, configController.getAllWarehouses);
 
-// Create new warehouse
+router.get("/:id", requireWarehouseConfigRead, configController.getWarehouseById);
+
 router.post(
   "/",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseConfigWrite,
   configController.createWarehouse
 );
 
-// Update warehouse
 router.put(
   "/:id",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseConfigWrite,
   configController.updateWarehouse
 );
 
-// Delete warehouse
 router.delete(
   "/:id",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseConfigWrite,
   configController.deleteWarehouse
 );
 
-// ============================================
-// WAREHOUSE OPERATIONS
-// ============================================
-
-// Generate locations from configuration
 router.post(
   "/:id/generate-locations",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireGlobalSimulationForWarehouseWrite,
+  requireWarehouseConfigWrite,
   configController.generateLocationsFromConfig
 );
 
-// Get warehouse statistics
-router.get(
-  "/:id/stats",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
-  configController.getWarehouseStats
-);
+router.get("/:id/stats", requireWarehouseConfigRead, configController.getWarehouseStats);
 
-// Get warehouse layout for visualization
-router.get(
-  "/:id/layout",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
-  configController.getWarehouseLayout
-);
+router.get("/:id/layout", requireWarehouseConfigRead, configController.getWarehouseLayout);
 
-// Search product location
 router.get(
   "/:id/search-location",
-  restrictTo("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+  requireWarehouseConfigRead,
   configController.searchLocationByProduct
 );
 

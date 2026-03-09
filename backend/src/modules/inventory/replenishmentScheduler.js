@@ -6,6 +6,7 @@ import {
 } from "./replenishmentSnapshotService.js";
 import { sendReplenishmentSummaryNotification } from "../notification/notificationService.js";
 import { omniLog } from "../../utils/logger.js";
+import { runWithBranchContext } from "../../authz/branchContext.js";
 
 const DEFAULT_SCHEDULE_HOUR = 2;
 const DEFAULT_SCHEDULE_MINUTE = 0;
@@ -142,9 +143,17 @@ export const runReplenishmentSnapshotJob = async ({
   const generatedAt = new Date();
   const snapshotDateKey = toDateKey(generatedAt);
   const analysisOptions = getAnalysisOptions();
+  const schedulerContext = {
+    activeBranchId: "",
+    isGlobalAdmin: true,
+    scopeMode: "global",
+    userId: String(initiatedBy || "SYSTEM"),
+  };
 
   try {
-    const analysisResult = await analyzeReplenishmentNeeds(analysisOptions);
+    const analysisResult = await runWithBranchContext(schedulerContext, async () =>
+      analyzeReplenishmentNeeds(analysisOptions)
+    );
     const { snapshot, recommendationsCount } = await saveReplenishmentSnapshot({
       recommendations: analysisResult.recommendations || [],
       summary: analysisResult.summary || {},

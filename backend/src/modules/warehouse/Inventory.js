@@ -1,20 +1,20 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/Inventory.js
-// Quản lý tồn kho theo từng vị trí và SKU
-// ============================================
-
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const inventorySchema = new mongoose.Schema(
   {
-    // SKU sản phẩm (reference to UniversalProduct.variants)
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+
     sku: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Thông tin sản phẩm (cached for performance)
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UniversalProduct",
@@ -26,7 +26,6 @@ const inventorySchema = new mongoose.Schema(
       required: true,
     },
 
-    // Vị trí lưu kho
     locationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WarehouseLocation",
@@ -36,9 +35,9 @@ const inventorySchema = new mongoose.Schema(
     locationCode: {
       type: String,
       required: true,
+      trim: true,
     },
 
-    // Số lượng tồn kho tại vị trí này
     quantity: {
       type: Number,
       required: true,
@@ -46,19 +45,16 @@ const inventorySchema = new mongoose.Schema(
       min: 0,
     },
 
-    // Thông tin nhập kho
     lastReceived: {
       type: Date,
     },
 
-    // Trạng thái
     status: {
       type: String,
       enum: ["GOOD", "DAMAGED", "EXPIRED", "RESERVED"],
       default: "GOOD",
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
@@ -69,11 +65,12 @@ const inventorySchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-inventorySchema.index({ sku: 1 });
-inventorySchema.index({ locationId: 1 });
-inventorySchema.index({ sku: 1, locationId: 1 }, { unique: true });
-inventorySchema.index({ productId: 1 });
-inventorySchema.index({ status: 1 });
+inventorySchema.index({ storeId: 1, sku: 1 });
+inventorySchema.index({ storeId: 1, locationId: 1 });
+inventorySchema.index({ storeId: 1, sku: 1, locationId: 1 }, { unique: true });
+inventorySchema.index({ storeId: 1, productId: 1 });
+inventorySchema.index({ storeId: 1, status: 1 });
 
-export default mongoose.model("Inventory", inventorySchema);
+inventorySchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
+
+export default mongoose.models.Inventory || mongoose.model("Inventory", inventorySchema);

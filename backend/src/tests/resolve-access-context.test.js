@@ -67,10 +67,10 @@ test("resolveAccessContext denies manual branch switch via header for staff", as
 
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 403);
-  assert.equal(res.payload?.code, "AUTHZ_BRANCH_SWITCH_FORBIDDEN");
+  assert.equal(res.payload?.code, "AUTHZ_BRANCH_FORBIDDEN");
 });
 
-test("resolveAccessContext denies staff with invalid branch assignment count", async () => {
+test("resolveAccessContext denies staff with no branch assignment", async () => {
   const req = {
     user: buildStaffUser({ branchAssignments: [] }),
     headers: {},
@@ -80,7 +80,7 @@ test("resolveAccessContext denies staff with invalid branch assignment count", a
   await resolveAccessContext(req, res, () => {});
 
   assert.equal(res.statusCode, 403);
-  assert.equal(res.payload?.code, "AUTHZ_INVALID_BRANCH_ASSIGNMENT");
+  assert.equal(res.payload?.code, "AUTHZ_NO_BRANCH_ASSIGNED");
 });
 
 test("resolveAccessContext keeps simulation path for global admin", async () => {

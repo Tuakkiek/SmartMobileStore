@@ -1,21 +1,20 @@
-// ============================================
-// FILE: backend/src/modules/warehouse/WarehouseLocation.js
-// Quản lý vị trí trong kho (Khu/Dãy/Tầng/Ô)
-// ============================================
-
 import mongoose from "mongoose";
+import { branchIsolationPlugin } from "../../authz/branchIsolationPlugin.js";
 
 const warehouseLocationSchema = new mongoose.Schema(
   {
-    // Mã vị trí: WH-HCM-A-01-03-05
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      required: true,
+    },
+
     locationCode: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
-    // Kho (warehouse)
     warehouse: {
       type: String,
       required: true,
@@ -23,40 +22,36 @@ const warehouseLocationSchema = new mongoose.Schema(
       default: "WH-HCM",
     },
 
-    // Khu (zone)
     zone: {
       type: String,
       required: true,
       trim: true,
     },
+
     zoneName: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Dãy (aisle)
     aisle: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Tầng (shelf)
     shelf: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Ô (bin)
     bin: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Sức chứa
     capacity: {
       type: Number,
       required: true,
@@ -64,21 +59,18 @@ const warehouseLocationSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // Số lượng hiện tại
     currentLoad: {
       type: Number,
       default: 0,
       min: 0,
     },
 
-    // Trạng thái
     status: {
       type: String,
       enum: ["ACTIVE", "INACTIVE", "MAINTENANCE"],
       default: "ACTIVE",
     },
 
-    // Loại sản phẩm được lưu (để tối ưu tìm kiếm)
     productCategories: [
       {
         type: String,
@@ -86,13 +78,11 @@ const warehouseLocationSchema = new mongoose.Schema(
       },
     ],
 
-    // QR Code data
     qrCode: {
       type: String,
       trim: true,
     },
 
-    // Ghi chú
     notes: {
       type: String,
       trim: true,
@@ -103,34 +93,31 @@ const warehouseLocationSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-warehouseLocationSchema.index({ locationCode: 1 });
-warehouseLocationSchema.index({ zone: 1, aisle: 1, shelf: 1, bin: 1 });
-warehouseLocationSchema.index({ status: 1 });
+warehouseLocationSchema.index({ storeId: 1, locationCode: 1 }, { unique: true });
+warehouseLocationSchema.index({ storeId: 1, zone: 1, aisle: 1, shelf: 1, bin: 1 });
+warehouseLocationSchema.index({ storeId: 1, status: 1 });
 warehouseLocationSchema.index({ productCategories: 1 });
 
-// Virtual: Tỷ lệ lấp đầy
-warehouseLocationSchema.virtual("fillRate").get(function () {
+warehouseLocationSchema.virtual("fillRate").get(function fillRateGetter() {
   if (this.capacity === 0) return 0;
   return Math.round((this.currentLoad / this.capacity) * 100);
 });
 
-// Methods
-warehouseLocationSchema.methods.canAccommodate = function (quantity) {
+warehouseLocationSchema.methods.canAccommodate = function canAccommodate(quantity) {
   return this.currentLoad + quantity <= this.capacity;
 };
 
-warehouseLocationSchema.methods.addStock = async function (quantity) {
+warehouseLocationSchema.methods.addStock = async function addStock(quantity) {
   if (!this.canAccommodate(quantity)) {
-    throw new Error("Vị trí không đủ chỗ");
+    throw new Error("Vi tri khong du cho");
   }
   this.currentLoad += quantity;
   await this.save();
 };
 
-warehouseLocationSchema.methods.removeStock = async function (quantity) {
+warehouseLocationSchema.methods.removeStock = async function removeStock(quantity) {
   if (this.currentLoad < quantity) {
-    throw new Error("Số lượng trong kho không đủ");
+    throw new Error("So luong trong kho khong du");
   }
   this.currentLoad -= quantity;
   await this.save();
@@ -139,4 +126,8 @@ warehouseLocationSchema.methods.removeStock = async function (quantity) {
 warehouseLocationSchema.set("toJSON", { virtuals: true });
 warehouseLocationSchema.set("toObject", { virtuals: true });
 
-export default mongoose.model("WarehouseLocation", warehouseLocationSchema);
+warehouseLocationSchema.plugin(branchIsolationPlugin, { branchField: "storeId" });
+
+export default
+  mongoose.models.WarehouseLocation ||
+  mongoose.model("WarehouseLocation", warehouseLocationSchema);

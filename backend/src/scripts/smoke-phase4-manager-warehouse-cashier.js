@@ -12,6 +12,7 @@ import {
 import Inventory from "../modules/warehouse/Inventory.js";
 import WarehouseLocation from "../modules/warehouse/WarehouseLocation.js";
 import StockMovement from "../modules/warehouse/StockMovement.js";
+import Store from "../modules/store/Store.js";
 
 dotenv.config();
 
@@ -72,9 +73,13 @@ const run = async () => {
     const warehouseUser =
       (await User.findOne({ role: "WAREHOUSE_MANAGER" }).select("_id role fullName name")) ||
       (await User.findOne({ role: "ADMIN" }).select("_id role fullName name"));
+    const warehouseStore =
+      (await Store.findOne({ code: "WH-HCM" }).select("_id code")) ||
+      (await Store.findOne({ type: "WAREHOUSE", status: "ACTIVE" }).select("_id code"));
 
     assert(managerUser, "No ORDER_MANAGER/ADMIN user found");
     assert(cashierUser, "No CASHIER/ADMIN user found");
+    assert(warehouseStore, "No warehouse store found");
     // warehouseUser might be same as managerUser if ADMIN is used, that's fine.
 
     log("Users resolved", {
@@ -137,6 +142,7 @@ const run = async () => {
     cleanupLocationCodes.push(locationCode);
 
     const location = await WarehouseLocation.create({
+      storeId: warehouseStore._id,
       locationCode,
       warehouse: "WH-HCM",
       zone: "PH4",
@@ -150,6 +156,7 @@ const run = async () => {
     });
 
     await Inventory.create({
+      storeId: warehouseStore._id,
       sku: sku2,
       productId,
       productName: "Phase4 Smoke Product",
@@ -160,6 +167,7 @@ const run = async () => {
     });
 
     await StockMovement.create({
+      storeId: warehouseStore._id,
       type: "OUTBOUND",
       sku: sku2,
       productId,
@@ -260,12 +268,20 @@ const run = async () => {
       "Canceled order stage is not CANCELLED"
     );
 
-    const restoredInventory = await Inventory.findOne({ sku: sku2, locationCode }).lean();
-    const restoredLocation = await WarehouseLocation.findOne({ locationCode }).lean();
+    const restoredInventory = await Inventory.findOne({
+      storeId: warehouseStore._id,
+      sku: sku2,
+      locationCode,
+    }).lean();
+    const restoredLocation = await WarehouseLocation.findOne({
+      storeId: warehouseStore._id,
+      locationCode,
+    }).lean();
     assert(restoredInventory?.quantity === 10, "Inventory not restored to expected qty");
     assert(restoredLocation?.currentLoad === 10, "Location load not restored as expected");
 
     const inboundRestore = await StockMovement.findOne({
+      storeId: warehouseStore._id,
       type: "INBOUND",
       referenceType: "ORDER",
       referenceId: String(orderCancel._id),
@@ -281,8 +297,12 @@ const run = async () => {
       await StockMovement.deleteMany({ referenceId: { $in: cleanupRefIds } });
     }
     if (cleanupLocationCodes.length) {
-      await Inventory.deleteMany({ locationCode: { $in: cleanupLocationCodes } });
+      await Inventory.deleteMany({
+        storeId: warehouseStore?._id,
+        locationCode: { $in: cleanupLocationCodes },
+      });
       await WarehouseLocation.deleteMany({
+        storeId: warehouseStore?._id,
         locationCode: { $in: cleanupLocationCodes },
       });
     }
@@ -298,4 +318,3 @@ run().catch((error) => {
   console.error("[PHASE4][SMOKE] FAILED", error.message);
   process.exit(1);
 });
-

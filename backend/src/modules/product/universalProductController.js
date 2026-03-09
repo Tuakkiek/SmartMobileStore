@@ -497,9 +497,26 @@ export const findAll = async (req, res) => {
     // 2. Build Query for Universal Products
     const uniQuery = {};
     if (search) {
+      const skuMatchedVariants = await UniversalVariant.find({
+        sku: { $regex: search, $options: "i" },
+      })
+        .select("productId")
+        .limit(200)
+        .lean();
+      const skuMatchedProductIds = [
+        ...new Set(
+          skuMatchedVariants
+            .map((variant) => String(variant?.productId || ""))
+            .filter(Boolean)
+        ),
+      ];
+
       uniQuery.$or = [
         { name: { $regex: search, $options: "i" } },
         { model: { $regex: search, $options: "i" } },
+        ...(skuMatchedProductIds.length > 0
+          ? [{ _id: { $in: skuMatchedProductIds } }]
+          : []),
       ];
     }
     if (status) uniQuery.status = status;
