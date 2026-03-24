@@ -615,6 +615,20 @@ const orderSchema = new mongoose.Schema(
 
     notes: String,
     note: String,
+    returnReason: {
+      type: {
+        type: String,
+        enum: ["CUSTOMER_REJECTED", "PRODUCT_DEFECT", "OTHER"],
+      },
+      label: {
+        type: String,
+        trim: true,
+      },
+      detail: {
+        type: String,
+        trim: true,
+      },
+    },
     cancelReason: String,
 
     trackingNumber: String,

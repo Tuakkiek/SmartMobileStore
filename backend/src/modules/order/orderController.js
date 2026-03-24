@@ -75,6 +75,25 @@ const CARRIER_EVENT_TO_STATUS = Object.freeze({
   CANCELLED: "CANCELLED",
 });
 const RETURN_RESTORE_STATUSES = new Set(["RETURNED", "DELIVERY_FAILED"]);
+const RETURN_REASON_TYPES = new Set(["CUSTOMER_REJECTED", "PRODUCT_DEFECT", "OTHER"]);
+const RETURN_REASON_LABELS = Object.freeze({
+  CUSTOMER_REJECTED: "Khong nhan - Khach hang tu choi nhan hang",
+  PRODUCT_DEFECT: "Hang loi - San pham bi hong, loi, sai specifications",
+  OTHER: "Khac - Cac ly do khac",
+});
+const RETURN_RESTORE_REASON_TYPES = new Set(["CUSTOMER_REJECTED"]);
+
+const getReturnReasonType = (returnReason) => {
+  if (!returnReason) return "";
+  const rawType = returnReason.type || returnReason.reasonType || "";
+  return String(rawType).trim().toUpperCase();
+};
+
+const shouldRestoreInventoryForReturnReason = (returnReason) =>
+  RETURN_RESTORE_REASON_TYPES.has(getReturnReasonType(returnReason));
+
+const sumRestoredQuantity = (items = []) =>
+  items.reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0);
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -85,6 +104,42 @@ const badRequest = (message) => {
   const error = new Error(message);
   error.httpStatus = 400;
   return error;
+};
+
+const normalizeReturnReasonPayload = (payload) => {
+  if (!payload) return null;
+
+  if (typeof payload === "string") {
+    const detail = payload.trim();
+    if (!detail) return null;
+    return {
+      type: "OTHER",
+      label: RETURN_REASON_LABELS.OTHER,
+      detail,
+    };
+  }
+
+  if (typeof payload !== "object" || Array.isArray(payload)) {
+    throw badRequest("Ly do tra hang khong hop le");
+  }
+
+  const rawType = payload.type || payload.reasonType || "";
+  const type = String(rawType).trim().toUpperCase();
+  const detail = String(payload.detail || payload.reasonDetail || "").trim();
+
+  if (!RETURN_REASON_TYPES.has(type)) {
+    throw badRequest("Loai ly do tra hang khong hop le");
+  }
+
+  if (type === "OTHER" && !detail) {
+    throw badRequest("Vui long nhap chi tiet ly do tra hang");
+  }
+
+  return {
+    type,
+    label: RETURN_REASON_LABELS[type] || type,
+    detail: type === "OTHER" ? detail : detail || "",
+  };
 };
 
 const normalizeLegacyStatus = (status) => {
@@ -1479,8 +1534,9 @@ export const updateOrderStatus = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { status, note, shipperId, assignedStoreId } = req.body;
+    const { status, note, shipperId, assignedStoreId, returnReason } = req.body;
     const targetStatus = normalizeRequestedOrderStatus(status);
+    let normalizedReturnReason = null;
     const isManagerRole = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
     const canAssignCarrier = ["ADMIN", "ORDER_MANAGER"].includes(
       req.user.role
@@ -1494,6 +1550,10 @@ export const updateOrderStatus = async (req, res) => {
         success: false,
         message: "Trạng thái không hợp lệ",
       });
+    }
+
+    if (targetStatus === "RETURNED") {
+      normalizedReturnReason = normalizeReturnReasonPayload(returnReason);
     }
 
     const order = await Order.findById(req.params.id).session(session);
@@ -1889,6 +1949,144 @@ export const updateOrderStatus = async (req, res) => {
       };
     }
 
+    if (targetStatus === "RETURNED") {
+      const noteFallback = typeof note === "string" ? note.trim() : "";
+      if (!normalizedReturnReason && noteFallback) {
+        normalizedReturnReason = {
+          type: "OTHER",
+          label: RETURN_REASON_LABELS.OTHER,
+          detail: noteFallback,
+        };
+      }
+
+      if (!normalizedReturnReason) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Vui long chon loai ly do tra hang",
+        });
+      }
+
+      order.returnReason = normalizedReturnReason;
+
+      const reasonType = getReturnReasonType(normalizedReturnReason);
+      const reasonTypeLabel = reasonType || "UNKNOWN";
+      const reasonLabel =
+        normalizedReturnReason?.label || RETURN_REASON_LABELS[reasonType] || "";
+      const reasonDetail = normalizedReturnReason?.detail || "";
+      const restoreReason = reasonLabel || reasonDetail || noteFallback;
+      const shouldRestoreInventory =
+        shouldRestoreInventoryForReturnReason(normalizedReturnReason);
+
+      if (shouldRestoreInventory) {
+        omniLog.info("updateOrderStatus: restore inventory for return", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          reasonType: reasonTypeLabel,
+          reasonLabel,
+          userId: req.user?._id,
+          role: req.user?.role,
+        });
+
+        try {
+          const restoredItems = await restoreInventoryForReturn({
+            order,
+            user: req.user,
+            session,
+            reason: restoreReason,
+          });
+          const restoredQuantity = sumRestoredQuantity(restoredItems);
+
+          omniLog.info("updateOrderStatus: restore inventory completed", {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            reasonType: reasonTypeLabel,
+            restoredItemsCount: restoredItems.length,
+            restoredQuantity,
+            restoredItems,
+          });
+
+          await trackOmnichannelEvent({
+            eventType: "RETURN_INVENTORY_RESTORE_SUCCESS",
+            operation: "restore_inventory_for_return",
+            level: "INFO",
+            success: true,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            fulfillmentType: order.fulfillmentType,
+            storeId: order.assignedStore?.storeId,
+            itemCount: restoredItems.length,
+            userId: req.user?._id,
+            metadata: {
+              source: "update_order_status",
+              reasonType: reasonTypeLabel,
+              reasonLabel,
+              reasonDetail,
+              restoredQuantity,
+              restoredItems,
+            },
+          });
+        } catch (error) {
+          omniLog.error("updateOrderStatus: restore inventory failed", {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            reasonType: reasonTypeLabel,
+            error: error.message,
+          });
+
+          await trackOmnichannelEvent({
+            eventType: "RETURN_INVENTORY_RESTORE_FAILED",
+            operation: "restore_inventory_for_return",
+            level: "ERROR",
+            success: false,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            fulfillmentType: order.fulfillmentType,
+            storeId: order.assignedStore?.storeId,
+            userId: req.user?._id,
+            httpStatus: 500,
+            errorMessage: error.message,
+            metadata: {
+              source: "update_order_status",
+              reasonType: reasonTypeLabel,
+              reasonLabel,
+              reasonDetail,
+            },
+          });
+
+          throw error;
+        }
+      } else {
+        omniLog.info("updateOrderStatus: skip restore inventory for return", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          reasonType: reasonTypeLabel,
+          reasonLabel,
+          reasonDetail,
+          userId: req.user?._id,
+          role: req.user?.role,
+        });
+
+        await trackOmnichannelEvent({
+          eventType: "RETURN_INVENTORY_RESTORE_SKIPPED",
+          operation: "restore_inventory_for_return",
+          level: "INFO",
+          success: true,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          fulfillmentType: order.fulfillmentType,
+          storeId: order.assignedStore?.storeId,
+          userId: req.user?._id,
+          metadata: {
+            source: "update_order_status",
+            reasonType: reasonTypeLabel,
+            reasonLabel,
+            reasonDetail,
+          },
+        });
+      }
+    }
+
     if (targetStatus === "CANCELLED") {
       // ✅ PAID-ORDER GUARD: block trực tiếp hủy đơn đã PAID
       // Note: canTransitionOrderStatus đã chặn ở layer FSM,
@@ -2003,6 +2201,7 @@ export const updateOrderStatus = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+    const statusCode = error.httpStatus || 500;
 
     omniLog.error("updateOrderStatus failed", {
       orderId: req.params.id,
@@ -2011,7 +2210,7 @@ export const updateOrderStatus = async (req, res) => {
       error: error.message,
     });
 
-    res.status(500).json({
+    res.status(statusCode).json({
       success: false,
       message: "Lỗi khi cập nhật trạng thái",
       error: error.message,
@@ -2356,24 +2555,142 @@ export const handleCarrierWebhook = async (req, res) => {
 
     if (RETURN_RESTORE_STATUSES.has(normalizedEventType)) {
       order.returnedAt = order.returnedAt || eventTime;
-      await restoreInventoryForReturn({
-        order,
-        user: {
-          _id:
-            order?.shipperInfo?.shipperId ||
-            order?.carrierAssignment?.assignedBy ||
-            order?.createdByInfo?.userId ||
-            order?.customerId ||
-            order?.userId,
-          fullName:
-            order?.shipperInfo?.shipperName ||
-            normalizedCarrierName ||
-            order?.createdByInfo?.userName ||
-            "Carrier webhook",
-        },
-        session,
-        reason: webhookNote,
-      });
+      const restoreActor = {
+        _id:
+          order?.shipperInfo?.shipperId ||
+          order?.carrierAssignment?.assignedBy ||
+          order?.createdByInfo?.userId ||
+          order?.customerId ||
+          order?.userId,
+        fullName:
+          order?.shipperInfo?.shipperName ||
+          normalizedCarrierName ||
+          order?.createdByInfo?.userName ||
+          "Carrier webhook",
+      };
+
+      const reasonType = getReturnReasonType(order.returnReason);
+      const reasonTypeLabel = reasonType || "UNKNOWN";
+      const reasonLabel = order.returnReason?.label || RETURN_REASON_LABELS[reasonType] || "";
+      const reasonDetail = order.returnReason?.detail || "";
+      const restoreReason = reasonLabel || reasonDetail || webhookNote;
+      const shouldRestoreInventory = shouldRestoreInventoryForReturnReason(order.returnReason);
+
+      if (shouldRestoreInventory) {
+        omniLog.info("handleCarrierWebhook: restore inventory for return", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          eventType: normalizedEventType,
+          reasonType: reasonTypeLabel,
+          reasonLabel,
+          carrierName: normalizedCarrierName,
+        });
+
+        try {
+          const restoredItems = await restoreInventoryForReturn({
+            order,
+            user: restoreActor,
+            session,
+            reason: restoreReason,
+          });
+          const restoredQuantity = sumRestoredQuantity(restoredItems);
+
+          omniLog.info("handleCarrierWebhook: restore inventory completed", {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            eventType: normalizedEventType,
+            reasonType: reasonTypeLabel,
+            restoredItemsCount: restoredItems.length,
+            restoredQuantity,
+            restoredItems,
+          });
+
+          await trackOmnichannelEvent({
+            eventType: "RETURN_INVENTORY_RESTORE_SUCCESS",
+            operation: "restore_inventory_for_return",
+            level: "INFO",
+            success: true,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            fulfillmentType: order.fulfillmentType,
+            storeId: order.assignedStore?.storeId,
+            itemCount: restoredItems.length,
+            userId: restoreActor?._id,
+            metadata: {
+              source: "carrier_webhook",
+              eventType: normalizedEventType,
+              carrierName: normalizedCarrierName,
+              reasonType: reasonTypeLabel,
+              reasonLabel,
+              reasonDetail,
+              restoredQuantity,
+              restoredItems,
+            },
+          });
+        } catch (error) {
+          omniLog.error("handleCarrierWebhook: restore inventory failed", {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            eventType: normalizedEventType,
+            reasonType: reasonTypeLabel,
+            error: error.message,
+          });
+
+          await trackOmnichannelEvent({
+            eventType: "RETURN_INVENTORY_RESTORE_FAILED",
+            operation: "restore_inventory_for_return",
+            level: "ERROR",
+            success: false,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            fulfillmentType: order.fulfillmentType,
+            storeId: order.assignedStore?.storeId,
+            userId: restoreActor?._id,
+            httpStatus: 500,
+            errorMessage: error.message,
+            metadata: {
+              source: "carrier_webhook",
+              eventType: normalizedEventType,
+              carrierName: normalizedCarrierName,
+              reasonType: reasonTypeLabel,
+              reasonLabel,
+              reasonDetail,
+            },
+          });
+
+          throw error;
+        }
+      } else {
+        omniLog.info("handleCarrierWebhook: skip restore inventory for return", {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          eventType: normalizedEventType,
+          reasonType: reasonTypeLabel,
+          reasonLabel,
+          reasonDetail,
+          carrierName: normalizedCarrierName,
+        });
+
+        await trackOmnichannelEvent({
+          eventType: "RETURN_INVENTORY_RESTORE_SKIPPED",
+          operation: "restore_inventory_for_return",
+          level: "INFO",
+          success: true,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          fulfillmentType: order.fulfillmentType,
+          storeId: order.assignedStore?.storeId,
+          userId: restoreActor?._id,
+          metadata: {
+            source: "carrier_webhook",
+            eventType: normalizedEventType,
+            carrierName: normalizedCarrierName,
+            reasonType: reasonTypeLabel,
+            reasonLabel,
+            reasonDetail,
+          },
+        });
+      }
     }
 
     if (proof && typeof proof === "object") {

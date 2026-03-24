@@ -35,7 +35,6 @@ import {
   CheckCircle2, // ĐÃ THÊM: Icon cho thanh toán thành công
 } from "lucide-react";
 import { orderAPI } from "@/features/orders";
-import { userAPI } from "@/features/account";
 import {
   formatPrice,
   formatDate,
@@ -44,6 +43,44 @@ import {
 } from "@/shared/lib/utils";
 
 import PersonalStatsWidget from "../components/PersonalStatsWidget";
+
+const RETURN_REASON_OPTIONS = Object.freeze([
+  {
+    value: "CUSTOMER_REJECTED",
+    label: "Không nhận",
+    description: "Khách hàng từ chối nhận hàng",
+    restoresStock: true,
+  },
+  {
+    value: "PRODUCT_DEFECT",
+    label: "Hàng lỗi",
+    description: "Sản phẩm bị hỏng, lỗi, sai specifications",
+    restoresStock: false,
+  },
+  {
+    value: "OTHER",
+    label: "Khác",
+    description: "Các lý do khác",
+    restoresStock: false,
+  },
+]);
+
+const RETURN_REASON_LABEL_MAP = RETURN_REASON_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = `${option.label} - ${option.description}`;
+  return acc;
+}, {});
+
+const buildReturnNote = (reasonType, reasonDetail = "") => {
+  const reasonLabel = RETURN_REASON_LABEL_MAP[reasonType];
+  if (!reasonLabel) return "Trả hàng";
+
+  const normalizedDetail = String(reasonDetail || "").trim();
+  if (reasonType === "OTHER" && normalizedDetail) {
+    return `Trả hàng. Lý do: ${reasonLabel}. Chi tiết: ${normalizedDetail}`;
+  }
+
+  return `Trả hàng. Lý do: ${reasonLabel}`;
+};
 
 const ShipperDashboard = () => {
   const { user } = useAuthStore();
@@ -57,7 +94,15 @@ const ShipperDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [completionNote, setCompletionNote] = useState("");
   const [returnReason, setReturnReason] = useState("");
+  const [selectedReturnReasonType, setSelectedReturnReasonType] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedReturnReasonMeta = useMemo(
+    () =>
+      RETURN_REASON_OPTIONS.find(
+        (option) => option.value === selectedReturnReasonType
+      ) || null,
+    [selectedReturnReasonType]
+  );
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -232,6 +277,10 @@ const ShipperDashboard = () => {
   /* ACTION HANDLERS */
   /* ------------------------------------------------------------------ */
   const refreshAfterAction = () => fetchAllOrders();
+  const resetReturnForm = () => {
+    setSelectedReturnReasonType("");
+    setReturnReason("");
+  };
 
   const handleCompleteDelivery = async () => {
     if (!completionNote.trim())
@@ -253,16 +302,28 @@ const ShipperDashboard = () => {
   };
 
   const handleReturnOrder = async () => {
-    if (!returnReason.trim())
-      return toast.error("Vui lòng nhập lý do trả hàng");
+    if (!selectedOrder?._id) return toast.error("Không tìm thấy đơn hàng");
+    if (!selectedReturnReasonType)
+      return toast.error("Vui lòng chọn loại lý do trả hàng");
+    if (selectedReturnReasonType === "OTHER" && !returnReason.trim())
+      return toast.error("Vui lòng nhập chi tiết lý do trả hàng");
+
+    const reasonDetail = returnReason.trim();
+    const returnNote = buildReturnNote(selectedReturnReasonType, reasonDetail);
+
     setIsSubmitting(true);
     try {
       await orderAPI.updateStatus(selectedOrder._id, {
         status: "RETURNED",
-        note: `Trả hàng. Lý do: ${returnReason}`,
+        note: returnNote,
+        returnReason: {
+          type: selectedReturnReasonType,
+          detail: selectedReturnReasonType === "OTHER" ? reasonDetail : "",
+        },
       });
       toast.success("Đã xác nhận trả hàng");
       setShowReturnDialog(false);
+      resetReturnForm();
       refreshAfterAction();
     } catch (e) {
       toast.error(e.response?.data?.message || "Cập nhật thất bại");
@@ -767,6 +828,7 @@ const ShipperDashboard = () => {
                               variant="destructive"
                               onClick={() => {
                                 setSelectedOrder(order);
+                                resetReturnForm();
                                 setShowReturnDialog(true);
                               }}
                             >
@@ -971,7 +1033,15 @@ const ShipperDashboard = () => {
       </Dialog>
 
       {/* Return Dialog */}
-      <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+      <Dialog
+        open={showReturnDialog}
+        onOpenChange={(open) => {
+          setShowReturnDialog(open);
+          if (!open) {
+            resetReturnForm();
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Xác nhận trả hàng</DialogTitle>
@@ -981,11 +1051,66 @@ const ShipperDashboard = () => {
               **RETURNED**.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            placeholder="Lý do trả hàng (ví dụ: Khách hàng không nhận, Sai địa chỉ...)"
-            value={returnReason}
-            onChange={(e) => setReturnReason(e.target.value)}
-          />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Loại lý do trả hàng <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedReturnReasonType}
+                onChange={(e) => {
+                  const nextType = e.target.value;
+                  setSelectedReturnReasonType(nextType);
+                  if (nextType !== "OTHER") {
+                    setReturnReason("");
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-md"
+              >
+                <option value="">Chọn loại lý do</option>
+                {RETURN_REASON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} - {option.description}{" "}
+                    {option.restoresStock ? "(Hoan kho)" : "(Khong hoan kho)"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedReturnReasonMeta && (
+              <div
+                className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
+                  selectedReturnReasonMeta.restoresStock
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                {selectedReturnReasonMeta.restoresStock ? (
+                  <CheckCircle className="mt-0.5 h-4 w-4" />
+                ) : (
+                  <AlertCircle className="mt-0.5 h-4 w-4" />
+                )}
+                <span>
+                  {selectedReturnReasonMeta.restoresStock
+                    ? "Kho se tu dong hoan ton khi tra hang."
+                    : "Ly do nay khong tu dong hoan ton kho."}
+                </span>
+              </div>
+            )}
+
+            {selectedReturnReasonType === "OTHER" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Chi tiết lý do <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  placeholder="Nhập chi tiết lý do trả hàng"
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
