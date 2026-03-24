@@ -10,6 +10,7 @@ import {
   loadActiveUserPermissionGrants,
 } from "./userPermissionService.js";
 import { getOrLoadEffectiveContext } from "./effectivePermissionCache.js";
+import { loadRolePermissionMap } from "./rolePermissionService.js";
 
 const normalizeScopeType = (value) => String(value || "").trim().toUpperCase();
 const normalizeScopeId = (value) => String(value || "").trim();
@@ -72,6 +73,7 @@ export const resolveEffectiveAccessContext = async ({
 
   const cacheKey = `${userId}:${permissionsVersion}:${effectiveActiveBranchId || "_"}:effective`;
   return getOrLoadEffectiveContext(cacheKey, async () => {
+    const rolePermissionMap = await loadRolePermissionMap();
     const explicitGrants = await loadActiveUserPermissionGrants({
       userId: normalized.userId,
       permissionsVersion: normalized.permissionsVersion,
@@ -80,7 +82,7 @@ export const resolveEffectiveAccessContext = async ({
     const roleGrants = buildRolePermissionGrants({
       ...normalized,
       activeBranchId: effectiveActiveBranchId,
-    });
+    }, { rolePermissionMap });
 
     const selected = selectBaseGrants({
       explicitGrants,
@@ -101,6 +103,7 @@ export const resolveEffectiveAccessContext = async ({
       allowedBranchIds,
       permissionMode: selected.permissionMode,
       permissionGrants,
+      rolePermissionMap,
     };
     authzSnapshot.permissions = buildPermissionSet(authzSnapshot);
     authzSnapshot.permissionGrantMap = buildPermissionGrantMap(permissionGrants);

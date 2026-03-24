@@ -285,6 +285,7 @@ export const ensurePermissionCatalogSeeded = async () => {
           description: definition.description || "",
           isSensitive: Boolean(definition.isSensitive),
           isActive: true,
+          "metadata.source": "SYSTEM_CATALOG",
         },
       },
       upsert: true,

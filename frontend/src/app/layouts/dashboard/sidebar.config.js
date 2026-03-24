@@ -43,12 +43,22 @@ export const getRoleLabel = (role) => {
 export const getDashboardNavigation = ({ user, authz }) => {
   const items = [];
   const role = String(user?.role || "").toUpperCase();
-  const permissionSet = new Set(Array.isArray(authz?.permissions) ? authz.permissions : []);
+  const permissionSet = new Set(
+    Array.isArray(authz?.permissions) ? authz.permissions : [],
+  );
   const isGlobalAdmin = Boolean(authz?.isGlobalAdmin || role === "GLOBAL_ADMIN");
+  const hasPermission = (key) => permissionSet.has(key);
+  const hasAnyPermission = (keys = []) => keys.some((key) => hasPermission(key));
+  const addItem = (item) => {
+    if (!items.some((existing) => existing.path === item.path)) {
+      items.push(item);
+    }
+  };
+
   const canManageUsers =
-    permissionSet.has("*") ||
-    permissionSet.has("users.manage.branch") ||
-    permissionSet.has("users.manage.global");
+    hasPermission("*") ||
+    hasPermission("users.manage.branch") ||
+    hasPermission("users.manage.global");
 
   if (role === "ADMIN" || role === "GLOBAL_ADMIN") {
     items.push(
@@ -124,8 +134,69 @@ export const getDashboardNavigation = ({ user, authz }) => {
     );
   }
 
-  if (canManageUsers && !items.some((item) => item.path === "/admin/employees")) {
-    items.push({ path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" });
+  // Support hybrid users in EXPLICIT mode (for example POS + warehouse grants).
+  const canAccessWarehouseDashboard =
+    hasPermission("*") ||
+    hasAnyPermission([
+      "warehouse.read",
+      "warehouse.write",
+      "inventory.read",
+      "inventory.write",
+      "transfer.read",
+      "transfer.create",
+      "transfer.approve",
+      "transfer.ship",
+      "transfer.receive",
+    ]);
+  const canAccessWarehouseProducts =
+    hasPermission("*") ||
+    hasAnyPermission([
+      "product.create",
+      "product.update",
+      "product.delete",
+    ]);
+  const canAccessWarehouseReceive =
+    hasPermission("*") ||
+    hasAnyPermission(["warehouse.write", "inventory.write"]);
+  const canAccessWarehousePick =
+    hasPermission("*") ||
+    hasAnyPermission(["orders.read", "warehouse.read", "inventory.read"]);
+  const canAccessWarehouseTransfer =
+    hasPermission("*") ||
+    hasAnyPermission([
+      "transfer.read",
+      "transfer.create",
+      "transfer.approve",
+      "transfer.ship",
+      "transfer.receive",
+    ]);
+
+  if (canAccessWarehouseProducts) {
+    addItem({ path: "/warehouse/products", icon: Smartphone, label: "Sản phẩm" });
+  }
+  if (canAccessWarehouseDashboard) {
+    addItem({ path: "/warehouse-staff", icon: Package, label: "Dashboard kho" });
+  }
+  if (canAccessWarehouseReceive) {
+    addItem({
+      path: "/warehouse-staff/receive-goods",
+      icon: PackageCheck,
+      label: "Nhận hàng",
+    });
+  }
+  if (canAccessWarehousePick) {
+    addItem({
+      path: "/warehouse-staff/pick-orders",
+      icon: ClipboardList,
+      label: "Xuất kho",
+    });
+  }
+  if (canAccessWarehouseTransfer) {
+    addItem({ path: "/warehouse-staff/transfer", icon: RefreshCw, label: "Chuyển kho" });
+  }
+
+  if (canManageUsers) {
+    addItem({ path: "/admin/employees", icon: Users, label: "Quản lý nhân viên" });
   }
 
   return items;

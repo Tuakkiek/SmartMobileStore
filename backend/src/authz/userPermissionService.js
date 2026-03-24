@@ -182,7 +182,8 @@ export const normalizeRequestedPermissionAssignments = async ({
       }
       requestedScopeIds.push(...mergedScopeIds);
     } else if (requestedScopeType === SCOPE_TYPES.SELF) {
-      requestedScopeIds.push(normalizeScopeId(raw?.scopeId || targetUserId));
+      const resolvedSelfScopeId = normalizeScopeId(targetUserId || raw?.scopeId);
+      requestedScopeIds.push(resolvedSelfScopeId);
     } else {
       requestedScopeIds.push("");
     }

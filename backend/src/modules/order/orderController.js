@@ -32,6 +32,14 @@ import {
   INVENTORY_STATES,
   SERVICE_STATES,
 } from "../device/afterSalesConfig.js";
+import {
+  recalculateProductAvailability,
+  resolveVariantPricingSnapshot,
+} from "../product/productPricingService.js";
+import {
+  canPurchaseForProductStatus,
+  normalizeProductStatus,
+} from "../product/productPricingConfig.js";
 
 const ORDER_STATUSES = new Set([
   "PENDING",
@@ -412,6 +420,10 @@ const restoreInventoryForReturn = async ({
     skuMetaMap.set(sku, {
       productId: item?.productId || null,
       productName: item?.productName || item?.name || sku,
+      basePrice: toNumber(item?.basePrice, toNumber(item?.originalPrice, 0)),
+      originalPrice: toNumber(item?.originalPrice, toNumber(item?.basePrice, 0)),
+      sellingPrice: toNumber(item?.price, 0),
+      costPrice: toNumber(item?.costPrice, 0),
     });
   }
 
@@ -454,6 +466,10 @@ const restoreInventoryForReturn = async ({
     const skuMeta = skuMetaMap.get(batch.sku) || {};
     let productId = batch.productId || skuMeta.productId || null;
     let productName = batch.productName || skuMeta.productName || batch.sku;
+    const basePrice = toNumber(skuMeta.basePrice, toNumber(skuMeta.originalPrice, 0));
+    const originalPrice = toNumber(skuMeta.originalPrice, basePrice);
+    const sellingPrice = toNumber(skuMeta.sellingPrice, 0);
+    const costPrice = toNumber(skuMeta.costPrice, 0);
     const batchStoreId = normalizeBranchId(batch.storeId || location?.storeId || fallbackStoreId);
     if (!batchStoreId) {
       omniLog.warn("restoreInventoryForReturn: missing storeId", {
@@ -474,6 +490,11 @@ const restoreInventoryForReturn = async ({
 
     if (inventory) {
       inventory.quantity = (Number(inventory.quantity) || 0) + toRestore;
+      inventory.basePrice = basePrice;
+      inventory.originalPrice = originalPrice;
+      inventory.sellingPrice = sellingPrice;
+      inventory.costPrice = costPrice;
+      inventory.price = sellingPrice;
       await inventory.save({ session });
       productId = productId || inventory.productId || null;
       productName = productName || inventory.productName || batch.sku;
@@ -497,6 +518,11 @@ const restoreInventoryForReturn = async ({
             locationId: location._id,
             locationCode: location.locationCode,
             quantity: toRestore,
+            basePrice,
+            originalPrice,
+            sellingPrice,
+            costPrice,
+            price: sellingPrice,
             status: "GOOD",
           },
         ],
@@ -527,6 +553,11 @@ const restoreInventoryForReturn = async ({
           toLocationId: location._id,
           toLocationCode: location.locationCode,
           quantity: toRestore,
+          basePrice,
+          originalPrice,
+          sellingPrice,
+          costPrice,
+          price: sellingPrice,
           referenceType: "ORDER",
           referenceId: String(order._id),
           performedBy,
@@ -818,16 +849,21 @@ const buildProcessedItems = async (rawItems, session) => {
       await variant.save({ session });
     }
 
+    const productStatus = normalizeProductStatus(product.status);
+    if (!canPurchaseForProductStatus(productStatus)) {
+      throw badRequest(`${product.name} is not available for purchase`);
+    }
+
     product.salesCount = toNumber(product.salesCount, 0) + quantity;
     await product.save({ session });
 
-    const unitPrice = toNumber(rawItem?.price, variant ? toNumber(variant.price, 0) : 0);
-    const originalPrice = toNumber(
-      rawItem?.originalPrice,
-      variant ? toNumber(variant.originalPrice, unitPrice) : unitPrice
-    );
+    const pricingSnapshot = resolveVariantPricingSnapshot(variant || rawItem || {});
+    const unitPrice = toNumber(pricingSnapshot.price, 0);
+    const originalPrice = toNumber(pricingSnapshot.originalPrice, unitPrice);
+    const basePrice = toNumber(pricingSnapshot.basePrice, originalPrice);
+    const costPrice = toNumber(pricingSnapshot.costPrice, 0);
 
-    if (unitPrice < 0) {
+    if (unitPrice <= 0) {
       throw badRequest("Giá sản phẩm không hợp lệ");
     }
 
@@ -860,6 +896,8 @@ const buildProcessedItems = async (rawItems, session) => {
       variantRam: rawItem?.variantRam || rawItem?.ram || variant?.attributes?.ram || "",
       price: unitPrice,
       originalPrice,
+      basePrice,
+      costPrice,
       quantity,
       subtotal: unitPrice * quantity,
       total: unitPrice * quantity,
@@ -867,6 +905,20 @@ const buildProcessedItems = async (rawItems, session) => {
   }
 
   return processedItems;
+};
+
+const recalculateAvailabilityForItems = async (orderItems = [], session) => {
+  const productIds = [
+    ...new Set(
+      (Array.isArray(orderItems) ? orderItems : [])
+        .map((item) => String(item?.productId || "").trim())
+        .filter(Boolean)
+    ),
+  ];
+
+  for (const productId of productIds) {
+    await recalculateProductAvailability({ productId, session });
+  }
 };
 
 const restoreVariantStock = async (orderItems, session) => {
@@ -893,6 +945,8 @@ const restoreVariantStock = async (orderItems, session) => {
       }
     }
   }
+
+  await recalculateAvailabilityForItems(orderItems, session);
 };
 
 const removeOrderedItemsFromCart = async (customerId, orderItems, session) => {
@@ -1289,17 +1343,10 @@ export const createOrder = async (req, res) => {
 
     const subtotal = processedItems.reduce((sum, item) => sum + toNumber(item.price) * toNumber(item.quantity, 1), 0);
 
-    const inferredPromotionDiscount = processedItems.reduce((sum, item) => {
-      const originalPrice = toNumber(item.originalPrice, item.price);
-      const currentPrice = toNumber(item.price);
-      const quantity = toNumber(item.quantity, 1);
-      return sum + Math.max(0, originalPrice - currentPrice) * quantity;
-    }, 0);
-
     const tradeInDiscount = toNumber(tradeInInfo?.finalValue, 0);
     const explicitDiscount = toNumber(discount, 0);
-
-    const totalDiscount = Math.max(explicitDiscount, inferredPromotionDiscount) + tradeInDiscount;
+    const promotionDiscount = Math.max(explicitDiscount, 0);
+    const totalDiscount = promotionDiscount + tradeInDiscount;
 
     let finalShippingFee = toNumber(shippingFee, 0);
 
@@ -1360,7 +1407,9 @@ export const createOrder = async (req, res) => {
       subtotal,
       shippingFee: finalShippingFee,
       discount: totalDiscount,
-      promotionDiscount: inferredPromotionDiscount,
+      // Item price already reflects merchandising/flash-sale price.
+      // Do not subtract inferred list-price discount again at order level.
+      promotionDiscount: 0,
       total: finalTotal,
       totalAmount: finalTotal,
       notes: notes || note || "",
@@ -1387,7 +1436,7 @@ export const createOrder = async (req, res) => {
       appliedPromotion: promotionCode
         ? {
             code: promotionCode,
-            discountAmount: inferredPromotionDiscount,
+            discountAmount: promotionDiscount,
           }
         : undefined,
     });
@@ -1397,6 +1446,7 @@ export const createOrder = async (req, res) => {
     await order.save({ session });
 
     await order.save({ session });
+    await recalculateAvailabilityForItems(processedItems, session);
 
     if (assignedStore) {
       assignedStore.capacity.currentOrders = toNumber(assignedStore.capacity?.currentOrders, 0) + 1;
@@ -1528,6 +1578,8 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const inStoreOrder = isInStoreOrder(order);
+
     if (req.user.role === "SHIPPER") {
       const assignedShipper = order?.shipperInfo?.shipperId?.toString();
       if (!assignedShipper || assignedShipper !== req.user._id.toString()) {
@@ -1547,8 +1599,25 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
+    if (targetStatus === "DELIVERED" && !inStoreOrder) {
+      const assignedShipperId = order?.shipperInfo?.shipperId?.toString();
+      const actorId = req.user?._id?.toString();
+      const isAssignedShipperActor =
+        req.user.role === "SHIPPER" &&
+        Boolean(assignedShipperId) &&
+        assignedShipperId === actorId;
+
+      if (!isAssignedShipperActor) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          success: false,
+          code: "DELIVERED_REQUIRES_ASSIGNED_SHIPPER",
+          message: "Chỉ shipper được gán cho đơn hàng mới được xác nhận đã giao",
+        });
+      }
+    }
+
     const currentStatus = normalizeLegacyStatus(order.status);
-    const inStoreOrder = isInStoreOrder(order);
 
     if (req.user.role === "POS_STAFF") {
       const creatorId = order?.createdByInfo?.userId?.toString();
@@ -1861,6 +1930,10 @@ export const updateOrderStatus = async (req, res) => {
       }
     }
 
+    const shouldRestoreForReturn =
+      RETURN_RESTORE_STATUSES.has(targetStatus) &&
+      !RETURN_RESTORE_STATUSES.has(currentStatus);
+
     order.status = targetStatus;
 
     if (targetStatus === "CONFIRMED") {
@@ -1915,6 +1988,16 @@ export const updateOrderStatus = async (req, res) => {
         ...order.shipperInfo,
         deliveryNote: note,
       };
+    }
+
+    if (shouldRestoreForReturn) {
+      await restoreInventoryForReturn({
+        order,
+        user: req.user,
+        session,
+        reason: note || targetStatus,
+      });
+      await restoreVariantStock(order.items, session);
     }
 
     if (targetStatus === "RETURNED") {
@@ -2371,6 +2454,9 @@ export const handleCarrierWebhook = async (req, res) => {
         ? note.trim()
         : `Carrier event ${normalizedEventType}`;
     const eventTime = parseDateOrNow(occurredAt);
+    const shouldRestoreForReturn =
+      RETURN_RESTORE_STATUSES.has(normalizedEventType) &&
+      !RETURN_RESTORE_STATUSES.has(currentStatus);
 
     order.carrierAssignment = {
       ...(order.carrierAssignment || {}),
@@ -2411,7 +2497,7 @@ export const handleCarrierWebhook = async (req, res) => {
       }
     }
 
-    if (RETURN_RESTORE_STATUSES.has(normalizedEventType)) {
+    if (shouldRestoreForReturn) {
       order.returnedAt = order.returnedAt || eventTime;
       await restoreInventoryForReturn({
         order,
@@ -2452,6 +2538,7 @@ export const handleCarrierWebhook = async (req, res) => {
         eventType: "ORDER_RETURNED",
         note: webhookNote,
       });
+      await restoreVariantStock(order.items, session);
     }
 
     if (proof && typeof proof === "object") {

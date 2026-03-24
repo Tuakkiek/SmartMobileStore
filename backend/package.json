@@ -15,6 +15,7 @@
     "seed:role-definitions": "node src/scripts/seed-role-definitions.js",
     "migrate:order-status-stage": "node src/scripts/migrate-order-status-stage.js",
     "migrate:order-audit-baseline": "node src/scripts/migrate-order-audit-baseline.js",
+    "migrate:pricing-availability-refactor": "node src/scripts/migrate-pricing-availability-refactor.js",
     "migrate:review-media:dry-run": "node src/scripts/migrate-review-media-to-cloudinary.js --dry-run",
     "migrate:review-media:apply": "node src/scripts/migrate-review-media-to-cloudinary.js --apply",
     "migrate:instore-order-branch": "node src/scripts/migrate-instore-order-branch.js",

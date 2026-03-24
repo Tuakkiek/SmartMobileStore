@@ -88,6 +88,8 @@ export const restrictTo = (...roles) => {
   };
 };
 
+export const checkRole = (...roles) => restrictTo(...roles);
+
 export const signToken = (id, permissionsVersion = 1) => {
   return jwt.sign({ id, pv: Number(permissionsVersion || 1) }, config.JWT_SECRET, {
     expiresIn: config.JWT_EXPIRES_IN,

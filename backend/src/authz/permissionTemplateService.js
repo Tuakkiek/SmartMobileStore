@@ -1,7 +1,7 @@
 import Permission from "../modules/auth/Permission.js";
 import PermissionTemplate from "../modules/auth/PermissionTemplate.js";
 import TemplatePermission from "../modules/auth/TemplatePermission.js";
-import { ROLE_PERMISSIONS } from "./actions.js";
+import { ROLE_PERMISSIONS, SYSTEM_ROLES, BRANCH_ROLES, TASK_ROLES } from "./actions.js";
 import { ensurePermissionCatalogSeeded } from "./permissionCatalog.js";
 
 const SYSTEM_TEMPLATE_METADATA = Object.freeze({
@@ -52,6 +52,14 @@ const normalizePermissionKey = (value) => String(value || "").trim().toLowerCase
 
 const roleKeys = Object.keys(ROLE_PERMISSIONS);
 
+const resolveTemplateScope = (roleKey) => {
+  const normalized = normalizeTemplateKey(roleKey);
+  if (SYSTEM_ROLES.includes(normalized)) return "SYSTEM";
+  if (TASK_ROLES.includes(normalized)) return "TASK";
+  if (BRANCH_ROLES.includes(normalized)) return "BRANCH";
+  return "BRANCH";
+};
+
 const getTemplatePayload = (roleKey) => {
   const metadata = SYSTEM_TEMPLATE_METADATA[roleKey] || {
     name: roleKey,
@@ -62,6 +70,7 @@ const getTemplatePayload = (roleKey) => {
     key: normalizeTemplateKey(roleKey),
     name: metadata.name,
     description: metadata.description,
+    scope: resolveTemplateScope(roleKey),
     isSystem: true,
     isActive: true,
     metadata: {
@@ -91,7 +100,7 @@ export const ensurePermissionTemplatesSeeded = async () => {
   const templates = await PermissionTemplate.find({
     key: { $in: roleKeys.map(normalizeTemplateKey) },
   })
-    .select("_id key")
+    .select("_id key scope")
     .lean();
 
   const templateIdByKey = new Map(
@@ -178,7 +187,7 @@ export const ensurePermissionTemplatesSeeded = async () => {
 export const getPermissionTemplates = async ({ includeInactive = false } = {}) => {
   const templateFilter = includeInactive ? {} : { isActive: true };
   const templates = await PermissionTemplate.find(templateFilter)
-    .select("_id key name description isSystem isActive metadata")
+    .select("_id key name description scope isSystem isActive metadata")
     .sort({ isSystem: -1, key: 1 })
     .lean();
 

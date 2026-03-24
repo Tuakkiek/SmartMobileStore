@@ -9,7 +9,7 @@ import { Button } from "@/shared/ui/button";
 import { Star, ShoppingCart, Edit2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatPrice } from "@/shared/lib/utils";
 import { useCartStore } from "@/features/cart";
-import { useAuthStore } from "@/features/auth";
+import { useAuthStore, usePermission } from "@/features/auth";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -202,6 +202,10 @@ const ProductCard = ({
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
+  const canManageProducts = usePermission(["product.update", "product.delete"], {
+    mode: "any",
+    fallbackRoles: ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"],
+  });
 
   const [isAdding, setIsAdding] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -209,10 +213,8 @@ const ProductCard = ({
   const [isVariantReady, setIsVariantReady] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  const normalizedRole = String(user?.role || "").toUpperCase();
-  const hasAdminRole = ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"].includes(normalizedRole);
   const canShowAdminActions =
-    typeof showAdminActions === "boolean" ? showAdminActions : hasAdminRole;
+    typeof showAdminActions === "boolean" ? showAdminActions : canManageProducts;
 
   const safeVariants = useMemo(
     () => (Array.isArray(product?.variants) ? product.variants : []),
@@ -375,7 +377,7 @@ const ProductCard = ({
           {isTopSeller && !isTopNew && <div className="badge-top badge-seller">Bán chạy</div>}
 
           {/* Add to cart hover button */}
-          {!hasAdminRole && isAuthenticated && user?.role === "CUSTOMER" && totalStock > 0 && (
+          {!canManageProducts && isAuthenticated && user?.role === "CUSTOMER" && totalStock > 0 && (
             <button
               onClick={handleAddToCart}
               disabled={isAdding}

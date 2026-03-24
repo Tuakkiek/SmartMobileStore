@@ -31,7 +31,14 @@ const warehouseRoutes = (
 
     <Route
       element={
-        <ProtectedRoute allowedRoles={["PRODUCT_MANAGER", "ADMIN"]}>
+        <ProtectedRoute
+          allowedRoles={["PRODUCT_MANAGER", "ADMIN"]}
+          allowedPermissions={[
+            "product.create",
+            "product.update",
+            "product.delete",
+          ]}
+        >
           <DashboardLayout />
         </ProtectedRoute>
       }
@@ -42,7 +49,20 @@ const warehouseRoutes = (
 
     <Route
       element={
-        <ProtectedRoute allowedRoles={["WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"]}>
+        <ProtectedRoute
+          allowedRoles={["WAREHOUSE_MANAGER", "ADMIN", "WAREHOUSE_STAFF"]}
+          allowedPermissions={[
+            "warehouse.read",
+            "warehouse.write",
+            "inventory.read",
+            "inventory.write",
+            "transfer.read",
+            "transfer.create",
+            "transfer.approve",
+            "transfer.ship",
+            "transfer.receive",
+          ]}
+        >
           <DashboardLayout />
         </ProtectedRoute>
       }

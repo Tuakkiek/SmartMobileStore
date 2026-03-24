@@ -8,11 +8,38 @@ const DENY = (code, message) => ({
 
 const ALLOW = () => ({ allowed: true, code: "AUTHZ_ALLOWED" });
 
-const rolePermissions = (role) => ROLE_PERMISSIONS[role] || [];
-
+const normalizeRoleKey = (value) => String(value || "").trim().toUpperCase();
 const normalizePermissionKey = (value) => String(value || "").trim().toLowerCase();
 const normalizeScopeType = (value) => String(value || "").trim().toUpperCase();
 const normalizeScopeId = (value) => String(value || "").trim();
+
+const resolveRolePermissions = (role, rolePermissionMap = null) => {
+  const normalizedRole = normalizeRoleKey(role);
+  const mapped = rolePermissionMap?.get(normalizedRole);
+  const mappedPermissions = Array.isArray(mapped?.permissions) ? mapped.permissions : [];
+
+  if (mappedPermissions.length === 0) {
+    return ROLE_PERMISSIONS[normalizedRole] || [];
+  }
+
+  if (
+    normalizedRole === "GLOBAL_ADMIN" &&
+    Array.isArray(ROLE_PERMISSIONS.GLOBAL_ADMIN) &&
+    ROLE_PERMISSIONS.GLOBAL_ADMIN.includes("*") &&
+    !mappedPermissions.some((permission) => normalizePermissionKey(permission?.key) === "*")
+  ) {
+    return [
+      ...mappedPermissions,
+      {
+        key: "*",
+        scopeType: "GLOBAL",
+        scopeId: "",
+      },
+    ];
+  }
+
+  return mappedPermissions;
+};
 
 const inferScopeTypeFromPermission = (permission) => {
   const key = normalizePermissionKey(permission);
@@ -69,17 +96,24 @@ export const buildPermissionGrantMap = (grants = []) => {
   return map;
 };
 
-export const buildRolePermissionGrants = (authz = {}) => {
+export const buildRolePermissionGrants = (authz = {}, { rolePermissionMap = null } = {}) => {
   const grants = [];
   const activeBranchId = normalizeScopeId(authz?.activeBranchId);
   const userId = normalizeScopeId(authz?.userId);
 
   for (const role of authz?.systemRoles || []) {
-    for (const permission of rolePermissions(role)) {
+    for (const permission of resolveRolePermissions(role, rolePermissionMap)) {
+      const key = typeof permission === "string" ? permission : permission?.key;
+      const scopeType =
+        typeof permission === "string"
+          ? inferScopeTypeFromPermission(key)
+          : normalizeScopeType(permission?.scopeType || inferScopeTypeFromPermission(key));
+      const scopeId = normalizeScopeId(permission?.scopeId);
       grants.push(
         createGrant({
-          key: permission,
-          scopeType: permission === "*" ? "GLOBAL" : inferScopeTypeFromPermission(permission),
+          key,
+          scopeType: key === "*" ? "GLOBAL" : scopeType,
+          scopeId,
           sourceType: "SYSTEM",
           source: role,
         })
@@ -88,13 +122,18 @@ export const buildRolePermissionGrants = (authz = {}) => {
   }
 
   for (const role of authz?.taskRoles || []) {
-    for (const permission of rolePermissions(role)) {
-      const inferredScopeType = inferScopeTypeFromPermission(permission);
+    for (const permission of resolveRolePermissions(role, rolePermissionMap)) {
+      const key = typeof permission === "string" ? permission : permission?.key;
+      const inferredScopeType =
+        typeof permission === "string"
+          ? inferScopeTypeFromPermission(key)
+          : normalizeScopeType(permission?.scopeType || inferScopeTypeFromPermission(key));
+      const explicitScopeId = normalizeScopeId(permission?.scopeId);
       grants.push(
         createGrant({
-          key: permission,
+          key,
           scopeType: inferredScopeType,
-          scopeId: inferredScopeType === "SELF" ? userId : "",
+          scopeId: explicitScopeId || (inferredScopeType === "SELF" ? userId : ""),
           sourceType: "TASK",
           source: role,
         })
@@ -108,18 +147,24 @@ export const buildRolePermissionGrants = (authz = {}) => {
     );
     if (activeAssignment) {
       for (const role of activeAssignment.roles || []) {
-        for (const permission of rolePermissions(role)) {
-          const inferredScopeType = inferScopeTypeFromPermission(permission);
+        for (const permission of resolveRolePermissions(role, rolePermissionMap)) {
+          const key = typeof permission === "string" ? permission : permission?.key;
+          const inferredScopeType =
+            typeof permission === "string"
+              ? inferScopeTypeFromPermission(key)
+              : normalizeScopeType(permission?.scopeType || inferScopeTypeFromPermission(key));
+          const explicitScopeId = normalizeScopeId(permission?.scopeId);
           grants.push(
             createGrant({
-              key: permission,
+              key,
               scopeType: inferredScopeType,
               scopeId:
-                inferredScopeType === "BRANCH"
+                explicitScopeId ||
+                (inferredScopeType === "BRANCH"
                   ? activeBranchId
                   : inferredScopeType === "SELF"
                     ? userId
-                    : "",
+                    : ""),
               sourceType: "BRANCH_ROLE",
               source: role,
             })
@@ -136,13 +181,18 @@ export const buildRolePermissionGrants = (authz = {}) => {
   const hasExplicitPermissionMode = String(authz?.permissionMode || "").toUpperCase() === "EXPLICIT";
 
   if (authz?.role && !hasV2Data && !hasExplicitPermissionMode) {
-    for (const permission of rolePermissions(authz.role)) {
-      const inferredScopeType = inferScopeTypeFromPermission(permission);
+    for (const permission of resolveRolePermissions(authz.role, rolePermissionMap)) {
+      const key = typeof permission === "string" ? permission : permission?.key;
+      const inferredScopeType =
+        typeof permission === "string"
+          ? inferScopeTypeFromPermission(key)
+          : normalizeScopeType(permission?.scopeType || inferScopeTypeFromPermission(key));
+      const explicitScopeId = normalizeScopeId(permission?.scopeId);
       grants.push(
         createGrant({
-          key: permission,
+          key,
           scopeType: inferredScopeType,
-          scopeId: inferredScopeType === "SELF" ? userId : "",
+          scopeId: explicitScopeId || (inferredScopeType === "SELF" ? userId : ""),
           sourceType: "LEGACY_ROLE",
           source: authz.role,
         })
@@ -158,13 +208,14 @@ export const buildPermissionSet = (authz) => {
   const activeBranchId = normalizeScopeId(authz?.activeBranchId);
   const userId = normalizeScopeId(authz?.userId);
   const explicitMode = String(authz?.permissionMode || "").trim().toUpperCase() === "EXPLICIT";
+  const rolePermissionMap = authz?.rolePermissionMap instanceof Map ? authz.rolePermissionMap : null;
 
   const grants =
     Array.isArray(authz?.permissionGrants)
       ? explicitMode || authz.permissionGrants.length > 0
         ? dedupeGrants(authz.permissionGrants)
         : buildRolePermissionGrants(authz)
-      : buildRolePermissionGrants(authz);
+      : buildRolePermissionGrants(authz, { rolePermissionMap });
 
   for (const grant of grants) {
     if (!grant) continue;

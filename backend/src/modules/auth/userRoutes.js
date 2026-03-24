@@ -14,6 +14,7 @@ import {
   deleteEmployee,
   updateEmployeeAvatar,
   updateEmployee,
+  updateUserRoles,
   getAllShippers,
   createUserWithPermissions,
   getPermissionsCatalogController,
@@ -79,6 +80,7 @@ router.get("/shippers", ...requireOrdersRead, getAllShippers);
 // New granular permission endpoints
 router.post("/", ...requireUsersManage, createUserWithPermissions);
 router.put("/:id/permissions", ...requireUsersManage, updateUserPermissions);
+router.put("/:id/roles", ...requireUsersManage, updateUserRoles);
 router.get("/:id/effective-permissions", ...requireUsersManage, getEffectivePermissionsForUser);
 
 export default router;
