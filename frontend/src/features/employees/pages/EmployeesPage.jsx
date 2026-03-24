@@ -42,20 +42,20 @@ import {
 } from "lucide-react";
 
 const EMPLOYEE_TABS = [
-  { value: "ALL", label: "Táº¥t cáº£" },
-  { value: "ADMIN", label: "Quáº£n trá»‹" },
+  { value: "ALL", label: "Tất cả" },
+  { value: "ADMIN", label: "Quản trị" },
   { value: "WAREHOUSE_MANAGER", label: "QL kho" },
-  { value: "PRODUCT_MANAGER", label: "QL sáº£n pháº©m" },
-  { value: "ORDER_MANAGER", label: "QL Ä‘Æ¡n hÃ ng" },
-  { value: "SHIPPER", label: "Giao hÃ ng" },
-  { value: "POS_STAFF", label: "NhÃ¢n viÃªn POS" },
-  { value: "CASHIER", label: "Thu ngÃ¢n" },
+  { value: "PRODUCT_MANAGER", label: "QL sản phẩm" },
+  { value: "ORDER_MANAGER", label: "QL đơn hàng" },
+  { value: "SHIPPER", label: "Giao hàng" },
+  { value: "POS_STAFF", label: "Nhân viên POS" },
+  { value: "CASHIER", label: "Thu ngân" },
 ];
 
 const STEPS = [
-  { id: 1, label: "ThÃ´ng tin cÆ¡ báº£n" },
-  { id: 2, label: "Chi nhÃ¡nh" },
-  { id: 3, label: "PhÃ¢n quyá»n" },
+  { id: 1, label: "Thông tin cơ bản" },
+  { id: 2, label: "Chi nhánh" },
+  { id: 3, label: "Phân quyền" },
 ];
 
 const BRANCH_ROLES = new Set([
@@ -71,29 +71,29 @@ const BRANCH_ROLES = new Set([
 ]);
 
 const SCOPE_LABELS = {
-  GLOBAL: "ToÃ n cá»¥c",
-  BRANCH: "Chi nhÃ¡nh",
-  SELF: "Báº£n thÃ¢n",
+  GLOBAL: "Toàn cục",
+  BRANCH: "Chi nhánh",
+  SELF: "Bản thân",
 };
 
 const translateModule = (moduleKey) => {
   if (!moduleKey) return "";
   const map = {
-    analytics: "Thá»‘ng kÃª",
-    auth: "XÃ¡c thá»±c",
-    branch: "Chi nhÃ¡nh",
-    category: "Danh má»¥c",
-    customer: "KhÃ¡ch hÃ ng",
-    dashboard: "Báº£ng Ä‘iá»u khiá»ƒn",
-    employee: "NhÃ¢n viÃªn",
-    inventory: "Kho hÃ ng",
-    order: "ÄÆ¡n hÃ ng",
-    product: "Sáº£n pháº©m",
-    report: "BÃ¡o cÃ¡o",
-    role: "Vai trÃ²",
-    setting: "CÃ i Ä‘áº·t",
-    store: "Cá»­a hÃ ng",
-    user: "NgÆ°á»i dÃ¹ng",
+    analytics: "Thống kê",
+    auth: "Xác thực",
+    branch: "Chi nhánh",
+    category: "Danh mục",
+    customer: "Khách hàng",
+    dashboard: "Bảng điều khiển",
+    employee: "Nhân viên",
+    inventory: "Kho hàng",
+    order: "Đơn hàng",
+    product: "Sản phẩm",
+    report: "Báo cáo",
+    role: "Vai trò",
+    setting: "Cài đặt",
+    store: "Cửa hàng",
+    user: "Người dùng",
     general: "Chung",
   };
   const lowerKey = String(moduleKey).toLowerCase();
@@ -102,10 +102,10 @@ const translateModule = (moduleKey) => {
 
 const translateDescription = (desc, key) => {
   const customMap = {
-    "analytics.read.assigned": "Xem thá»‘ng kÃª cÃ¡c chi nhÃ¡nh Ä‘Æ°á»£c giao",
-    "analytics.read.branch": "Xem thá»‘ng kÃª chi nhÃ¡nh Ä‘ang hoáº¡t Ä‘á»™ng",
-    "analytics.read.global": "Xem thá»‘ng kÃª trÃªn toÃ n há»‡ thá»‘ng",
-    "analytics.read.personal": "Xem thá»‘ng kÃª cÃ¡ nhÃ¢n",
+    "analytics.read.assigned": "Xem thống kê các chi nhánh được giao",
+    "analytics.read.branch": "Xem thống kê chi nhánh đang hoạt động",
+    "analytics.read.global": "Xem thống kê trên toàn hệ thống",
+    "analytics.read.personal": "Xem thống kê cá nhân",
   };
   if (customMap[key]) return customMap[key];
   if (!desc) return "";
@@ -114,40 +114,40 @@ const translateDescription = (desc, key) => {
   
   // Replace action words
   translated = translated.replace(/^Read /gi, 'Xem ');
-  translated = translated.replace(/^Create /gi, 'Táº¡o ');
-  translated = translated.replace(/^Update /gi, 'Cáº­p nháº­t ');
-  translated = translated.replace(/^Delete /gi, 'XÃ³a ');
-  translated = translated.replace(/^Manage /gi, 'Quáº£n lÃ½ ');
+  translated = translated.replace(/^Create /gi, 'Tạo ');
+  translated = translated.replace(/^Update /gi, 'Cập nhật ');
+  translated = translated.replace(/^Delete /gi, 'Xóa ');
+  translated = translated.replace(/^Manage /gi, 'Quản lý ');
   translated = translated.replace(/^View /gi, 'Xem ');
   
   // Replace common objects
-  translated = translated.replace(/ analytics/gi, ' thá»‘ng kÃª');
-  translated = translated.replace(/ users/gi, ' ngÆ°á»i dÃ¹ng');
-  translated = translated.replace(/ user/gi, ' ngÆ°á»i dÃ¹ng');
-  translated = translated.replace(/ orders/gi, ' Ä‘Æ¡n hÃ ng');
-  translated = translated.replace(/ order/gi, ' Ä‘Æ¡n hÃ ng');
-  translated = translated.replace(/ products/gi, ' sáº£n pháº©m');
-  translated = translated.replace(/ product/gi, ' sáº£n pháº©m');
-  translated = translated.replace(/ categories/gi, ' danh má»¥c');
-  translated = translated.replace(/ category/gi, ' danh má»¥c');
-  translated = translated.replace(/ customers/gi, ' khÃ¡ch hÃ ng');
-  translated = translated.replace(/ customer/gi, ' khÃ¡ch hÃ ng');
-  translated = translated.replace(/ inventory/gi, ' kho hÃ ng');
-  translated = translated.replace(/ settings/gi, ' cÃ i Ä‘áº·t');
-  translated = translated.replace(/ setting/gi, ' cÃ i Ä‘áº·t');
-  translated = translated.replace(/ roles/gi, ' vai trÃ²');
-  translated = translated.replace(/ role/gi, ' vai trÃ²');
-  translated = translated.replace(/ permissions/gi, ' quyá»n');
-  translated = translated.replace(/ permission/gi, ' quyá»n');
+  translated = translated.replace(/ analytics/gi, ' thống kê');
+  translated = translated.replace(/ users/gi, ' người dùng');
+  translated = translated.replace(/ user/gi, ' người dùng');
+  translated = translated.replace(/ orders/gi, ' đơn hàng');
+  translated = translated.replace(/ order/gi, ' đơn hàng');
+  translated = translated.replace(/ products/gi, ' sản phẩm');
+  translated = translated.replace(/ product/gi, ' sản phẩm');
+  translated = translated.replace(/ categories/gi, ' danh mục');
+  translated = translated.replace(/ category/gi, ' danh mục');
+  translated = translated.replace(/ customers/gi, ' khách hàng');
+  translated = translated.replace(/ customer/gi, ' khách hàng');
+  translated = translated.replace(/ inventory/gi, ' kho hàng');
+  translated = translated.replace(/ settings/gi, ' cài đặt');
+  translated = translated.replace(/ setting/gi, ' cài đặt');
+  translated = translated.replace(/ roles/gi, ' vai trò');
+  translated = translated.replace(/ role/gi, ' vai trò');
+  translated = translated.replace(/ permissions/gi, ' quyền');
+  translated = translated.replace(/ permission/gi, ' quyền');
   
   // Conditions
-  translated = translated.replace(/ for assigned branches/gi, ' cÃ¡c chi nhÃ¡nh Ä‘Æ°á»£c giao');
-  translated = translated.replace(/ for assigned branch/gi, ' chi nhÃ¡nh Ä‘Æ°á»£c giao');
-  translated = translated.replace(/ for active branch/gi, ' chi nhÃ¡nh Ä‘ang hoáº¡t Ä‘á»™ng');
-  translated = translated.replace(/ across all branches/gi, ' trÃªn toÃ n há»‡ thá»‘ng');
-  translated = translated.replace(/ personal/gi, ' cÃ¡ nhÃ¢n');
-  translated = translated.replace(/ own/gi, ' cÃ¡ nhÃ¢n');
-  translated = translated.replace(/ all/gi, ' táº¥t cáº£');
+  translated = translated.replace(/ for assigned branches/gi, ' các chi nhánh được giao');
+  translated = translated.replace(/ for assigned branch/gi, ' chi nhánh được giao');
+  translated = translated.replace(/ for active branch/gi, ' chi nhánh đang hoạt động');
+  translated = translated.replace(/ across all branches/gi, ' trên toàn hệ thống');
+  translated = translated.replace(/ personal/gi, ' cá nhân');
+  translated = translated.replace(/ own/gi, ' cá nhân');
+  translated = translated.replace(/ all/gi, ' tất cả');
   translated = translated.replace(/ for /gi, ' cho ');
 
   return translated.charAt(0).toUpperCase() + translated.slice(1);
@@ -416,7 +416,7 @@ const EmployeesPage = () => {
         total: data.pagination?.total || 0,
       });
     } catch (e) {
-      setError("KhÃ´ng thá»ƒ táº£i danh sÃ¡ch nhÃ¢n viÃªn");
+      setError("Không thể tải danh sách nhân viên");
     } finally {
       setIsLoading(false);
     }
@@ -429,7 +429,7 @@ const EmployeesPage = () => {
       setTemplates(res.data?.data?.templates || []);
     } catch (e) {
       setError(
-        e.response?.data?.message || "KhÃ´ng thá»ƒ táº£i metadata phÃ¢n quyá»n",
+        e.response?.data?.message || "Không thể tải metadata phân quyền",
       );
     }
   };
@@ -497,10 +497,10 @@ const EmployeesPage = () => {
       });
       setPreview(res.data?.data || null);
       if (res.data?.success === false) {
-        setError(res.data?.message || "Xem trÆ°á»›c phÃ¢n quyá»n bá»‹ tá»« chá»‘i");
+        setError(res.data?.message || "Xem trước phân quyền bị từ chối");
       }
     } catch (e) {
-      setError(e.response?.data?.message || "KhÃ´ng thá»ƒ xem trÆ°á»›c phÃ¢n quyá»n");
+      setError(e.response?.data?.message || "Không thể xem trước phân quyền");
     } finally {
       setPreviewLoading(false);
     }
@@ -564,7 +564,7 @@ const EmployeesPage = () => {
           ]),
         );
       } catch (e) {
-        setError(e.response?.data?.message || "KhÃ´ng thá»ƒ táº£i quyá»n hiá»‡n táº¡i");
+        setError(e.response?.data?.message || "Không thể tải quyền hiện tại");
       }
     }
   };
@@ -609,7 +609,7 @@ const EmployeesPage = () => {
       await fetchEmployees();
       closeDialog();
     } catch (e) {
-      setError(e.response?.data?.message || "Táº¡o nhÃ¢n viÃªn tháº¥t báº¡i");
+      setError(e.response?.data?.message || "Tạo nhân viên thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -633,7 +633,7 @@ const EmployeesPage = () => {
       await fetchEmployees();
       closeDialog();
     } catch (e) {
-      setError(e.response?.data?.message || "Cáº­p nháº­t tháº¥t báº¡i");
+      setError(e.response?.data?.message || "Cập nhật thất bại");
     } finally {
       setIsSubmitting(false);
     }
@@ -644,17 +644,17 @@ const EmployeesPage = () => {
       await userAPI.toggleEmployeeStatus(id);
       await fetchEmployees();
     } catch {
-      setError("Thao tÃ¡c tháº¥t báº¡i");
+      setError("Thao tác thất bại");
     }
   };
 
   const removeEmployee = async (id) => {
-    if (!window.confirm("XÃ³a nhÃ¢n viÃªn nÃ y?")) return;
+    if (!window.confirm("Xóa nhân viên này?")) return;
     try {
       await userAPI.deleteEmployee(id);
       await fetchEmployees();
     } catch {
-      setError("XÃ³a tháº¥t báº¡i");
+      setError("Xóa thất bại");
     }
   };
 
@@ -680,7 +680,7 @@ const EmployeesPage = () => {
       {step === 1 ? (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Há» vÃ  tÃªn *</Label>
+            <Label>Họ và tên *</Label>
             <Input
               name="fullName"
               value={formData.fullName}
@@ -691,7 +691,7 @@ const EmployeesPage = () => {
             />
           </div>
           <div>
-            <Label>Sá»‘ Ä‘iá»‡n thoáº¡i *</Label>
+            <Label>Số điện thoại *</Label>
             <Input
               name="phoneNumber"
               value={formData.phoneNumber}
@@ -715,7 +715,7 @@ const EmployeesPage = () => {
             />
           </div>
           <div>
-            <Label>Tá»‰nh/ThÃ nh</Label>
+            <Label>Tỉnh/Thành</Label>
             <Select
               value={formData.province}
               onValueChange={(value) =>
@@ -723,7 +723,7 @@ const EmployeesPage = () => {
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Chá»n tá»‰nh/thÃ nh" />
+                <SelectValue placeholder="Chọn tỉnh/thành" />
               </SelectTrigger>
               <SelectContent className="max-h-96">
                 {provinces.map((p) => (
@@ -735,7 +735,7 @@ const EmployeesPage = () => {
             </Select>
           </div>
           <div>
-            <Label>Máº­t kháº©u {editingEmployee ? "(má»›i)" : "*"}</Label>
+            <Label>Mật khẩu {editingEmployee ? "(mới)" : "*"}</Label>
             <Input
               type="password"
               value={formData.password}
@@ -746,7 +746,7 @@ const EmployeesPage = () => {
             />
           </div>
           <div className="col-span-2">
-            <Label>áº¢nh Ä‘áº¡i diá»‡n (URL)</Label>
+            <Label>Ảnh đại diện (URL)</Label>
             <Input
               value={formData.avatar}
               onChange={(e) =>
@@ -759,10 +759,10 @@ const EmployeesPage = () => {
 
       {step === 2 ? (
         <div className="space-y-2 rounded-md border p-3">
-          <div className="text-sm font-medium">Pháº¡m vi chi nhÃ¡nh</div>
+          <div className="text-sm font-medium">Phạm vi chi nhánh</div>
           {branchStoreOptions.length === 0 ? (
             <div className="rounded border border-dashed p-3 text-sm text-muted-foreground">
-              KhÃ´ng cÃ³ chi nhÃ¡nh nÃ o trong pháº¡m vi quáº£n lÃ½.
+              Không có chi nhánh nào trong phạm vi quản lý.
             </div>
           ) : (
             branchStoreOptions.map((store) => (
@@ -792,18 +792,18 @@ const EmployeesPage = () => {
           branchStoreOptions.length > 0 &&
           branchIds.length === 0 ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-              Vui lÃ²ng chá»n Ã­t nháº¥t 1 chi nhÃ¡nh Ä‘á»ƒ tiáº¿p tá»¥c.
+              Vui lòng chọn ít nhất 1 chi nhánh để tiếp tục.
             </div>
           ) : null}
           {branchIds.length > 1 ? (
             <div className="space-y-2 pt-2">
-              <Label>Chi nhÃ¡nh chÃ­nh</Label>
+              <Label>Chi nhánh chính</Label>
               <Select
                 value={normalize(primaryBranchId)}
                 onValueChange={(value) => setPrimaryBranchId(value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Chá»n chi nhÃ¡nh chÃ­nh" />
+                  <SelectValue placeholder="Chọn chi nhánh chính" />
                 </SelectTrigger>
                 <SelectContent>
                   {sortedBranchIds.map((branchId) => {
@@ -827,7 +827,7 @@ const EmployeesPage = () => {
       {step === 3 ? (
         <div className="space-y-3">
           <div className="rounded border p-3">
-            <Label className="mb-2 block">Vai trÃ²</Label>
+            <Label className="mb-2 block">Vai trò</Label>
             <Select
               value={formData.role}
               onValueChange={(value) => {
@@ -841,7 +841,7 @@ const EmployeesPage = () => {
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Chá»n vai trÃ²" />
+                <SelectValue placeholder="Chọn vai trò" />
               </SelectTrigger>
               <SelectContent>
                 {EMPLOYEE_TABS.filter((t) => t.value !== "ALL").map((t) => (
@@ -855,7 +855,7 @@ const EmployeesPage = () => {
           {granularEnabled ? (
             <>
               <div className="rounded border p-3">
-                <Label className="mb-2 block">Chá»n máº«u phÃ¢n quyá»n</Label>
+                <Label className="mb-2 block">Chọn mẫu phân quyền</Label>
                 <Select
                   value={templateKeys[0] || "__NONE__"}
                   onValueChange={(value) => {
@@ -867,11 +867,11 @@ const EmployeesPage = () => {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Chá»n máº«u" />
+                    <SelectValue placeholder="Chọn mẫu" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__NONE__">
-                      KhÃ´ng Ã¡p dá»¥ng máº«u
+                      Không áp dụng mẫu
                     </SelectItem>
                     {templates.map((t) => (
                       <SelectItem
@@ -887,7 +887,7 @@ const EmployeesPage = () => {
               <div className="max-h-72 space-y-3 overflow-y-auto rounded border p-3">
                 {catalog.length === 0 ? (
                   <div className="rounded border border-dashed p-3 text-sm text-muted-foreground">
-                    ChÆ°a cÃ³ danh má»¥c quyá»n Ä‘á»ƒ hiá»ƒn thá»‹.
+                    Chưa có danh mục quyền để hiển thị.
                   </div>
                 ) : null}
                 {Object.entries(groupedCatalog).map(
@@ -913,7 +913,7 @@ const EmployeesPage = () => {
                               toggleModulePermissions(modulePermissions, true)
                             }
                           >
-                            Chá»n háº¿t
+                            Chọn hết
                           </Button>
                           <Button
                             type="button"
@@ -924,7 +924,7 @@ const EmployeesPage = () => {
                               toggleModulePermissions(modulePermissions, false)
                             }
                           >
-                            Bá» module
+                            Bỏ module
                           </Button>
                         </div>
                       </div>
@@ -959,7 +959,7 @@ const EmployeesPage = () => {
                                 variant="destructive"
                                 className="text-[10px]"
                               >
-                                Nháº¡y cáº£m
+                                Nhạy cảm
                               </Badge>
                             ) : null}
                           </span>
@@ -970,7 +970,7 @@ const EmployeesPage = () => {
                 )}
               </div>
               <div className="flex items-center justify-between rounded border p-3 text-sm">
-                <span>ÄÃ£ chá»n: {permissionKeys.length}</span>
+                <span>Đã chọn: {permissionKeys.length}</span>
                 <Button
                   type="button"
                   variant="outline"
@@ -980,30 +980,30 @@ const EmployeesPage = () => {
                   }
                 >
                   {previewLoading
-                    ? "Äang táº£i báº£n xem trÆ°á»›c..."
-                    : "Táº£i láº¡i báº£n xem trÆ°á»›c"}
+                    ? "Đang tải bản xem trước..."
+                    : "Tải lại bản xem trước"}
                 </Button>
               </div>
               {sensitivePermissions.length ? (
                 <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                   <div className="mb-1 flex items-center gap-1 font-semibold">
-                    <AlertTriangle className="h-4 w-4" /> Quyá»n nháº¡y cáº£m
+                    <AlertTriangle className="h-4 w-4" /> Quyền nhạy cảm
                   </div>
                   <div>
-                    CÃ¡c quyá»n nháº¡y cáº£m (key ká»¹ thuáº­t):{" "}
+                    Các quyền nhạy cảm (key kỹ thuật):{" "}
                     {sensitivePermissions.join(", ")}
                   </div>
                 </div>
               ) : null}
               {preview ? (
                 <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
-                  Quyá»n hiá»‡u lá»±c: {preview.assignments?.length || 0}
+                  Quyền hiệu lực: {preview.assignments?.length || 0}
                 </div>
               ) : null}
             </>
           ) : (
             <div className="rounded border p-3 text-sm text-muted-foreground">
-              TÃ­nh nÄƒng phÃ¢n quyá»n chi tiáº¿t Ä‘Ã£ bá»‹ vÃ´ hiá»‡u hÃ³a.
+              Tính năng phân quyền chi tiết đã bị vô hiệu hóa.
             </div>
           )}
         </div>
@@ -1029,10 +1029,10 @@ const EmployeesPage = () => {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Quáº£n lÃ½ nhÃ¢n viÃªn</h1>
+        <h1 className="text-3xl font-bold">Quản lý nhân viên</h1>
         <Button onClick={openCreateDialog}>
           <UserPlus className="mr-2 h-4 w-4" />
-          ThÃªm nhÃ¢n viÃªn
+          Thêm nhân viên
         </Button>
       </div>
       <Tabs
@@ -1060,25 +1060,25 @@ const EmployeesPage = () => {
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="TÃ¬m tÃªn, email, sá»‘ Ä‘iá»‡n thoáº¡i..."
+            placeholder="Tìm tên, email, số điện thoại..."
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Tráº¡ng thÃ¡i" />
+            <SelectValue placeholder="Trạng thái" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Táº¥t cáº£</SelectItem>
-            <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-            <SelectItem value="LOCKED">LOCKED</SelectItem>
+            <SelectItem value="ALL">Tất cả</SelectItem>
+            <SelectItem value="ACTIVE">Hoạt động</SelectItem>
+            <SelectItem value="LOCKED">Đã khóa</SelectItem>
           </SelectContent>
         </Select>
         <Select value={provinceFilter} onValueChange={setProvinceFilter}>
           <SelectTrigger className="w-56">
-            <SelectValue placeholder="Tá»‰nh/ThÃ nh" />
+            <SelectValue placeholder="Tỉnh/Thành" />
           </SelectTrigger>
           <SelectContent className="max-h-96">
-            <SelectItem value="ALL">Táº¥t cáº£ tá»‰nh/thÃ nh</SelectItem>
+            <SelectItem value="ALL">Tất cả tỉnh/thành</SelectItem>
             {provinces.map((p) => (
               <SelectItem key={p} value={p}>
                 {p}
@@ -1089,10 +1089,10 @@ const EmployeesPage = () => {
         {isGlobalAdmin ? (
           <Select value={storeFilter} onValueChange={setStoreFilter}>
             <SelectTrigger className="w-56">
-              <SelectValue placeholder="Chi nhÃ¡nh" />
+              <SelectValue placeholder="Chi nhánh" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">Táº¥t cáº£ chi nhÃ¡nh</SelectItem>
+              <SelectItem value="ALL">Tất cả chi nhánh</SelectItem>
               {stores.map((s) => (
                 <SelectItem key={s._id} value={s._id}>
                   {s.name}
@@ -1112,7 +1112,7 @@ const EmployeesPage = () => {
             }}
           >
             <X className="mr-2 h-4 w-4" />
-            XÃ³a bá»™ lá»c
+            Xóa bộ lọc
           </Button>
         ) : null}
       </div>
@@ -1123,7 +1123,7 @@ const EmployeesPage = () => {
         <div className="py-16 text-center">
           <Users className="mx-auto mb-4 h-16 w-16 text-muted-foreground opacity-50" />
           <p className="text-muted-foreground">
-            {hasFilter ? "KhÃ´ng tÃ¬m tháº¥y nhÃ¢n viÃªn" : "ChÆ°a cÃ³ nhÃ¢n viÃªn nÃ o"}
+            {hasFilter ? "Không tìm thấy nhân viên" : "Chưa có nhân viên nào"}
           </p>
         </div>
       ) : (
@@ -1163,7 +1163,7 @@ const EmployeesPage = () => {
                     <MapPin className="mr-1 h-3 w-3" />
                     {stores.find(
                       (s) => normalize(s._id) === normalize(emp.storeLocation),
-                    )?.name || "Chi nhÃ¡nh"}
+                    )?.name || "Chi nhánh"}
                   </Badge>
                 ) : null}
                 <div className="mt-4 flex gap-2">
@@ -1206,7 +1206,7 @@ const EmployeesPage = () => {
             disabled={pagination.currentPage === 1}
             onClick={() => fetchEmployees(pagination.currentPage - 1)}
           >
-            TrÆ°á»›c
+            Trước
           </Button>
           <span className="text-sm">
             Trang {pagination.currentPage}/{pagination.totalPages}
@@ -1230,13 +1230,13 @@ const EmployeesPage = () => {
       >
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>ThÃªm nhÃ¢n viÃªn má»›i</DialogTitle>
+            <DialogTitle>Thêm nhân viên mới</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             {renderWizard()}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeDialog}>
-                Há»§y
+                Hủy
               </Button>
               {step > 1 ? (
                 <Button
@@ -1244,7 +1244,7 @@ const EmployeesPage = () => {
                   variant="outline"
                   onClick={() => setStep((prev) => prev - 1)}
                 >
-                  Quay láº¡i
+                  Quay lại
                 </Button>
               ) : null}
               {step < 3 ? (
@@ -1253,7 +1253,7 @@ const EmployeesPage = () => {
                   disabled={!canContinue}
                   onClick={() => setStep((prev) => prev + 1)}
                 >
-                  Tiáº¿p tá»¥c
+                  Tiếp tục
                 </Button>
               ) : (
                 <Button
@@ -1264,7 +1264,7 @@ const EmployeesPage = () => {
                       branchIds.length === 0)
                   }
                 >
-                  {isSubmitting ? "Äang táº¡o..." : "Táº¡o nhÃ¢n viÃªn"}
+                  {isSubmitting ? "Đang tạo..." : "Tạo nhân viên"}
                 </Button>
               )}
             </DialogFooter>
@@ -1279,13 +1279,13 @@ const EmployeesPage = () => {
         >
           <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Chá»‰nh sá»­a nhÃ¢n viÃªn</DialogTitle>
+              <DialogTitle>Chỉnh sửa nhân viên</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleUpdate} className="space-y-4">
               {renderWizard()}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={closeDialog}>
-                  Há»§y
+                  Hủy
                 </Button>
                 {step > 1 ? (
                   <Button
@@ -1293,7 +1293,7 @@ const EmployeesPage = () => {
                     variant="outline"
                     onClick={() => setStep((prev) => prev - 1)}
                   >
-                    Quay láº¡i
+                    Quay lại
                   </Button>
                 ) : null}
                 {step < 3 ? (
@@ -1302,7 +1302,7 @@ const EmployeesPage = () => {
                     disabled={!canContinue}
                     onClick={() => setStep((prev) => prev + 1)}
                   >
-                    Tiáº¿p tá»¥c
+                    Tiếp tục
                   </Button>
                 ) : (
                   <Button
@@ -1313,7 +1313,7 @@ const EmployeesPage = () => {
                         branchIds.length === 0)
                     }
                   >
-                    {isSubmitting ? "Äang cáº­p nháº­t..." : "Cáº­p nháº­t"}
+                    {isSubmitting ? "Đang cập nhật..." : "Cập nhật"}
                   </Button>
                 )}
               </DialogFooter>
