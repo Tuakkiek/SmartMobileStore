@@ -202,9 +202,9 @@ const ProductCard = ({
   const navigate = useNavigate();
   const { addToCart } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
+  const canManageCart = usePermission("cart.manage.self");
   const canManageProducts = usePermission(["product.update", "product.delete"], {
     mode: "any",
-    fallbackRoles: ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"],
   });
 
   const [isAdding, setIsAdding] = useState(false);
@@ -291,7 +291,7 @@ const ProductCard = ({
   const handleAddToCart = async (e) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!isAuthenticated || user?.role !== "CUSTOMER") { navigate("/login"); return; }
+    if (!isAuthenticated || !canManageCart) { navigate("/login"); return; }
     if (!selectedVariant) { toast.error("Vui lòng chọn phiên bản"); return; }
     if (selectedVariant.stock <= 0) { toast.error("Sản phẩm tạm hết hàng"); return; }
     setIsAdding(true);
@@ -377,7 +377,7 @@ const ProductCard = ({
           {isTopSeller && !isTopNew && <div className="badge-top badge-seller">Bán chạy</div>}
 
           {/* Add to cart hover button */}
-          {!canManageProducts && isAuthenticated && user?.role === "CUSTOMER" && totalStock > 0 && (
+          {!canManageProducts && isAuthenticated && canManageCart && totalStock > 0 && (
             <button
               onClick={handleAddToCart}
               disabled={isAdding}

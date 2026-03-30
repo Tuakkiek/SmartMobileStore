@@ -40,6 +40,9 @@ import {
   canPurchaseForProductStatus,
   normalizeProductStatus,
 } from "../product/productPricingConfig.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
+import { hasPermission } from "../../authz/policyEngine.js";
+import { resolveEffectiveAccessContext } from "../../authz/authorizationService.js";
 
 const ORDER_STATUSES = new Set([
   "PENDING",
@@ -139,6 +142,104 @@ const isBranchScopedStaffActor = (req) => {
   return Boolean(req?.authz && !req.authz.isGlobalAdmin && req.authz.requiresBranchAssignment);
 };
 
+const requestHasPermission = (req, permission, mode = "branch", resource = null) =>
+  hasPermission(req?.authz, permission, { mode, resource });
+
+const hasBroadOrderAccess = (req) =>
+  Boolean(req?.authz?.isGlobalAdmin) ||
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDERS_READ, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_STATUS_MANAGE, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_STATUS_MANAGE, "global") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.USERS_MANAGE_BRANCH, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.USERS_MANAGE_GLOBAL, "global");
+
+const hasBroadPosAccess = (req) =>
+  Boolean(req?.authz?.isGlobalAdmin) ||
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH, "global");
+
+const canViewOwnOrders = (req) =>
+  !hasBroadOrderAccess(req) &&
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_VIEW_SELF, "self");
+
+const canViewAssignedOrders = (req, resource = null) =>
+  !hasBroadOrderAccess(req) &&
+  (requestHasPermission(req, AUTHZ_ACTIONS.ORDER_VIEW_ASSIGNED, "task", resource) ||
+    requestHasPermission(req, AUTHZ_ACTIONS.TASK_READ, "task", resource));
+
+const canViewOwnPosOrders = (req) =>
+  !hasBroadPosAccess(req) &&
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_SELF, "self");
+
+const canViewBranchPosOrders = (req) =>
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
+
+const canManageOrderWorkflow = (req) =>
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.ORDER_STATUS_MANAGE,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
+
+const canManageWarehouseWorkflow = (req) =>
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_WAREHOUSE, "branch");
+
+const canManageTaskWorkflow = (req, resource = null) =>
+  !hasBroadOrderAccess(req) &&
+  !canManageWarehouseWorkflow(req) &&
+  (requestHasPermission(req, AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_TASK, "task", resource) ||
+    requestHasPermission(req, AUTHZ_ACTIONS.TASK_UPDATE, "task", resource));
+
+const canManagePosWorkflow = (req) =>
+  !hasBroadOrderAccess(req) &&
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_POS, "branch");
+
+const canAssignCarrierPermission = (req) =>
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.ORDER_ASSIGN_CARRIER,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
+
+const canAssignStorePermission = (req) =>
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.ORDER_ASSIGN_STORE,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
+
+const canAssignInStorePicker = (req) =>
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_PICKER_ASSIGN_INSTORE, "branch");
+
+const canCompleteInStorePick = (req) =>
+  requestHasPermission(req, AUTHZ_ACTIONS.ORDER_PICK_COMPLETE_INSTORE, "branch");
+
+const hasBranchManagementPermission = (req) =>
+  requestHasPermission(req, AUTHZ_ACTIONS.USERS_MANAGE_BRANCH, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.USERS_MANAGE_GLOBAL, "global");
+
+const isCoordinatorWorkflowActor = (req) =>
+  canManageOrderWorkflow(req) && !hasBranchManagementPermission(req) && !req?.authz?.isGlobalAdmin;
+
+const userHasEffectivePermission = async ({
+  user,
+  permission,
+  mode = "branch",
+  activeBranchId = "",
+  resource = null,
+} = {}) => {
+  if (!user) return false;
+  const authz = await resolveEffectiveAccessContext({
+    user,
+    activeBranchId,
+  });
+  return hasPermission(authz, permission, { mode, resource });
+};
+
 const enforceInStoreBranchAccess = (req, order) => {
   if (!isInStoreOrder(order) || !isBranchScopedStaffActor(req)) {
     return { allowed: true };
@@ -198,7 +299,7 @@ const collectActiveBranchIds = (user) => {
 const validateShipperBranchScope = ({ req, order, shipper }) => {
   if (!shipper) return { allowed: true };
 
-  const isGlobalAdmin = Boolean(req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN");
+  const isGlobalAdmin = Boolean(req?.authz?.isGlobalAdmin);
   if (isGlobalAdmin) return { allowed: true };
 
   const activeBranchId = normalizeBranchId(req?.authz?.activeBranchId);
@@ -1007,13 +1108,13 @@ const buildFilter = (req) => {
 
   const andClauses = [];
 
-  if (req.user.role === "CUSTOMER") {
+  if (canViewOwnOrders(req)) {
     andClauses.push({
       $or: [{ customerId: req.user._id }, { userId: req.user._id }],
     });
   }
 
-  if (req.user.role === "SHIPPER") {
+  if (canViewAssignedOrders(req, { assigneeId: req.user._id })) {
     andClauses.push({ "shipperInfo.shipperId": req.user._id });
   }
 
@@ -1074,12 +1175,12 @@ const buildFilter = (req) => {
     andClauses.push({ createdAt });
   }
 
-  if (req.user.role === "POS_STAFF") {
+  if (canViewOwnPosOrders(req) && !canViewBranchPosOrders(req)) {
     andClauses.push({ orderSource: "IN_STORE" });
     andClauses.push({ "posInfo.staffId": req.user._id });
   }
 
-  if (req.user.role === "CASHIER") {
+  if (canViewBranchPosOrders(req)) {
     andClauses.push({ orderSource: "IN_STORE" });
   }
 
@@ -1087,8 +1188,8 @@ const buildFilter = (req) => {
   // Customers see their own orders, shippers see orders assigned to their shipperId.
   const shouldApplyBranchScope =
     !req.authz?.isGlobalAdmin &&
-    req.user.role !== "CUSTOMER" &&
-    req.user.role !== "SHIPPER";
+    !canViewOwnOrders(req) &&
+    !canViewAssignedOrders(req, { assigneeId: req.user._id });
 
   if (shouldApplyBranchScope) {
     if (req.authz?.activeBranchId) {
@@ -1190,14 +1291,14 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    if (req.user.role === "CUSTOMER" && !isOrderOwnedByUser(order, req.user._id)) {
+    if (canViewOwnOrders(req) && !isOrderOwnedByUser(order, req.user._id)) {
       return res.status(403).json({
         success: false,
         message: "Bạn không có quyền xem đơn hàng này",
       });
     }
 
-    if (req.user.role === "SHIPPER") {
+    if (canViewAssignedOrders(req, { assigneeId: req.user._id, userId: req.user._id })) {
       const shipperId = order?.shipperInfo?.shipperId?.toString();
       if (!shipperId || shipperId !== req.user._id.toString()) {
         return res.status(403).json({
@@ -1207,7 +1308,7 @@ export const getOrderById = async (req, res) => {
       }
     }
 
-    if (req.user.role === "POS_STAFF") {
+    if (canViewOwnPosOrders(req) && !canViewBranchPosOrders(req)) {
       const isInStore = isInStoreOrder(order);
       const staffId = order?.posInfo?.staffId?.toString();
       if (!isInStore || !staffId || staffId !== req.user._id.toString()) {
@@ -1218,7 +1319,7 @@ export const getOrderById = async (req, res) => {
       }
     }
 
-    if (req.user.role === "CASHIER" && !isInStoreOrder(order)) {
+    if (canViewBranchPosOrders(req) && !canViewOwnPosOrders(req) && !isInStoreOrder(order)) {
       return res.status(403).json({
         success: false,
         message: "Bạn không có quyền xem đơn hàng này",
@@ -1543,10 +1644,8 @@ export const updateOrderStatus = async (req, res) => {
   try {
     const { status, note, shipperId, assignedStoreId } = req.body;
     const targetStatus = normalizeRequestedOrderStatus(status);
-    const isManagerRole = ["ADMIN", "ORDER_MANAGER"].includes(req.user.role);
-    const canAssignCarrier = ["ADMIN", "ORDER_MANAGER"].includes(
-      req.user.role
-    );
+    const isManagerRole = canManageOrderWorkflow(req);
+    const canAssignCarrier = canAssignCarrierPermission(req);
     let exchangeRequested = false;
     let exchangeReason = "";
 
@@ -1580,7 +1679,7 @@ export const updateOrderStatus = async (req, res) => {
 
     const inStoreOrder = isInStoreOrder(order);
 
-    if (req.user.role === "SHIPPER") {
+    if (canManageTaskWorkflow(req, { assigneeId: req.user._id, userId: req.user._id })) {
       const assignedShipper = order?.shipperInfo?.shipperId?.toString();
       if (!assignedShipper || assignedShipper !== req.user._id.toString()) {
         await session.abortTransaction();
@@ -1603,7 +1702,7 @@ export const updateOrderStatus = async (req, res) => {
       const assignedShipperId = order?.shipperInfo?.shipperId?.toString();
       const actorId = req.user?._id?.toString();
       const isAssignedShipperActor =
-        req.user.role === "SHIPPER" &&
+        canManageTaskWorkflow(req, { assigneeId: req.user._id, userId: req.user._id }) &&
         Boolean(assignedShipperId) &&
         assignedShipperId === actorId;
 
@@ -1619,7 +1718,7 @@ export const updateOrderStatus = async (req, res) => {
 
     const currentStatus = normalizeLegacyStatus(order.status);
 
-    if (req.user.role === "POS_STAFF") {
+    if (canManagePosWorkflow(req)) {
       const creatorId = order?.createdByInfo?.userId?.toString();
       const canHandleOwnInStoreOrder =
         inStoreOrder && creatorId && creatorId === req.user._id.toString();
@@ -1649,7 +1748,14 @@ export const updateOrderStatus = async (req, res) => {
       order,
       currentStatus,
       targetStatus,
-      role: req.user.role,
+      capabilities: {
+        canManageAll: hasBranchManagementPermission(req) || req?.authz?.isGlobalAdmin,
+        canManageCoordinator: canManageOrderWorkflow(req),
+        canManageWarehouse: canManageWarehouseWorkflow(req),
+        canManageTask: canManageTaskWorkflow(req, { assigneeId: req.user._id, userId: req.user._id }),
+        canManagePos: canManagePosWorkflow(req),
+        canCompleteInStorePick: canCompleteInStorePick(req),
+      },
     });
     const transitionView = getStatusTransitionView({
       order,
@@ -1680,9 +1786,23 @@ export const updateOrderStatus = async (req, res) => {
     ) {
       // Allow assigning picker during status update
       const picker = await User.findById(req.body.pickerId).session(session);
+      const pickerBranchId =
+        String(order?.assignedStore?.storeId || req.authz?.activeBranchId || "").trim();
+      const canPickerHandleInStore = await userHasEffectivePermission({
+        user: picker,
+        permission: AUTHZ_ACTIONS.ORDER_PICK_COMPLETE_INSTORE,
+        mode: "branch",
+        activeBranchId: pickerBranchId,
+      });
+      const canPickerHandleWarehouse = await userHasEffectivePermission({
+        user: picker,
+        permission: AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_WAREHOUSE,
+        mode: "branch",
+        activeBranchId: pickerBranchId,
+      });
       const isAllowedPickerRole = inStoreOrder
-        ? picker?.role === "WAREHOUSE_MANAGER"
-        : ["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker?.role);
+        ? canPickerHandleInStore
+        : canPickerHandleWarehouse;
 
       if (picker && isAllowedPickerRole) {
         order.pickerInfo = {
@@ -1704,7 +1824,7 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (
-      req.user.role === "ORDER_MANAGER" &&
+      isCoordinatorWorkflowActor(req) &&
       !["CONFIRMED", "PROCESSING", "SHIPPING", "CANCELLED", "CANCEL_REFUND_PENDING", "INCIDENT_REFUND_PROCESSING"].includes(
         targetStatus
       )
@@ -1719,7 +1839,7 @@ export const updateOrderStatus = async (req, res) => {
 
     if (
       inStoreOrder &&
-      req.user.role === "ORDER_MANAGER" &&
+      isCoordinatorWorkflowActor(req) &&
       ["PROCESSING", "PREPARING"].includes(targetStatus) &&
       !order?.pickerInfo?.pickerId
     ) {
@@ -1732,7 +1852,7 @@ export const updateOrderStatus = async (req, res) => {
 
     if (targetStatus === "PREPARING_SHIPMENT") {
       if (inStoreOrder) {
-        if (req.user.role !== "WAREHOUSE_MANAGER") {
+        if (!canCompleteInStorePick(req)) {
           await session.abortTransaction();
           return res.status(403).json({
             success: false,
@@ -1748,7 +1868,7 @@ export const updateOrderStatus = async (req, res) => {
             message: "Đơn hàng này được phân công cho Warehouse Manager khác",
           });
         }
-      } else if (!["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"].includes(req.user.role)) {
+      } else if (!canManageWarehouseWorkflow(req)) {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
@@ -1775,7 +1895,16 @@ export const updateOrderStatus = async (req, res) => {
 
     if (shipperId) {
       const shipper = await User.findById(shipperId).session(session);
-      if (!shipper || shipper.role !== "SHIPPER") {
+      const shipperBranchId =
+        String(order?.assignedStore?.storeId || req.authz?.activeBranchId || "").trim();
+      const shipperCanUpdateAssignedTask = await userHasEffectivePermission({
+        user: shipper,
+        permission: AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_TASK,
+        mode: "task",
+        activeBranchId: shipperBranchId,
+        resource: { assigneeId: shipper?._id, userId: shipper?._id },
+      });
+      if (!shipper || !shipperCanUpdateAssignedTask) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
@@ -1804,7 +1933,7 @@ export const updateOrderStatus = async (req, res) => {
 
     // Handle manual store assignment
     if (assignedStoreId) {
-      if (!isManagerRole) {
+      if (!canAssignStorePermission(req)) {
         await session.abortTransaction();
         return res.status(403).json({
           success: false,
@@ -1889,7 +2018,7 @@ export const updateOrderStatus = async (req, res) => {
 
     if (
       inStoreOrder &&
-      req.user.role === "POS_STAFF" &&
+      canManagePosWorkflow(req) &&
       currentStatus === "PREPARING_SHIPMENT" &&
       targetStatus === "CONFIRMED"
     ) {
@@ -2107,7 +2236,6 @@ export const updateOrderStatus = async (req, res) => {
       to: targetStatus,
       stage: transitionView,
       userId: req.user._id,
-      role: req.user.role,
     });
 
     await sendOrderStageNotifications({
@@ -2212,7 +2340,16 @@ export const assignCarrier = async (req, res) => {
     let shipper = null;
     if (shipperId) {
       shipper = await User.findById(shipperId).session(session);
-      if (!shipper || shipper.role !== "SHIPPER") {
+      const shipperBranchId =
+        String(order?.assignedStore?.storeId || req.authz?.activeBranchId || "").trim();
+      const shipperCanUpdateAssignedTask = await userHasEffectivePermission({
+        user: shipper,
+        permission: AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_TASK,
+        mode: "task",
+        activeBranchId: shipperBranchId,
+        resource: { assigneeId: shipper?._id, userId: shipper?._id },
+      });
+      if (!shipper || !shipperCanUpdateAssignedTask) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
@@ -2684,7 +2821,17 @@ export const assignPicker = async (req, res) => {
     }
 
     const picker = await User.findById(pickerId).session(session);
-    if (!picker || !["WAREHOUSE_STAFF", "WAREHOUSE_MANAGER"].includes(picker.role)) {
+    const pickerBranchId =
+      normalizeBranchId(order?.assignedStore?.storeId) ||
+      normalizeBranchId(req?.authz?.activeBranchId);
+    const pickerCanHandleWarehouseFlow = await userHasEffectivePermission({
+      user: picker,
+      permission: AUTHZ_ACTIONS.ORDER_STATUS_MANAGE_WAREHOUSE,
+      mode: "branch",
+      activeBranchId: pickerBranchId,
+    });
+
+    if (!picker || !pickerCanHandleWarehouseFlow) {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
@@ -2898,7 +3045,7 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    if (req.user.role === "CUSTOMER" && !isOrderOwnedByUser(order, req.user._id)) {
+    if (canViewOwnOrders(req) && !isOrderOwnedByUser(order, req.user._id)) {
       await session.abortTransaction();
       return res.status(403).json({
         success: false,
@@ -3146,7 +3293,6 @@ export const revertOrderStatus = async (req, res) => {
       to: previousStatus,
       previousPaymentStatus,
       userId: req.user._id,
-      role: req.user.role,
     });
 
     // Khôi phục trạng thái

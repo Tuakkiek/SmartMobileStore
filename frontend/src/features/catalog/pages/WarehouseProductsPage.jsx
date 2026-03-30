@@ -43,7 +43,6 @@ const ProductsPage = () => {
   const navigate = useNavigate();
   const canManageProducts = usePermission(["product.create", "product.update"], {
     mode: "any",
-    fallbackRoles: ["ADMIN", "PRODUCT_MANAGER", "GLOBAL_ADMIN"],
   });
   
   // Refs for potential future use

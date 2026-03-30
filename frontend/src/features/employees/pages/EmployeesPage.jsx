@@ -61,13 +61,13 @@ const STEPS = [
 const BRANCH_ROLES = new Set([
   "ADMIN",
   "BRANCH_ADMIN",
+  "SALES_STAFF",
   "WAREHOUSE_MANAGER",
   "WAREHOUSE_STAFF",
   "PRODUCT_MANAGER",
   "ORDER_MANAGER",
   "POS_STAFF",
   "CASHIER",
-  "SHIPPER",
 ]);
 
 const SCOPE_LABELS = {
@@ -157,6 +157,54 @@ const normalize = (value) => String(value || "").trim();
 const normalizeStoreId = (value) => normalize(value?._id || value);
 const unique = (items = []) =>
   Array.from(new Set(items.map((item) => normalize(item)).filter(Boolean)));
+const normalizeRoleKey = (value) => normalize(value).toUpperCase();
+const uniqueRoleKeys = (items = []) =>
+  Array.from(
+    new Set(
+      items
+        .map((item) => normalizeRoleKey(item))
+        .filter((item) => item && item !== "ALL"),
+    ),
+  );
+const TASK_SCOPED_ROLES = new Set(["SHIPPER"]);
+
+const getPrimaryRoleKey = (roleKeys = [], fallback = "SHIPPER") =>
+  uniqueRoleKeys(roleKeys)[0] || normalizeRoleKey(fallback) || "SHIPPER";
+
+const resolveSelectedRoleKeys = (formData = {}) => {
+  const roleKeys = uniqueRoleKeys(formData?.roleKeys || []);
+  if (roleKeys.length > 0) return roleKeys;
+  return uniqueRoleKeys([formData?.role]);
+};
+
+const buildCanonicalRoleAssignments = ({
+  roleKeys = [],
+  branchIds = [],
+  primaryBranchId = "",
+}) => {
+  const normalizedRoleKeys = uniqueRoleKeys(roleKeys);
+  const normalizedBranchIds = unique(branchIds);
+  const primaryBranch = normalize(primaryBranchId) || normalizedBranchIds[0] || "";
+
+  return normalizedRoleKeys.flatMap((roleKey) => {
+    if (TASK_SCOPED_ROLES.has(roleKey)) {
+      return [{ roleKey, scopeType: "TASK", scopeRef: "" }];
+    }
+
+    if (!BRANCH_ROLES.has(roleKey)) {
+      return [{ roleKey, scopeType: "GLOBAL", scopeRef: "" }];
+    }
+
+    return normalizedBranchIds.map((branchId) => ({
+      roleKey,
+      scopeType: "BRANCH",
+      scopeRef: branchId,
+      metadata: {
+        isPrimary: normalize(branchId) === primaryBranch,
+      },
+    }));
+  });
+};
 
 const isGranularFeatureEnabled = (user) => {
   const enabled =
@@ -187,6 +235,7 @@ const emptyForm = () => ({
   province: "",
   password: "",
   role: "SHIPPER",
+  roleKeys: ["SHIPPER"],
   avatar: "",
   storeLocation: "",
 });
@@ -231,9 +280,8 @@ const EmployeesPage = () => {
       ),
     [authz?.isGlobalAdmin, user?.role],
   );
-  const roleNeedsBranch = BRANCH_ROLES.has(
-    String(formData.role || "").toUpperCase(),
-  );
+  const selectedRoleKeys = useMemo(() => resolveSelectedRoleKeys(formData), [formData]);
+  const roleNeedsBranch = selectedRoleKeys.some((roleKey) => BRANCH_ROLES.has(roleKey));
 
   const catalogByKey = useMemo(() => {
     const map = new Map();
@@ -514,14 +562,11 @@ const EmployeesPage = () => {
     setPrimaryBranchId(defaults[0] || "");
     setPermissionKeys([]);
     setTemplateKeys([]);
-    if (granularEnabled && templateByKey.has(normalize(role).toUpperCase())) {
-      applyTemplate(role);
-    }
   };
 
   const openCreateDialog = () => {
     const role = activeTab !== "ALL" ? activeTab : "SHIPPER";
-    setFormData({ ...emptyForm(), role });
+    setFormData({ ...emptyForm(), role, roleKeys: [role] });
     resetWizard(role);
     setShowCreateDialog(true);
   };
@@ -535,6 +580,7 @@ const EmployeesPage = () => {
       province: employee.province || "",
       password: "",
       role: employee.role || "SHIPPER",
+      roleKeys: [employee.role || "SHIPPER"],
       avatar: employee.avatar || "",
       storeLocation: employee.storeLocation || "",
     });
@@ -545,9 +591,51 @@ const EmployeesPage = () => {
     setPermissionKeys([]);
     setTemplateKeys([]);
     setPreview(null);
-    if (granularEnabled) {
-      try {
-        const res = await userAPI.getUserEffectivePermissions(employee._id);
+    try {
+      const res = await userAPI.getUserAuthorization(employee._id);
+      const data = res.data?.data || {};
+      const authorizationRoleKeys = uniqueRoleKeys(
+        data.roleKeys || (data.roleAssignments || []).map((item) => item.roleKey),
+      );
+      const authorizationBranchIds = unique([
+        ...(data.allowedBranchIds || []),
+        ...(data.roleAssignments || [])
+          .filter((item) => String(item.scopeType || "").toUpperCase() === "BRANCH")
+          .map((item) => item.scopeRef || item.scopeId),
+        ...(data.directPermissionGrants || [])
+          .filter((item) => String(item.scopeType || "").toUpperCase() === "BRANCH")
+          .map((item) => item.scopeRef || item.scopeId),
+      ]);
+
+      setFormData((prev) => ({
+        ...prev,
+        role: getPrimaryRoleKey(authorizationRoleKeys, employee.role || "SHIPPER"),
+        roleKeys: authorizationRoleKeys.length
+          ? authorizationRoleKeys
+          : [employee.role || "SHIPPER"],
+      }));
+      setBranchIds(authorizationBranchIds.length ? authorizationBranchIds : nextBranchIds);
+      setPrimaryBranchId(
+        normalize(data.activeBranchId) ||
+          extractPrimaryBranchId(
+            employee,
+            authorizationBranchIds.length ? authorizationBranchIds : nextBranchIds,
+          ),
+      );
+
+      if (granularEnabled) {
+        setPermissionKeys(
+          unique((data.directPermissionGrants || []).map((item) => item.key)),
+        );
+      }
+      return;
+    } catch (e) {
+      setError(e.response?.data?.message || "KhÃ´ng thá»ƒ táº£i quyá»n hiá»‡n táº¡i");
+      return;
+    }
+    /*
+    try {
+      const res = await userAPI.getUserAuthorization(employee._id);
         const data = res.data?.data || {};
         setPermissionKeys(
           unique((data.permissionGrants || []).map((item) => item.key)),
@@ -567,6 +655,7 @@ const EmployeesPage = () => {
         setError(e.response?.data?.message || "Không thể tải quyền hiện tại");
       }
     }
+    */
   };
 
   const closeDialog = () => {
@@ -582,17 +671,31 @@ const EmployeesPage = () => {
     setError("");
   };
 
-  const basePayload = () => ({
-    fullName: formData.fullName,
-    phoneNumber: formData.phoneNumber,
-    email: formData.email,
-    province: formData.province,
-    password: formData.password,
-    role: formData.role,
-    avatar: formData.avatar,
-    storeLocation: sortedBranchIds[0] || formData.storeLocation,
-    branchIds: sortedBranchIds,
-  });
+  const basePayload = () => {
+    const primaryRoleKey = getPrimaryRoleKey(selectedRoleKeys, formData.role);
+    const canonicalRoleAssignments = buildCanonicalRoleAssignments({
+      roleKeys: selectedRoleKeys,
+      branchIds: sortedBranchIds,
+      primaryBranchId,
+    });
+    const resolvedPrimaryBranchId =
+      normalize(primaryBranchId) || sortedBranchIds[0] || formData.storeLocation;
+
+    return {
+      fullName: formData.fullName,
+      phoneNumber: formData.phoneNumber,
+      email: formData.email,
+      province: formData.province,
+      password: formData.password,
+      role: primaryRoleKey,
+      roleKeys: selectedRoleKeys,
+      roleAssignments: canonicalRoleAssignments,
+      avatar: formData.avatar,
+      primaryBranchId: resolvedPrimaryBranchId,
+      storeLocation: resolvedPrimaryBranchId,
+      branchIds: sortedBranchIds,
+    };
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -827,28 +930,68 @@ const EmployeesPage = () => {
       {step === 3 ? (
         <div className="space-y-3">
           <div className="rounded border p-3">
+            <Label className="mb-2 block">Vai trÃ² Ä‘Æ°á»£c gÃ¡n</Label>
+            <div className="grid gap-2 md:grid-cols-2">
+              {EMPLOYEE_TABS.filter((t) => t.value !== "ALL").map((t) => {
+                const checked = selectedRoleKeys.includes(t.value);
+                return (
+                  <label
+                    key={t.value}
+                    className="flex items-center justify-between gap-3 rounded border p-3 text-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(nextChecked) => {
+                          const nextRoleKeys = nextChecked
+                            ? uniqueRoleKeys([...selectedRoleKeys, t.value])
+                            : selectedRoleKeys.filter((roleKey) => roleKey !== t.value);
+                          const normalizedRoleKeys = nextRoleKeys.length
+                            ? nextRoleKeys
+                            : ["SHIPPER"];
+                          const nextPrimaryRole = normalizedRoleKeys.includes(formData.role)
+                            ? formData.role
+                            : getPrimaryRoleKey(normalizedRoleKeys, normalizedRoleKeys[0]);
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            role: nextPrimaryRole,
+                            roleKeys: normalizedRoleKeys,
+                          }));
+                        }}
+                      />
+                      <span>{t.label}</span>
+                    </span>
+                    {formData.role === t.value ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        ChÃ­nh
+                      </Badge>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded border p-3">
             <Label className="mb-2 block">Vai trò</Label>
             <Select
               value={formData.role}
-              onValueChange={(value) => {
-                setFormData((prev) => ({ ...prev, role: value }));
-                if (
-                  granularEnabled &&
-                  templateByKey.has(normalize(value).toUpperCase())
-                ) {
-                  applyTemplate(value);
-                }
-              }}
+              onValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, role: value }))
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Chọn vai trò" />
               </SelectTrigger>
               <SelectContent>
-                {EMPLOYEE_TABS.filter((t) => t.value !== "ALL").map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
+                {selectedRoleKeys.map((roleKey) => {
+                  const roleOption = EMPLOYEE_TABS.find((t) => t.value === roleKey);
+                  return (
+                    <SelectItem key={roleKey} value={roleKey}>
+                      {roleOption?.label || roleKey}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

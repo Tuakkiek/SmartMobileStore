@@ -1,5 +1,4 @@
-import PermissionTemplate from "./PermissionTemplate.js";
-import TemplatePermission from "./TemplatePermission.js";
+import Role from "./Role.js";
 import Permission from "./Permission.js";
 import { invalidateRolePermissionCache } from "../../authz/rolePermissionService.js";
 import { clearPermissionCache } from "../../authz/effectivePermissionCache.js";
@@ -43,89 +42,32 @@ const resolvePermissionDocs = async (permissionKeys = []) => {
   return permissions;
 };
 
-const applyTemplatePermissions = async ({ templateId, permissions = [] }) => {
-  await TemplatePermission.deleteMany({ templateId });
-  if (!permissions.length) {
-    return;
-  }
-
-  const mappings = permissions.map((permission, index) => ({
-    templateId,
-    permissionId: permission._id,
-    scopeType: permission.scopeType,
-    scopeId: "",
-    sortOrder: index,
-    metadata: {
-      source: "ROLE_MANUAL",
-    },
-  }));
-
-  await TemplatePermission.insertMany(mappings, { ordered: false });
-};
-
-const buildPermissionsByTemplate = async ({ templateIds, includeInactive = false }) => {
-  const mappings = templateIds.length
-    ? await TemplatePermission.find({ templateId: { $in: templateIds } })
-        .populate("permissionId", "key isActive")
-        .select("templateId permissionId sortOrder")
-        .sort({ sortOrder: 1, createdAt: 1 })
-        .lean()
-    : [];
-
-  const byTemplateId = new Map();
-  for (const row of mappings) {
-    const permission = row.permissionId;
-    if (!permission) continue;
-    if (!includeInactive && permission.isActive === false) continue;
-
-    const templateId = String(row.templateId);
-    if (!byTemplateId.has(templateId)) {
-      byTemplateId.set(templateId, []);
-    }
-    byTemplateId.get(templateId).push(normalizePermissionKey(permission.key));
-  }
-
-  return byTemplateId;
-};
-
-const buildRolePayload = ({ template, permissionKeys = [] }) => ({
-  id: String(template._id),
-  key: normalizeRoleKey(template.key),
-  name: template.name,
-  description: template.description || "",
-  scope: template.scope || "BRANCH",
-  isSystem: Boolean(template.isSystem),
-  isActive: Boolean(template.isActive),
-  metadata: template.metadata || {},
-  permissions: permissionKeys,
+const buildRolePayload = (role) => ({
+  id: String(role._id),
+  key: normalizeRoleKey(role.key),
+  name: role.name,
+  description: role.description || "",
+  scope: role.scopeType || "BRANCH",
+  scopeType: role.scopeType || "BRANCH",
+  isSystem: Boolean(role.isSystem),
+  isActive: Boolean(role.isActive),
+  metadata: role.metadata || {},
+  permissions: (role.permissions || []).map(normalizePermissionKey),
 });
 
 export const listRoles = async (req, res) => {
   try {
     const includeInactive = toBoolean(req.query.includeInactive);
-    const templateFilter = includeInactive ? {} : { isActive: true };
+    const filter = includeInactive ? {} : { isActive: true };
 
-    const templates = await PermissionTemplate.find(templateFilter)
-      .select("_id key name description scope isSystem isActive metadata")
+    const roles = await Role.find(filter)
+      .select("_id key name description scopeType isSystem isActive metadata permissions")
       .sort({ isSystem: -1, key: 1 })
       .lean();
 
-    const templateIds = templates.map((template) => template._id);
-    const permissionMap = await buildPermissionsByTemplate({
-      templateIds,
-      includeInactive,
-    });
-
-    const roles = templates.map((template) =>
-      buildRolePayload({
-        template,
-        permissionKeys: permissionMap.get(String(template._id)) || [],
-      })
-    );
-
     return res.json({
       success: true,
-      data: { roles },
+      data: { roles: roles.map(buildRolePayload) },
     });
   } catch (error) {
     return res.status(500).json({
@@ -139,8 +81,8 @@ export const listRoles = async (req, res) => {
 export const getRole = async (req, res) => {
   try {
     const roleKey = normalizeRoleKey(req.params.key);
-    const template = await PermissionTemplate.findOne({ key: roleKey }).lean();
-    if (!template) {
+    const role = await Role.findOne({ key: roleKey }).lean();
+    if (!role) {
       return res.status(404).json({
         success: false,
         code: "ROLE_NOT_FOUND",
@@ -148,18 +90,10 @@ export const getRole = async (req, res) => {
       });
     }
 
-    const permissionMap = await buildPermissionsByTemplate({
-      templateIds: [template._id],
-      includeInactive: true,
-    });
-
     return res.json({
       success: true,
       data: {
-        role: buildRolePayload({
-          template,
-          permissionKeys: permissionMap.get(String(template._id)) || [],
-        }),
+        role: buildRolePayload(role),
       },
     });
   } catch (error) {
@@ -173,8 +107,9 @@ export const getRole = async (req, res) => {
 
 export const createRole = async (req, res) => {
   try {
-    const { key, name, description, scope, isActive, permissions } = req.body || {};
-    if (!key || !name || !scope) {
+    const { key, name, description, scope, scopeType, isActive, permissions } = req.body || {};
+    const resolvedScope = String(scopeType || scope || "").trim().toUpperCase();
+    if (!key || !name || !resolvedScope) {
       return res.status(400).json({
         success: false,
         code: "ROLE_PAYLOAD_INVALID",
@@ -183,7 +118,7 @@ export const createRole = async (req, res) => {
     }
 
     const normalizedKey = normalizeRoleKey(key);
-    const existing = await PermissionTemplate.findOne({ key: normalizedKey }).lean();
+    const existing = await Role.findOne({ key: normalizedKey }).lean();
     if (existing) {
       return res.status(409).json({
         success: false,
@@ -192,23 +127,19 @@ export const createRole = async (req, res) => {
       });
     }
 
-    const permissionDocs = await resolvePermissionDocs(permissions || []);
+    await resolvePermissionDocs(permissions || []);
 
-    const template = await PermissionTemplate.create({
+    const role = await Role.create({
       key: normalizedKey,
       name: String(name).trim(),
       description: String(description || "").trim(),
-      scope: String(scope).trim().toUpperCase(),
+      scopeType: resolvedScope,
       isActive: isActive === undefined ? true : Boolean(isActive),
       isSystem: false,
+      permissions: permissions || [],
       metadata: {
         source: "CUSTOM_ROLE",
       },
-    });
-
-    await applyTemplatePermissions({
-      templateId: template._id,
-      permissions: permissionDocs,
     });
 
     invalidateAuthzCaches();
@@ -216,10 +147,7 @@ export const createRole = async (req, res) => {
     return res.status(201).json({
       success: true,
       data: {
-        role: buildRolePayload({
-          template,
-          permissionKeys: permissionDocs.map((permission) => normalizePermissionKey(permission.key)),
-        }),
+        role: buildRolePayload(role),
       },
     });
   } catch (error) {
@@ -233,10 +161,11 @@ export const createRole = async (req, res) => {
 
 export const updateRole = async (req, res) => {
   try {
-    const { key, name, description, scope, isActive, permissions } = req.body || {};
+    const { key, name, description, scope, scopeType, isActive, permissions } = req.body || {};
     const roleKey = normalizeRoleKey(req.params.key);
+    const resolvedScope = String(scopeType || scope || "").trim().toUpperCase();
 
-    if (!name || !scope) {
+    if (!name || !resolvedScope) {
       return res.status(400).json({
         success: false,
         code: "ROLE_PAYLOAD_INVALID",
@@ -252,8 +181,8 @@ export const updateRole = async (req, res) => {
       });
     }
 
-    const template = await PermissionTemplate.findOne({ key: roleKey });
-    if (!template) {
+    const role = await Role.findOne({ key: roleKey });
+    if (!role) {
       return res.status(404).json({
         success: false,
         code: "ROLE_NOT_FOUND",
@@ -261,29 +190,23 @@ export const updateRole = async (req, res) => {
       });
     }
 
-    template.name = String(name).trim();
-    template.description = String(description || "").trim();
-    template.scope = String(scope).trim().toUpperCase();
+    await resolvePermissionDocs(permissions || []);
+
+    role.name = String(name).trim();
+    role.description = String(description || "").trim();
+    role.scopeType = resolvedScope;
+    role.permissions = permissions || [];
     if (isActive !== undefined) {
-      template.isActive = Boolean(isActive);
+      role.isActive = Boolean(isActive);
     }
 
-    const permissionDocs = await resolvePermissionDocs(permissions || []);
-    await applyTemplatePermissions({
-      templateId: template._id,
-      permissions: permissionDocs,
-    });
-
-    await template.save();
+    await role.save();
     invalidateAuthzCaches();
 
     return res.json({
       success: true,
       data: {
-        role: buildRolePayload({
-          template,
-          permissionKeys: permissionDocs.map((permission) => normalizePermissionKey(permission.key)),
-        }),
+        role: buildRolePayload(role),
       },
     });
   } catch (error) {
@@ -298,8 +221,8 @@ export const updateRole = async (req, res) => {
 export const patchRole = async (req, res) => {
   try {
     const roleKey = normalizeRoleKey(req.params.key);
-    const template = await PermissionTemplate.findOne({ key: roleKey });
-    if (!template) {
+    const role = await Role.findOne({ key: roleKey });
+    if (!role) {
       return res.status(404).json({
         success: false,
         code: "ROLE_NOT_FOUND",
@@ -317,43 +240,29 @@ export const patchRole = async (req, res) => {
     }
 
     if (payload.name !== undefined) {
-      template.name = String(payload.name).trim();
+      role.name = String(payload.name).trim();
     }
     if (payload.description !== undefined) {
-      template.description = String(payload.description || "").trim();
+      role.description = String(payload.description || "").trim();
     }
-    if (payload.scope !== undefined) {
-      template.scope = String(payload.scope).trim().toUpperCase();
+    if (payload.scope !== undefined || payload.scopeType !== undefined) {
+      role.scopeType = String(payload.scopeType || payload.scope).trim().toUpperCase();
+    }
+    if (payload.permissions !== undefined) {
+      await resolvePermissionDocs(payload.permissions || []);
+      role.permissions = payload.permissions || [];
     }
     if (payload.isActive !== undefined) {
-      template.isActive = Boolean(payload.isActive);
+      role.isActive = Boolean(payload.isActive);
     }
 
-    let permissionKeys = null;
-    if (payload.permissions !== undefined) {
-      const permissionDocs = await resolvePermissionDocs(payload.permissions || []);
-      await applyTemplatePermissions({
-        templateId: template._id,
-        permissions: permissionDocs,
-      });
-      permissionKeys = permissionDocs.map((permission) => normalizePermissionKey(permission.key));
-    }
-
-    await template.save();
+    await role.save();
     invalidateAuthzCaches();
 
     return res.json({
       success: true,
       data: {
-        role: buildRolePayload({
-          template,
-          permissionKeys:
-            permissionKeys ||
-            (await buildPermissionsByTemplate({
-              templateIds: [template._id],
-              includeInactive: true,
-            })).get(String(template._id)) || [],
-        }),
+        role: buildRolePayload(role),
       },
     });
   } catch (error) {

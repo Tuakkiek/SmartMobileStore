@@ -39,7 +39,9 @@ export const listPermissions = async (req, res) => {
     }
 
     const permissions = await Permission.find(filter)
-      .select("_id key module action scopeType description isSensitive isActive metadata")
+      .select(
+        "_id key module action scopeType defaultScope resourceType description isSensitive isActive metadata"
+      )
       .sort({ module: 1, key: 1 })
       .lean();
 
@@ -82,7 +84,16 @@ export const getPermission = async (req, res) => {
 
 export const createPermission = async (req, res) => {
   try {
-    const { key, module, action, scopeType, description, isSensitive } = req.body || {};
+    const {
+      key,
+      module,
+      action,
+      scopeType,
+      defaultScope,
+      resourceType,
+      description,
+      isSensitive,
+    } = req.body || {};
     if (!key || !module || !action || !scopeType) {
       return res.status(400).json({
         success: false,
@@ -106,6 +117,8 @@ export const createPermission = async (req, res) => {
       module: String(module).trim(),
       action: String(action).trim(),
       scopeType: String(scopeType).trim().toUpperCase(),
+      defaultScope: String(defaultScope || scopeType).trim().toUpperCase(),
+      resourceType: String(resourceType || module).trim(),
       description: String(description || "").trim(),
       isSensitive: Boolean(isSensitive),
       isActive: true,
@@ -131,7 +144,17 @@ export const createPermission = async (req, res) => {
 
 export const updatePermission = async (req, res) => {
   try {
-    const { key, module, action, scopeType, description, isSensitive, isActive } = req.body || {};
+    const {
+      key,
+      module,
+      action,
+      scopeType,
+      defaultScope,
+      resourceType,
+      description,
+      isSensitive,
+      isActive,
+    } = req.body || {};
     if (!key || !module || !action || !scopeType) {
       return res.status(400).json({
         success: false,
@@ -161,6 +184,8 @@ export const updatePermission = async (req, res) => {
     permission.module = String(module).trim();
     permission.action = String(action).trim();
     permission.scopeType = String(scopeType).trim().toUpperCase();
+    permission.defaultScope = String(defaultScope || scopeType).trim().toUpperCase();
+    permission.resourceType = String(resourceType || module).trim();
     permission.description = String(description || "").trim();
     permission.isSensitive = Boolean(isSensitive);
     permission.isActive = typeof isActive === "boolean" ? isActive : permission.isActive;
@@ -212,6 +237,12 @@ export const patchPermission = async (req, res) => {
     }
     if (payload.scopeType !== undefined) {
       permission.scopeType = String(payload.scopeType).trim().toUpperCase();
+    }
+    if (payload.defaultScope !== undefined) {
+      permission.defaultScope = String(payload.defaultScope).trim().toUpperCase();
+    }
+    if (payload.resourceType !== undefined) {
+      permission.resourceType = String(payload.resourceType || "").trim();
     }
     if (payload.description !== undefined) {
       permission.description = String(payload.description || "").trim();

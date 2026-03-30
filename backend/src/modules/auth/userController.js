@@ -12,12 +12,17 @@ import {
 } from "../../authz/permissionTemplateService.js";
 import {
   applyUserPermissionAssignments,
+  loadActiveUserPermissionGrants,
   normalizeRequestedPermissionAssignments,
   validateGrantAntiEscalation,
 } from "../../authz/userPermissionService.js";
 import { resolveEffectiveAccessContext } from "../../authz/authorizationService.js";
 import { SYSTEM_ROLES, BRANCH_ROLES, TASK_ROLES } from "../../authz/actions.js";
 import { omniLog } from "../../utils/logger.js";
+import {
+  normalizeRequestedRoleAssignments as normalizeCanonicalRoleAssignments,
+  syncUserRoleAssignments,
+} from "../../authz/roleAssignmentService.js";
 
 const BRANCH_REQUIRED_EMPLOYEE_ROLES = new Set([
   "ADMIN",
@@ -30,6 +35,14 @@ const BRANCH_REQUIRED_EMPLOYEE_ROLES = new Set([
   "CASHIER",
   "SHIPPER",
 ]);
+
+const LEGACY_ROLE_TO_CANONICAL_BRANCH_ROLE = Object.freeze({
+  ADMIN: "BRANCH_ADMIN",
+});
+
+const CANONICAL_BRANCH_ROLE_TO_LEGACY_ROLE = Object.freeze({
+  BRANCH_ADMIN: "ADMIN",
+});
 
 const normalizeText = (value) => String(value || "").trim();
 const toUniqueStrings = (items = []) =>
@@ -80,6 +93,13 @@ const hasGranularPermissionPayload = (payload = {}) => {
     (Array.isArray(payload?.permissions) && payload.permissions.length > 0) ||
     !!normalizeText(payload?.templateKey) ||
     (Array.isArray(payload?.templateKeys) && payload.templateKeys.length > 0)
+  );
+};
+
+const hasCanonicalRolePayload = (payload = {}) => {
+  return (
+    (Array.isArray(payload?.roleAssignments) && payload.roleAssignments.length > 0) ||
+    (Array.isArray(payload?.roleKeys) && payload.roleKeys.length > 0)
   );
 };
 
@@ -152,6 +172,33 @@ const assertActorCanAssignRole = (req, role) => {
       "Only global admin can assign GLOBAL_ADMIN role",
     );
   }
+};
+
+const assertActorCanAssignRoles = (req, roles = []) => {
+  for (const role of roles) {
+    assertActorCanAssignRole(req, role);
+  }
+};
+
+const resolveCanonicalRoleAssignmentsFromPayload = async (req, payload = {}) => {
+  await ensurePermissionTemplatesSeeded();
+  const normalizedAssignments = await normalizeCanonicalRoleAssignments(payload);
+  if (!normalizedAssignments.length) {
+    throw toAppError(
+      400,
+      "AUTHZ_ROLE_ASSIGNMENTS_REQUIRED",
+      "At least one valid role assignment is required",
+    );
+  }
+  const roleKeys = normalizedAssignments.map((assignment) => assignment.roleKey);
+  assertActorCanAssignRoles(req, roleKeys);
+
+  const branchIds = normalizedAssignments
+    .filter((assignment) => String(assignment.scopeType || "").toUpperCase() === "BRANCH")
+    .map((assignment) => assignment.scopeRef);
+  assertActorBranchScope(req, branchIds);
+
+  return normalizedAssignments;
 };
 
 const syncExplicitPermissionsForUser = async ({
@@ -299,7 +346,7 @@ const normalizeBranchRoles = (roles = []) => {
   const output = new Set();
   for (const role of normalizeRoleArray(roles)) {
     if (!role) continue;
-    const effectiveRole = role === "ADMIN" ? "BRANCH_ADMIN" : role;
+    const effectiveRole = LEGACY_ROLE_TO_CANONICAL_BRANCH_ROLE[role] || role;
     if (BRANCH_ROLES.includes(role) || BRANCH_ROLES.includes(effectiveRole)) {
       output.add(effectiveRole);
     }
@@ -354,7 +401,7 @@ const deriveLegacyRoleFromAssignments = ({
       branchAssignments.find((assignment) => assignment.isPrimary) ||
       branchAssignments[0];
     const role = primary?.roles?.[0] || fallbackRole;
-    return role === "BRANCH_ADMIN" ? "ADMIN" : role;
+    return CANONICAL_BRANCH_ROLE_TO_LEGACY_ROLE[role] || role;
   }
 
   return fallbackRole || "USER";
@@ -511,6 +558,7 @@ export const getAllEmployees = async (req, res) => {
     const filter = {
       role: {
         $in: [
+          "SALES_STAFF",
           "WAREHOUSE_MANAGER",
           "PRODUCT_MANAGER",
           "ORDER_MANAGER",
@@ -611,19 +659,27 @@ export const createEmployee = async (req, res) => {
       avatar,
       storeLocation,
     } = req.body;
-    const legacyRole = String(role || "USER")
+    const canonicalRoleRequested = hasCanonicalRolePayload(req.body);
+    const requestedBranchIds = collectBranchIds(req.body);
+    const fallbackRequestedRole =
+      (Array.isArray(req.body?.roleKeys) && req.body.roleKeys[0]) || role || "USER";
+    const legacyRole = String(fallbackRequestedRole || "USER")
       .trim()
       .toUpperCase();
-    assertActorCanAssignRole(req, legacyRole);
-    const requestedBranchIds = collectBranchIds(req.body);
+    if (!canonicalRoleRequested) {
+      assertActorCanAssignRole(req, legacyRole);
+    }
     assertActorBranchScope(req, requestedBranchIds);
     const granularRequested = hasGranularPermissionPayload(req.body);
+    const requestedPrimaryBranchId =
+      normalizeText(req.body?.primaryBranchId) ||
+      normalizeText(storeLocation) ||
+      requestedBranchIds[0] ||
+      "";
 
-    const primaryBranchId =
-      normalizeText(storeLocation) || requestedBranchIds[0] || "";
     const effectiveStoreLocation = await resolveEmployeeStoreLocation({
       role: legacyRole,
-      storeLocation: primaryBranchId,
+      storeLocation: requestedPrimaryBranchId,
     });
     const authzWrite = deriveAuthzWriteFromLegacyInput({
       role: legacyRole,
@@ -650,18 +706,48 @@ export const createEmployee = async (req, res) => {
       province,
       password,
       role: legacyRole,
+      roles: [],
+      permissions: [],
       avatar: avatar || "",
-      systemRoles: authzWrite.systemRoles,
-      taskRoles: authzWrite.taskRoles,
-      branchAssignments,
-      authzState: authzWrite.authzState,
+      systemRoles: canonicalRoleRequested ? [] : authzWrite.systemRoles,
+      taskRoles: canonicalRoleRequested ? [] : authzWrite.taskRoles,
+      branchAssignments: canonicalRoleRequested ? [] : branchAssignments,
+      authzState: canonicalRoleRequested ? "ACTIVE" : authzWrite.authzState,
       authzVersion: 2,
       permissionsVersion: 1,
-      permissionMode: "EXPLICIT", // Always explicit for new employees
+      authorizationVersion: 1,
+      permissionMode: "HYBRID",
       storeLocation: effectiveStoreLocation,
     });
 
     let permissionSync = null;
+    let roleSync = null;
+    const roleAssignmentPayload = canonicalRoleRequested
+      ? {
+          ...req.body,
+          storeLocation: effectiveStoreLocation,
+          primaryBranchId: requestedPrimaryBranchId || effectiveStoreLocation,
+        }
+      : {
+          roleKeys: [legacyRole],
+          branchIds: requestedBranchIds,
+          storeLocation: effectiveStoreLocation,
+          primaryBranchId: requestedPrimaryBranchId || effectiveStoreLocation,
+        };
+
+    try {
+      roleSync = await syncUserRoleAssignments({
+        user,
+        assignments: await resolveCanonicalRoleAssignmentsFromPayload(req, roleAssignmentPayload),
+        actorUserId: req.user?._id || null,
+        primaryBranchId: requestedPrimaryBranchId || effectiveStoreLocation,
+        reason: "user_create",
+      });
+    } catch (error) {
+      await User.findByIdAndDelete(user._id);
+      throw error;
+    }
+
     if (granularRequested) {
       try {
         permissionSync = await syncExplicitPermissionsForUser({
@@ -681,6 +767,13 @@ export const createEmployee = async (req, res) => {
       message: "Tao nhan vien thanh cong",
       data: {
         user,
+        roleSync: roleSync
+          ? {
+              grantedCount: roleSync.grantedCount,
+              revokedCount: roleSync.revokedCount,
+              roleKeys: roleSync.roleKeys,
+            }
+          : null,
         permissionSync: permissionSync
           ? {
               grantedCount: permissionSync.grantedCount,
@@ -809,13 +902,19 @@ export const updateEmployee = async (req, res) => {
     assertActorCanManageTargetUser(req, user);
     const requestedBranchIds = collectBranchIds(req.body);
     assertActorBranchScope(req, requestedBranchIds);
+    const canonicalRoleRequested = hasCanonicalRolePayload(req.body);
 
     const nextRole = role ? String(role).trim().toUpperCase() : user.role;
-    assertActorCanAssignRole(req, nextRole);
+    if (!canonicalRoleRequested) {
+      assertActorCanAssignRole(req, nextRole);
+    }
     const requestedStoreLocation =
       storeLocation !== undefined ? storeLocation : user.storeLocation;
     const primaryBranchId =
-      normalizeText(requestedStoreLocation) || requestedBranchIds[0] || "";
+      normalizeText(req.body?.primaryBranchId) ||
+      normalizeText(requestedStoreLocation) ||
+      requestedBranchIds[0] ||
+      "";
 
     const nextStoreLocation = await resolveEmployeeStoreLocation({
       role: nextRole,
@@ -853,10 +952,10 @@ export const updateEmployee = async (req, res) => {
     user.role = nextRole;
     user.avatar = avatar !== undefined ? avatar : user.avatar;
     user.storeLocation = nextStoreLocation;
-    user.systemRoles = authzWrite.systemRoles;
-    user.taskRoles = authzWrite.taskRoles;
-    user.branchAssignments = nextBranchAssignments;
-    user.authzState = authzWrite.authzState;
+    user.systemRoles = canonicalRoleRequested ? user.systemRoles : authzWrite.systemRoles;
+    user.taskRoles = canonicalRoleRequested ? user.taskRoles : authzWrite.taskRoles;
+    user.branchAssignments = canonicalRoleRequested ? user.branchAssignments : nextBranchAssignments;
+    user.authzState = canonicalRoleRequested ? "ACTIVE" : authzWrite.authzState;
     user.authzVersion = 2;
 
     if (roleOrScopeChanged) {
@@ -870,6 +969,28 @@ export const updateEmployee = async (req, res) => {
     await user.save();
 
     let permissionSync = null;
+    let roleSync = null;
+    const roleAssignmentPayload = canonicalRoleRequested
+      ? {
+          ...req.body,
+          storeLocation: primaryBranchId || nextStoreLocation,
+          primaryBranchId: primaryBranchId || nextStoreLocation,
+        }
+      : {
+          roleKeys: [nextRole],
+          branchIds: requestedBranchIds,
+          storeLocation: primaryBranchId || nextStoreLocation,
+          primaryBranchId: primaryBranchId || nextStoreLocation,
+        };
+
+    roleSync = await syncUserRoleAssignments({
+      user,
+      assignments: await resolveCanonicalRoleAssignmentsFromPayload(req, roleAssignmentPayload),
+      actorUserId: req.user?._id || null,
+      primaryBranchId: primaryBranchId || nextStoreLocation,
+      reason: "user_update",
+    });
+
     if (hasGranularPermissionPayload(req.body)) {
       permissionSync = await syncExplicitPermissionsForUser({
         req,
@@ -884,6 +1005,13 @@ export const updateEmployee = async (req, res) => {
       message: "Cap nhat nhan vien thanh cong",
       data: {
         user,
+        roleSync: roleSync
+          ? {
+              grantedCount: roleSync.grantedCount,
+              revokedCount: roleSync.revokedCount,
+              roleKeys: roleSync.roleKeys,
+            }
+          : null,
         permissionSync: permissionSync
           ? {
               grantedCount: permissionSync.grantedCount,
@@ -915,92 +1043,53 @@ export const updateUserRoles = async (req, res) => {
     }
 
     assertActorCanManageTargetUser(req, targetUser);
-
-    const systemRoles = normalizeRoleArray(req.body?.systemRoles).filter(
-      (role) => SYSTEM_ROLES.includes(role),
-    );
-    const taskRoles = normalizeRoleArray(req.body?.taskRoles).filter((role) =>
-      TASK_ROLES.includes(role),
-    );
     const branchAssignments = normalizeBranchAssignmentsPayload(
       req.body?.branchAssignments || [],
     );
-
-    const invalidSystemRoles = normalizeRoleArray(req.body?.systemRoles).filter(
-      (role) => !SYSTEM_ROLES.includes(role),
-    );
-    const invalidTaskRoles = normalizeRoleArray(req.body?.taskRoles).filter(
-      (role) => !TASK_ROLES.includes(role),
-    );
-
-    if (invalidSystemRoles.length || invalidTaskRoles.length) {
-      return res.status(400).json({
-        success: false,
-        code: "AUTHZ_ROLE_INVALID",
-        message: "Invalid roles provided",
-        details: {
-          invalidSystemRoles,
-          invalidTaskRoles,
-        },
-      });
-    }
-
-    if (systemRoles.includes("GLOBAL_ADMIN")) {
-      assertActorCanAssignRole(req, "GLOBAL_ADMIN");
-    }
-
-    const branchIds = branchAssignments.map((assignment) => assignment.storeId);
-    assertActorBranchScope(req, branchIds);
-
-    const snapshotBefore = JSON.stringify({
-      systemRoles: normalizeRoleArray(targetUser.systemRoles),
-      taskRoles: normalizeRoleArray(targetUser.taskRoles),
-      branchAssignments: (targetUser.branchAssignments || []).map(
-        (assignment) => ({
-          storeId: normalizeText(assignment.storeId),
-          roles: normalizeBranchRoles(assignment.roles || []),
-          status: assignment.status || "ACTIVE",
-          isPrimary: Boolean(assignment.isPrimary),
-        }),
+    const fallbackAssignments = [
+      ...normalizeRoleArray(req.body?.systemRoles)
+        .filter((role) => SYSTEM_ROLES.includes(role))
+        .map((roleKey) => ({ roleKey, scopeType: "GLOBAL", scopeRef: "" })),
+      ...normalizeRoleArray(req.body?.taskRoles)
+        .filter((role) => TASK_ROLES.includes(role))
+        .map((roleKey) => ({ roleKey, scopeType: "TASK", scopeRef: "" })),
+      ...branchAssignments.flatMap((assignment) =>
+        normalizeBranchRoles(assignment?.roles || []).map((roleKey) => ({
+          roleKey,
+          scopeType: "BRANCH",
+          scopeRef: normalizeText(assignment.storeId),
+          metadata: {
+            isPrimary: Boolean(assignment?.isPrimary),
+          },
+        })),
       ),
+    ];
+
+    const requestedAssignments = hasCanonicalRolePayload(req.body)
+      ? await resolveCanonicalRoleAssignmentsFromPayload(req, req.body)
+      : await resolveCanonicalRoleAssignmentsFromPayload(req, {
+          roleAssignments: fallbackAssignments,
+          primaryBranchId:
+            normalizeText(req.body?.primaryBranchId) ||
+            normalizeText(req.body?.storeLocation) ||
+            normalizeText(branchAssignments.find((assignment) => assignment.isPrimary)?.storeId) ||
+            normalizeText(branchAssignments[0]?.storeId) ||
+            normalizeText(targetUser.storeLocation),
+        });
+
+    const primaryBranchId =
+      normalizeText(req.body?.primaryBranchId) ||
+      normalizeText(req.body?.storeLocation) ||
+      requestedAssignments.find((assignment) => assignment.scopeType === "BRANCH")?.scopeRef ||
+      normalizeText(targetUser.storeLocation);
+
+    await syncUserRoleAssignments({
+      user: targetUser,
+      assignments: requestedAssignments,
+      actorUserId: req.user?._id || null,
+      primaryBranchId,
+      reason: "user_role_update",
     });
-
-    const legacyRole = deriveLegacyRoleFromAssignments({
-      systemRoles,
-      taskRoles,
-      branchAssignments,
-      fallbackRole: targetUser.role || "USER",
-    });
-
-    const primaryAssignment =
-      branchAssignments.find((assignment) => assignment.isPrimary) ||
-      branchAssignments[0];
-
-    targetUser.systemRoles = systemRoles;
-    targetUser.taskRoles = taskRoles;
-    targetUser.branchAssignments = branchAssignments.map((assignment) => ({
-      ...assignment,
-      assignedBy: req.user?._id || assignment.assignedBy || undefined,
-      assignedAt: assignment.assignedAt || new Date(),
-    }));
-    targetUser.role = legacyRole;
-    if (primaryAssignment?.storeId) {
-      targetUser.storeLocation = primaryAssignment.storeId;
-    }
-    targetUser.authzVersion = 2;
-
-    const snapshotAfter = JSON.stringify({
-      systemRoles,
-      taskRoles,
-      branchAssignments,
-    });
-
-    if (snapshotBefore !== snapshotAfter) {
-      targetUser.permissionsVersion =
-        Number(targetUser.permissionsVersion || 1) + 1;
-    }
-
-    await targetUser.save();
 
     const effective = await resolveEffectiveAccessContext({
       user: targetUser,
@@ -1013,9 +1102,11 @@ export const updateUserRoles = async (req, res) => {
       data: {
         user: targetUser,
         authz: {
-          permissionMode: effective.permissionMode || "ROLE_FALLBACK",
+          permissionMode: effective.permissionMode || "HYBRID",
           activeBranchId: effective.activeBranchId || "",
           allowedBranchIds: effective.allowedBranchIds || [],
+          roleKeys: effective.roleKeys || [],
+          roleAssignments: effective.roleAssignments || [],
           permissions: Array.from(effective.permissions || []).sort(),
           permissionGrants: Array.isArray(effective.permissionGrants)
             ? effective.permissionGrants
@@ -1039,9 +1130,7 @@ export const getAllShippers = async (req, res) => {
       status: "ACTIVE",
     };
 
-    const isGlobalAdmin = Boolean(
-      req.authz?.isGlobalAdmin || req.user?.role === "GLOBAL_ADMIN",
-    );
+    const isGlobalAdmin = Boolean(req.authz?.isGlobalAdmin);
 
     if (!isGlobalAdmin) {
       const activeBranchId = String(req.authz?.activeBranchId || "").trim();
@@ -1163,9 +1252,13 @@ export const getEffectivePermissionsForUser = async (req, res) => {
       success: true,
       data: {
         userId: String(targetUser._id),
-        permissionMode: effective.permissionMode || "ROLE_FALLBACK",
+        permissionMode: effective.permissionMode || "HYBRID",
         activeBranchId: effective.activeBranchId || "",
         allowedBranchIds: effective.allowedBranchIds || [],
+        roleKeys: effective.roleKeys || [],
+        roleAssignments: Array.isArray(effective.roleAssignments)
+          ? effective.roleAssignments
+          : [],
         permissions: Array.from(effective.permissions || []).sort(),
         permissionGrants: Array.isArray(effective.permissionGrants)
           ? effective.permissionGrants
@@ -1181,6 +1274,101 @@ export const getEffectivePermissionsForUser = async (req, res) => {
     });
   }
 };
+
+export const getUserAuthorization = async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    assertActorCanManageTargetUser(req, targetUser);
+
+    const queryBranchId = normalizeText(req.query?.activeBranchId);
+    const effective = await resolveEffectiveAccessContext({
+      user: targetUser,
+      activeBranchId: queryBranchId || targetUser.storeLocation || "",
+    });
+    const directPermissionGrants = await loadActiveUserPermissionGrants({
+      userId: targetUser._id,
+      permissionsVersion: targetUser.permissionsVersion,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        userId: String(targetUser._id),
+        role: targetUser.role,
+        roles: Array.isArray(targetUser.roles) ? targetUser.roles.map(String) : [],
+        roleKeys: effective.roleKeys || [],
+        roleAssignments: Array.isArray(effective.roleAssignments)
+          ? effective.roleAssignments
+          : [],
+        directPermissions: Array.isArray(targetUser.permissions)
+          ? targetUser.permissions
+          : [],
+        directPermissionGrants,
+        permissionMode: effective.permissionMode || "HYBRID",
+        activeBranchId: effective.activeBranchId || "",
+        allowedBranchIds: effective.allowedBranchIds || [],
+        permissions: Array.from(effective.permissions || []).sort(),
+        permissionGrants: Array.isArray(effective.permissionGrants)
+          ? effective.permissionGrants
+          : [],
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_AUTHORIZATION_LOAD_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
+
+export const getUserRoleAssignments = async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    assertActorCanManageTargetUser(req, targetUser);
+    const effective = await resolveEffectiveAccessContext({
+      user: targetUser,
+      activeBranchId: targetUser.storeLocation || "",
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        userId: String(targetUser._id),
+        roleKeys: effective.roleKeys || [],
+        roleAssignments: Array.isArray(effective.roleAssignments)
+          ? effective.roleAssignments
+          : [],
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_ROLE_ASSIGNMENTS_LOAD_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
+
+export const updateUserRoleAssignments = async (req, res) => updateUserRoles(req, res);
 
 export const updateUserPermissions = async (req, res) => {
   try {
@@ -1259,6 +1447,46 @@ export const updateUserPermissions = async (req, res) => {
     });
   }
 };
+
+export const getUserPermissionGrants = async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    assertActorCanManageTargetUser(req, targetUser);
+
+    const directPermissionGrants = await loadActiveUserPermissionGrants({
+      userId: targetUser._id,
+      permissionsVersion: targetUser.permissionsVersion,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        userId: String(targetUser._id),
+        directPermissions: Array.isArray(targetUser.permissions)
+          ? targetUser.permissions
+          : [],
+        permissionGrants: directPermissionGrants,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({
+      success: false,
+      code: error.code || "USER_PERMISSION_GRANTS_LOAD_FAILED",
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+};
+
+export const updateUserPermissionGrants = async (req, res) => updateUserPermissions(req, res);
 
 export const previewPermissionAssignments = async (req, res) => {
   try {

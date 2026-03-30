@@ -121,14 +121,11 @@ const summarizeTransfers = (transfers = []) =>
 
   const TransferStockPage = () => {
   const navigate = useNavigate();
-  const canApproveTransfers = usePermission("transfer.approve", {
-    fallbackRoles: ["ADMIN", "WAREHOUSE_MANAGER"],
-  });
+  const canApproveTransfers = usePermission("transfer.approve");
   const canOperateTransfers = usePermission(
     ["transfer.create", "transfer.ship", "transfer.receive"],
     {
       mode: "any",
-      fallbackRoles: ["ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"],
     }
   );
 

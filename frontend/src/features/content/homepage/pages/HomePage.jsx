@@ -7,7 +7,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Loading } from "@/shared/ui/Loading";
 import DynamicSection from "../components/DynamicSection";
 import { ProductEditModal, universalProductAPI } from "@/features/catalog";
-import { useAuthStore } from "@/features/auth";
+import { useAuthStore, usePermission } from "@/features/auth";
 import { homePageAPI } from "../api/homepage.api";
 import { toast } from "sonner";
 
@@ -31,6 +31,9 @@ const logWarn = (label, payload) => {
 
 const HomePage = () => {
   const { isAuthenticated, user } = useAuthStore();
+  const canManageHomepage = usePermission(["content.manage", "product.update", "product.create"], {
+    mode: "any",
+  });
 
   const [layout, setLayout] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
@@ -42,9 +45,7 @@ const HomePage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
-  const isAdmin =
-    isAuthenticated &&
-    ["ADMIN", "WAREHOUSE_MANAGER", "PRODUCT_MANAGER"].includes(user?.role);
+  const isAdmin = isAuthenticated && canManageHomepage;
 
   // ============================================
   // FETCH HOMEPAGE LAYOUT

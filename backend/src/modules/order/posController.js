@@ -29,6 +29,8 @@ import {
   canPurchaseForProductStatus,
   normalizeProductStatus,
 } from "../product/productPricingConfig.js";
+import { AUTHZ_ACTIONS } from "../../authz/actions.js";
+import { hasPermission } from "../../authz/policyEngine.js";
 
 const getModelsByType = () => ({ Product: UniversalProduct, Variant: UniversalVariant });
 
@@ -44,7 +46,34 @@ const buildHttpError = (httpStatus, code, message) => {
 const getActiveBranchIdFromReq = (req) => String(req?.authz?.activeBranchId || "").trim();
 
 const isGlobalAdminRequest = (req) =>
-  Boolean(req?.authz?.isGlobalAdmin || req?.user?.role === "GLOBAL_ADMIN");
+  Boolean(req?.authz?.isGlobalAdmin);
+
+const requestHasPermission = (req, permission, mode = "branch") =>
+  hasPermission(req?.authz, permission, { mode });
+
+const hasBroadPosAccess = (req) =>
+  Boolean(req?.authz?.isGlobalAdmin) ||
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH, "branch") ||
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH, "global");
+
+const canReadOwnPosOrders = (req) =>
+  !hasBroadPosAccess(req) &&
+  requestHasPermission(req, AUTHZ_ACTIONS.POS_ORDER_READ_SELF, "self");
+
+const canReadBranchPosOrders = (req) =>
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.POS_ORDER_READ_BRANCH,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
+
+const canProcessCashierPayments = (req) =>
+  !req?.authz?.isGlobalAdmin &&
+  requestHasPermission(
+    req,
+    AUTHZ_ACTIONS.POS_PAYMENT_PROCESS,
+    req?.authz?.isGlobalAdmin ? "global" : "branch",
+  );
 
 const ensureActiveBranchContext = (req, { allowGlobalWithoutBranch = false, fallbackBranchId = "" } = {}) => {
   const activeBranchId = getActiveBranchIdFromReq(req);
@@ -334,7 +363,6 @@ export const createPOSOrder = async (req, res) => {
           createdByInfo: {
             userId: req.user._id,
             userName: req.user.fullName || req.user.name,
-            userRole: req.user.role,
           },
         },
       ],
@@ -434,7 +462,7 @@ export const getPOSOrderById = async (req, res) => {
 
     assertOrderInActiveBranch(req, order);
 
-    if (req.user.role === "POS_STAFF") {
+    if (canReadOwnPosOrders(req) && !canReadBranchPosOrders(req)) {
       const staffId = String(order?.posInfo?.staffId?._id || order?.posInfo?.staffId || "");
       if (!staffId || staffId !== String(req.user._id)) {
         return res.status(403).json({
@@ -1018,7 +1046,7 @@ export const getPOSOrderHistory = async (req, res) => {
       query["assignedStore.storeId"] = activeBranchId;
     }
 
-    if (req.user.role === "POS_STAFF") {
+    if (canReadOwnPosOrders(req) && !canReadBranchPosOrders(req)) {
       query["posInfo.staffId"] = req.user._id;
     }
 
@@ -1078,8 +1106,6 @@ export const getPOSStats = async (req, res) => {
     const activeBranchId = ensureActiveBranchContext(req, { allowGlobalWithoutBranch: true });
     const { startDate, endDate } = req.query;
     const userId = req.user._id;
-    const userRole = req.user.role;
-
     const query = {
       orderSource: "IN_STORE",
     };
@@ -1087,11 +1113,11 @@ export const getPOSStats = async (req, res) => {
       query["assignedStore.storeId"] = activeBranchId;
     }
 
-    if (userRole === "CASHIER") {
+    if (canProcessCashierPayments(req)) {
       query["posInfo.cashierId"] = userId;
     }
 
-    if (userRole === "POS_STAFF") {
+    if (canReadOwnPosOrders(req) && !canReadBranchPosOrders(req)) {
       query["posInfo.staffId"] = userId;
     }
 

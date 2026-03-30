@@ -50,9 +50,7 @@ const UniversalProductForm = ({
 }) => {
   const { user } = useAuthStore();
   const isEdit = mode === "edit";
-  const canEditInventory = usePermission("inventory.write", {
-    fallbackRoles: ["WAREHOUSE_MANAGER"],
-  });
+  const canEditInventory = usePermission("inventory.write");
   const canEditVariantStock = isEdit && canEditInventory;
   const [activeTab, setActiveTab] = useState("basic");
   const [isSubmitting, setIsSubmitting] = useState(false);

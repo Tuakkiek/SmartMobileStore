@@ -1,10 +1,45 @@
-import PermissionTemplate from "../modules/auth/PermissionTemplate.js";
-import TemplatePermission from "../modules/auth/TemplatePermission.js";
+import mongoose from "mongoose";
+import Role from "../modules/auth/Role.js";
+import { ROLE_PERMISSIONS, SYSTEM_ROLES, TASK_ROLES } from "./actions.js";
+import { getCatalogDefinitionByKey } from "./permissionCatalog.js";
 
 const DEFAULT_TTL_MS = Number(process.env.AUTHZ_ROLE_CACHE_TTL_MS || 30_000);
 const rolePermissionCache = new Map();
 
 const now = () => Date.now();
+const normalizeRoleKey = (value) => String(value || "").trim().toUpperCase();
+const normalizePermissionKey = (value) => String(value || "").trim().toLowerCase();
+const isMongoConnected = () => mongoose.connection?.readyState === 1;
+const catalogDefinitionByKey = getCatalogDefinitionByKey();
+
+const inferRoleScope = (roleKey) => {
+  if (SYSTEM_ROLES.includes(roleKey)) return "GLOBAL";
+  if (TASK_ROLES.includes(roleKey)) return "TASK";
+  return "BRANCH";
+};
+
+const buildFallbackRolePermissionMap = () => {
+  const roleMap = new Map();
+  for (const [rawRoleKey, permissionKeys] of Object.entries(ROLE_PERMISSIONS || {})) {
+    const roleKey = normalizeRoleKey(rawRoleKey);
+    roleMap.set(roleKey, {
+      key: roleKey,
+      scope: inferRoleScope(roleKey),
+      isSystem: SYSTEM_ROLES.includes(roleKey),
+      isActive: true,
+      permissions: (permissionKeys || []).map((permissionKey) => {
+        const key = normalizePermissionKey(permissionKey);
+        const definition = catalogDefinitionByKey.get(key);
+        return {
+          key,
+          scopeType: definition?.scopeType || undefined,
+          scopeId: "",
+        };
+      }),
+    });
+  }
+  return roleMap;
+};
 
 const isExpired = (entry) => {
   if (!entry) return true;
@@ -28,57 +63,33 @@ const setCachedValue = (key, value, ttlMs = DEFAULT_TTL_MS) => {
   return value;
 };
 
-const normalizeRoleKey = (value) => String(value || "").trim().toUpperCase();
-const normalizePermissionKey = (value) => String(value || "").trim().toLowerCase();
-const normalizeScopeType = (value) => String(value || "").trim().toUpperCase();
-const normalizeScopeId = (value) => String(value || "").trim();
-
 const loadRolePermissions = async ({ includeInactive = false } = {}) => {
-  const templateFilter = includeInactive ? {} : { isActive: true };
-  const templates = await PermissionTemplate.find(templateFilter)
-    .select("_id key scope isSystem isActive")
-    .lean();
-
-  const templateIdToRoleKey = new Map(
-    templates.map((template) => [String(template._id), normalizeRoleKey(template.key)])
-  );
-
-  const templateIds = Array.from(templateIdToRoleKey.keys());
-  const mappings = templateIds.length
-    ? await TemplatePermission.find({ templateId: { $in: templateIds } })
-        .populate("permissionId", "key scopeType isSensitive isActive")
-        .select("templateId permissionId scopeType scopeId")
-        .lean()
-    : [];
-
-  const roleMap = new Map();
-  for (const template of templates) {
-    const roleKey = normalizeRoleKey(template.key);
-    roleMap.set(roleKey, {
-      key: roleKey,
-      scope: template.scope || "BRANCH",
-      isSystem: Boolean(template.isSystem),
-      isActive: Boolean(template.isActive),
-      permissions: [],
-    });
+  if (!isMongoConnected()) {
+    return buildFallbackRolePermissionMap();
   }
 
-  for (const row of mappings) {
-    const roleKey = templateIdToRoleKey.get(String(row.templateId));
-    if (!roleKey) continue;
+  const filter = includeInactive ? {} : { isActive: true };
+  const roles = await Role.find(filter)
+    .select("_id key scopeType isSystem isActive permissions")
+    .lean();
 
-    const permission = row.permissionId;
-    if (!permission) continue;
-    if (!includeInactive && permission.isActive === false) continue;
-
-    const entry = roleMap.get(roleKey);
-    if (!entry) continue;
-
-    entry.permissions.push({
-      key: normalizePermissionKey(permission.key),
-      scopeType: normalizeScopeType(row.scopeType || permission.scopeType),
-      scopeId: normalizeScopeId(row.scopeId || ""),
-      isSensitive: Boolean(permission.isSensitive),
+  const roleMap = new Map();
+  for (const role of roles) {
+    const roleKey = normalizeRoleKey(role.key);
+    roleMap.set(roleKey, {
+      key: roleKey,
+      scope: role.scopeType || "BRANCH",
+      isSystem: Boolean(role.isSystem),
+      isActive: Boolean(role.isActive),
+      permissions: (role.permissions || []).map((permissionKey) => {
+        const key = normalizePermissionKey(permissionKey);
+        const definition = catalogDefinitionByKey.get(key);
+        return {
+          key,
+          scopeType: definition?.scopeType || undefined,
+          scopeId: "",
+        };
+      }),
     });
   }
 

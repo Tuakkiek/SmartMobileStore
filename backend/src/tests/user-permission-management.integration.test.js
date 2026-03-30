@@ -10,7 +10,7 @@ import config from "../config/config.js";
 import userRoutes from "../modules/auth/userRoutes.js";
 import User from "../modules/auth/User.js";
 import Store from "../modules/store/Store.js";
-import UserPermission from "../modules/auth/UserPermission.js";
+import UserPermissionGrant from "../modules/auth/UserPermissionGrant.js";
 
 let mongoServer;
 let app;
@@ -105,6 +105,7 @@ beforeEach(async () => {
       phoneNumber: nextPhone(),
       password: "Strong@1234",
       status: "ACTIVE",
+      systemRoles: ["GLOBAL_ADMIN"],
     }),
   ]);
 
@@ -192,17 +193,14 @@ test("explicit SELF permissions bind to target user during create", async () => 
   const createdUserId = response.body?.data?.user?._id;
   assert.ok(createdUserId);
 
-  const grants = await UserPermission.find({
+  const grants = await UserPermissionGrant.find({
     userId: createdUserId,
     status: "ACTIVE",
   })
-    .populate("permissionId", "key")
     .lean();
 
-  const selfGrant = grants.find(
-    (row) => String(row.permissionId?.key) === "analytics.read.personal"
-  );
+  const selfGrant = grants.find((row) => String(row.permissionKey) === "analytics.read.personal");
 
   assert.ok(selfGrant, "Expected analytics.read.personal grant");
-  assert.equal(String(selfGrant.scopeId || ""), String(createdUserId));
+  assert.equal(String(selfGrant.scopeRef || ""), String(createdUserId));
 });

@@ -351,14 +351,6 @@ export const getStoreInventoryComparison = async (req, res) => {
       .select("_id code name type capacity")
       .lean();
 
-    // ✅ Branch Enforcement
-    if (req.user.role !== "GLOBAL_ADMIN") {
-        return res.status(403).json({
-            success: false,
-            message: "Ban khong co quyen xem so sanh ton kho toan he thong",
-        });
-    }
-
     const groupedStats = await StoreInventory.aggregate([
       {
         $group: {
