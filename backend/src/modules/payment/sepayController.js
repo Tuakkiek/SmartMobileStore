@@ -4,6 +4,11 @@ const DEFAULT_SEPAY_QR_BASE_URL = "https://qr.sepay.vn/img";
 const DEFAULT_SEPAY_TTL_MINUTES = 15;
 const ORDER_CODE_PRIMARY_REGEX = /DH\d{9}/i;
 const ORDER_CODE_FALLBACK_REGEX = /DH\d+/i;
+const SEPAY_REQUIRED_QR_CONFIG_KEYS = [
+  "SEPAY_BANK_ACCOUNT",
+  "SEPAY_BANK_ID",
+  "SEPAY_ACCOUNT_NAME",
+];
 
 const toNumber = (value, fallback = NaN) => {
   const parsed = Number(value);
@@ -18,6 +23,54 @@ const getSepayTtlMinutes = () => {
   return Math.floor(fromEnv);
 };
 
+const getEnvTrimmedValue = (key) => String(process.env[key] || "").trim();
+
+const maskValue = (value, { prefix = 0, suffix = 0 } = {}) => {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "<empty>";
+  }
+
+  if (text.length <= prefix + suffix) {
+    return `${text.slice(0, 1)}***`;
+  }
+
+  return `${text.slice(0, prefix)}***${text.slice(-suffix)}`;
+};
+
+const getSepayQrConfig = () => ({
+  baseUrl: getEnvTrimmedValue("SEPAY_QR_BASE_URL") || DEFAULT_SEPAY_QR_BASE_URL,
+  bankAccount: getEnvTrimmedValue("SEPAY_BANK_ACCOUNT"),
+  bankId: getEnvTrimmedValue("SEPAY_BANK_ID"),
+  accountName: getEnvTrimmedValue("SEPAY_ACCOUNT_NAME"),
+});
+
+const getMissingSepayQrConfigKeys = (config = getSepayQrConfig()) => {
+  return SEPAY_REQUIRED_QR_CONFIG_KEYS.filter((key) => {
+    if (key === "SEPAY_BANK_ACCOUNT") {
+      return !config.bankAccount;
+    }
+
+    if (key === "SEPAY_BANK_ID") {
+      return !config.bankId;
+    }
+
+    if (key === "SEPAY_ACCOUNT_NAME") {
+      return !config.accountName;
+    }
+
+    return !getEnvTrimmedValue(key);
+  });
+};
+
+const buildSepayConfigDebugInfo = (config = getSepayQrConfig()) => ({
+  baseUrl: config.baseUrl,
+  bankAccountMasked: maskValue(config.bankAccount, { prefix: 4, suffix: 4 }),
+  bankId: config.bankId || "<empty>",
+  accountNameMasked: maskValue(config.accountName, { prefix: 1, suffix: 1 }),
+  missingKeys: getMissingSepayQrConfigKeys(config),
+});
+
 const buildSepayOrderCode = (orderNumber, fallbackSeed = "") => {
   const raw = String(orderNumber || "").trim();
   const lastSegment = raw.split("-").pop() || raw;
@@ -29,17 +82,16 @@ const buildSepayOrderCode = (orderNumber, fallbackSeed = "") => {
   return `DH${finalDigits}`;
 };
 
-const buildSepayQrUrl = ({ amount, orderCode }) => {
-  const baseUrl = process.env.SEPAY_QR_BASE_URL || DEFAULT_SEPAY_QR_BASE_URL;
+const buildSepayQrUrl = ({ amount, orderCode, config = getSepayQrConfig() }) => {
   const params = new URLSearchParams({
-    acc: String(process.env.SEPAY_BANK_ACCOUNT || "").trim(),
-    bank: String(process.env.SEPAY_BANK_ID || "").trim(),
+    acc: config.bankAccount,
+    bank: config.bankId,
     amount: String(Math.floor(Number(amount) || 0)),
     des: String(orderCode || "").trim(),
-    name: String(process.env.SEPAY_ACCOUNT_NAME || "").trim(),
+    name: config.accountName,
   });
 
-  return `${baseUrl}?${params.toString()}`;
+  return `${config.baseUrl}?${params.toString()}`;
 };
 
 const normalizeSepayOrderCode = (value) => {
@@ -247,6 +299,33 @@ export const createSepayQr = async (req, res) => {
       });
     }
 
+    const sepayConfig = getSepayQrConfig();
+    const missingConfigKeys = getMissingSepayQrConfigKeys(sepayConfig);
+
+    console.info("[SEPAY][create-qr] Request accepted", {
+      orderId: String(order._id),
+      orderNumber: order.orderNumber,
+      userId: String(req.user?._id || ""),
+      host: req.get("host") || "",
+      origin: req.get("origin") || "",
+      referer: req.get("referer") || "",
+      config: buildSepayConfigDebugInfo(sepayConfig),
+    });
+
+    if (missingConfigKeys.length > 0) {
+      console.error("[SEPAY][create-qr] Missing SePay QR configuration", {
+        orderId: String(order._id),
+        orderNumber: order.orderNumber,
+        missingConfigKeys,
+        config: buildSepayConfigDebugInfo(sepayConfig),
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: `SePay QR configuration is incomplete: ${missingConfigKeys.join(", ")}`,
+      });
+    }
+
     const ttlMinutes = getSepayTtlMinutes();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlMinutes * 60 * 1000);
@@ -256,6 +335,21 @@ export const createSepayQr = async (req, res) => {
     const qrUrl = buildSepayQrUrl({
       amount: order.totalAmount,
       orderCode,
+      config: sepayConfig,
+    });
+
+    console.info("[SEPAY][create-qr] QR generated", {
+      orderId: String(order._id),
+      orderNumber: order.orderNumber,
+      orderCode,
+      amount: order.totalAmount,
+      expiresAt: expiresAt.toISOString(),
+      qrBaseUrl: sepayConfig.baseUrl,
+      qrParams: {
+        bankId: sepayConfig.bankId,
+        hasBankAccount: Boolean(sepayConfig.bankAccount),
+        hasAccountName: Boolean(sepayConfig.accountName),
+      },
     });
 
     order.paymentInfo = {
@@ -264,9 +358,9 @@ export const createSepayQr = async (req, res) => {
       sepayQrUrl: qrUrl,
       sepayCreatedAt: now,
       sepayExpiresAt: expiresAt,
-      sepayAccount: String(process.env.SEPAY_BANK_ACCOUNT || "").trim(),
-      sepayBankId: String(process.env.SEPAY_BANK_ID || "").trim(),
-      sepayAccountName: String(process.env.SEPAY_ACCOUNT_NAME || "").trim(),
+      sepayAccount: sepayConfig.bankAccount,
+      sepayBankId: sepayConfig.bankId,
+      sepayAccountName: sepayConfig.accountName,
       sepayExpectedAmount: Number(order.totalAmount) || 0,
     };
 
@@ -285,7 +379,12 @@ export const createSepayQr = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[SEPAY] create QR failed:", error);
+    console.error("[SEPAY][create-qr] Failed", {
+      orderId: String(req.body?.orderId || ""),
+      userId: String(req.user?._id || ""),
+      message: error.message,
+      stack: error.stack,
+    });
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",

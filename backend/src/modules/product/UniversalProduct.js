@@ -4,6 +4,10 @@
 // ============================================
 
 import mongoose from "mongoose";
+import {
+  IDENTIFIER_POLICIES,
+  TRACKING_MODES,
+} from "../device/afterSalesConfig.js";
 
 // VARIANT SCHEMA - CHỈ CÓ variantName
 const universalVariantSchema = new mongoose.Schema(
@@ -30,9 +34,13 @@ const universalVariantSchema = new mongoose.Schema(
 
 // Validation: giá bán <= giá gốc
 universalVariantSchema.pre("save", function (next) {
-  if (this.price > this.originalPrice) {
+  const shouldValidatePrice =
+    this.isNew || this.isModified("price") || this.isModified("originalPrice");
+
+  if (shouldValidatePrice && this.price > this.originalPrice) {
     return next(new Error("Giá bán không được lớn hơn giá gốc"));
   }
+
   next();
 });
 
@@ -74,6 +82,26 @@ const universalProductSchema = new mongoose.Schema(
     specifications: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
+    },
+
+    afterSalesConfig: {
+      trackingMode: {
+        type: String,
+        enum: Object.values(TRACKING_MODES),
+      },
+      identifierPolicy: {
+        type: String,
+        enum: Object.values(IDENTIFIER_POLICIES),
+      },
+      warrantyMonths: {
+        type: Number,
+        min: 0,
+      },
+      warrantyTerms: {
+        type: String,
+        trim: true,
+        default: "",
+      },
     },
 
     variants: [{ type: mongoose.Schema.Types.ObjectId, ref: "UniversalVariant" }],

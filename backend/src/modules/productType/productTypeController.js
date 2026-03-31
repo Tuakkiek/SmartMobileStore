@@ -4,13 +4,14 @@
 
 import ProductType from "./ProductType.js";
 import UniversalProduct from "../product/UniversalProduct.js";
+import { normalizeAfterSalesInput } from "../device/afterSalesConfig.js";
 
 // CREATE
 export const create = async (req, res) => {
   try {
     console.log("📥 CREATE PRODUCT TYPE REQUEST:", req.body);
 
-    const { name, description, icon, specFields, createdBy } = req.body;
+    const { name, description, icon, specFields, createdBy, afterSalesDefaults } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({
@@ -35,6 +36,9 @@ export const create = async (req, res) => {
       description: description?.trim() || "",
       icon: icon?.trim() || "",
       specFields: specFields || [],
+      afterSalesDefaults: normalizeAfterSalesInput(afterSalesDefaults, {
+        allowUndefined: false,
+      }),
       createdBy,
     });
 
@@ -195,7 +199,7 @@ export const findOne = async (req, res) => {
 export const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, icon, specFields, status } = req.body;
+    const { name, description, icon, specFields, status, afterSalesDefaults } = req.body;
 
     const productType = await ProductType.findById(id);
     if (!productType) {
@@ -225,6 +229,11 @@ export const update = async (req, res) => {
     if (description !== undefined) productType.description = description.trim();
     if (icon !== undefined) productType.icon = icon.trim();
     if (specFields !== undefined) productType.specFields = specFields;
+    if (afterSalesDefaults !== undefined) {
+      productType.afterSalesDefaults = normalizeAfterSalesInput(afterSalesDefaults, {
+        allowUndefined: false,
+      });
+    }
     if (status) productType.status = status;
 
     await productType.save();

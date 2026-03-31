@@ -185,12 +185,17 @@ const CheckoutPage = () => {
   );
 
   // Phí vận chuyển
+  // Tạm thời comment lại phần dười 5tr là có 50k tiền ship
+  /*
   const shippingFee =
     effectiveFulfillmentType === "CLICK_AND_COLLECT"
       ? 0
       : subtotal >= 5000000
       ? 0
       : 50000;
+  */
+  const shippingFee = 0;
+
 
   // Tổng cuối cùng
   const finalTotal =
@@ -684,6 +689,15 @@ const CheckoutPage = () => {
             throw new Error("Không thể tạo mã QR Chuyển khoản (SePay)");
           }
 
+          console.info("[SEPAY][checkout] createQr response", {
+            orderId: createdOrder._id,
+            orderNumber: createdOrder.orderNumber,
+            success: Boolean(sepayResponse?.data?.success),
+            backendMessage: sepayResponse?.data?.message || "",
+            orderCode: sepayData?.orderCode || "",
+            qrUrl: sepayData?.qrUrl || "",
+          });
+
           const session = {
             orderId: createdOrder._id,
             orderNumber: createdOrder.orderNumber,
@@ -700,11 +714,26 @@ const CheckoutPage = () => {
           localStorage.setItem(SEPAY_PENDING_KEY, JSON.stringify(session));
           startSepayPolling(createdOrder._id);
           toast.success("Đơn hàng đã tạo. Vui lòng quét QR để thanh toán");
-        } catch {
-          await orderAPI.cancel(createdOrder._id, {
-            reason: "Không thể tạo mã QR Chuyển khoản (SePay)",
+        } catch (error) {
+          console.error("[SEPAY][checkout] createQr failed", {
+            orderId: createdOrder._id,
+            orderNumber: createdOrder.orderNumber,
+            requestBody: {
+              orderId: createdOrder._id,
+            },
+            responseStatus: error?.response?.status || null,
+            responseData: error?.response?.data || null,
+            message: error?.message || "",
           });
-          toast.error("Lỗi khi tạo QR thanh toán Chuyển khoản (SePay)");
+          await orderAPI.cancel(createdOrder._id, {
+            reason:
+              error?.response?.data?.message ||
+              "Không thể tạo mã QR Chuyển khoản (SePay)",
+          });
+          toast.error(
+            error?.response?.data?.message ||
+              "Lỗi khi tạo QR thanh toán Chuyển khoản (SePay)"
+          );
         }
       } else {
         skipEmptySelectionGuardRef.current = true;
@@ -1171,6 +1200,23 @@ const CheckoutPage = () => {
                   src={sepaySession.qrUrl}
                   alt="QR Chuyển khoản (SePay)"
                   className="h-56 w-56 object-contain"
+                  onLoad={() => {
+                    console.info("[SEPAY][checkout] QR image loaded", {
+                      orderId: sepaySession?.orderId || "",
+                      orderNumber: sepaySession?.orderNumber || "",
+                      orderCode: sepaySession?.orderCode || "",
+                      qrUrl: sepaySession?.qrUrl || "",
+                    });
+                  }}
+                  onError={(event) => {
+                    console.error("[SEPAY][checkout] QR image failed", {
+                      orderId: sepaySession?.orderId || "",
+                      orderNumber: sepaySession?.orderNumber || "",
+                      orderCode: sepaySession?.orderCode || "",
+                      qrUrl: sepaySession?.qrUrl || "",
+                      currentSrc: event.currentTarget?.currentSrc || "",
+                    });
+                  }}
                 />
               </div>
             )}

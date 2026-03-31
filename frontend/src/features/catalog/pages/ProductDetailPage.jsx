@@ -19,6 +19,11 @@ import { WarrantyTab } from "../components/WarrantyTab";
 import { ReviewsTab } from "../components/ReviewsTab";
 import SimilarProducts from "../components/SimilarProducts";
 import AddToCartModal from "../components/AddToCartModal";
+import {
+  formatWarrantyDuration,
+  isSerializedProduct,
+  resolveAfterSalesConfig,
+} from "@/features/afterSales/utils/afterSales";
 
 // ✅ Map ProductType slug to category path for URL generation
 const PRODUCT_TYPE_TO_CATEGORY = {
@@ -382,6 +387,9 @@ const ProductDetailPage = () => {
   const groupedVariants = getGroupedVariants();
   const variantKeyOptions = getVariantKeyOptions();
   const selectedVariantName = getVariantDisplayName(selectedVariant);
+  const afterSalesConfig = resolveAfterSalesConfig(product);
+  const warrantyDurationLabel = formatWarrantyDuration(afterSalesConfig.warrantyMonths);
+  const serializedTrackingEnabled = isSerializedProduct(product);
 
   return (
     <div ref={topRef} className="bg-gray-50 min-h-screen">
@@ -640,11 +648,13 @@ const ProductDetailPage = () => {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <Check className="w-4 h-4 text-green-600" />
-                      <span className="text-gray-700">Bảo hành 12 tháng</span>
+                      <span className="text-gray-700">{warrantyDurationLabel}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Check className="w-4 h-4 text-green-600" />
-                      <span className="text-gray-700">Đổi trả 30 ngày</span>
+                      <span className="text-gray-700">
+                        {serializedTrackingEnabled ? "Theo dõi từng thiết bị" : "Bảo hành theo sản phẩm"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -927,11 +937,13 @@ const ProductDetailPage = () => {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <Check className="w-4 h-4 text-green-600" />
-                      <span className="text-gray-700">Bảo hành 12 tháng</span>
+                      <span className="text-gray-700">{warrantyDurationLabel}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Check className="w-4 h-4 text-green-600" />
-                      <span className="text-gray-700">Đổi trả 30 ngày</span>
+                      <span className="text-gray-700">
+                        {serializedTrackingEnabled ? "Theo dõi từng thiết bị" : "Bảo hành theo sản phẩm"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -974,7 +986,7 @@ const ProductDetailPage = () => {
         onClose={() => setShowWarrantyPanel(false)}
         title="Chính sách & Bảo hành"
       >
-        <WarrantyTab />
+        <WarrantyTab product={product} />
       </SlideInPanel>
 
       {/* Add to Cart Modal */}

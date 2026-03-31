@@ -30,6 +30,14 @@ import { Loading } from "@/shared/ui/Loading";
 const PRODUCT_TYPE_DELETE_BLOCKED_MESSAGE =
   "This product type cannot be deleted because it is currently in use by one or more products.";
 
+const TRACKING_MODE_OPTIONS = ["NONE", "SERIALIZED"];
+const IDENTIFIER_POLICY_OPTIONS = [
+  "IMEI",
+  "SERIAL",
+  "IMEI_OR_SERIAL",
+  "IMEI_AND_SERIAL",
+];
+
 const ProductTypeManagementPage = () => {
   const { user } = useAuthStore();
   const [productTypes, setProductTypes] = useState([]);
@@ -44,6 +52,12 @@ const ProductTypeManagementPage = () => {
     description: "",
     icon: "",
     specFields: [],
+    afterSalesDefaults: {
+      trackingMode: "NONE",
+      identifierPolicy: "IMEI_OR_SERIAL",
+      warrantyMonths: 12,
+      warrantyTerms: "",
+    },
     status: "ACTIVE",
   });
 
@@ -81,6 +95,12 @@ const ProductTypeManagementPage = () => {
           placeholder: "VD: Black, White",
         },
       ],
+      afterSalesDefaults: {
+        trackingMode: "NONE",
+        identifierPolicy: "IMEI_OR_SERIAL",
+        warrantyMonths: 12,
+        warrantyTerms: "",
+      },
       status: "ACTIVE",
     });
     setExpandedFields({});
@@ -95,6 +115,13 @@ const ProductTypeManagementPage = () => {
       description: productType.description || "",
       icon: productType.icon || "",
       specFields: productType.specFields || [],
+      afterSalesDefaults: {
+        trackingMode: productType.afterSalesDefaults?.trackingMode || "NONE",
+        identifierPolicy:
+          productType.afterSalesDefaults?.identifierPolicy || "IMEI_OR_SERIAL",
+        warrantyMonths: productType.afterSalesDefaults?.warrantyMonths ?? 12,
+        warrantyTerms: productType.afterSalesDefaults?.warrantyTerms || "",
+      },
       status: productType.status || "ACTIVE",
     });
     setExpandedFields({});
@@ -123,7 +150,14 @@ const ProductTypeManagementPage = () => {
       toast.error("Tên loại sản phẩm là bắt buộc");
       return;
     }
-    const payload = { ...formData, createdBy: user._id };
+    const payload = {
+      ...formData,
+      afterSalesDefaults: {
+        ...formData.afterSalesDefaults,
+        warrantyMonths: Number(formData.afterSalesDefaults?.warrantyMonths) || 0,
+      },
+      createdBy: user._id,
+    };
     try {
       if (currentMode === "create") {
         await productTypeAPI.create(payload);
@@ -392,6 +426,100 @@ const ProductTypeManagementPage = () => {
                     <SelectItem value="INACTIVE">Không hoạt động</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 border rounded-xl p-4 bg-slate-50/70">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Tracking mode</Label>
+                <Select
+                  value={formData.afterSalesDefaults?.trackingMode || "NONE"}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      afterSalesDefaults: {
+                        ...prev.afterSalesDefaults,
+                        trackingMode: value,
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRACKING_MODE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Identifier policy</Label>
+                <Select
+                  value={formData.afterSalesDefaults?.identifierPolicy || "IMEI_OR_SERIAL"}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      afterSalesDefaults: {
+                        ...prev.afterSalesDefaults,
+                        identifierPolicy: value,
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IDENTIFIER_POLICY_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Warranty months</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.afterSalesDefaults?.warrantyMonths ?? 12}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      afterSalesDefaults: {
+                        ...prev.afterSalesDefaults,
+                        warrantyMonths: e.target.value,
+                      },
+                    }))
+                  }
+                  className="h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2 xl:col-span-1">
+                <Label className="text-sm">Warranty terms</Label>
+                <textarea
+                  value={formData.afterSalesDefaults?.warrantyTerms || ""}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      afterSalesDefaults: {
+                        ...prev.afterSalesDefaults,
+                        warrantyTerms: e.target.value,
+                      },
+                    }))
+                  }
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Điều khoản bảo hành mặc định cho nhóm sản phẩm này..."
+                />
               </div>
             </div>
 

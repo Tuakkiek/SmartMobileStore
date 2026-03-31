@@ -345,10 +345,80 @@ export const deductInventory = async (storeId, orderItems, options = {}) => {
   }
 };
 
+export const restoreInventory = async (storeId, orderItems, options = {}) => {
+  const { session = null } = options;
+  const itemCount = Array.isArray(orderItems) ? orderItems.length : 0;
+
+  try {
+    for (const rawItem of orderItems) {
+      const item = getItemIdentity(rawItem);
+      if (!item.productId || !item.variantSku || item.quantity <= 0) {
+        continue;
+      }
+
+      let inventory = await StoreInventory.findOne({
+        productId: item.productId,
+        variantSku: item.variantSku,
+        storeId,
+      }).session(session);
+
+      if (!inventory) {
+        inventory = new StoreInventory({
+          productId: item.productId,
+          variantSku: item.variantSku,
+          storeId,
+          quantity: 0,
+          reserved: 0,
+        });
+      }
+
+      inventory.quantity = (Number(inventory.quantity) || 0) + item.quantity;
+      await inventory.save({ session });
+
+      omniLog.debug("restoreInventory: item restored", {
+        storeId,
+        productId: item.productId,
+        variantSku: item.variantSku,
+        quantity: item.quantity,
+        quantityAfter: inventory.quantity,
+        availableAfter: inventory.available,
+      });
+    }
+
+    await trackOmnichannelEvent({
+      eventType: "RESTORE_INVENTORY_SUCCESS",
+      operation: "restore_inventory",
+      level: "DEBUG",
+      success: true,
+      storeId,
+      itemCount,
+    });
+
+    return true;
+  } catch (error) {
+    await trackOmnichannelEvent({
+      eventType: "RESTORE_INVENTORY_FAILED",
+      operation: "restore_inventory",
+      level: "ERROR",
+      success: false,
+      storeId,
+      itemCount,
+      errorMessage: error.message,
+    });
+
+    omniLog.error("restoreInventory failed", {
+      storeId,
+      error: error.message,
+    });
+    throw error;
+  }
+};
+
 export default {
   findBestStore,
   findNearestStoreWithStock,
   reserveInventory,
   releaseInventory,
   deductInventory,
+  restoreInventory,
 };

@@ -24,6 +24,14 @@ import {
   isPaidOrder,
   PAID_ORDER_SAFE_CANCEL_STATUSES,
 } from "./orderStateMachine.js";
+import {
+  activateWarrantyForOrder,
+  releaseOrderDevices,
+} from "../device/deviceService.js";
+import {
+  INVENTORY_STATES,
+  SERVICE_STATES,
+} from "../device/afterSalesConfig.js";
 
 const ORDER_STATUSES = new Set([
   "PENDING",
@@ -392,6 +400,250 @@ const resolveMovementActor = ({ order, user } = {}) => {
   return { performedBy, performedByName };
 };
 
+const buildReturnFallbackBatches = ({ order, skuMetaMap }) => {
+  const batches = new Map();
+  const shippedItems = Array.isArray(order?.shippedByInfo?.items)
+    ? order.shippedByInfo.items
+    : [];
+
+  if (shippedItems.length > 0) {
+    for (const item of shippedItems) {
+      const sku = String(item?.sku || "").trim();
+      const quantity = toNumber(item?.quantity, 0);
+      if (!sku || quantity <= 0) {
+        continue;
+      }
+
+      const locationCode = String(item?.locationCode || "").trim();
+      const key = `${sku}::${locationCode || "UNKNOWN"}`;
+      const meta = skuMetaMap.get(sku) || {};
+      const existing = batches.get(key) || {
+        sku,
+        quantity: 0,
+        locationCode,
+        productId: meta.productId || null,
+        productName: meta.productName || sku,
+      };
+
+      existing.quantity += quantity;
+      if (!existing.productId && meta.productId) {
+        existing.productId = meta.productId;
+      }
+      if (!existing.productName && meta.productName) {
+        existing.productName = meta.productName;
+      }
+
+      batches.set(key, existing);
+    }
+  } else {
+    const orderItems = Array.isArray(order?.items) ? order.items : [];
+    for (const item of orderItems) {
+      const sku = String(item?.variantSku || item?.sku || "").trim();
+      const quantity = toNumber(item?.quantity, 0);
+      if (!sku || quantity <= 0) {
+        continue;
+      }
+
+      const key = `${sku}::`;
+      const existing = batches.get(key) || {
+        sku,
+        quantity: 0,
+        locationCode: "",
+        productId: item?.productId || null,
+        productName: item?.productName || item?.name || sku,
+      };
+
+      existing.quantity += quantity;
+      if (!existing.productId && item?.productId) {
+        existing.productId = item.productId;
+      }
+      if (!existing.productName && (item?.productName || item?.name)) {
+        existing.productName = item.productName || item.name;
+      }
+
+      batches.set(key, existing);
+    }
+  }
+
+  return Array.from(batches.values());
+};
+
+const resolveReturnFallbackLocation = async ({
+  storeId,
+  sku,
+  locationCode,
+  session,
+} = {}) => {
+  if (locationCode) {
+    const byCode = await WarehouseLocation.findOne({
+      locationCode,
+      ...(storeId ? { storeId } : {}),
+    })
+      .setOptions({ skipBranchIsolation: true })
+      .session(session);
+
+    if (byCode) {
+      return byCode;
+    }
+  }
+
+  if (storeId && sku) {
+    const existingInventory = await Inventory.findOne({
+      storeId,
+      sku,
+    })
+      .sort({ quantity: -1 })
+      .setOptions({ skipBranchIsolation: true })
+      .session(session);
+
+    if (existingInventory?.locationId) {
+      const location = await WarehouseLocation.findById(existingInventory.locationId)
+        .setOptions({ skipBranchIsolation: true })
+        .session(session);
+      if (location) {
+        return location;
+      }
+    }
+  }
+
+  if (!storeId) return null;
+
+  return WarehouseLocation.findOne({
+    storeId,
+    status: "ACTIVE",
+  })
+    .sort({ currentLoad: 1 })
+    .setOptions({ skipBranchIsolation: true })
+    .session(session);
+};
+
+const restoreInventoryForReturnFallback = async ({
+  order,
+  user,
+  session,
+  reason = "",
+  skuMetaMap,
+  fallbackStoreId,
+} = {}) => {
+  const { performedBy, performedByName } = resolveMovementActor({ order, user });
+  if (!performedBy) {
+    throw new Error("Cannot restore inventory for return because performedBy is missing");
+  }
+
+  const batches = buildReturnFallbackBatches({ order, skuMetaMap });
+  if (!batches.length) {
+    return [];
+  }
+
+  const restoredItems = [];
+
+  for (const batch of batches) {
+    const quantity = toNumber(batch.quantity, 0);
+    if (quantity <= 0) {
+      continue;
+    }
+
+    const batchStoreId = normalizeBranchId(batch.storeId || fallbackStoreId);
+    if (!batchStoreId) {
+      omniLog.warn("restoreInventoryForReturn: fallback missing storeId", {
+        orderId: order?._id,
+        sku: batch.sku,
+      });
+      continue;
+    }
+
+    const location = await resolveReturnFallbackLocation({
+      storeId: batchStoreId,
+      sku: batch.sku,
+      locationCode: batch.locationCode,
+      session,
+    });
+
+    if (!location) {
+      omniLog.warn("restoreInventoryForReturn: fallback location not found", {
+        orderId: order?._id,
+        sku: batch.sku,
+        locationCode: batch.locationCode,
+      });
+      continue;
+    }
+
+    const meta = skuMetaMap.get(batch.sku) || {};
+    const productId = batch.productId || meta.productId || null;
+    const productName = batch.productName || meta.productName || batch.sku;
+
+    if (!productId) {
+      omniLog.warn("restoreInventoryForReturn: fallback missing productId", {
+        orderId: order?._id,
+        sku: batch.sku,
+        locationCode: location.locationCode,
+      });
+      continue;
+    }
+
+    const inventory = await Inventory.findOne({
+      storeId: batchStoreId,
+      sku: batch.sku,
+      locationId: location._id,
+    })
+      .setOptions({ skipBranchIsolation: true })
+      .session(session);
+
+    if (inventory) {
+      inventory.quantity = (Number(inventory.quantity) || 0) + quantity;
+      await inventory.save({ session });
+    } else {
+      await Inventory.create(
+        [
+          {
+            storeId: batchStoreId,
+            sku: batch.sku,
+            productId,
+            productName,
+            locationId: location._id,
+            locationCode: location.locationCode,
+            quantity,
+            status: "GOOD",
+          },
+        ],
+        { session }
+      );
+    }
+
+    location.currentLoad = (Number(location.currentLoad) || 0) + quantity;
+    await location.save({ session });
+
+    await StockMovement.create(
+      [
+        {
+          storeId: batchStoreId,
+          type: "INBOUND",
+          sku: batch.sku,
+          productId,
+          productName: productName || batch.sku,
+          toLocationId: location._id,
+          toLocationCode: location.locationCode,
+          quantity,
+          referenceType: "ORDER",
+          referenceId: String(order._id),
+          performedBy,
+          performedByName,
+          notes: `Hoàn trả từ giao hàng thất bại${reason ? `: ${reason}` : ""}`,
+        },
+      ],
+      { session }
+    );
+
+    restoredItems.push({
+      sku: batch.sku,
+      locationCode: location.locationCode,
+      quantity,
+    });
+  }
+
+  return restoredItems;
+};
+
 const restoreInventoryForReturn = async ({
   order,
   user,
@@ -400,13 +652,35 @@ const restoreInventoryForReturn = async ({
 } = {}) => {
   const fallbackStoreId = normalizeBranchId(order?.assignedStore?.storeId);
 
+  const skuMetaMap = new Map();
+  for (const item of Array.isArray(order?.items) ? order.items : []) {
+    const sku = String(item?.variantSku || "").trim();
+    if (!sku || skuMetaMap.has(sku)) {
+      continue;
+    }
+    skuMetaMap.set(sku, {
+      productId: item?.productId || null,
+      productName: item?.productName || item?.name || sku,
+    });
+  }
+
   const movements = await StockMovement.find({
     referenceType: "ORDER",
     referenceId: String(order?._id),
   }).session(session);
 
   if (!movements.length) {
-    return [];
+    omniLog.warn("restoreInventoryForReturn: no stock movements, fallback to order items", {
+      orderId: order?._id,
+    });
+    return restoreInventoryForReturnFallback({
+      order,
+      user,
+      session,
+      reason,
+      skuMetaMap,
+      fallbackStoreId,
+    });
   }
 
   const grouped = new Map();
@@ -448,18 +722,6 @@ const restoreInventoryForReturn = async ({
   const { performedBy, performedByName } = resolveMovementActor({ order, user });
   if (!performedBy) {
     throw new Error("Cannot restore inventory for return because performedBy is missing");
-  }
-
-  const skuMetaMap = new Map();
-  for (const item of Array.isArray(order?.items) ? order.items : []) {
-    const sku = String(item?.variantSku || "").trim();
-    if (!sku || skuMetaMap.has(sku)) {
-      continue;
-    }
-    skuMetaMap.set(sku, {
-      productId: item?.productId || null,
-      productName: item?.productName || item?.name || sku,
-    });
   }
 
   const restoredItems = [];
@@ -862,11 +1124,11 @@ const buildProcessedItems = async (rawItems, session) => {
 
       variant.stock -= quantity;
       variant.salesCount = toNumber(variant.salesCount, 0) + quantity;
-      await variant.save({ session });
+      await variant.save({ session, validateModifiedOnly: true });
     }
 
     product.salesCount = toNumber(product.salesCount, 0) + quantity;
-    await product.save({ session });
+    await product.save({ session, validateModifiedOnly: true });
 
     const unitPrice = toNumber(rawItem?.price, variant ? toNumber(variant.price, 0) : 0);
     const originalPrice = toNumber(
@@ -928,7 +1190,7 @@ const restoreVariantStock = async (orderItems, session) => {
       if (variant) {
         variant.stock = toNumber(variant.stock, 0) + quantity;
         variant.salesCount = Math.max(0, toNumber(variant.salesCount, 0) - quantity);
-        await variant.save({ session });
+        await variant.save({ session, validateModifiedOnly: true });
       }
     }
 
@@ -936,7 +1198,7 @@ const restoreVariantStock = async (orderItems, session) => {
       const product = await UniversalProduct.findById(item.productId).session(session);
       if (product) {
         product.salesCount = Math.max(0, toNumber(product.salesCount, 0) - quantity);
-        await product.save({ session });
+        await product.save({ session, validateModifiedOnly: true });
       }
     }
   }
@@ -1350,6 +1612,8 @@ export const createOrder = async (req, res) => {
 
     let finalShippingFee = toNumber(shippingFee, 0);
 
+    // Tạm thời set phí ship = 0 cho tất cả
+    /*
     if (effectiveFulfillment !== "HOME_DELIVERY") {
       finalShippingFee = 0;
     } else if (!shippingFee) {
@@ -1366,6 +1630,8 @@ export const createOrder = async (req, res) => {
         finalShippingFee = subtotal >= 5000000 ? 0 : 50000;
       }
     }
+    */
+    finalShippingFee = 0;
 
     const computedTotal = Math.max(0, subtotal + finalShippingFee - totalDiscount);
     const finalTotal = Number.isFinite(Number(total)) ? Number(total) : computedTotal;
@@ -1442,9 +1708,14 @@ export const createOrder = async (req, res) => {
     await order.save({ session });
 
     if (assignedStore) {
-      assignedStore.capacity.currentOrders = toNumber(assignedStore.capacity?.currentOrders, 0) + 1;
-      assignedStore.stats.totalOrders = toNumber(assignedStore.stats?.totalOrders, 0) + 1;
-      await assignedStore.save({ session });
+      if (!assignedStore.capacity) assignedStore.capacity = {};
+      if (!assignedStore.stats) assignedStore.stats = {};
+
+      assignedStore.capacity.currentOrders =
+        toNumber(assignedStore.capacity?.currentOrders, 0) + 1;
+      assignedStore.stats.totalOrders =
+        toNumber(assignedStore.stats?.totalOrders, 0) + 1;
+      await assignedStore.save({ session, validateModifiedOnly: true });
     }
 
     if (!isDeferredPayment) {
@@ -1881,6 +2152,15 @@ export const updateOrderStatus = async (req, res) => {
         reason: exchangeReason,
       });
 
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "DEVICE_RELEASED_FOR_EXCHANGE",
+        note: exchangeReason,
+      });
+
       if (!Array.isArray(order.exchangeHistory)) {
         order.exchangeHistory = [];
       }
@@ -1940,6 +2220,13 @@ export const updateOrderStatus = async (req, res) => {
       if (order.assignedStore?.storeId) {
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+
+      await activateWarrantyForOrder({
+        order,
+        soldAt: order.deliveredAt,
+        actor: req.user,
+        session,
+      });
     }
 
     if (targetStatus === "RETURNED" && note) {
@@ -1949,142 +2236,39 @@ export const updateOrderStatus = async (req, res) => {
       };
     }
 
-    if (targetStatus === "RETURNED") {
-      const noteFallback = typeof note === "string" ? note.trim() : "";
-      if (!normalizedReturnReason && noteFallback) {
-        normalizedReturnReason = {
-          type: "OTHER",
-          label: RETURN_REASON_LABELS.OTHER,
-          detail: noteFallback,
-        };
-      }
-
-      if (!normalizedReturnReason) {
-        await session.abortTransaction();
-        return res.status(400).json({
-          success: false,
-          message: "Vui long chon loai ly do tra hang",
-        });
-      }
-
+    if (targetStatus === "RETURNED" && normalizedReturnReason) {
       order.returnReason = normalizedReturnReason;
+    }
 
-      const reasonType = getReturnReasonType(normalizedReturnReason);
-      const reasonTypeLabel = reasonType || "UNKNOWN";
-      const reasonLabel =
-        normalizedReturnReason?.label || RETURN_REASON_LABELS[reasonType] || "";
-      const reasonDetail = normalizedReturnReason?.detail || "";
-      const restoreReason = reasonLabel || reasonDetail || noteFallback;
-      const shouldRestoreInventory =
-        shouldRestoreInventoryForReturnReason(normalizedReturnReason);
+    const isReturnTarget = RETURN_RESTORE_STATUSES.has(targetStatus);
+    const wasReturnTarget = RETURN_RESTORE_STATUSES.has(currentStatus);
 
-      if (shouldRestoreInventory) {
-        omniLog.info("updateOrderStatus: restore inventory for return", {
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          reasonType: reasonTypeLabel,
-          reasonLabel,
-          userId: req.user?._id,
-          role: req.user?.role,
-        });
+    if (isReturnTarget && !wasReturnTarget) {
+      const restoreNote =
+        note ||
+        normalizedReturnReason?.detail ||
+        (targetStatus === "DELIVERY_FAILED" ? "Delivery failed" : "Order returned");
 
-        try {
-          const restoredItems = await restoreInventoryForReturn({
-            order,
-            user: req.user,
+      if (order.assignedStore?.storeId) {
+        if (order.inventoryDeductedAt) {
+          await routingService.restoreInventory(order.assignedStore.storeId, order.items, {
             session,
-            reason: restoreReason,
           });
-          const restoredQuantity = sumRestoredQuantity(restoredItems);
-
-          omniLog.info("updateOrderStatus: restore inventory completed", {
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            reasonType: reasonTypeLabel,
-            restoredItemsCount: restoredItems.length,
-            restoredQuantity,
-            restoredItems,
+        } else {
+          await routingService.releaseInventory(order.assignedStore.storeId, order.items, {
+            session,
           });
-
-          await trackOmnichannelEvent({
-            eventType: "RETURN_INVENTORY_RESTORE_SUCCESS",
-            operation: "restore_inventory_for_return",
-            level: "INFO",
-            success: true,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            fulfillmentType: order.fulfillmentType,
-            storeId: order.assignedStore?.storeId,
-            itemCount: restoredItems.length,
-            userId: req.user?._id,
-            metadata: {
-              source: "update_order_status",
-              reasonType: reasonTypeLabel,
-              reasonLabel,
-              reasonDetail,
-              restoredQuantity,
-              restoredItems,
-            },
-          });
-        } catch (error) {
-          omniLog.error("updateOrderStatus: restore inventory failed", {
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            reasonType: reasonTypeLabel,
-            error: error.message,
-          });
-
-          await trackOmnichannelEvent({
-            eventType: "RETURN_INVENTORY_RESTORE_FAILED",
-            operation: "restore_inventory_for_return",
-            level: "ERROR",
-            success: false,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            fulfillmentType: order.fulfillmentType,
-            storeId: order.assignedStore?.storeId,
-            userId: req.user?._id,
-            httpStatus: 500,
-            errorMessage: error.message,
-            metadata: {
-              source: "update_order_status",
-              reasonType: reasonTypeLabel,
-              reasonLabel,
-              reasonDetail,
-            },
-          });
-
-          throw error;
         }
-      } else {
-        omniLog.info("updateOrderStatus: skip restore inventory for return", {
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          reasonType: reasonTypeLabel,
-          reasonLabel,
-          reasonDetail,
-          userId: req.user?._id,
-          role: req.user?.role,
-        });
-
-        await trackOmnichannelEvent({
-          eventType: "RETURN_INVENTORY_RESTORE_SKIPPED",
-          operation: "restore_inventory_for_return",
-          level: "INFO",
-          success: true,
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          fulfillmentType: order.fulfillmentType,
-          storeId: order.assignedStore?.storeId,
-          userId: req.user?._id,
-          metadata: {
-            source: "update_order_status",
-            reasonType: reasonTypeLabel,
-            reasonLabel,
-            reasonDetail,
-          },
-        });
       }
+
+      await restoreVariantStock(order.items, session);
+
+      await restoreInventoryForReturn({
+        order,
+        user: req.user,
+        session,
+        reason: restoreNote,
+      });
     }
 
     if (targetStatus === "CANCELLED") {
@@ -2111,6 +2295,15 @@ export const updateOrderStatus = async (req, res) => {
         });
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "ORDER_CANCELLED",
+        note: note || "Order cancelled",
+      });
 
       await restoreVariantStock(order.items, session);
     }
@@ -2139,6 +2332,14 @@ export const updateOrderStatus = async (req, res) => {
         });
         await decrementStoreCapacity(order.assignedStore.storeId, session);
       }
+      await releaseOrderDevices({
+        order,
+        actor: req.user,
+        session,
+        toInventoryState: INVENTORY_STATES.IN_STOCK,
+        eventType: "ORDER_CANCELLED_REFUND_PENDING",
+        note: note || "Order cancelled pending refund",
+      });
       await restoreVariantStock(order.items, session);
     }
 
@@ -2555,142 +2756,24 @@ export const handleCarrierWebhook = async (req, res) => {
 
     if (RETURN_RESTORE_STATUSES.has(normalizedEventType)) {
       order.returnedAt = order.returnedAt || eventTime;
-      const restoreActor = {
-        _id:
-          order?.shipperInfo?.shipperId ||
-          order?.carrierAssignment?.assignedBy ||
-          order?.createdByInfo?.userId ||
-          order?.customerId ||
-          order?.userId,
-        fullName:
-          order?.shipperInfo?.shipperName ||
-          normalizedCarrierName ||
-          order?.createdByInfo?.userName ||
-          "Carrier webhook",
-      };
-
-      const reasonType = getReturnReasonType(order.returnReason);
-      const reasonTypeLabel = reasonType || "UNKNOWN";
-      const reasonLabel = order.returnReason?.label || RETURN_REASON_LABELS[reasonType] || "";
-      const reasonDetail = order.returnReason?.detail || "";
-      const restoreReason = reasonLabel || reasonDetail || webhookNote;
-      const shouldRestoreInventory = shouldRestoreInventoryForReturnReason(order.returnReason);
-
-      if (shouldRestoreInventory) {
-        omniLog.info("handleCarrierWebhook: restore inventory for return", {
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          eventType: normalizedEventType,
-          reasonType: reasonTypeLabel,
-          reasonLabel,
-          carrierName: normalizedCarrierName,
-        });
-
-        try {
-          const restoredItems = await restoreInventoryForReturn({
-            order,
-            user: restoreActor,
-            session,
-            reason: restoreReason,
-          });
-          const restoredQuantity = sumRestoredQuantity(restoredItems);
-
-          omniLog.info("handleCarrierWebhook: restore inventory completed", {
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            eventType: normalizedEventType,
-            reasonType: reasonTypeLabel,
-            restoredItemsCount: restoredItems.length,
-            restoredQuantity,
-            restoredItems,
-          });
-
-          await trackOmnichannelEvent({
-            eventType: "RETURN_INVENTORY_RESTORE_SUCCESS",
-            operation: "restore_inventory_for_return",
-            level: "INFO",
-            success: true,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            fulfillmentType: order.fulfillmentType,
-            storeId: order.assignedStore?.storeId,
-            itemCount: restoredItems.length,
-            userId: restoreActor?._id,
-            metadata: {
-              source: "carrier_webhook",
-              eventType: normalizedEventType,
-              carrierName: normalizedCarrierName,
-              reasonType: reasonTypeLabel,
-              reasonLabel,
-              reasonDetail,
-              restoredQuantity,
-              restoredItems,
-            },
-          });
-        } catch (error) {
-          omniLog.error("handleCarrierWebhook: restore inventory failed", {
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            eventType: normalizedEventType,
-            reasonType: reasonTypeLabel,
-            error: error.message,
-          });
-
-          await trackOmnichannelEvent({
-            eventType: "RETURN_INVENTORY_RESTORE_FAILED",
-            operation: "restore_inventory_for_return",
-            level: "ERROR",
-            success: false,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            fulfillmentType: order.fulfillmentType,
-            storeId: order.assignedStore?.storeId,
-            userId: restoreActor?._id,
-            httpStatus: 500,
-            errorMessage: error.message,
-            metadata: {
-              source: "carrier_webhook",
-              eventType: normalizedEventType,
-              carrierName: normalizedCarrierName,
-              reasonType: reasonTypeLabel,
-              reasonLabel,
-              reasonDetail,
-            },
-          });
-
-          throw error;
-        }
-      } else {
-        omniLog.info("handleCarrierWebhook: skip restore inventory for return", {
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          eventType: normalizedEventType,
-          reasonType: reasonTypeLabel,
-          reasonLabel,
-          reasonDetail,
-          carrierName: normalizedCarrierName,
-        });
-
-        await trackOmnichannelEvent({
-          eventType: "RETURN_INVENTORY_RESTORE_SKIPPED",
-          operation: "restore_inventory_for_return",
-          level: "INFO",
-          success: true,
-          orderId: order._id,
-          orderNumber: order.orderNumber,
-          fulfillmentType: order.fulfillmentType,
-          storeId: order.assignedStore?.storeId,
-          userId: restoreActor?._id,
-          metadata: {
-            source: "carrier_webhook",
-            eventType: normalizedEventType,
-            carrierName: normalizedCarrierName,
-            reasonType: reasonTypeLabel,
-            reasonLabel,
-            reasonDetail,
-          },
-        });
-      }
+      await restoreInventoryForReturn({
+        order,
+        user: {
+          _id:
+            order?.shipperInfo?.shipperId ||
+            order?.carrierAssignment?.assignedBy ||
+            order?.createdByInfo?.userId ||
+            order?.customerId ||
+            order?.userId,
+          fullName:
+            order?.shipperInfo?.shipperName ||
+            normalizedCarrierName ||
+            order?.createdByInfo?.userName ||
+            "Carrier webhook",
+        },
+        session,
+        reason: webhookNote,
+      });
     }
 
     if (proof && typeof proof === "object") {
@@ -2749,6 +2832,27 @@ export const handleCarrierWebhook = async (req, res) => {
         metadata: metadata || undefined,
       },
     });
+
+    if (targetStatus === "DELIVERED") {
+      await activateWarrantyForOrder({
+        order,
+        soldAt: order.deliveredAt || eventTime,
+        actor: {
+          _id:
+            order?.shipperInfo?.shipperId ||
+            order?.carrierAssignment?.assignedBy ||
+            order?.createdByInfo?.userId ||
+            order?.customerId ||
+            order?.userId,
+          fullName:
+            order?.shipperInfo?.shipperName ||
+            normalizedCarrierName ||
+            order?.createdByInfo?.userName ||
+            "Carrier webhook",
+        },
+        session,
+      });
+    }
 
     await order.save({ session });
     await session.commitTransaction();
@@ -3080,6 +3184,15 @@ export const cancelOrder = async (req, res) => {
       await decrementStoreCapacity(order.assignedStore.storeId, session);
     }
 
+    await releaseOrderDevices({
+      order,
+      actor: req.user,
+      session,
+      toInventoryState: INVENTORY_STATES.IN_STOCK,
+      eventType: "ORDER_CANCELLED",
+      note: req.body?.cancelReason || req.body?.reason || "Cancelled by user",
+    });
+
     await restoreVariantStock(order.items, session);
 
     order.status = "CANCELLED";
@@ -3310,7 +3423,7 @@ export const revertOrderStatus = async (req, res) => {
           if (variant) {
             variant.stock = toNumber(variant.stock, 0) + quantity;
             variant.salesCount = Math.max(0, toNumber(variant.salesCount, 0) - quantity);
-            await variant.save({ session });
+            await variant.save({ session, validateModifiedOnly: true });
           }
         }
       }

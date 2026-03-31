@@ -16,6 +16,11 @@ import {
   ensureWarehouseWriteBranchId,
   resolveWarehouseStore,
 } from "./warehouseContext.js";
+import {
+  isSerializedConfig,
+  resolveAfterSalesConfigByProductId,
+} from "../device/afterSalesConfig.js";
+import { registerSerializedUnits } from "../device/deviceService.js";
 
 const RECEIVABLE_PO_STATUSES = new Set(["CONFIRMED", "PARTIAL"]);
 const DEFAULT_STORE_MIN_STOCK = 5;
@@ -275,6 +280,31 @@ export const startGoodsReceipt = async (req, res) => {
       });
     }
 
+    const items = await Promise.all(
+      po.items.map(async (item) => {
+        const remainingQuantity = Math.max(
+          0,
+          (Number(item.orderedQuantity) || 0) - (Number(item.receivedQuantity) || 0)
+        );
+        const afterSalesContext = await resolveAfterSalesConfigByProductId({
+          productId: item.productId,
+        });
+
+        return {
+          sku: item.sku,
+          productId: item.productId,
+          productName: item.productName,
+          orderedQuantity: item.orderedQuantity,
+          receivedQuantity: item.receivedQuantity,
+          damagedQuantity: item.damagedQuantity || 0,
+          remainingQuantity,
+          serializedTrackingEnabled: Boolean(
+            afterSalesContext && isSerializedConfig(afterSalesContext.config)
+          ),
+        };
+      })
+    );
+
     res.json({
       success: true,
       purchaseOrder: {
@@ -282,21 +312,7 @@ export const startGoodsReceipt = async (req, res) => {
         poNumber: po.poNumber,
         supplier: po.supplier,
         status: po.status,
-        items: po.items.map((item) => {
-          const remainingQuantity = Math.max(
-            0,
-            (Number(item.orderedQuantity) || 0) - (Number(item.receivedQuantity) || 0)
-          );
-          return {
-            sku: item.sku,
-            productId: item.productId,
-            productName: item.productName,
-            orderedQuantity: item.orderedQuantity,
-            receivedQuantity: item.receivedQuantity,
-            damagedQuantity: item.damagedQuantity || 0,
-            remainingQuantity,
-          };
-        }),
+        items,
         expectedDeliveryDate: po.expectedDeliveryDate,
       },
     });
@@ -330,6 +346,7 @@ export const receiveItem = async (req, res) => {
       locationCode,
       qualityStatus = "GOOD",
       notes,
+      serializedUnits = [],
     } = req.body;
 
     const actorName = getActorName(req.user);
@@ -408,6 +425,24 @@ export const receiveItem = async (req, res) => {
       damagedQuantity: damagedQty,
       qualityStatus: normalizedQualityStatus,
     });
+
+    const afterSalesContext = await resolveAfterSalesConfigByProductId({
+      productId: poItem.productId,
+      session,
+    });
+    const serializedTrackingEnabled = Boolean(
+      afterSalesContext && isSerializedConfig(afterSalesContext.config)
+    );
+
+    if (serializedTrackingEnabled && sellableQuantity > 0) {
+      if (!Array.isArray(serializedUnits) || serializedUnits.length !== sellableQuantity) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `SKU ${normalizedSku} requires ${sellableQuantity} serialized unit(s) for the sellable quantity`,
+        });
+      }
+    }
 
     const inventoryQuantityDelta =
       normalizedQualityStatus === "GOOD" ? sellableQuantity : receiveQty;
@@ -500,6 +535,7 @@ export const receiveItem = async (req, res) => {
 
     let variantStockAfter = null;
     let distributedToStores = [];
+    let registeredDevices = 0;
 
     if (sellableQuantity > 0) {
       const variant = await UniversalVariant.findOne({
@@ -524,6 +560,24 @@ export const receiveItem = async (req, res) => {
         receivedQuantity: sellableQuantity,
         session,
       });
+
+      if (serializedTrackingEnabled) {
+        const createdDevices = await registerSerializedUnits({
+          storeId: activeStoreId,
+          warehouseLocationId: location._id,
+          warehouseLocationCode: location.locationCode,
+          productId: variant.productId,
+          variantId: variant._id,
+          variantSku: normalizedSku,
+          productName: poItem.productName,
+          variantName: variant.variantName || "",
+          serializedUnits,
+          notes,
+          actor: req.user,
+          session,
+        });
+        registeredDevices = createdDevices.length;
+      }
     }
 
     await session.commitTransaction();
@@ -543,6 +597,8 @@ export const receiveItem = async (req, res) => {
         sellableQuantity,
         variantStockAfter,
         distributedToStores,
+        serializedTrackingEnabled,
+        registeredDevices,
       },
     });
   } catch (error) {

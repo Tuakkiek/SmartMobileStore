@@ -23,6 +23,20 @@ import { Badge } from "@/shared/ui/badge";
 import { toast } from "sonner";
 import { api } from "@/shared/lib/http/httpClient";
 
+const parseSerializedUnits = (input) =>
+  String(input || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(/[,\t|;]/).map((item) => item.trim()).filter(Boolean);
+      const first = parts[0] || "";
+      const second = parts[1] || "";
+      return /^\d{8,}$/.test(first.replace(/\s+/g, ""))
+        ? { imei: first.replace(/\s+/g, ""), serialNumber: second }
+        : { imei: "", serialNumber: first };
+    });
+
 const ReceiveGoodsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore(); // Get user from auth store
@@ -42,6 +56,7 @@ const ReceiveGoodsPage = () => {
   const [suggestedLocations, setSuggestedLocations] = useState([]);
   const [qualityStatus, setQualityStatus] = useState("GOOD");
   const [notes, setNotes] = useState("");
+  const [serializedInput, setSerializedInput] = useState("");
 
   // Step 4: Hoàn tất
   const [signature, setSignature] = useState("");
@@ -102,6 +117,9 @@ const ReceiveGoodsPage = () => {
     const currentItem = purchaseOrder.items[currentItemIndex];
     const qty = parseInt(currentQuantity) || 0;
     const damaged = parseInt(damagedQuantity) || 0;
+    const sellableQuantity =
+      qualityStatus === "GOOD" ? Math.max(0, qty - damaged) : 0;
+    const serializedUnits = parseSerializedUnits(serializedInput);
 
     if (qty === 0) {
       toast.error("Vui lòng nhập số lượng nhận");
@@ -118,6 +136,15 @@ const ReceiveGoodsPage = () => {
       return;
     }
 
+    if (
+      currentItem.serializedTrackingEnabled &&
+      sellableQuantity > 0 &&
+      serializedUnits.length !== sellableQuantity
+    ) {
+      toast.error(`SKU này cần đúng ${sellableQuantity} IMEI/serial cho số lượng bán được`);
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -129,6 +156,7 @@ const ReceiveGoodsPage = () => {
         locationCode: selectedLocation.locationCode,
         qualityStatus,
         notes,
+        serializedUnits,
       });
 
       const newReceivedItems = [...receivedItems];
@@ -149,6 +177,7 @@ const ReceiveGoodsPage = () => {
       setCurrentQuantity("");
       setDamagedQuantity("");
       setNotes("");
+       setSerializedInput("");
       setQualityStatus("GOOD");
       setSelectedLocation(null);
 
@@ -255,6 +284,11 @@ const ReceiveGoodsPage = () => {
                   <div className="flex-1">
                     <p className="font-medium">{index + 1}. {item.productName}</p>
                     <p className="text-sm text-gray-600">SKU: {item.sku}</p>
+                    {item.serializedTrackingEnabled && (
+                      <p className="text-xs font-medium text-blue-600 mt-1">
+                        Yêu cầu nhập IMEI / serial khi nhận hàng
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-lg">
@@ -364,6 +398,26 @@ const ReceiveGoodsPage = () => {
                   <option value="EXPIRED">Hết hạn</option>
                 </select>
               </div>
+
+              {currentItem.serializedTrackingEnabled && (
+                <div>
+                  <Label>
+                    IMEI / Serial cho số lượng bán được
+                    <span className="text-xs text-gray-500 ml-2">
+                      ({qualityStatus === "GOOD"
+                        ? Math.max(0, (parseInt(currentQuantity) || 0) - (parseInt(damagedQuantity) || 0))
+                        : 0} dòng)
+                    </span>
+                  </Label>
+                  <textarea
+                    value={serializedInput}
+                    onChange={(e) => setSerializedInput(e.target.value)}
+                    placeholder={"356789012345678\n356789012345679,SN-IP15-0002"}
+                    className="w-full mt-1 p-2 border rounded-md font-mono text-sm"
+                    rows="5"
+                  />
+                </div>
+              )}
 
               {/* Chọn vị trí */}
               <div>

@@ -299,6 +299,15 @@ const PickOrdersPage = () => {
           <Card>
             <CardHeader><CardTitle><Package className="w-5 h-5 mr-2 inline" />{item.productName}</CardTitle><p className="text-sm text-gray-600">SKU: {item.sku}</p></CardHeader>
             <CardContent className="space-y-6">
+              {item.serializedTrackingEnabled && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                  Dòng hàng serialized.
+                  {item.assignedDevicesCount > 0
+                    ? ` Đã gán ${item.assignedDevicesCount}/${item.requiredQty} thiết bị cho đơn.`
+                    : " Hệ thống sẽ tự gán thiết bị khả dụng khi xác nhận lấy hàng nếu chưa chọn thủ công."}
+                </div>
+              )}
+
               <div className="bg-blue-50 p-6 rounded-lg text-center">
                 <p className="text-sm text-gray-600 mb-2">Số lượng cần lấy</p>
                 <p className="text-5xl font-bold text-blue-600">{Number(loc.pickQty || loc.quantity || 0)}</p>
@@ -384,6 +393,11 @@ const PickOrdersPage = () => {
                   <div>
                     <p className="font-medium">* {item.productName || "Sản phẩm không tên"}</p>
                     <p className="text-sm text-gray-600">SKU: {item.sku}</p>
+                    {item.serializedTrackingEnabled && (
+                      <p className="text-xs font-medium text-blue-700">
+                        Serialized • Đã gán {item.assignedDevicesCount || 0}/{item.requiredQty}
+                      </p>
+                    )}
                   </div>
                   <Badge variant="outline">{item.requiredQty} chiếc</Badge>
                 </div>

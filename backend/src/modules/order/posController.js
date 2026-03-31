@@ -6,6 +6,17 @@ import UniversalProduct, { UniversalVariant } from "../product/UniversalProduct.
 import Inventory from "../warehouse/Inventory.js";
 import WarehouseLocation from "../warehouse/WarehouseLocation.js";
 import StockMovement from "../warehouse/StockMovement.js";
+import Device from "../device/Device.js";
+import {
+  activateWarrantyForOrder,
+  assignDevicesToOrderItem,
+  buildError,
+  resolveSerializedItemFlags,
+} from "../device/deviceService.js";
+import {
+  normalizeImei,
+  normalizeSerialNumber,
+} from "../device/afterSalesConfig.js";
 import {
   notifyOrderManagerPendingInStoreOrder,
   sendOrderStageNotifications,
@@ -530,13 +541,77 @@ export const finalizePOSOrder = async (req, res) => {
       }
     }
 
+    const serializedFlags = await resolveSerializedItemFlags({
+      items: order.items,
+      session,
+    });
+
     if (items && items.length > 0) {
       const itemMap = new Map(items.map((item) => [String(item._id || item.variantId), item]));
 
       for (const orderItem of order.items) {
-        const updateItem = itemMap.get(String(orderItem._id)) || itemMap.get(String(orderItem.variantId));
-        if (updateItem?.imei) {
+        const updateItem =
+          itemMap.get(String(orderItem._id)) || itemMap.get(String(orderItem.variantId));
+        const serializedTrackingEnabled =
+          serializedFlags.get(String(orderItem.productId || ""))?.isSerialized || false;
+
+        if (serializedTrackingEnabled) {
+          const requestedAssignments = Array.isArray(updateItem?.deviceAssignments)
+            ? updateItem.deviceAssignments
+            : [];
+          const requestedDeviceIds = requestedAssignments
+            .map((assignment) => assignment?.deviceId || assignment?._id || assignment)
+            .filter(Boolean);
+
+          if (!requestedDeviceIds.length && updateItem?.imei && Number(orderItem.quantity) === 1) {
+            const normalizedLegacyImei = normalizeImei(updateItem.imei);
+            const normalizedLegacySerial = normalizeSerialNumber(updateItem.serialNumber);
+            const legacyDevice = await Device.findOne({
+              storeId: order.assignedStore.storeId,
+              variantSku: orderItem.variantSku,
+              inventoryState: "IN_STOCK",
+              $or: [
+                ...(normalizedLegacyImei ? [{ imeiNormalized: normalizedLegacyImei }] : []),
+                ...(normalizedLegacySerial
+                  ? [{ serialNumberNormalized: normalizedLegacySerial }]
+                  : []),
+              ],
+            }).session(session);
+
+            if (!legacyDevice) {
+              throw buildError(
+                `Selected device ${updateItem.imei || updateItem.serialNumber} is unavailable`,
+                400,
+                "DEVICE_SELECTION_INVALID"
+              );
+            }
+
+            requestedDeviceIds.push(legacyDevice._id);
+          }
+
+          if (requestedDeviceIds.length !== Number(orderItem.quantity || 0)) {
+            throw buildError(
+              `Please select ${orderItem.quantity} device(s) for ${orderItem.productName || orderItem.variantSku}`,
+              400,
+              "DEVICE_ASSIGNMENT_REQUIRED"
+            );
+          }
+
+          await assignDevicesToOrderItem({
+            storeId: order.assignedStore.storeId,
+            order,
+            orderItem,
+            requestedDeviceIds,
+            requestedQuantity: Number(orderItem.quantity) || 0,
+            actor: req.user,
+            session,
+            mode: "MANUAL",
+          });
+        } else if (updateItem?.imei) {
           orderItem.imei = String(updateItem.imei).trim();
+          if (updateItem?.serialNumber) {
+            orderItem.serialNumber = String(updateItem.serialNumber).trim();
+          }
         }
       }
     }
@@ -587,6 +662,13 @@ export const finalizePOSOrder = async (req, res) => {
       updatedBy: req.user._id,
       updatedAt: new Date(),
       note: `Hoan tat don hang - Hoa don ${order.paymentInfo.invoiceNumber}`,
+    });
+
+    await activateWarrantyForOrder({
+      order,
+      soldAt: order.deliveredAt,
+      actor: req.user,
+      session,
     });
 
     await order.save({ session });

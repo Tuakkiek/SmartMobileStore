@@ -33,6 +33,8 @@ export const orderAuditMiddleware = (options = {}) => {
   const source = String(options.source || "").trim();
   const metadataFactory =
     typeof options.metadataFactory === "function" ? options.metadataFactory : null;
+  const actionTypeResolver =
+    typeof options.resolveActionType === "function" ? options.resolveActionType : null;
   const resolveOrderIdOption =
     typeof options.resolveOrderId === "function" ? options.resolveOrderId : null;
 
@@ -129,9 +131,19 @@ export const orderAuditMiddleware = (options = {}) => {
           durationMs: Date.now() - startedAt,
         };
 
+        const resolvedActionType =
+          actionTypeResolver?.({
+            req,
+            resBody: responseBody,
+            beforeOrder: preOrder,
+            afterOrder: postOrder,
+            outcome,
+            statusCode: res.statusCode,
+          }) || actionType;
+
         const payload = buildOrderAuditPayload({
           req,
-          actionType,
+          actionType: resolvedActionType,
           outcome,
           source,
           orderId: finalOrderId,

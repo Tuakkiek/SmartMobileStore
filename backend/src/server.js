@@ -38,6 +38,8 @@ import { startReplenishmentScheduler } from "./modules/inventory/replenishmentSc
 import monitoringRoutes from "./modules/monitoring/monitoringRoutes.js";
 import notificationRoutes from "./modules/notification/notificationRoutes.js";
 import orderAuditRoutes from "./modules/audit/orderAuditRoutes.js";
+import deviceRoutes from "./modules/device/deviceRoutes.js";
+import warrantyRoutes from "./modules/warranty/warrantyRoutes.js";
 
 
 
@@ -177,6 +179,8 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/monitoring", monitoringRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/audit-logs", orderAuditRoutes);
+app.use("/api/devices", deviceRoutes);
+app.use("/api/warranty", warrantyRoutes);
 
 // ================================
 // 🔹 Health Check Endpoint

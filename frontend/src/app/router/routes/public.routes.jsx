@@ -3,6 +3,7 @@ import { Route } from "react-router-dom";
 import PublicLayout from "@/app/layouts/public/PublicLayout";
 import NotFoundPage from "@/app/router/NotFoundPage";
 import { LoginPage, RegisterPage } from "@/features/auth";
+import { WarrantyLookupPage } from "@/features/afterSales";
 import { ProductsPage, ProductDetailPage } from "@/features/catalog";
 import { SearchResultsPage } from "@/features/search";
 import { HomePage } from "@/features/content/homepage";
@@ -22,6 +23,7 @@ const publicRoutes = (
       <Route path="/apple-watch" element={<ProductsPage category="AppleWatch" />} />
       <Route path="/phu-kien" element={<ProductsPage category="Accessories" />} />
       <Route path="/tim-kiem" element={<SearchResultsPage />} />
+      <Route path="/warranty-check" element={<WarrantyLookupPage />} />
       <Route path="/products/:productSlug" element={<ProductDetailPage />} />
       <Route path="/:categorySlug/:productSlug" element={<ProductDetailPage />} />
       <Route path="/login" element={<LoginPage />} />

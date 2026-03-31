@@ -55,6 +55,18 @@ const auditCancelOrder = orderAuditMiddleware({
 const auditUpdateStatus = orderAuditMiddleware({
   actionType: ORDER_AUDIT_ACTIONS.UPDATE_STATUS,
   source: "ORDERS_API",
+  resolveActionType: ({ req, afterOrder }) => {
+    const role = String(req?.user?.role || "").trim().toUpperCase();
+    const nextStatus = String(afterOrder?.status || req?.body?.status || "")
+      .trim()
+      .toUpperCase();
+
+    if (role === "SHIPPER" && nextStatus === "RETURNED") {
+      return ORDER_AUDIT_ACTIONS.RETURN_ORDER;
+    }
+
+    return ORDER_AUDIT_ACTIONS.UPDATE_STATUS;
+  },
 });
 const auditAssignCarrier = orderAuditMiddleware({
   actionType: ORDER_AUDIT_ACTIONS.ASSIGN_CARRIER,

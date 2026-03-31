@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "@/shared/lib/http/httpClient";
 import { toast } from "sonner";
 import { formatDate } from "@/shared/lib/utils";
+import { isSerializedProduct } from "@/features/afterSales/utils/afterSales";
 import {
   PackagePlus,
   Search,
@@ -42,6 +43,20 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+
+const parseSerializedUnitsInput = (input) =>
+  String(input || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(/[,\t|;]/).map((item) => item.trim()).filter(Boolean);
+      const first = parts[0] || "";
+      const second = parts[1] || "";
+      return /^\d{8,}$/.test(first.replace(/\s+/g, ""))
+        ? { imei: first.replace(/\s+/g, ""), serialNumber: second }
+        : { imei: "", serialNumber: first };
+    });
 
 // ============================================
 // LOCATION PICKER COMPONENT
@@ -320,6 +335,21 @@ const StockInItemCard = ({ item, locations, onUpdate, onRemove }) => (
         onChange={(val) => onUpdate(item.sku, "locationCode", val)}
       />
     </div>
+
+    {item.serializedTrackingEnabled && (
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          IMEI / Serial ({item.quantity} dòng)
+        </label>
+        <textarea
+          value={item.serializedInput || ""}
+          onChange={(e) => onUpdate(item.sku, "serializedInput", e.target.value)}
+          rows={4}
+          className="w-full rounded-md border bg-background px-3 py-2 text-xs font-mono"
+          placeholder={"356789012345678\n356789012345679,SN-IP15-0002"}
+        />
+      </div>
+    )}
   </div>
 );
 
@@ -392,6 +422,9 @@ const StockInPage = () => {
             variantName: `${variant.color} - ${variant.variantName}`,
             currentStock: variant.stock || 0,
             lifecycleStage: product.lifecycleStage || "ACTIVE",
+            afterSalesConfig: product.afterSalesConfig || {},
+            productType: product.productType || null,
+            serializedTrackingEnabled: isSerializedProduct(product),
           });
         }
       }
@@ -455,7 +488,13 @@ const StockInPage = () => {
     }
     setStockInItems((prev) => [
       ...prev,
-      { ...variant, quantity: 1, locationCode: "", notes: "" },
+      {
+        ...variant,
+        quantity: 1,
+        locationCode: "",
+        notes: "",
+        serializedInput: "",
+      },
     ]);
     setSearchQuery("");
     setSearchResults([]);
@@ -489,6 +528,13 @@ const StockInPage = () => {
         toast.error(`Chưa chọn đầy đủ vị trí kho cho SKU: ${item.sku}`);
         return;
       }
+      if (item.serializedTrackingEnabled) {
+        const serializedUnits = parseSerializedUnitsInput(item.serializedInput);
+        if (serializedUnits.length !== Number(item.quantity)) {
+          toast.error(`SKU ${item.sku} cần đúng ${item.quantity} IMEI/serial`);
+          return;
+        }
+      }
     }
     setSubmitting(true);
     try {
@@ -498,6 +544,9 @@ const StockInPage = () => {
           quantity: Number(item.quantity),
           locationCode: item.locationCode,
           notes: item.notes || "",
+          serializedUnits: item.serializedTrackingEnabled
+            ? parseSerializedUnitsInput(item.serializedInput)
+            : [],
         })),
       };
       const res = await api.post("/warehouse/stock-in", payload);
@@ -643,6 +692,14 @@ const StockInPage = () => {
                             Skeleton
                           </Badge>
                         )}
+                        {variant.serializedTrackingEnabled && (
+                          <Badge
+                            variant="outline"
+                            className="text-blue-600 border-blue-300 bg-blue-50 text-xs hidden sm:inline-flex"
+                          >
+                            Serialized
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                           Tồn: {variant.currentStock}
                         </span>
@@ -699,7 +756,7 @@ const StockInPage = () => {
 
                 {/* Desktop table — horizontally scrollable */}
                 <div className="hidden sm:block rounded-lg border overflow-x-auto">
-                  <Table className="min-w-[780px]">
+                  <Table className="min-w-[980px]">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="w-[220px]">Sản phẩm</TableHead>
@@ -715,6 +772,7 @@ const StockInPage = () => {
                           </div>
                         </TableHead>
                         <TableHead className="w-[150px]">Ghi chú</TableHead>
+                        <TableHead className="w-[260px]">IMEI / Serial</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -776,6 +834,23 @@ const StockInPage = () => {
                               }
                               className="h-8 text-xs"
                             />
+                          </TableCell>
+                          <TableCell>
+                            {item.serializedTrackingEnabled ? (
+                              <textarea
+                                value={item.serializedInput || ""}
+                                onChange={(e) =>
+                                  updateItem(item.sku, "serializedInput", e.target.value)
+                                }
+                                rows={4}
+                                className="w-full rounded-md border bg-background px-3 py-2 text-xs font-mono"
+                                placeholder={"356789012345678\n356789012345679,SN-IP15-0002"}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Không yêu cầu
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Button
